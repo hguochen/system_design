@@ -131,8 +131,8 @@ QPS(Queries Per Second) = requests / second
 ### Mental shortcuts
 
 ```
-1 day ≈ 100k seconds
-1 year ≈ 30M seconds
+1 day ≈ 10^5 seconds
+1 year ≈ 3 x 10^7 seconds
 ```
 
 This makes division easy.
@@ -178,6 +178,7 @@ Basic (Binary - used in systems)
 1 MB = 1,048,576 B                (~10^6)
 1 GB = 1,073,741,824 B            (~10^9)
 1 TB = 1,099,511,627,776 B        (~10^12)
+1 PB = 1,125,899,906,842,624 B.   (~10^15)
 ```
 
 ### Decimal (SI - used in networking/marketing)
