@@ -445,19 +445,154 @@ User:
 
 # 6. ⚠️ Common Pitfalls
 
+## Pitfall 1 - Ignoring Encoding Overhead
 
+Why it’s wrong
+
+* JSON doubles size
+
+Example
+Raw = 500B → actual = 1KB+
+
+
+## Pitfall 2 - Ignoring Index
+
+Why it’s wrong
+
+* DB indexes often 2-3x data
+
+
+
+## Pitfall 3 - Ignoring Replication
+
+Why it’s wrong
+
+* production system always replicate
+
+Example
+
+RF = 3 → 3x storage
+
+
+## Pitfall 4 - Over-optimizing precision
+
+Why it’s wrong
+
+* interview cares about scale, not exact bytes
+
+## Pitfall 5 - Not identifying dominant field
+
+Why it’s wrong
+
+* wastes time
+
+Example
+Video system → don’t calculate metadata in detail
+
+
+## Pitfall 6 - Assuming uniform object size
+
+Why it’s wrong
+
+* real systems vary
+
+Example
+
+* tweet: 10 chars vs 280chars
+
+use averages
 * * *
 
 
 # 7. 🔗 2 Minute Teachings
 
-## Topic - 
+## Topic - Object Size Estimation
 
 ### What?
 
+Object Size Estimation is the process of estimating the size of core system data objects (e.g., messages, posts, users), which form the foundation of all system capacity planning.
+
 ### When?
 
+Object size estimation is required when designing or scaling:
+
+*    Data storage capacity
+*    Network bandwidth requirements
+*    Cache capacity
+
+Because
+
+```
+Total system size = object size × number of objects
+```
+
+
+
 ### How?
+
+To reliably estimate object size, we first need to calculate the raw data size required. To get a reliable raw data size, we need to breakdown the object into it’s individual data fields and sum them up.
+
+
+#### Step 1 - Decompose into fields
+
+```
+Breakdown of a chat system object:
+- sender_id -> 8B
+- receiver_id -> 8B
+- timestamp -> 8B
+- text -> 100B
+
+Raw:
+≈ 124B → round to 150B to factor for additional metadata required
+```
+
+#### Step 2 - Identify dominant field
+
+* explanation: focus on the field contributing most to size
+* example:
+    * chat → text dominates
+    * media → image/video domaintes
+
+This avoid over-optimizing insignificant fields.
+
+
+#### Step 3 - Apply multipliers(context-dependent)
+
+Apply only if relevant:
+
+Encoding
+
+*    explanation: serialization format affects size
+*    example:
+*    JSON → ~2x
+*    Protobuf → ~1–1.2x
+*    ⚠️ Not needed for already compressed data (e.g., images, videos)
+
+Index
+
+*    explanation: depends on access patterns
+*    example:
+*    simple ID lookup → 1.1–1.5x
+*    search-heavy systems → higher
+*    ⚠️ May not apply for append-only systems (e.g., logs)
+
+
+Replication
+
+*    explanation: ensures durability and availability
+*    example:
+*    RF = 3 → ~3x storage
+*    ⚠️ Not applicable for transient data (e.g., RPC)
+
+Critical distinction
+
+```
+Stored size ≠ Read payload size ≠ Cache size
+```
+
+*    Stored size → includes encoding, index, replication
+*    Read payload → only what is transmitted
+*    Cache size → only what is stored in cache layer
 
 * * *
 
