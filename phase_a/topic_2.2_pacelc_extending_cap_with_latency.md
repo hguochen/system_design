@@ -457,7 +457,7 @@ W + R > N: 3 + 3 = 6 > 5. This guarantees — not probabilistically, but by the 
 > *All sections are pre-filled. Your job is not to write — it is to internalize, verify, and prove you own it. Work through each phase in order. Don't move to the next until you can honestly tick every item.*
 
 
-### Phase 1 — Acquire 📖
+### Phase 1 — Acquire 📖 💪💪
 
 *Goal: Read the pre-filled content actively, not passively. Close the doc and reconstruct key ideas from memory.*
 
@@ -466,7 +466,7 @@ W + R > N: 3 + 3 = 6 > 5. This guarantees — not probabilistically, but by the 
 - [x] Read the original PACELC paper (2012): http://cs-www.cs.yale.edu/homes/dna/papers/abadi-pacelc.pdf — verify the pre-filled content is accurate; correct anything that conflicts
 - [ ] Read *Designing Data-Intensive Applications* Chapter 9 (replication lag + linearizability sections) — same drill: correct anything in the doc that doesn't match
 
-### Phase 2 — Consolidate ✍️
+### Phase 2 — Consolidate ✍️ 💪💪💪
 
 *Goal: Compress the pre-filled content into your own mental model. Add personal annotations to Section 16.*
 
@@ -476,7 +476,7 @@ W + R > N: 3 + 3 = 6 > 5. This guarantees — not probabilistically, but by the 
 - [x] Read **Section 10** (Trade-offs) — for each row, ask: "can I think of a concrete scenario where this cost bit someone in production?" Add examples to Section 16 if yes
 - [x] Read **Section 3** (Cheatsheet) — memorize it cold; this is your 30-second interview recall card
 
-### Phase 3 — Apply 🔧
+### Phase 3 — Apply 🔧 💪💪💪💪
 
 *Goal: Stress-test the pre-filled content against real systems. Practice speaking, not reading.*
 
@@ -486,7 +486,7 @@ W + R > N: 3 + 3 = 6 > 5. This guarantees — not probabilistically, but by the 
 - [x] Read **Section 12** (Misconceptions) — for each one, ask yourself: "would I have gotten this wrong before reading this file?" Mark the ones that genuinely surprised you in Section 16
 - [x] Read **Section 13** (Relationships) — trace the chain: CAP (2.1) → PACELC (2.2) → Consistency Models (Topic 17). Make sure the connections feel logical, not just memorized
 
-### Phase 4 — Validate 🧪
+### Phase 4 — Validate 🧪 💪💪💪💪💪
 
 *Goal: Prove you own it — without the doc.*
 

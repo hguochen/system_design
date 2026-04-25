@@ -497,7 +497,7 @@ The system continues to operate despite an arbitrary number of messages being dr
 > *A progressive plan from first exposure to interview-ready. Work through each phase in order. Don't move to the next until you can honestly tick every item.*
 
 
-### Phase 1 — Acquire 📖
+### Phase 1 — Acquire 📖 💪💪
 
 *Goal: Get CAP into your head clearly — including what it does and doesn't say.*
 
@@ -507,7 +507,7 @@ The system continues to operate despite an arbitrary number of messages being dr
 - [x] Skim the CAP chapter in *Designing Data-Intensive Applications* (Kleppmann, Chapter 9) — focus on the consistency vs. availability spectrum
 - [x] Fill in **Core Definition** and **Core Concepts** from memory after reading (close all tabs first)
 
-### Phase 2 — Consolidate ✍️
+### Phase 2 — Consolidate ✍️ 💪💪💪
 
 *Goal: Write it out in your own words. If you can't write it, you don't own it.*
 
@@ -517,7 +517,7 @@ The system continues to operate despite an arbitrary number of messages being dr
 - [x] Fill in **How It Works** — explain the partition scenario step by step: what the two nodes must choose between, and why they can't have both
 - [x] Fill in **Trade-offs** table — one row for CP choice, one row for AP choice
 
-### Phase 3 — Apply 🔧
+### Phase 3 — Apply 🔧 💪💪💪💪
 
 *Goal: Map CAP to systems you will actually be asked about in interviews.*
 
@@ -527,7 +527,7 @@ The system continues to operate despite an arbitrary number of messages being dr
 - [x] Fill in **Common Misconceptions** — research and add: the "CA systems exist" myth, the "P is optional" myth, and the oversimplification of treating CAP as binary
 - [x] Fill in **Relationships to Other Concepts** — link to PACELC (2.2), Consistency vs. Availability spectrum (2.5), and Consistency Models (Topic 17)
 
-### Phase 4 — Validate 🧪
+### Phase 4 — Validate 🧪 💪💪💪💪💪
 
 *Goal: Prove you own it before moving to 2.2.*
 
