@@ -1,8 +1,10 @@
 # 2.4 Little's Law and Its Application
 
 > **Topic:** Topic 2 — System Design Core Principles & Scalability Fundamentals
+
 > **Phase:** A — Core First Principles
-> **Date studied:** 2026-04-24
+
+> **Date studied:** 2026-04-27
 
 ---
 
@@ -21,11 +23,11 @@
 
 > *Concrete, testable proof that you own this concept — not just familiarity.*
 
-- [ ] Can state Little's Law from memory, define all three variables, and correctly rearrange the formula to solve for any one of them.
-- [ ] Can apply Little's Law to a concrete scenario (e.g., "if each request takes 50ms and we want 10,000 RPS, how many concurrent workers do we need?") within 30 seconds.
-- [ ] Can identify the Little's Law implication in a system design discussion — e.g., spot when a thread pool is sized incorrectly relative to latency and throughput targets.
-- [ ] Can explain the assumptions behind Little's Law (steady state, stable system) and articulate when it breaks down.
-- [ ] Can use Little's Law to estimate queue depth when a system is under load and explain what happens as latency increases.
+- [x] Can state Little's Law from memory, define all three variables, and correctly rearrange the formula to solve for any one of them.
+- [x] Can apply Little's Law to a concrete scenario (e.g., "if each request takes 50ms and we want 10,000 RPS, how many concurrent workers do we need?") within 30 seconds.
+- [x] Can identify the Little's Law implication in a system design discussion — e.g., spot when a thread pool is sized incorrectly relative to latency and throughput targets.
+- [x] Can explain the assumptions behind Little's Law (steady state, stable system) and articulate when it breaks down.
+- [x] Can use Little's Law to estimate queue depth when a system is under load and explain what happens as latency increases.
 
 > 💡 **Rule of thumb:** If you can teach it to someone else and field their follow-up questions, you've mastered it.
 
@@ -38,35 +40,35 @@
 ### Phase 1 — Acquire 📖 💪💪
 *Goal: Read deeply enough that you could explain the concept without the doc.*
 
-- [ ] Read **DDIA Chapter 1** (Reliable, Scalable, Maintainable Applications) — focus on the latency/throughput discussion
-- [ ] Read **"Little's Law" on Wikipedia** — particularly the proof intuition and the queueing theory framing
-- [ ] Read **ByteByteGo: "Back of the Envelope Estimation"** — see how Little's Law appears in sizing calculations
-- [ ] Read through **Sections 5–9** (Core Definition → How It Works) carefully — don't skim
-- [ ] Re-read the **Cheatsheet** (Section 4) and try to recite it from memory after
+- [x] Read **DDIA Chapter 1** (Reliable, Scalable, Maintainable Applications) — focus on the latency/throughput discussion
+- [x] Read **"Little's Law" on Wikipedia** — particularly the proof intuition and the queueing theory framing
+- [x] Read **ByteByteGo: "Back of the Envelope Estimation"** — see how Little's Law appears in sizing calculations
+- [x] Read through **Sections 5–9** (Core Definition → How It Works) carefully — don't skim
+- [x] Re-read the **Cheatsheet** (Section 4) and try to recite it from memory after
 
 ### Phase 2 — Consolidate ✍️ 💪💪💪
 *Goal: Verify you can reproduce the knowledge in your own words without looking.*
 
-- [ ] Close the doc — write out the **Core Definition** from memory, then compare
-- [ ] Explain **First Principles** out loud without notes — what problem does this solve and why?
-- [ ] Reconstruct the **How It Works** mechanics step by step from memory
-- [ ] Restate each **Trade-off** row in your own words — if you can't explain the cost, you don't own it yet
+- [x] Close the doc — write out the **Core Definition** from memory, then compare
+- [x] Explain **First Principles** out loud without notes — what problem does this solve and why?
+- [x] Reconstruct the **How It Works** mechanics step by step from memory
+- [x] Restate each **Trade-off** row in your own words — if you can't explain the cost, you don't own it yet
 
 ### Phase 3 — Apply 🔧 💪💪💪💪
 *Goal: Connect to real systems and simulate interview scenarios.*
 
-- [ ] Go through **Real-World System Examples** (Section 10) — verify each claim independently and add anything missed to **My Notes**
-- [ ] Practice the **Interview Application** (Section 12) out loud — say the trigger phrases and your response as if in a live interview
-- [ ] Work through **Common Misconceptions** (Section 13) — for each, make sure you can explain *why* the misconception is wrong, not just that it is
-- [ ] Trace the **Relationships to Other Concepts** (Section 14) — can you explain each connection without looking?
+- [x] Go through **Real-World System Examples** (Section 10) — verify each claim independently and add anything missed to **My Notes**
+- [x] Practice the **Interview Application** (Section 12) out loud — say the trigger phrases and your response as if in a live interview
+- [x] Work through **Common Misconceptions** (Section 13) — for each, make sure you can explain *why* the misconception is wrong, not just that it is
+- [x] Trace the **Relationships to Other Concepts** (Section 14) — can you explain each connection without looking?
 
 ### Phase 4 — Validate 🧪 💪💪💪💪💪
 *Goal: Confirm you actually own it, not just recognize it.*
 
-- [ ] Answer every **Self-Check Quiz** question (Section 15) out loud without looking at your notes
-- [ ] Recite the **Cheatsheet** (Section 4) from memory — if you can't, re-do Phase 2
-- [ ] Tick off items in **What Mastery Looks Like** (Section 2) — only check a box if you can demonstrate it on demand, not just if it sounds familiar
-- [ ] Teach this concept out loud to an imaginary interviewer for 2 minutes without hesitation or notes
+- [x] Answer every **Self-Check Quiz** question (Section 15) out loud without looking at your notes
+- [x] Recite the **Cheatsheet** (Section 4) from memory — if you can't, re-do Phase 2
+- [x] Tick off items in **What Mastery Looks Like** (Section 2) — only check a box if you can demonstrate it on demand, not just if it sounds familiar
+- [x] Teach this concept out loud to an imaginary interviewer for 2 minutes without hesitation or notes
 
 ---
 
@@ -280,10 +282,27 @@ During the capacity estimation or deep-dive phase, apply Little's Law explicitly
 > *Can you answer these without looking? If not, you haven't internalized it yet.*
 
 1. State Little's Law. Define each variable precisely, including its units.
+
+Little's Law states L = λW, where L is the average number of items in the system (dimensionless, in items), λ is the throughput in items per second, and W is the average time each item spends in the system in seconds — including both wait time and service time.
+
 2. Your service handles 4,000 RPS with an average latency of 25ms. How many concurrent threads must your thread pool support at minimum?
+
+concurrency = throughput x latency
+concurrenct threads = 4000 x 0.025 = 100 min concurrent threads
+
 3. What does Little's Law tell you will happen to latency (W) if your throughput (λ) grows but your concurrency (L) is fixed at a hard limit?
+
+When concurrency L is capped, and we have a throughput increase. Little's Law tells us that our latency will decrease. But this outcome is invalid. A hard concurrency cap means the system can't keep up with rising throughput. The arrival rate exceeds the exit rate, steady state breaks down, the queue grows unbounded. So each item's wait time increases.
+Since latency is the sum of wait time + process time, when wait time increases unbounded, latency also increases.
+This question is testing us on when not to trust Little's Law.
+
 4. Name a real production system that uses Little's Law implicitly in its configuration, and explain how the formula applies.
+
+Nginx uses Little's Law explicitly when sizing `worker_processes x worker_connections`. If we expect 10,000 RPS at 10ms latency, Little's Law L = 100 concurrent connections minimum. We configure Nginx' total connection capcity well above that floor. Database connection pools like HikariCP are an even more direct example - the pool size setting is L, derived from expected query throughput and latency.
+
 5. You're applying Little's Law to size a DB connection pool. A teammate says "just use P50 latency for W." What's wrong with this, and what should you use instead?
+
+P50 describes the median request, but slow tail requests hold connections open longer than the median predicts. If P99 is 10× P50, during a latency spike each connection is held 10× longer — the pool exhausts at normal throughput. You should size using P99 latency as W, so the pool has enough connections to absorb worst-case hold times without exhausting.
 
 ---
 
