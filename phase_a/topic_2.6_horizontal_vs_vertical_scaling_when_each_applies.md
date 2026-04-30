@@ -22,12 +22,12 @@
 
 > *Concrete, testable proof that you own this concept — not just familiarity.*
 
-- [ ] Can define **vertical** vs. **horizontal** scaling crisply and explain the physical/economic ceiling of each (single-box limits vs. coordination overhead).
+- [x] Can define **vertical** vs. **horizontal** scaling crisply and explain the physical/economic ceiling of each (single-box limits vs. coordination overhead).
 - [ ] Can classify any system component (web tier, RDBMS, Redis, Kafka, S3, queue worker) as "easy to scale horizontally", "hard to scale horizontally", or "must scale vertically" — and explain why.
-- [ ] Can recite the **scaling decision rule**: scale up first until cost or ceiling forces you out, then scale out — and explain the two scenarios where this rule flips.
-- [ ] Can identify the **three canonical pre-conditions** that make a service horizontally scalable (statelessness, idempotent operations, no shared mutable state) and name a violation for each.
-- [ ] Can explain why **databases are the hardest to scale horizontally** and name the four standard approaches (read replicas, sharding, multi-master, NewSQL) with their trade-offs.
-- [ ] Can articulate the **trade-off statement** out loud in under 30 seconds for any scaling decision in an interview.
+- [x] Can recite the **scaling decision rule**: scale up first until cost or ceiling forces you out, then scale out — and explain the two scenarios where this rule flips.
+- [x] Can identify the **three canonical pre-conditions** that make a service horizontally scalable (statelessness, idempotent operations, no shared mutable state) and name a violation for each.
+- [x] Can explain why **databases are the hardest to scale horizontally** and name the four standard approaches (read replicas, sharding, multi-master, NewSQL) with their trade-offs.
+- [x] Can articulate the **trade-off statement** out loud in under 30 seconds for any scaling decision in an interview.
 
 > 💡 **Rule of thumb:** If you can teach it to someone else and field their follow-up questions, you've mastered it.
 
@@ -40,42 +40,43 @@
 ### Phase 1 — Acquire 📖 💪💪
 *Goal: Read deeply enough that you could explain the concept without the doc.*
 
-- [ ] Read **DDIA Chapter 1** ("Reliable, Scalable, and Maintainable Applications") — the section on "Scalability" and "Approaches for coping with load."
-- [ ] Read **DDIA Chapter 6** ("Partitioning") — the introduction explains why horizontal scaling of databases is uniquely hard.
-- [ ] Read Martin Fowler's **"Scaling Architectures"** notes — https://martinfowler.com/articles/patterns-of-distributed-systems/
-- [ ] Read AWS's **"Scaling Up vs. Scaling Out"** whitepaper / blog post — https://aws.amazon.com/blogs/architecture/
-- [ ] Watch **ByteByteGo — "Vertical vs. Horizontal Scaling"** on YouTube.
-- [ ] Read through **Sections 5–9** (Core Definition → How It Works) carefully — don't skim.
-- [ ] Re-read the **Cheatsheet** (Section 4) and try to recite it from memory after.
+- [x] Read **DDIA Chapter 1** ("Reliable, Scalable, and Maintainable Applications") — the section on "Scalability" and "Approaches for coping with load."
+- [x] Read **DDIA Chapter 6** ("Partitioning") — the introduction explains why horizontal scaling of databases is uniquely hard.
+- [x] Read Martin Fowler's **"Scaling Architectures"** notes — https://martinfowler.com/articles/patterns-of-distributed-systems/
+- [x] Read AWS's **"Scaling Up vs. Scaling Out"** whitepaper / blog post — https://aws.amazon.com/blogs/architecture/
+- [x] Watch **ByteByteGo — "Vertical vs. Horizontal Scaling"** on YouTube.
+- [x] Read through **Sections 5–9** (Core Definition → How It Works) carefully — don't skim.
+- [x] Re-read the **Cheatsheet** (Section 4) and try to recite it from memory after.
 
 ### Phase 2 — Consolidate ✍️ 💪💪💪
 *Goal: Verify you can reproduce the knowledge in your own words without looking.*
 
-- [ ] Close the doc — write out the **Core Definition** from memory, then compare.
-- [ ] Explain **First Principles** out loud without notes — what problem does this solve and why does the choice exist?
-- [ ] Reconstruct the **How It Works** mechanics step by step from memory — including the three pre-conditions for horizontal scaling.
-- [ ] Restate each **Trade-off** row in your own words — if you can't explain the cost, you don't own it yet.
+- [x] Close the doc — write out the **Core Definition** from memory, then compare.
+- [x] Explain **First Principles** out loud without notes — what problem does this solve and why does the choice exist?
+- [x] Reconstruct the **How It Works** mechanics step by step from memory — including the three pre-conditions for horizontal scaling.
+- [x] Restate each **Trade-off** row in your own words — if you can't explain the cost, you don't own it yet.
 
 ### Phase 3 — Apply 🔧 💪💪💪💪
 *Goal: Connect to real systems and simulate interview scenarios.*
 
-- [ ] Go through **Real-World System Examples** (Section 10) — verify each claim independently and add anything missed to **My Notes**.
-- [ ] Practice the **Interview Application** (Section 12) out loud — say the trigger phrases and your response as if in a live interview.
-- [ ] Work through **Common Misconceptions** (Section 13) — for each, make sure you can explain *why* the misconception is wrong, not just that it is.
-- [ ] Trace the **Relationships to Other Concepts** (Section 14) — can you explain each connection without looking?
+- [x] Go through **Real-World System Examples** (Section 10) — verify each claim independently and add anything missed to **My Notes**.
+- [x] Practice the **Interview Application** (Section 12) out loud — say the trigger phrases and your response as if in a live interview.
+- [x] Work through **Common Misconceptions** (Section 13) — for each, make sure you can explain *why* the misconception is wrong, not just that it is.
+- [x] Trace the **Relationships to Other Concepts** (Section 14) — can you explain each connection without looking?
 
 ### Phase 4 — Validate 🧪 💪💪💪💪💪
 *Goal: Confirm you actually own it, not just recognize it.*
 
-- [ ] Answer every **Self-Check Quiz** question (Section 15) out loud without looking at your notes.
-- [ ] Recite the **Cheatsheet** (Section 4) from memory — if you can't, re-do Phase 2.
-- [ ] Tick off items in **What Mastery Looks Like** (Section 2) — only check a box if you can demonstrate it on demand, not just if it sounds familiar.
+- [x] Answer every **Self-Check Quiz** question (Section 15) out loud without looking at your notes.
+- [x] Recite the **Cheatsheet** (Section 4) from memory — if you can't, re-do Phase 2.
+- [x] Tick off items in **What Mastery Looks Like** (Section 2) — only check a box if you can demonstrate it on demand, not just if it sounds familiar.
 - [ ] Teach this concept out loud to an imaginary interviewer for 2 minutes without hesitation or notes.
 
 ---
 
 ## 4. 📋 Cheatsheet
 
+![horizontal_vs_vertical_scaling](../../mindmaps/horizontal_vs_vertical.png)
 > *Everything you need to recall this concept in 30 seconds — for quick review before an interview.*
 
 ```
@@ -335,25 +336,72 @@ Define vertical and horizontal scaling in one sentence each. Then name the speci
 
 > This tests whether you know the two ceilings by name: single-box hardware limit + superlinear price curve for vertical, and coordination/consistency/network-failure tax for horizontal. Saying "vertical runs out of space" without naming the price curve or SPOF reveals surface-level understanding.
 
+Horizontal scaling is increasing total system capacity by adding more machines and distributing work across them. Apart from limits with horizontal scaling such as consistency, more coordination and network tolerance for failures. The bigger limitation for horizontal scaling is that due to Amdahl's law your maximum speedup with the n number of nodes is limited by the number of serial processes. So let's say if 5% of your processes is serial and cannot be distributed, and no matter how many nodes you add to your system, your theoretical maximum system speedup will be 20 times.
+
 **Q2 — The Decision Rule + When It Flips**
 You're designing a payment service with linearizable writes and predictable, steady traffic. Would you scale the database vertically or horizontally first? When, if ever, would you flip — and what triggers the flip?
 
 > This tests the decision rule: scale up until the ceiling or cost forces you out. Candidates who say "horizontal is always better" fail immediately. The flip conditions matter — cost curve, SPOF risk, or workload exceeding box capacity.
+
+I will vertically scale the database first because that makes operationally simplistic, easy to change and the workload still fits inside one box. Linearizable writes require a single global ordering. Distributing that across multiple nodes means you need distributed transactions (2PC), consensus protocols, or Saga patterns — all of which are expensive, slow, and complexity-multiplying. The database is fundamentally a single-writer workload. Horizontal scaling would fight the architecture, not help it. Vertical is correct because of the consistency requirement, not just because it's simpler.
+
+Flip conditions
+1.Hardware ceiling — you've maxed out the largest available instance (CPU, RAM, IOPS) and the workload still exceeds it
+2.Superlinear cost — the price-per-vCPU on the largest instances becomes unjustifiable vs. sharding
+3.SPOF is unacceptable — add a read replica or standby first; full horizontal sharding is the last resort
 
 **Q3 — The Three Pre-conditions**
 Name the three pre-conditions that make a service cheap to scale horizontally. For each, give one concrete violation that would break horizontal scaling if not fixed.
 
 > This is a direct litmus test. If you can't name statelessness, idempotency, and no shared mutable critical-path state — with concrete violations — you haven't internalized the mechanics. "It needs to be distributed" is not an answer.
 
+1. statelessnes (routing problem. wrong node, missing context)
+User logs in → session token stored in Node A's memory → next request routes to Node B → Node B has no knowledge of the session → user gets a 401 or is treated as a stranger. Fix: externalize session state to Redis so any node can serve any request.
+
+2. idempotency (retry problem. same operation, runs twice)
+User clicks "Pay $100" → request times out in transit → client retries → both the original and the retry reach different nodes → no deduplication key → payment executes twice → $200 charged. Fix: attach an idempotency key to the request; any node that sees a duplicate key returns the cached result without re-executing.
+
+3. no shared mutable state on critical paths
+Let's say we have a bank account with a balance of $100. A violation on the mutable state of critical paths would mean person A withdraws $80 and it gives a successful response. Person B makes the same request to withdraw $80 to another node and it is also given a successful response. This creates a double-spending problem and then breaks the integrity of the system
+
 **Q4 — Adding Nodes Makes It Worse**
 You add 10 more instances to a stateless API tier, but throughput barely improves. What are the three most likely root causes, and how would you diagnose which one is the actual bottleneck?
 
 > This probes Amdahl's Law, the downstream bottleneck problem (saturated DB), and coordination overhead. Candidates who don't think of the database as the real constraint, or who don't mention Amdahl's serial fraction, are missing the deepest insight in this topic.
 
+1. Saturated downstream — the database (or any shared dependency) is the actual bottleneck, and adding API instances just means more threads queuing on the same saturated resource. More callers, same drain rate.
+
+2. Global lock / serialized critical section — a lock in the application code (e.g. a mutex around a counter, a singleton resource) serializes all requests regardless of how many instances you have. This is Amdahl's serial fraction made concrete.
+
+3. Downstream rate limit or blocking I/O — a third-party API, a slow external service, or a misconfigured connection pool caps throughput externally. Your instances are waiting, not working.
+
+All this is due to Amdahl's law which states that the percentage of serial paths in your system, a theoretical limit on the amount of speedup as you add more nodes to your system.
+
 **Q5 — Stateful Horizontal Scaling**
 Postgres is classically scaled vertically; Cassandra is scaled horizontally by design. What specific architectural decision in each system causes this? And what are the four standard approaches for horizontally scaling a database that wasn't designed for it?
 
 > This tests whether you understand that single-leader + ACID on the write path is why Postgres defaults to vertical, while Cassandra's masterless consistent-hashing ring makes it naturally horizontal. The four approaches (read replicas, sharding, multi-master, NewSQL) with their trade-offs separate those who've internalized the topic from those who've just read it.
+
+Postgres has a single-leader write path with full ACID guarantees. All writes go through one primary. To distribute writes across multiple nodes you need distributed transactions (2PC) or a consensus protocol — both of which are expensive, slow, and complex. The single-writer + ACID model is what forces vertical scaling. The box gets bigger because distributing the write path correctly is hard enough that most teams don't do it.
+
+Cassandra is horizontally scaled by design because it is masterless and it is partitioned by consistent hashing. The replication factor is 3. When we add a node to Cassandra DB, the hash ring will just rebalance automatically 
+
+4 Standard approaches for horizontally scaling a database
+1. Read Replicas
+- Copy data to N followers; reads spread across them
+  - Trade off: Writes still bottleneck on single leader, replication lag
+
+2. Sharding
+- Split data across nodes by partition key
+  - Tradeoff: Cross-shard transactions become expensive or impossible
+
+3. Multi-Master
+- Multiple nodes accept writes
+  - Tradeoff: Write conflicts require resolution; complext consistency
+
+4. NewSQL
+- System build for horizontal scal with ACD(Spanner, CockroachDB)
+  - Tradeoff: higher latency, operational complexity, cost
 
 ---
 
