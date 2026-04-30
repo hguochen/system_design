@@ -76,7 +76,7 @@
 
 ## 4. 📋 Cheatsheet
 
-![horizontal_vs_vertical_scaling](../../mindmaps/horizontal_vs_vertical.png)
+![horizontal_vs_vertical_scaling](../assets/images/horizontal_vs_vertical.png)
 > *Everything you need to recall this concept in 30 seconds — for quick review before an interview.*
 
 ```
