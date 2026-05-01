@@ -70,7 +70,7 @@
 - [x] Answer every **Self-Check Quiz** question (Section 15) out loud without looking at your notes.
 - [x] Recite the **Cheatsheet** (Section 4) from memory — if you can't, re-do Phase 2.
 - [x] Tick off items in **What Mastery Looks Like** (Section 2) — only check a box if you can demonstrate it on demand, not just if it sounds familiar.
-- [ ] Teach this concept out loud to an imaginary interviewer for 2 minutes without hesitation or notes.
+- [x] Teach this concept out loud to an imaginary interviewer for 2 minutes without hesitation or notes.
 
 ---
 
@@ -422,3 +422,4 @@ Cassandra is horizontally scaled by design because it is masterless and it is pa
 
 > *Personal observations, things that confused me, analogies that helped.*
 
+![horizontal_vs_vertical_notes](../assets/images/IMG_5385.jpeg)
