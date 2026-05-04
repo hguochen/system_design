@@ -23,12 +23,12 @@
 
 > *Concrete, testable proof that you own this concept — not just familiarity.*
 
-- [ ] Can define **stateless** and **stateful** crisply — specifically by where request-path state lives, not by hand-wavy "remembers things" language.
+- [x] Can define **stateless** and **stateful** crisply — specifically by where request-path state lives, not by hand-wavy "remembers things" language.
 - [ ] Can classify any system component (API server, Redis, Kafka broker, WebSocket server, Postgres, CDN edge, NGINX, Lambda) as stateless or stateful — and explain *which kind of state* it holds.
-- [ ] Can name the **four kinds of state** (session, application/in-memory, persistent, connection) and identify where each is correctly externalized.
-- [ ] Can describe the **stateless-ization recipe** — the standard moves to convert a stateful service into a stateless one, and the cases where it fails.
-- [ ] Can explain why **"stateless service" doesn't mean "no state in the system"** — it means state has been pushed to a designated stateful layer (DB, cache, object store).
-- [ ] Can articulate the **trade-off statement** out loud in under 30 seconds for any state-placement decision in an interview.
+- [x] Can name the **four kinds of state** (session, application/in-memory, persistent, connection) and identify where each is correctly externalized.
+- [x] Can describe the **stateless-ization recipe** — the standard moves to convert a stateful service into a stateless one, and the cases where it fails.
+- [x] Can explain why **"stateless service" doesn't mean "no state in the system"** — it means state has been pushed to a designated stateful layer (DB, cache, object store).
+- [x] Can articulate the **trade-off statement** out loud in under 30 seconds for any state-placement decision in an interview.
 
 > 💡 **Rule of thumb:** If you can teach it to someone else and field their follow-up questions, you've mastered it.
 
@@ -68,10 +68,10 @@
 ### Phase 4 — Validate 🧪 💪💪💪💪💪
 *Goal: Confirm you actually own it, not just recognize it.*
 
-- [ ] Answer every **Self-Check Quiz** question (Section 15) out loud without looking at your notes.
-- [ ] Recite the **Cheatsheet** (Section 4) from memory — if you can't, re-do Phase 2.
-- [ ] Tick off items in **What Mastery Looks Like** (Section 2) — only check a box if you can demonstrate it on demand, not just if it sounds familiar.
-- [ ] Teach this concept out loud to an imaginary interviewer for 2 minutes without hesitation or notes.
+- [x] Answer every **Self-Check Quiz** question (Section 15) out loud without looking at your notes.
+- [x] Recite the **Cheatsheet** (Section 4) from memory — if you can't, re-do Phase 2.
+- [x] Tick off items in **What Mastery Looks Like** (Section 2) — only check a box if you can demonstrate it on demand, not just if it sounds familiar.
+- [x] Teach this concept out loud to an imaginary interviewer for 2 minutes without hesitation or notes.
 
 ---
 
