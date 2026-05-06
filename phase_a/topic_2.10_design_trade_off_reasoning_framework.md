@@ -18,11 +18,11 @@ Be able to walk through any design decision in a structured, vocal way — ident
 
 > *Concrete, testable proof that you own this concept — not just familiarity.*
 
-- [ ] Can articulate a trade-off out loud in under 60 seconds using the FTAC framework (Forces → Tradeoff → Assumption → Choice) without notes
+- [x] Can articulate a trade-off out loud in under 60 seconds using the FTAC framework (Forces → Tradeoff → Assumption → Choice) without notes
 - [ ] Can identify at least three competing forces for any given design decision (e.g., latency vs. consistency vs. cost)
-- [ ] Can state a concrete assumption, tie it to the system's requirements, and use it to break a tie between two valid options
-- [ ] Can explain the cost of the chosen option — not just what you gain, but what you give up — in one crisp sentence
-- [ ] Can recognize when an interviewer is probing for trade-off reasoning vs. expecting a single correct answer
+- [x] Can state a concrete assumption, tie it to the system's requirements, and use it to break a tie between two valid options
+- [x] Can explain the cost of the chosen option — not just what you gain, but what you give up — in one crisp sentence
+- [x] Can recognize when an interviewer is probing for trade-off reasoning vs. expecting a single correct answer
 
 > 💡 **Rule of thumb:** If you can teach it to someone else and field their follow-up questions, you've mastered it.
 
@@ -59,7 +59,7 @@ Be able to walk through any design decision in a structured, vocal way — ident
 ### Phase 4 — Validate 🧪 💪💪💪💪💪
 *Goal: Confirm you actually own it, not just recognize it.*
 
-- [ ] Answer every **Self-Check Quiz** question (Section 15) out loud without looking at your notes
+- [x] Answer every **Self-Check Quiz** question (Section 15) out loud without looking at your notes
 - [ ] Recite the **Cheatsheet** (Section 4) from memory — if you can't, re-do Phase 2
 - [ ] Tick off items in **What Mastery Looks Like** (Section 2) — only check a box if you can demonstrate it on demand, not just if it sounds familiar
 - [ ] Teach this concept out loud to an imaginary interviewer for 2 minutes without hesitation or notes
