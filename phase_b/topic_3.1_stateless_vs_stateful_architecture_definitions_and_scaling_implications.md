@@ -41,17 +41,17 @@
 
 - [ ] Read **DDIA Chapter 6** (Kleppmann) — the "shared-nothing" section is the clearest first-principles explanation of this architecture pattern
 - [ ] Read **Martin Fowler: "Stateless"** — https://martinfowler.com/bliki/Stateless.html — short, precise, and interview-quotable
-- [ ] Watch **ByteByteGo: "Session vs Token Authentication"** — covers JWT trade-offs vs server-side sessions with scaling implications
-- [ ] Read through **Sections 5–9** (Core Definition → How It Works) carefully — don't skim
-- [ ] Re-read the **Cheatsheet** (Section 4) and try to recite it from memory after
+- [x] Watch **ByteByteGo: "Session vs Token Authentication"** — covers JWT trade-offs vs server-side sessions with scaling implications
+- [x] Read through **Sections 5–9** (Core Definition → How It Works) carefully — don't skim
+- [x] Re-read the **Cheatsheet** (Section 4) and try to recite it from memory after
 
 ### Phase 2 — Consolidate ✍️ 💪💪💪
 *Goal: Verify you can reproduce the knowledge in your own words without looking.*
 
-- [ ] Close the doc — write out the **Core Definition** from memory, then compare
-- [ ] Explain **First Principles** out loud without notes — what problem does this solve and why?
-- [ ] Reconstruct the **How It Works** mechanics step by step from memory
-- [ ] Restate each **Trade-off** row in your own words — if you can't explain the cost, you don't own it yet
+- [x] Close the doc — write out the **Core Definition** from memory, then compare
+- [x] Explain **First Principles** out loud without notes — what problem does this solve and why?
+- [x] Reconstruct the **How It Works** mechanics step by step from memory
+- [x] Restate each **Trade-off** row in your own words — if you can't explain the cost, you don't own it yet
 
 ### Phase 3 — Apply 🔧 💪💪💪💪
 *Goal: Connect to real systems and simulate interview scenarios.*
@@ -273,21 +273,154 @@ In requirements or high-level design, when drawing the application tier, explici
 
    > 💡 *Think through the definition in terms of what the instance holds, not what the system does overall — revisit Section 5 if you hesitate.*
 
+A stateless service holds no per-client state in its instance memory
+between requests — every request carries all the context the server
+needs to process it, so any instance is interchangeable.
+
+Key: the defining characteristic is what the instance holds (nothing
+per-client), not the downstream effect (any node can serve any request).
+The effect follows from the characteristic — don't conflate the two.
+
 2. Your team runs 3 app servers behind a round-robin load balancer. Users randomly report being logged out mid-session. What is the most likely root cause, and how do you fix it without switching to sticky sessions?
 
    > 💡 *Trace which server each request lands on and where the session data lives — revisit Section 9 if the mechanics aren't clear.*
+
+Root cause: sessions stored in instance memory — the classic stateful
+anti-pattern. Server A authenticates the user and stores the session
+locally. Round-robin routes the next request to Server B, which has
+no session → user appears logged out.
+
+Fix (two valid options):
+
+Option A — Redis Session Store:
+  On login, store session in Redis under a UUID key (session:abc123).
+  Return only the key as a cookie. Any instance reads the cookie,
+  does Redis GET session:abc123 (~0.5ms), gets the full session.
+  Instance holds nothing locally. Benefit: full revocability.
+
+Option B — JWT + jti Blocklist:
+  On login, issue a signed JWT containing {userId, roles, exp}.
+  Client sends it on every request. Any instance validates the
+  signature locally (no Redis call). For revocation, maintain a
+  Redis set of revoked jti values — check on each request.
+  Benefit: near-zero validation latency. Cost: Redis dependency
+  for revocation; tokens valid until exp if blocklist is bypassed.
+
+Both eliminate instance affinity. Choose based on whether revocability
+or validation latency is the higher priority.
 
 3. A colleague says "we use JWT so our service is completely stateless." Name one common scenario where this claim breaks down and explain the standard mitigation.
 
    > 💡 *Think about what happens when you need to invalidate a token before it expires — revisit Section 9 and Section 13.*
 
+Scenario where the claim breaks down:
+  A user's account is compromised — security team wants to immediately
+  invalidate all active sessions. With JWT and no blocklist, the
+  attacker's token is cryptographically valid until exp. The server
+  has no record of issued tokens and no mechanism to reject a specific
+  one. The service cannot revoke the session → the system is not
+  "fully stateless" in any useful sense; it just can't handle a core
+  auth requirement.
+
+  Other valid scenarios: user logs out (token still works until exp),
+  user role is downgraded (old token still carries elevated claims),
+  credentials are rotated (old tokens remain valid).
+
+Standard mitigation:
+  Redis jti blocklist — on revocation events (logout, ban, compromise),
+  add the token's jti (unique JWT ID) to a Redis set with a TTL equal
+  to the token's remaining validity. On each request, validate the
+  JWT signature locally (stateless), then do one Redis SISMEMBER check
+  against the blocklist. Fast (~0.5ms), lightweight, and gives
+  immediate revocation. Cost: Redis becomes a dependency and every
+  request pays the blocklist lookup.
+
+The honest framing: "our validation is stateless; our revocation is
+not — and that's the right trade-off."
+
 4. Name a real production system designed as a stateless tier and describe concretely what mechanism it uses to avoid holding per-client state.
 
    > 💡 *Pick one from Section 10 and explain the mechanism, not just the name.*
 
+System: AWS Lambda
+
+Mechanism:
+  Each Lambda invocation runs in an isolated execution environment
+  (a micro-VM). Lambda may reuse a warm execution environment for
+  performance (the "warm start" optimization), but the programming
+  model guarantees no per-client state persists between invocations —
+  any in-memory data from invocation N is not accessible in
+  invocation N+1, and invocations may land on completely different
+  execution environments.
+
+  All state that needs to persist must be externalized explicitly:
+    - Session / auth state → ElastiCache (Redis)
+    - Structured data → DynamoDB or RDS
+    - Files / objects → S3
+    - Ephemeral coordination → SQS / SNS
+
+Cost of this design:
+  Cold starts — when no warm environment is available, Lambda must
+  boot a new one (~100ms–1s latency penalty). This is the direct
+  price of zero instance affinity. You cannot pre-warm a specific
+  instance for a specific user because there is no such concept.
+
+Why this makes it the canonical stateless model:
+  Lambda makes it architecturally impossible to rely on local state —
+  the platform enforces the pattern, not just the developer's
+  discipline. That's why it's the clearest real-world proof of
+  share-nothing at the compute layer.
+
 5. You are designing a chat application. The WebSocket connection server is inherently stateful — it holds the active connection. Does this mean the whole system must be stateful? How do you isolate the statefulness?
 
    > 💡 *This is the "not everything can be stateless" edge case — think about which components are stateful vs. which can be stateless, and what the statefulness boundary looks like.*
+
+The system does not need to be fully stateful — statefulness should
+be isolated to the smallest possible surface.
+
+Stateful tier (unavoidable):
+  WebSocket connection servers hold active TCP connections — one
+  connection per connected client. This is inherently stateful at
+  the protocol level. A client is pinned to the connection server
+  it connected to for the lifetime of that socket.
+
+How to isolate it:
+  Everything below the connection layer is stateless.
+
+  Architecture:
+    Client ──[WebSocket]──▶ Connection Server (stateful: holds socket)
+                                    │
+                              Redis Pub/Sub
+                            (or Kafka topic)
+                                    │
+                         ┌──────────┴──────────┐
+                    Worker A              Worker B
+                  (stateless)           (stateless)
+                         └──────────┬──────────┘
+                                    │
+                              Redis Pub/Sub
+                                    │
+                           Connection Server
+                                    │
+                              Client receives
+
+  When User A sends a message to User B:
+    1. User A's connection server receives it, publishes to
+       Redis Pub/Sub channel (e.g., "user:B:messages").
+    2. Any stateless worker picks it up and processes it
+       (persist to DB, fan out to other recipients, etc.).
+    3. User B's connection server subscribes to that channel
+       and pushes the message down User B's open socket.
+
+Result:
+  Statefulness is isolated to exactly one tier — the connection
+  servers. Workers, auth, business logic, storage — all stateless.
+  You can scale workers freely. Connection servers scale by
+  consistent-hashing clients across them (user:B always connects
+  to connection server 3, deterministically).
+
+The principle: you can't always eliminate statefulness — but you
+can always contain it.
 
 ---
 
