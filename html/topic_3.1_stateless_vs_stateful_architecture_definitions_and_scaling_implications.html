@@ -1,0 +1,1028 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.1 Stateless vs. Stateful Architecture</title>
+<style>
+  :root {
+    --bg: #f9f8f6;
+    --surface: #ffffff;
+    --surface-alt: #f3f2ef;
+    --border: #e5e3de;
+    --text: #1a1917;
+    --text-muted: #6b6861;
+    --accent: #2563eb;
+    --accent-light: #dbeafe;
+    --green: #16a34a;
+    --green-light: #dcfce7;
+    --red: #dc2626;
+    --red-light: #fee2e2;
+    --yellow: #d97706;
+    --yellow-light: #fef3c7;
+    --purple: #7c3aed;
+    --purple-light: #ede9fe;
+    --code-bg: #1e1e2e;
+    --code-text: #cdd6f4;
+    --sidebar-w: 240px;
+    --content-max: 780px;
+    font-size: 16px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    display: flex;
+  }
+
+  /* ── SIDEBAR ── */
+  #toc {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: var(--sidebar-w);
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 24px 0 48px;
+    z-index: 100;
+  }
+
+  #toc-header {
+    padding: 0 16px 16px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 8px;
+  }
+
+  #toc-header .phase-tag {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: var(--accent-light);
+    border-radius: 4px;
+    padding: 2px 7px;
+    display: inline-block;
+    margin-bottom: 6px;
+  }
+
+  #toc-header h2 {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.4;
+  }
+
+  #toc nav a {
+    display: block;
+    padding: 5px 16px 5px 20px;
+    font-size: 12.5px;
+    color: var(--text-muted);
+    text-decoration: none;
+    border-left: 2px solid transparent;
+    transition: all 0.15s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+
+  /* ── MAIN CONTENT ── */
+  main {
+    margin-left: var(--sidebar-w);
+    padding: 48px 48px 96px;
+    max-width: calc(var(--sidebar-w) + var(--content-max) + 96px);
+    width: 100%;
+  }
+
+  article {
+    max-width: var(--content-max);
+  }
+
+  /* ── HEADER ── */
+  .doc-header {
+    margin-bottom: 40px;
+    padding-bottom: 28px;
+    border-bottom: 2px solid var(--border);
+  }
+
+  .doc-header .meta {
+    display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px;
+  }
+
+  .tag {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border-radius: 20px;
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+
+  .tag-phase  { background: var(--accent-light);  color: var(--accent); }
+  .tag-topic  { background: var(--purple-light);  color: var(--purple); }
+  .tag-date   { background: var(--surface-alt);   color: var(--text-muted); }
+
+  .doc-header h1 {
+    font-size: 30px;
+    font-weight: 800;
+    line-height: 1.25;
+    letter-spacing: -0.02em;
+    color: var(--text);
+  }
+
+  /* ── SECTIONS ── */
+  section {
+    margin-bottom: 52px;
+    scroll-margin-top: 32px;
+  }
+
+  h2.section-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 20px;
+    display: flex; align-items: center; gap: 10px;
+    letter-spacing: -0.01em;
+  }
+
+  h2.section-title .num {
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--text-muted);
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 2px 7px;
+    letter-spacing: 0.04em;
+  }
+
+  h3 {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    margin: 24px 0 10px;
+  }
+
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+
+  /* ── CALLOUT BOXES ── */
+  .callout {
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-bottom: 20px;
+    font-size: 14px;
+    border-left: 3px solid;
+  }
+
+  .callout-goal   { background: var(--accent-light);  border-color: var(--accent);  color: #1e40af; }
+  .callout-tip    { background: var(--yellow-light);  border-color: var(--yellow);  color: #92400e; }
+  .callout-quote  { background: var(--surface-alt);   border-color: var(--border);  color: var(--text-muted); font-style: italic; }
+
+  .callout strong { font-weight: 700; }
+
+  /* ── CHEATSHEET CODE BLOCK ── */
+  .cheatsheet {
+    background: var(--code-bg);
+    color: var(--code-text);
+    border-radius: 12px;
+    padding: 24px 28px;
+    font-family: "SF Mono", "Fira Code", "Cascadia Code", Menlo, monospace;
+    font-size: 13px;
+    line-height: 1.65;
+    white-space: pre-wrap;
+    overflow-x: auto;
+    margin-top: 16px;
+  }
+
+  .cheatsheet .label {
+    color: #cba6f7;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+  }
+
+  /* ── MINDMAP IMAGE ── */
+  .mindmap-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    margin: 20px 0 24px;
+    text-align: center;
+  }
+
+  .mindmap-wrap img {
+    max-width: 100%;
+    border-radius: 8px;
+  }
+
+  .mindmap-wrap .caption {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 8px;
+  }
+
+  /* ── CHECKLIST ── */
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+
+  .checklist li {
+    display: flex; align-items: flex-start; gap: 10px;
+    font-size: 14.5px;
+    line-height: 1.55;
+  }
+
+  .checklist li .cb {
+    flex-shrink: 0;
+    width: 18px; height: 18px;
+    border: 2px solid var(--border);
+    border-radius: 4px;
+    margin-top: 2px;
+    background: var(--surface);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+
+  .checklist li.checked .cb {
+    background: var(--green);
+    border-color: var(--green);
+  }
+
+  .checklist li.checked .cb::after {
+    content: '';
+    display: block;
+    width: 5px; height: 9px;
+    border: 2px solid #fff;
+    border-top: none; border-left: none;
+    transform: rotate(45deg) translateY(-1px);
+  }
+
+  .checklist li.checked .text { color: var(--text-muted); text-decoration: line-through; }
+
+  /* ── STUDY PHASES ── */
+  .phase-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+
+  .phase-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 20px;
+    cursor: pointer;
+    user-select: none;
+    background: var(--surface-alt);
+  }
+
+  .phase-header:hover { background: var(--border); }
+
+  .phase-label {
+    font-size: 14px;
+    font-weight: 700;
+    display: flex; align-items: center; gap: 10px;
+  }
+
+  .phase-badge {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 20px;
+  }
+
+  .ph1 { background: #dbeafe; color: #1d4ed8; }
+  .ph2 { background: #fce7f3; color: #9d174d; }
+  .ph3 { background: #d1fae5; color: #065f46; }
+  .ph4 { background: #fef3c7; color: #92400e; }
+
+  .phase-chevron {
+    font-size: 12px;
+    color: var(--text-muted);
+    transition: transform 0.2s;
+  }
+
+  .phase-card.open .phase-chevron { transform: rotate(180deg); }
+
+  .phase-body {
+    display: none;
+    padding: 16px 20px 20px;
+  }
+
+  .phase-card.open .phase-body { display: block; }
+
+  .phase-goal {
+    font-size: 12.5px;
+    color: var(--text-muted);
+    font-style: italic;
+    margin-bottom: 12px;
+  }
+
+  /* ── TABLES ── */
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+
+  th {
+    background: var(--surface-alt);
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    border-bottom: 2px solid var(--border);
+  }
+
+  td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+    line-height: 1.5;
+  }
+
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+
+  /* ── MISCONCEPTIONS ── */
+  .misconception {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 12px;
+  }
+
+  .misconception .wrong {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 12px 16px;
+    background: var(--red-light);
+    font-size: 14px;
+  }
+
+  .misconception .right {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 12px 16px;
+    background: var(--green-light);
+    font-size: 14px;
+    border-top: 1px solid var(--border);
+  }
+
+  .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+
+  /* ── QUIZ ── */
+  .quiz-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+    margin-bottom: 14px;
+  }
+
+  .quiz-q {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    display: flex; gap: 10px;
+  }
+
+  .quiz-num {
+    flex-shrink: 0;
+    background: var(--accent);
+    color: #fff;
+    border-radius: 50%;
+    width: 22px; height: 22px;
+    font-size: 12px;
+    font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    margin-top: 1px;
+  }
+
+  .quiz-hint {
+    background: var(--yellow-light);
+    border: 1px solid #fde68a;
+    border-radius: 7px;
+    padding: 10px 14px;
+    font-size: 13px;
+    color: #92400e;
+    cursor: pointer;
+    user-select: none;
+    display: flex; align-items: center; gap: 6px;
+  }
+
+  .quiz-hint::before { content: '💡'; }
+
+  /* ── RELATIONSHIPS ── */
+  .rel-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+    margin-top: 4px;
+  }
+
+  .rel-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+
+  .rel-card .rel-type {
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    margin-bottom: 6px;
+  }
+
+  .rel-builds  .rel-type { color: var(--accent); }
+  .rel-enables .rel-type { color: var(--green);  }
+  .rel-tension .rel-type { color: var(--yellow); }
+
+  .rel-card p { font-size: 13.5px; line-height: 1.5; }
+
+  /* ── FURTHER READING ── */
+  .reading-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+
+  .reading-list li {
+    display: flex; align-items: flex-start; gap: 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .reading-list li::before {
+    content: '📖';
+    flex-shrink: 0;
+    font-size: 16px;
+    margin-top: 1px;
+  }
+
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* ── TRADE-OFF STATEMENT ── */
+  .tradeoff-statement {
+    background: var(--purple-light);
+    border-left: 4px solid var(--purple);
+    border-radius: 0 8px 8px 0;
+    padding: 16px 18px;
+    font-size: 14.5px;
+    line-height: 1.65;
+    font-style: italic;
+    color: #4c1d95;
+    margin-top: 14px;
+  }
+
+  .trigger-list {
+    list-style: none;
+    display: flex; flex-direction: column; gap: 8px;
+    margin: 12px 0;
+  }
+
+  .trigger-list li {
+    display: flex; align-items: flex-start; gap: 8px;
+    font-size: 14px;
+  }
+
+  .trigger-list li::before {
+    content: '▶';
+    color: var(--accent);
+    font-size: 9px;
+    margin-top: 5px;
+    flex-shrink: 0;
+  }
+
+  /* ── DEFINITION HIGHLIGHT ── */
+  .definition {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 22px;
+    font-size: 15.5px;
+    line-height: 1.7;
+  }
+
+  strong { font-weight: 700; }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  @media (max-width: 860px) {
+    #toc { display: none; }
+    main { margin-left: 0; padding: 24px 20px 64px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR TOC -->
+<aside id="toc">
+  <div id="toc-header">
+    <div class="phase-tag">Phase B · Topic 3</div>
+    <h2>3.1 Stateless vs.<br>Stateful Architecture</h2>
+  </div>
+  <nav>
+    <a href="#s1">1 · Goal</a>
+    <a href="#s2">2 · Mastery Checklist</a>
+    <a href="#s3">3 · Study Phases</a>
+    <a href="#s4">4 · Cheatsheet</a>
+    <a href="#s5">5 · Core Definition</a>
+    <a href="#s6">6 · Core Concepts</a>
+    <a href="#s7">7 · First Principles</a>
+    <a href="#s8">8 · Mental Models</a>
+    <a href="#s9">9 · How It Works</a>
+    <a href="#s10">10 · Real-World Examples</a>
+    <a href="#s11">11 · Trade-offs</a>
+    <a href="#s12">12 · Interview Application</a>
+    <a href="#s13">13 · Misconceptions</a>
+    <a href="#s14">14 · Relationships</a>
+    <a href="#s15">15 · Self-Check Quiz</a>
+    <a href="#s16">16 · Further Reading</a>
+    <a href="#s17">17 · My Notes</a>
+  </nav>
+</aside>
+
+<!-- MAIN -->
+<main>
+<article>
+
+  <!-- HEADER -->
+  <div class="doc-header">
+    <div class="meta">
+      <span class="tag tag-phase">Phase B — Scalability Branch</span>
+      <span class="tag tag-topic">Topic 3 — Stateless Services</span>
+      <span class="tag tag-date">Studied: 2026-05-07</span>
+    </div>
+    <h1>3.1 Stateless vs. Stateful Architecture</h1>
+  </div>
+
+  <!-- S1: GOAL -->
+  <section id="s1">
+    <h2 class="section-title"><span class="num">01</span> 🎯 Goal of This Subtopic</h2>
+    <ul class="checklist" id="goal-list">
+      <li><span class="cb"></span><span class="text">Be able to distinguish stateless from stateful systems by their <strong>scaling implications</strong>, not just their definitions — and explain <em>why</em> the difference matters at load-balancing time.</span></li>
+      <li><span class="cb"></span><span class="text">Understand why stateless design is the <strong>prerequisite for effective horizontal scaling</strong>: any instance must be able to handle any request.</span></li>
+      <li><span class="cb"></span><span class="text">Identify the two primary patterns for externalizing state (<strong>Redis session store vs. JWT</strong>) and articulate the trade-offs of each in an interview.</span></li>
+      <li><span class="cb"></span><span class="text">Recognize when a system is <strong>"accidentally stateful"</strong> — holding session data in instance memory — and know how to refactor it.</span></li>
+      <li><span class="cb"></span><span class="text">Be able to explain the <strong>share-nothing architecture</strong> principle and its direct connection to horizontal scalability.</span></li>
+    </ul>
+  </section>
+
+  <!-- S2: MASTERY -->
+  <section id="s2">
+    <h2 class="section-title"><span class="num">02</span> ✅ What Mastery Looks Like</h2>
+    <div class="callout callout-tip">
+      <strong>Rule of thumb:</strong> If you can teach it to someone else and field their follow-up questions, you've mastered it.
+    </div>
+    <ul class="checklist" id="mastery-list">
+      <li><span class="cb"></span><span class="text">Can take a stateful service design (session stored in-memory) and refactor it into a stateless one by externalizing session to Redis or JWT, explaining every step.</span></li>
+      <li><span class="cb"></span><span class="text">Can explain why a stateless service can be freely load-balanced while a stateful one requires sticky sessions or session replication — with a concrete example.</span></li>
+      <li><span class="cb"></span><span class="text">Can articulate the share-nothing architecture principle and connect it directly to why horizontal scaling becomes trivial.</span></li>
+      <li><span class="cb"></span><span class="text">Can compare server-side sessions vs. JWT on the dimensions of revocability, latency, consistency, and scalability — without notes.</span></li>
+      <li><span class="cb"></span><span class="text">Can identify in a novel system design whether state is being held in the wrong place and propose the correct externalization fix.</span></li>
+    </ul>
+  </section>
+
+  <!-- S3: STUDY PHASES -->
+  <section id="s3">
+    <h2 class="section-title"><span class="num">03</span> 🗓️ Study Phases</h2>
+    <p style="font-size:14px;color:var(--text-muted);margin-bottom:16px;">Work through each phase in order. Don't move to the next until you can honestly tick every item.</p>
+
+    <div class="phase-card open">
+      <div class="phase-header" onclick="togglePhase(this)">
+        <div class="phase-label"><span class="phase-badge ph1">Phase 1</span> Acquire 📖</div>
+        <span class="phase-chevron">▼</span>
+      </div>
+      <div class="phase-body">
+        <div class="phase-goal">Goal: Read deeply enough that you could explain the concept without the doc.</div>
+        <ul class="checklist" id="ph1-list">
+          <li><span class="cb"></span><span class="text">Read <strong>DDIA Chapter 6</strong> (Kleppmann) — the "shared-nothing" section is the clearest first-principles explanation of this architecture pattern.</span></li>
+          <li><span class="cb"></span><span class="text">Read <strong>Martin Fowler: "Stateless"</strong> — <a href="https://martinfowler.com/bliki/Stateless.html" target="_blank">martinfowler.com/bliki/Stateless.html</a> — short, precise, and interview-quotable.</span></li>
+          <li><span class="cb"></span><span class="text">Watch <strong>ByteByteGo: "Session vs Token Authentication"</strong> — covers JWT trade-offs vs server-side sessions with scaling implications.</span></li>
+          <li><span class="cb"></span><span class="text">Read through <strong>Sections 5–9</strong> (Core Definition → How It Works) carefully — don't skim.</span></li>
+          <li><span class="cb"></span><span class="text">Re-read the <strong>Cheatsheet</strong> (Section 4) and try to recite it from memory after.</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-card">
+      <div class="phase-header" onclick="togglePhase(this)">
+        <div class="phase-label"><span class="phase-badge ph2">Phase 2</span> Consolidate ✍️</div>
+        <span class="phase-chevron">▼</span>
+      </div>
+      <div class="phase-body">
+        <div class="phase-goal">Goal: Verify you can reproduce the knowledge in your own words without looking.</div>
+        <ul class="checklist" id="ph2-list">
+          <li><span class="cb"></span><span class="text">Close the doc — write out the <strong>Core Definition</strong> from memory, then compare.</span></li>
+          <li><span class="cb"></span><span class="text">Explain <strong>First Principles</strong> out loud without notes — what problem does this solve and why?</span></li>
+          <li><span class="cb"></span><span class="text">Reconstruct the <strong>How It Works</strong> mechanics step by step from memory.</span></li>
+          <li><span class="cb"></span><span class="text">Restate each <strong>Trade-off</strong> row in your own words — if you can't explain the cost, you don't own it yet.</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-card">
+      <div class="phase-header" onclick="togglePhase(this)">
+        <div class="phase-label"><span class="phase-badge ph3">Phase 3</span> Apply 🔧</div>
+        <span class="phase-chevron">▼</span>
+      </div>
+      <div class="phase-body">
+        <div class="phase-goal">Goal: Connect to real systems and simulate interview scenarios.</div>
+        <ul class="checklist" id="ph3-list">
+          <li><span class="cb"></span><span class="text">Go through <strong>Real-World System Examples</strong> (Section 10) — verify each claim independently.</span></li>
+          <li><span class="cb"></span><span class="text">Practice the <strong>Interview Application</strong> (Section 12) out loud — say the trigger phrases and your response as if in a live interview.</span></li>
+          <li><span class="cb"></span><span class="text">Work through <strong>Common Misconceptions</strong> (Section 13) — for each, explain <em>why</em> the misconception is wrong, not just that it is.</span></li>
+          <li><span class="cb"></span><span class="text">Trace the <strong>Relationships to Other Concepts</strong> (Section 14) — can you explain each connection without looking?</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-card">
+      <div class="phase-header" onclick="togglePhase(this)">
+        <div class="phase-label"><span class="phase-badge ph4">Phase 4</span> Validate 🧪</div>
+        <span class="phase-chevron">▼</span>
+      </div>
+      <div class="phase-body">
+        <div class="phase-goal">Goal: Confirm you actually own it, not just recognize it.</div>
+        <ul class="checklist" id="ph4-list">
+          <li><span class="cb"></span><span class="text">Answer every <strong>Self-Check Quiz</strong> question (Section 15) out loud without looking at your notes.</span></li>
+          <li><span class="cb"></span><span class="text">Recite the <strong>Cheatsheet</strong> (Section 4) from memory — if you can't, re-do Phase 2.</span></li>
+          <li><span class="cb"></span><span class="text">Tick off items in <strong>What Mastery Looks Like</strong> (Section 2) — only check a box if you can demonstrate it on demand.</span></li>
+          <li><span class="cb"></span><span class="text">Teach this concept out loud to an imaginary interviewer for 2 minutes without hesitation or notes.</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- S4: CHEATSHEET -->
+  <section id="s4">
+    <h2 class="section-title"><span class="num">04</span> 📋 Cheatsheet</h2>
+    <p style="font-size:14px;color:var(--text-muted);margin-bottom:16px;">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</p>
+
+    <div class="mindmap-wrap">
+      <img src="../assets/images/topic_3.1_stateless_vs_stateful_architecture_definitions_and_scaling_implications_mindmap.png"
+           alt="3.1 Stateless vs. Stateful Architecture — Mindmap">
+      <div class="caption">3.1 Stateless vs. Stateful — Mindmap</div>
+    </div>
+
+    <div class="cheatsheet"><span class="label">ONE-LINER</span>
+  A stateless service holds no per-client context between requests —
+  every request is self-contained, so any instance can handle it.
+
+<span class="label">KEY PROPERTIES / RULES</span>
+  Stateless: no session in instance memory; all context in request or external store
+  Stateful: server holds client context across requests; subsequent requests need same instance
+  Stateless → any load-balancing algorithm works; no affinity required
+  Stateful → requires sticky sessions or session replication to scale
+  Share-nothing: each node is fully independent (no shared disk, memory, connections)
+
+<span class="label">DECISION RULE</span>
+  Make services stateless when: scaling horizontally, deploying behind a load balancer,
+  running in containerised / serverless environments.
+  Accept statefulness when: protocol requires it (WebSocket, game server) — but
+  externalize as much state as possible even then.
+
+<span class="label">NUMBERS / FORMULAS</span>
+  "Can I kill any one instance and have another handle the next request seamlessly?"
+  If NO → you have a stateful dependency to fix.
+  Redis GET latency: ~0.1–1ms (vs. 0ms for in-memory) — the price of externalization.
+
+<span class="label">GOTCHA TO NEVER FORGET</span>
+  Storing session in an in-memory dict is stateful even if it "feels light" —
+  the next request on a different instance will miss the session entirely.</div>
+  </section>
+
+  <!-- S5: CORE DEFINITION -->
+  <section id="s5">
+    <h2 class="section-title"><span class="num">05</span> 🧠 Core Definition</h2>
+    <div class="definition">
+      A <strong>stateless service</strong> holds no per-client state between requests — every request carries all necessary context, so any instance is interchangeable. A <strong>stateful service</strong> retains client context across requests, meaning subsequent requests must reach the same instance or that state must be replicated across all instances.
+    </div>
+  </section>
+
+  <!-- S6: CORE CONCEPTS -->
+  <section id="s6">
+    <h2 class="section-title"><span class="num">06</span> 📦 Core Concepts</h2>
+
+    <h3>Session State — The Defining Difference</h3>
+    <p>Session state is any data the server holds about a specific client between requests: who is logged in, what is in their cart, where they are in a multi-step flow. A stateless service has none of this in instance memory — it either derives all context from the request itself (JWT, cookies carrying data) or fetches it from a shared external store. The moment a server holds any per-client data in local memory, it becomes stateful and load-balancing becomes constrained.</p>
+
+    <h3>Share-Nothing Architecture</h3>
+    <p>In a share-nothing architecture, every processing node is fully independent — no shared in-memory state, no shared disk, no shared connections to other nodes. Each node can fail or be replaced without affecting any other. This is the architectural principle that makes horizontal scaling trivial: adding a new node requires no coordination with existing nodes. The alternative — shared memory or shared disk between nodes — creates coupling that limits how many nodes you can add and how fast you can fail over.</p>
+
+    <h3>Externalized State Store</h3>
+    <p>Externalizing state means moving session or other per-client data out of the instance and into a dedicated shared store (typically Redis or Memcached). The instance becomes a stateless processor: it receives a request, fetches needed context from the external store, does its work, writes any updates back, and returns a response — holding nothing locally afterwards. The external store becomes the system of record for all mutable client state.</p>
+
+    <h3>JWT as Stateless Session Token</h3>
+    <p>A JSON Web Token (JWT) encodes the session context (user ID, roles, expiry) directly in the token, signed by the server. The client stores the JWT and presents it with every request. The server validates the signature without any external lookup — making authentication fully stateless. The trade-off: the server cannot invalidate a JWT before it expires without maintaining a token blocklist, which reintroduces state.</p>
+
+    <h3>Sticky Sessions as a Workaround</h3>
+    <p>Sticky sessions (session affinity) configure the load balancer to always route requests from the same client to the same backend instance. This makes a stateful service work behind a load balancer — but it does not solve the problem; it papers over it. Load distribution becomes uneven (popular users dominate one instance), and instance failure destroys sessions. Sticky sessions are a sign that a service needs to be refactored to be stateless, not a long-term solution.</p>
+  </section>
+
+  <!-- S7: FIRST PRINCIPLES -->
+  <section id="s7">
+    <h2 class="section-title"><span class="num">07</span> 🔍 First Principles — Why Does This Exist?</h2>
+    <p>Before stateless design was a recognized pattern, the default was to store session data in the web server's local memory — cheap, fast, and simple for a single server. The problem became acute the moment you added a second server to handle load. Server A held User X's session. The load balancer sent User X's next request to Server B. Server B had no session for User X — the user was suddenly logged out, or their shopping cart was empty.</p>
+    <p>The "fix" was sticky sessions: configure the load balancer to always route User X back to Server A. But now Server A carries more load than Server B (not all users are equally active), Server A becomes a single point of failure for User X, and you cannot replace Server A without destroying every session it holds. Horizontal scaling — the whole point of adding servers — is now fundamentally hobbled.</p>
+    <p>The root cause was mixing two concerns in the same place: mutable per-client state and stateless request processing logic. Stateless architecture separates them: processing logic lives in commodity, replaceable instances; mutable state lives in a dedicated, replicated, independently scalable store. Now you can scale the processing tier freely — add instances, remove instances, replace instances — without touching the state.</p>
+  </section>
+
+  <!-- S8: MENTAL MODELS -->
+  <section id="s8">
+    <h2 class="section-title"><span class="num">08</span> 🗺️ Mental Models</h2>
+
+    <h3>Model 1: The ATM vs. Bank Teller</h3>
+    <p>An ATM is stateless: you insert your card (carry your own context), it fetches your account from the bank's central database (external store), processes your transaction, and forgets you the moment you leave. Any ATM handles any customer — there is no "your ATM." A bank teller is stateful: they remember your name, keep notes on their desk about your account, and you need to come back to the same teller for continuity. Scaling means adding tellers, but now you need routing logic to send each customer to their teller — and if that teller calls in sick, your context is gone.</p>
+    <div class="callout callout-quote"><strong>Where it breaks down:</strong> Even the ATM depends on a central database — stateless doesn't mean "no state anywhere," it means "no state in the processing node."</div>
+
+    <h3>Model 2: The "Kill Any Instance" Test</h3>
+    <p>If you can terminate any running instance right now and the system continues working correctly for all active users — the service is stateless. If killing one instance means any user loses their session or in-progress work, you have a stateful dependency hiding somewhere. Run this thought experiment on every service in your design. It is the fastest way to find accidental statefulness.</p>
+
+    <h3>Model 3: The Backpack vs. The Locker</h3>
+    <p>A stateless system gives every client a backpack: they carry everything they need with them on every request (JWT, cookie, request parameters). The server needs no memory of them. A stateful system gives each client a locker at the server: their stuff stays there between visits, but they must always go back to the same locker room. <strong>Stateless = client carries state. Stateful = server stores state.</strong></p>
+    <div class="callout callout-quote"><strong>Where it breaks down:</strong> Some state is too large or too sensitive to put in a backpack (e.g., a full user profile, payment details) — those belong in an external store, not in the token.</div>
+  </section>
+
+  <!-- S9: HOW IT WORKS -->
+  <section id="s9">
+    <h2 class="section-title"><span class="num">09</span> ⚙️ How It Works — Mechanics</h2>
+
+    <h3>Stateless Happy Path (JWT-based)</h3>
+    <ol style="padding-left:20px;display:flex;flex-direction:column;gap:8px;font-size:14.5px;margin-bottom:20px;">
+      <li>Client logs in — server validates credentials, creates a signed JWT containing <code>{userId, roles, exp}</code>, returns it.</li>
+      <li>Client stores JWT and sends it as <code>Authorization: Bearer &lt;token&gt;</code> on every subsequent request.</li>
+      <li>Load balancer routes to any available instance using any algorithm (round robin, least connections).</li>
+      <li>Instance validates JWT signature <strong>locally</strong> (no DB call), extracts userId/roles from payload.</li>
+      <li>Instance fetches dynamic data from the database, processes, returns response.</li>
+      <li>Instance holds <strong>zero per-client state</strong> after the response is sent.</li>
+    </ol>
+
+    <h3>Stateless Happy Path (Redis Session)</h3>
+    <ol style="padding-left:20px;display:flex;flex-direction:column;gap:8px;font-size:14.5px;margin-bottom:20px;">
+      <li>Client logs in — server creates a session object, stores it in Redis under a UUID key (<code>session:abc123</code>), sets a TTL.</li>
+      <li>Server returns a cookie containing only <code>session_id=abc123</code>.</li>
+      <li>On subsequent requests, <strong>any instance</strong> reads the cookie, does <code>Redis GET session:abc123</code> in ~0.5ms.</li>
+      <li>Instance processes request using the fetched session, writes updates back to Redis.</li>
+      <li>Instance holds zero per-client state after the response.</li>
+    </ol>
+
+    <h3>Failure Handling</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Scenario</th><th>Behaviour on Instance Death</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Stateless (JWT)</strong></td><td>Next request goes to another instance, validates the same JWT identically. Zero data loss.</td></tr>
+          <tr><td><strong>Stateless (Redis)</strong></td><td>Instance death is invisible. Redis downtime makes sessions unavailable — Redis must be HA (Sentinel or Cluster).</td></tr>
+          <tr><td><strong>Stateful (no externalization)</strong></td><td>Session loss for all clients on that instance. Recovery requires session replication or forced re-login.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>The JWT Revocation Problem</h3>
+    <p>JWT validation requires no external state — but revocation does. If a user logs out or their account is suspended, the JWT is still valid until its <code>exp</code> timestamp. Standard mitigations: (1) <strong>short expiry</strong> (15–60 min) with refresh tokens, (2) a <strong>Redis blocklist</strong> of revoked <code>jti</code> (JWT ID) values checked on each request — which reintroduces a small amount of state but is far more scalable than full server-side sessions.</p>
+  </section>
+
+  <!-- S10: REAL-WORLD -->
+  <section id="s10">
+    <h2 class="section-title"><span class="num">10</span> 🏭 Real-World System Examples</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>System</th><th>How This Concept Applies</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>AWS Lambda</strong></td>
+            <td>Stateless by design — each invocation is independent; all state must live in DynamoDB, S3, or ElastiCache.</td>
+            <td>Cold starts are the cost of zero instance affinity.</td>
+          </tr>
+          <tr>
+            <td><strong>Kubernetes pods (app tier)</strong></td>
+            <td>App pods are stateless and ephemeral; scheduler can reschedule to any node; StatefulSets for stateful workloads.</td>
+            <td>Enables seamless rolling deployments with zero session loss.</td>
+          </tr>
+          <tr>
+            <td><strong>Netflix API / Zuul</strong></td>
+            <td>Stateless service tier; JWT-based auth so any node validates any request; per-user state in EVCache.</td>
+            <td>Handles millions of RPS across thousands of stateless instances.</td>
+          </tr>
+          <tr>
+            <td><strong>Traditional Rails apps (pre-2008)</strong></td>
+            <td>Default session stored in server memory — broke under load balancing; migration to Redis was required.</td>
+            <td>A historical lesson in accidental statefulness.</td>
+          </tr>
+          <tr>
+            <td><strong>Stripe API</strong></td>
+            <td>Fully stateless API tier — each request is independently authenticated via HMAC; idempotency keys stored in DB.</td>
+            <td>Even payment-critical systems can be fully stateless with good external store design.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- S11: TRADE-OFFS -->
+  <section id="s11">
+    <h2 class="section-title"><span class="num">11</span> ⚖️ Trade-offs</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>✅ Benefit</th><th>❌ Cost / Limitation</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Any instance handles any request — free horizontal scaling with any LB algorithm.</td>
+            <td>Every request must carry or fetch its context, adding payload size (JWT) or external store latency (~0.5–1ms Redis).</td>
+          </tr>
+          <tr>
+            <td>Instance failure is non-catastrophic — no session loss, just retry on another instance.</td>
+            <td>External state store (Redis) becomes a new critical dependency and SPOF if not made HA.</td>
+          </tr>
+          <tr>
+            <td>Zero-downtime rolling deploys — drain and replace any instance with no affinity to break.</td>
+            <td>JWT-based auth cannot revoke tokens before expiry without a blocklist, creating a revocation window.</td>
+          </tr>
+          <tr>
+            <td>Simplified operations — no session replication, no affinity configuration in the LB.</td>
+            <td>Externalizing state adds operational complexity: you now run, monitor, and back up Redis or Memcached.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- S12: INTERVIEW -->
+  <section id="s12">
+    <h2 class="section-title"><span class="num">12</span> 🎯 Interview Application</h2>
+
+    <h3>When an interviewer asks / says:</h3>
+    <ul class="trigger-list">
+      <li>"How would you handle session management at scale?"</li>
+      <li>"The system needs to scale horizontally — how do you make that work?"</li>
+      <li>"What happens to users if one of your app servers goes down?"</li>
+      <li>"How do you design the authentication layer?"</li>
+    </ul>
+
+    <h3>What you say / do:</h3>
+    <p style="font-size:14.5px;">In requirements or high-level design, when drawing the application tier, explicitly state: <em>"I'll design the app servers to be stateless — sessions externalized to Redis, authentication via short-lived JWTs — so the load balancer can route any request to any instance with no affinity requirement. This means I can scale the app tier horizontally by just adding instances."</em> This signals architectural maturity early and sets up clean load balancing discussion in the next breath.</p>
+
+    <h3>The trade-off statement (memorize this):</h3>
+    <div class="tradeoff-statement">
+      "If we choose stateless + JWT auth, we get free horizontal scaling and simple load balancing, but we pay the cost of JWT non-revocability during the token's validity window. For this system, I'd mitigate that with a 15-minute expiry and a Redis blocklist for explicit logouts — keeping the stateless benefits while plugging the revocation gap."
+    </div>
+  </section>
+
+  <!-- S13: MISCONCEPTIONS -->
+  <section id="s13">
+    <h2 class="section-title"><span class="num">13</span> ⚠️ Common Misconceptions & Gotchas</h2>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> "Stateless means no database — the service holds no data at all."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Stateless means the <em>processing node</em> holds no per-client state between requests. It absolutely reads from and writes to databases and caches. The distinction is about what lives in instance memory, not whether the system has persistent storage.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> "We use JWT so we're fully stateless."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> JWT validation is stateless, but revocation is not. Logging out, banning users, or rotating compromised tokens all require a blocklist — a stateful store. A system that claims "fully stateless via JWT" likely cannot revoke sessions reliably.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> "Sticky sessions solve the stateful scaling problem."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Sticky sessions paper over the problem without solving it. They re-couple client identity to a specific server instance, making load distribution uneven and instance failure catastrophic for that instance's sessions. They are a workaround, not a fix.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> "Stateless is always the right answer — you should never have stateful services."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Some services are inherently stateful at the protocol level: WebSocket servers, game servers, video encoding workers. The goal is to externalize as much state as possible, not achieve theoretical purity — and to be explicit about what is and isn't stateless in your design.</div></div>
+    </div>
+  </section>
+
+  <!-- S14: RELATIONSHIPS -->
+  <section id="s14">
+    <h2 class="section-title"><span class="num">14</span> 🔗 Relationships to Other Concepts</h2>
+    <div class="rel-grid">
+      <div class="rel-card rel-builds">
+        <div class="rel-type">Builds on</div>
+        <p><strong>Topic 2 — CAP Theorem:</strong> Externalizing state to Redis introduces consistency trade-offs; Redis replication lag means sessions read from a replica may be stale after a write.</p>
+      </div>
+      <div class="rel-card rel-enables">
+        <div class="rel-type">Enables</div>
+        <p><strong>Topic 4 — Load Balancing:</strong> Stateless services make every routing algorithm viable. Without statelessness, you're forced into IP hash or cookie affinity, which breaks even distribution.</p>
+      </div>
+      <div class="rel-card rel-tension">
+        <div class="rel-type">Tension with</div>
+        <p><strong>Topic 4.6 — Sticky Sessions:</strong> Sticky sessions exist precisely because services became stateful. Understanding why they're a problem is only fully clear once you've internalized what stateless means.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- S15: QUIZ -->
+  <section id="s15">
+    <h2 class="section-title"><span class="num">15</span> 🧪 Self-Check Quiz</h2>
+    <p style="font-size:14px;color:var(--text-muted);margin-bottom:20px;">Answer each question out loud without looking. If you hesitate, you haven't internalized it yet.</p>
+
+    <div class="quiz-item">
+      <div class="quiz-q"><span class="quiz-num">1</span><span>In one sentence: what is the defining characteristic that makes a service stateless rather than stateful?</span></div>
+      <div class="quiz-hint">Think through the definition in terms of what the <em>instance</em> holds, not what the system does overall — revisit Section 5 if you hesitate.</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q"><span class="quiz-num">2</span><span>Your team runs 3 app servers behind a round-robin load balancer. Users randomly report being logged out mid-session. What is the most likely root cause, and how do you fix it without switching to sticky sessions?</span></div>
+      <div class="quiz-hint">Trace which server each request lands on and where the session data lives — revisit Section 9 if the mechanics aren't clear.</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q"><span class="quiz-num">3</span><span>A colleague says "we use JWT so our service is completely stateless." Name one common scenario where this claim breaks down and explain the standard mitigation.</span></div>
+      <div class="quiz-hint">Think about what happens when you need to invalidate a token before it expires — revisit Sections 9 and 13.</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q"><span class="quiz-num">4</span><span>Name a real production system designed as a stateless tier and describe concretely what mechanism it uses to avoid holding per-client state.</span></div>
+      <div class="quiz-hint">Pick one from Section 10 and explain the mechanism, not just the name.</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q"><span class="quiz-num">5</span><span>You are designing a chat application. The WebSocket connection server is inherently stateful — it holds the active connection. Does this mean the whole system must be stateful? How do you isolate the statefulness?</span></div>
+      <div class="quiz-hint">Think about which components are stateful vs. which can be stateless, and what the statefulness boundary looks like.</div>
+    </div>
+  </section>
+
+  <!-- S16: FURTHER READING -->
+  <section id="s16">
+    <h2 class="section-title"><span class="num">16</span> 📚 Further Reading</h2>
+    <ul class="reading-list">
+      <li><strong>DDIA Chapter 6</strong> — Kleppmann, <em>Designing Data-Intensive Applications</em>. The shared-nothing section is the clearest first-principles explanation of why this pattern exists.</li>
+      <li><strong>Martin Fowler: "Stateless"</strong> — <a href="https://martinfowler.com/bliki/Stateless.html" target="_blank">martinfowler.com/bliki/Stateless.html</a> — short, precise, and directly quotable in an interview.</li>
+      <li><strong>ByteByteGo: "Session vs Token Authentication"</strong> — YouTube / bytebytego.com — JWT vs server-side session trade-offs with scaling diagrams.</li>
+      <li><strong>AWS: "Building serverless applications with AWS Lambda"</strong> — Lambda as the canonical stateless compute model; forces you to confront what state you were relying on.</li>
+      <li><strong>Redis: "Redis as a session store"</strong> — <a href="https://redis.io/docs" target="_blank">redis.io/docs</a> — practical implementation of the externalized session pattern.</li>
+    </ul>
+  </section>
+
+  <!-- S17: MY NOTES -->
+  <section id="s17">
+    <h2 class="section-title"><span class="num">17</span> ✍️ My Notes</h2>
+    <div style="background:var(--surface);border:2px dashed var(--border);border-radius:10px;padding:24px;min-height:120px;">
+      <p style="color:var(--text-muted);font-style:italic;font-size:14px;">Personal observations, things that confused you, analogies that helped. This space is yours.</p>
+    </div>
+  </section>
+
+</article>
+</main>
+
+<script>
+  // Phase card toggle
+  function togglePhase(header) {
+    header.parentElement.classList.toggle('open');
+  }
+
+  // Checkbox toggle — persists to localStorage
+  document.querySelectorAll('.checklist .cb').forEach((cb, i) => {
+    const key = 'cb_' + i;
+    if (localStorage.getItem(key) === '1') cb.parentElement.classList.add('checked');
+    cb.addEventListener('click', () => {
+      cb.parentElement.classList.toggle('checked');
+      localStorage.setItem(key, cb.parentElement.classList.contains('checked') ? '1' : '0');
+    });
+  });
+
+  // Active TOC link on scroll
+  const sections = document.querySelectorAll('section[id]');
+  const tocLinks = document.querySelectorAll('#toc nav a');
+
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        tocLinks.forEach(a => a.classList.remove('active'));
+        const active = document.querySelector(`#toc nav a[href="#${e.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+
+  sections.forEach(s => observer.observe(s));
+</script>
+
+</body>
+</html>

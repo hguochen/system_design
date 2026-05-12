@@ -1,0 +1,1075 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.2 Session Management Approaches</title>
+<style>
+  :root {
+    --bg: #f9f8f6;
+    --surface: #ffffff;
+    --surface-alt: #f3f2ef;
+    --border: #e5e3de;
+    --text: #1a1917;
+    --text-muted: #6b6861;
+    --accent: #2563eb;
+    --accent-light: #dbeafe;
+    --green: #16a34a;
+    --green-light: #dcfce7;
+    --red: #dc2626;
+    --red-light: #fee2e2;
+    --yellow: #d97706;
+    --yellow-light: #fef3c7;
+    --purple: #7c3aed;
+    --purple-light: #ede9fe;
+    --code-bg: #1e1e2e;
+    --code-text: #cdd6f4;
+    --sidebar-w: 240px;
+    --content-max: 780px;
+    font-size: 16px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    display: flex;
+  }
+
+  /* ── SIDEBAR ── */
+  #toc {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: var(--sidebar-w);
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 24px 0 48px;
+    z-index: 100;
+  }
+
+  #toc-header {
+    padding: 0 16px 16px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 8px;
+  }
+
+  #toc-header .phase-tag {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: var(--accent-light);
+    border-radius: 4px;
+    padding: 2px 7px;
+    display: inline-block;
+    margin-bottom: 6px;
+  }
+
+  #toc-header h2 {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.4;
+  }
+
+  #toc nav a {
+    display: block;
+    padding: 5px 16px 5px 20px;
+    font-size: 12.5px;
+    color: var(--text-muted);
+    text-decoration: none;
+    border-left: 2px solid transparent;
+    transition: all 0.15s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+
+  /* ── MAIN CONTENT ── */
+  main {
+    margin-left: var(--sidebar-w);
+    padding: 48px 48px 96px;
+    max-width: calc(var(--sidebar-w) + var(--content-max) + 96px);
+    width: 100%;
+  }
+
+  article { max-width: var(--content-max); }
+
+  /* ── HEADER ── */
+  .doc-header {
+    margin-bottom: 40px;
+    padding-bottom: 28px;
+    border-bottom: 2px solid var(--border);
+  }
+
+  .doc-header .meta {
+    display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px;
+  }
+
+  .tag {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border-radius: 20px;
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+
+  .tag-phase  { background: var(--accent-light);  color: var(--accent); }
+  .tag-topic  { background: var(--purple-light);  color: var(--purple); }
+  .tag-date   { background: var(--surface-alt);   color: var(--text-muted); }
+
+  .doc-header h1 {
+    font-size: 30px;
+    font-weight: 800;
+    line-height: 1.25;
+    letter-spacing: -0.02em;
+    color: var(--text);
+  }
+
+  /* ── SECTIONS ── */
+  section {
+    margin-bottom: 52px;
+    scroll-margin-top: 32px;
+  }
+
+  h2.section-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 20px;
+    display: flex; align-items: center; gap: 10px;
+    letter-spacing: -0.01em;
+  }
+
+  h2.section-title .num {
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--text-muted);
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 2px 7px;
+    letter-spacing: 0.04em;
+  }
+
+  h3 {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    margin: 24px 0 10px;
+  }
+
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+
+  /* ── CALLOUT BOXES ── */
+  .callout {
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-bottom: 20px;
+    font-size: 14px;
+    border-left: 3px solid;
+  }
+
+  .callout-goal   { background: var(--accent-light);  border-color: var(--accent);  color: #1e40af; }
+  .callout-tip    { background: var(--yellow-light);  border-color: var(--yellow);  color: #92400e; }
+  .callout-quote  { background: var(--surface-alt);   border-color: var(--border);  color: var(--text-muted); font-style: italic; }
+
+  .callout strong { font-weight: 700; }
+
+  /* ── CHEATSHEET ── */
+  .cheatsheet {
+    background: var(--code-bg);
+    color: var(--code-text);
+    border-radius: 12px;
+    padding: 24px 28px;
+    font-family: "SF Mono", "Fira Code", "Cascadia Code", Menlo, monospace;
+    font-size: 13px;
+    line-height: 1.65;
+    white-space: pre-wrap;
+    overflow-x: auto;
+    margin-top: 16px;
+  }
+
+  .cheatsheet .label {
+    color: #cba6f7;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+  }
+
+  .cheatsheet .val { color: #a6e3a1; }
+  .cheatsheet .hi  { color: #f38ba8; font-weight: 600; }
+
+  /* ── MINDMAP ── */
+  .mindmap-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    margin: 20px 0 24px;
+    text-align: center;
+  }
+
+  .mindmap-wrap img { max-width: 100%; border-radius: 8px; }
+
+  .mindmap-wrap .caption {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 8px;
+  }
+
+  /* ── CHECKLIST ── */
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+
+  .checklist li {
+    display: flex; align-items: flex-start; gap: 10px;
+    font-size: 14.5px;
+    line-height: 1.55;
+  }
+
+  .checklist li .cb {
+    flex-shrink: 0;
+    width: 18px; height: 18px;
+    border: 2px solid var(--border);
+    border-radius: 4px;
+    margin-top: 2px;
+    background: var(--surface);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+
+  .checklist li.checked .cb {
+    background: var(--green);
+    border-color: var(--green);
+  }
+
+  .checklist li.checked .cb::after {
+    content: '';
+    display: block;
+    width: 5px; height: 9px;
+    border: 2px solid #fff;
+    border-top: none; border-left: none;
+    transform: rotate(45deg) translateY(-1px);
+  }
+
+  .checklist li.checked .text { color: var(--text-muted); text-decoration: line-through; }
+
+  /* ── STUDY PHASES ── */
+  .phase-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+
+  .phase-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 20px;
+    cursor: pointer;
+    user-select: none;
+    background: var(--surface-alt);
+  }
+
+  .phase-header:hover { background: var(--border); }
+
+  .phase-label {
+    font-size: 14px;
+    font-weight: 700;
+    display: flex; align-items: center; gap: 10px;
+  }
+
+  .phase-badge {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 20px;
+  }
+
+  .ph1 { background: #dbeafe; color: #1d4ed8; }
+  .ph2 { background: #fce7f3; color: #9d174d; }
+  .ph3 { background: #d1fae5; color: #065f46; }
+  .ph4 { background: #fef3c7; color: #92400e; }
+
+  .phase-chevron { font-size: 12px; color: var(--text-muted); transition: transform 0.2s; }
+  .phase-card.open .phase-chevron { transform: rotate(180deg); }
+
+  .phase-body { display: none; padding: 16px 20px 20px; }
+  .phase-card.open .phase-body { display: block; }
+
+  .phase-goal {
+    font-size: 12.5px;
+    color: var(--text-muted);
+    font-style: italic;
+    margin-bottom: 12px;
+  }
+
+  /* ── TABLES ── */
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+
+  th {
+    background: var(--surface-alt);
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    border-bottom: 2px solid var(--border);
+  }
+
+  td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+    line-height: 1.5;
+  }
+
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+
+  /* ── MISCONCEPTIONS ── */
+  .misconception {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 12px;
+  }
+
+  .misconception .wrong {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 12px 16px;
+    background: var(--red-light);
+    font-size: 14px;
+  }
+
+  .misconception .right {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 12px 16px;
+    background: var(--green-light);
+    font-size: 14px;
+    border-top: 1px solid var(--border);
+  }
+
+  .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+
+  /* ── QUIZ ── */
+  .quiz-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+    margin-bottom: 14px;
+  }
+
+  .quiz-q {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    display: flex; gap: 10px;
+  }
+
+  .quiz-num {
+    flex-shrink: 0;
+    background: var(--accent);
+    color: #fff;
+    border-radius: 50%;
+    width: 22px; height: 22px;
+    font-size: 12px;
+    font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    margin-top: 1px;
+  }
+
+  .quiz-hint {
+    background: var(--yellow-light);
+    border: 1px solid #fde68a;
+    border-radius: 7px;
+    padding: 10px 14px;
+    font-size: 13px;
+    color: #92400e;
+    cursor: pointer;
+    user-select: none;
+    display: flex; align-items: center; gap: 6px;
+  }
+
+  .quiz-hint::before { content: '💡'; }
+
+  /* ── RELATIONSHIPS ── */
+  .rel-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+    margin-top: 4px;
+  }
+
+  .rel-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+
+  .rel-card .rel-type {
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    margin-bottom: 6px;
+  }
+
+  .rel-builds  .rel-type { color: var(--accent); }
+  .rel-enables .rel-type { color: var(--green);  }
+  .rel-tension .rel-type { color: var(--yellow); }
+
+  .rel-card p { font-size: 13.5px; line-height: 1.5; }
+
+  /* ── FURTHER READING ── */
+  .reading-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+
+  .reading-list li {
+    display: flex; align-items: flex-start; gap: 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .reading-list li::before { content: '📖'; flex-shrink: 0; font-size: 16px; margin-top: 1px; }
+
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* ── TRADE-OFF STATEMENT ── */
+  .tradeoff-statement {
+    background: var(--purple-light);
+    border-left: 4px solid var(--purple);
+    border-radius: 0 8px 8px 0;
+    padding: 16px 18px;
+    font-size: 14.5px;
+    line-height: 1.65;
+    font-style: italic;
+    color: #4c1d95;
+    margin-top: 14px;
+  }
+
+  .trigger-list { list-style: none; display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+
+  .trigger-list li { display: flex; align-items: flex-start; gap: 8px; font-size: 14px; }
+
+  .trigger-list li::before {
+    content: '▶';
+    color: var(--accent);
+    font-size: 9px;
+    margin-top: 5px;
+    flex-shrink: 0;
+  }
+
+  /* ── DEFINITION ── */
+  .definition {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 22px;
+    font-size: 15.5px;
+    line-height: 1.7;
+  }
+
+  /* ── SESSION COMPARISON CARDS ── */
+  .approach-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 14px;
+    margin: 16px 0;
+  }
+
+  .approach-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .approach-card .ac-header {
+    padding: 10px 14px;
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .ac-blue   .ac-header { background: #dbeafe; color: #1e40af; }
+  .ac-purple .ac-header { background: #ede9fe; color: #4c1d95; }
+  .ac-orange .ac-header { background: #ffedd5; color: #9a3412; }
+
+  .approach-card .ac-body { padding: 12px 14px; font-size: 13.5px; line-height: 1.55; }
+
+  strong { font-weight: 700; }
+  code {
+    font-family: "SF Mono", "Fira Code", Menlo, monospace;
+    font-size: 12.5px;
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 5px;
+  }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  @media (max-width: 860px) {
+    #toc { display: none; }
+    main { margin-left: 0; padding: 24px 20px 64px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR TOC -->
+<aside id="toc">
+  <div id="toc-header">
+    <div class="phase-tag">Phase B · Topic 3</div>
+    <h2>3.2 Session<br>Management Approaches</h2>
+  </div>
+  <nav>
+    <a href="#s1">1 · Goal</a>
+    <a href="#s2">2 · Mastery Checklist</a>
+    <a href="#s3">3 · Study Phases</a>
+    <a href="#s4">4 · Cheatsheet</a>
+    <a href="#s5">5 · Core Definition</a>
+    <a href="#s6">6 · Core Concepts</a>
+    <a href="#s7">7 · First Principles</a>
+    <a href="#s8">8 · Mental Models</a>
+    <a href="#s9">9 · How It Works</a>
+    <a href="#s10">10 · Real-World Examples</a>
+    <a href="#s11">11 · Trade-offs</a>
+    <a href="#s12">12 · Interview Application</a>
+    <a href="#s13">13 · Misconceptions</a>
+    <a href="#s14">14 · Relationships</a>
+    <a href="#s15">15 · Self-Check Quiz</a>
+    <a href="#s16">16 · Further Reading</a>
+    <a href="#s17">17 · My Notes</a>
+  </nav>
+</aside>
+
+<!-- MAIN -->
+<main>
+<article>
+
+  <!-- HEADER -->
+  <div class="doc-header">
+    <div class="meta">
+      <span class="tag tag-phase">Phase B — Scalability Branch</span>
+      <span class="tag tag-topic">Topic 3 — Stateless Services</span>
+      <span class="tag tag-date">Studied: 2026-05-11</span>
+    </div>
+    <h1>3.2 Session Management Approaches</h1>
+  </div>
+
+  <!-- S1: GOAL -->
+  <section id="s1">
+    <h2 class="section-title"><span class="num">01</span> 🎯 Goal of This Subtopic</h2>
+    <ul class="checklist" id="goal-list">
+      <li><span class="cb"></span><span class="text">Be able to compare <strong>server-side, cookie-based, and token-based</strong> session management and select the right approach given a system's scalability and revocation requirements.</span></li>
+      <li><span class="cb"></span><span class="text">Understand why the choice of session strategy is a <strong>load balancing and scaling decision</strong>, not just an auth decision.</span></li>
+      <li><span class="cb"></span><span class="text">Identify the specific failure modes of each approach — particularly why <strong>JWTs can't be revoked</strong> without reintroducing server-side state.</span></li>
+    </ul>
+  </section>
+
+  <!-- S2: MASTERY -->
+  <section id="s2">
+    <h2 class="section-title"><span class="num">02</span> ✅ What Mastery Looks Like</h2>
+    <div class="callout callout-tip">
+      <strong>Rule of thumb:</strong> If you can teach it to someone else and field their follow-up questions, you've mastered it.
+    </div>
+    <ul class="checklist" id="mastery-list">
+      <li><span class="cb"></span><span class="text">Can explain what <strong>sticky sessions</strong> are, why they exist, and why they hurt horizontal scaling — in under 60 seconds.</span></li>
+      <li><span class="cb"></span><span class="text">Can describe the scalability problem with in-memory server-side sessions and propose the correct fix (<strong>shared session store</strong>) without prompting.</span></li>
+      <li><span class="cb"></span><span class="text">Can walk through the <strong>JWT validation flow</strong> — including what "stateless" means mechanically — and explain why JWTs can't be revoked without a blocklist.</span></li>
+      <li><span class="cb"></span><span class="text">Can compare all three approaches on: <strong>scalability, revocation capability, complexity, and trust boundary</strong>.</span></li>
+      <li><span class="cb"></span><span class="text">Can take a stateful session design and <strong>refactor it into a stateless JWT-based design</strong>, explaining each step.</span></li>
+    </ul>
+  </section>
+
+  <!-- S3: STUDY PHASES -->
+  <section id="s3">
+    <h2 class="section-title"><span class="num">03</span> 🗓️ Study Phases</h2>
+    <p style="font-size:14px;color:var(--text-muted);margin-bottom:16px;">Work through each phase in order. Don't move to the next until you can honestly tick every item.</p>
+
+    <div class="phase-card open">
+      <div class="phase-header" onclick="togglePhase(this)">
+        <div class="phase-label"><span class="phase-badge ph1">Phase 1</span> Acquire 📖</div>
+        <span class="phase-chevron">▼</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Read deeply enough that you could explain the concept without the doc.</p>
+        <ul class="checklist">
+          <li><span class="cb"></span><span class="text">Read <em>DDIA</em> Ch. 9 (session guarantees) and <em>System Design Interview Vol. 1</em> Ch. 13</span></li>
+          <li><span class="cb"></span><span class="text">Read Auth0 blog — "Cookies vs. Tokens: The Definitive Guide" (auth0.com/blog)</span></li>
+          <li><span class="cb"></span><span class="text">Read JWT.io introduction and RFC 7519 summary</span></li>
+          <li><span class="cb"></span><span class="text">Read through <strong>Sections 5–9</strong> (Core Definition → How It Works) carefully — don't skim</span></li>
+          <li><span class="cb"></span><span class="text">Re-read the <strong>Cheatsheet</strong> (Section 4) and try to recite it from memory after</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-card">
+      <div class="phase-header" onclick="togglePhase(this)">
+        <div class="phase-label"><span class="phase-badge ph2">Phase 2</span> Consolidate ✍️</div>
+        <span class="phase-chevron">▼</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Verify you can reproduce the knowledge in your own words without looking.</p>
+        <ul class="checklist">
+          <li><span class="cb"></span><span class="text">Close the doc — write out the <strong>Core Definition</strong> from memory, then compare</span></li>
+          <li><span class="cb"></span><span class="text">Explain <strong>First Principles</strong> out loud without notes — what problem does this solve and why?</span></li>
+          <li><span class="cb"></span><span class="text">Reconstruct the <strong>How It Works</strong> mechanics step by step from memory</span></li>
+          <li><span class="cb"></span><span class="text">Restate each <strong>Trade-off</strong> row in your own words — if you can't explain the cost, you don't own it yet</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-card">
+      <div class="phase-header" onclick="togglePhase(this)">
+        <div class="phase-label"><span class="phase-badge ph3">Phase 3</span> Apply 🔧</div>
+        <span class="phase-chevron">▼</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Connect to real systems and simulate interview scenarios.</p>
+        <ul class="checklist">
+          <li><span class="cb"></span><span class="text">Go through <strong>Real-World System Examples</strong> (Section 10) — verify each claim independently</span></li>
+          <li><span class="cb"></span><span class="text">Practice the <strong>Interview Application</strong> (Section 12) out loud — say the trigger phrases and your response as if in a live interview</span></li>
+          <li><span class="cb"></span><span class="text">Work through <strong>Common Misconceptions</strong> (Section 13) — explain <em>why</em> each is wrong, not just that it is</span></li>
+          <li><span class="cb"></span><span class="text">Trace the <strong>Relationships to Other Concepts</strong> (Section 14) — can you explain each connection without looking?</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-card">
+      <div class="phase-header" onclick="togglePhase(this)">
+        <div class="phase-label"><span class="phase-badge ph4">Phase 4</span> Validate 🧪</div>
+        <span class="phase-chevron">▼</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Confirm you actually own it, not just recognize it.</p>
+        <ul class="checklist">
+          <li><span class="cb"></span><span class="text">Answer every <strong>Self-Check Quiz</strong> question (Section 15) out loud without notes</span></li>
+          <li><span class="cb"></span><span class="text">Recite the <strong>Cheatsheet</strong> (Section 4) from memory — if you can't, re-do Phase 2</span></li>
+          <li><span class="cb"></span><span class="text">Tick off items in <strong>What Mastery Looks Like</strong> (Section 2) — only check if you can demonstrate it on demand</span></li>
+          <li><span class="cb"></span><span class="text">Teach this concept out loud to an imaginary interviewer for 2 minutes without hesitation</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- S4: CHEATSHEET -->
+  <section id="s4">
+    <h2 class="section-title"><span class="num">04</span> 📋 Cheatsheet</h2>
+    <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+
+    <div class="mindmap-wrap">
+      <img src="../assets/images/topic_3.2_session_management_approaches_mindmap.png" alt="3.2 Session Management Approaches — Mindmap">
+      <div class="caption">3.2 Session Management Approaches — Mindmap</div>
+    </div>
+
+    <div class="cheatsheet"><span class="label">ONE-LINER</span>
+  Session management is where you store "who is this user, what can they do" —
+  on your servers (server-side), in a browser cookie, or in a signed token the
+  client carries (JWT). The choice determines whether your service can scale freely.
+
+<span class="label">KEY PROPERTIES / RULES</span>
+  <span class="val">1.</span> Server-side sessions: auth state lives on the server. Horizontal scaling requires
+     a shared session store (Redis); otherwise sticky sessions are needed.
+  <span class="val">2.</span> Cookie-based: the browser sends a session ID on every request. The server
+     looks it up in its store. Still server-side — "cookie" is just the transport.
+  <span class="val">3.</span> Token-based (JWT): server issues a signed token; client stores and sends it.
+     Server validates the signature — no shared store needed. Stateless.
+  <span class="val">4.</span> JWTs cannot be revoked before expiry without a blocklist, which reintroduces
+     server-side state and partially defeats the purpose.
+
+<span class="label">DECISION RULE</span>
+  Use JWT when: stateless horizontal scaling, microservices, mobile / cross-domain.
+  Use sessions when: instant revocation required, single-domain, strong audit trail.
+  Avoid JWT when: account suspension must take effect in &lt; 1 minute.
+
+<span class="label">NUMBERS TO REMEMBER</span>
+  JWT access token TTL  →  15 min – 1 hr  (short to limit revocation window)
+  Refresh token TTL     →  7 – 30 days    (rotated on use)
+  Session cookie TTL    →  30 min – 24 hr (server controls expiry)
+  JWT max practical size →  ~4–8 KB       (keep claims minimal)
+
+<span class="label">GOTCHA TO NEVER FORGET</span>
+  <span class="hi">Adding a JWT blocklist to fix revocation = you now have a shared session store,
+  just worse. You paid the JWT complexity tax and got server-side sessions anyway.</span></div>
+  </section>
+
+  <!-- S5: CORE DEFINITION -->
+  <section id="s5">
+    <h2 class="section-title"><span class="num">05</span> 🧠 Core Definition</h2>
+    <div class="definition">
+      Session management is the mechanism by which a server tracks authenticated user state across multiple stateless HTTP requests. The three primary approaches — <strong>server-side store, cookie transport, and token-based self-contained tokens</strong> — represent a fundamental trade-off between <strong>revocation control</strong> (can you immediately invalidate a session?) and <strong>horizontal scalability</strong> (can any server handle any request without coordination?).
+    </div>
+  </section>
+
+  <!-- S6: CORE CONCEPTS -->
+  <section id="s6">
+    <h2 class="section-title"><span class="num">06</span> 📦 Core Concepts</h2>
+
+    <div class="approach-grid">
+      <div class="approach-card ac-blue">
+        <div class="ac-header">🖥️ Server-Side Sessions</div>
+        <div class="ac-body">Server creates a session record keyed by a session ID, returns only the ID to the client (via cookie). Every request requires a lookup. <strong>State lives on the server.</strong></div>
+      </div>
+      <div class="approach-card ac-purple">
+        <div class="ac-header">🔑 JWT / Token-Based</div>
+        <div class="ac-body">Server issues a signed token containing claims. Client stores it; server validates the signature locally. <strong>No lookup required. Fully stateless.</strong></div>
+      </div>
+      <div class="approach-card ac-orange">
+        <div class="ac-header">🍪 Cookie Transport</div>
+        <div class="ac-body">A delivery mechanism, not a session strategy. Browser attaches cookies automatically. Can carry a session ID <em>or</em> a JWT. <strong>The cookie is the envelope, not the letter.</strong></div>
+      </div>
+    </div>
+
+    <h3>Sticky Sessions (Session Affinity)</h3>
+    <p>When in-memory sessions aren't shared, a load balancer must route all requests from a given client to the <em>same</em> backend server — the one holding their session. This is sticky sessions. It solves the lookup problem without a shared store, but at a severe scaling cost: nodes can't be freely added/removed, a server failure takes its sessions with it, and load distribution becomes uneven. <strong>Sticky sessions are a code smell</strong> — a signal that state hasn't been properly externalized.</p>
+
+    <h3>Shared Session Store (Externalizing State)</h3>
+    <p>The correct fix: move session records to a shared, fast, distributed store — typically Redis. All application servers read/write to the same Redis cluster. Any server can handle any request; sessions survive individual server restarts. Cost: the Redis cluster is now a stateful component that must be highly available — its failure takes down all auth.</p>
+
+    <h3>JWT Structure &amp; Mechanics</h3>
+    <p>A JWT is three base64url-encoded segments joined by dots: <code>header.payload.signature</code>. The header specifies the signing algorithm (RS256, HS256). The payload contains claims: <code>sub</code> (subject), <code>iat</code> (issued at), <code>exp</code> (expiry), <code>roles</code>, custom claims. The signature is computed over header + payload with the server's private key. <strong>The payload is encoded, not encrypted</strong> — anyone can decode it. The signature guarantees integrity, not confidentiality.</p>
+
+    <h3>Token Revocation &amp; The Blocklist Problem</h3>
+    <p>When a user logs out or is suspended, server-side sessions are trivially invalidated by deleting the record. JWTs remain cryptographically valid until their <code>exp</code> claim lapses. Common mitigations: (1) <strong>short TTLs</strong> (15–60 min) bound the attack window; (2) <strong>refresh token rotation</strong> — access tokens expire quickly, refresh tokens are stored server-side and rotated on use; (3) a <strong>token blocklist</strong> in Redis stores revoked JTIs checked on each request — but this reintroduces a shared store. There is no free lunch.</p>
+  </section>
+
+  <!-- S7: FIRST PRINCIPLES -->
+  <section id="s7">
+    <h2 class="section-title"><span class="num">07</span> 🔍 First Principles — Why Does This Exist?</h2>
+    <p>HTTP is inherently stateless — each request carries no memory of prior requests. But almost every useful web application needs to know <em>who is making this request</em> without asking them to authenticate on every click. The first solution was simple: the server keeps a ledger (session store) and gives the client a claim-check (session ID cookie). This worked fine on a single server in 2000.</p>
+    <p>The problem emerged at scale. When you run 10 or 100 servers behind a load balancer, the session record on Server 1 is invisible to Server 2. The industry's first response — sticky sessions — kicked the problem down the road. The correct fix was externalizing the ledger to a shared store (Redis), making server nodes symmetric and freely replaceable.</p>
+    <p>The next wave — microservices, mobile clients, cross-domain APIs — made even the shared session store a bottleneck. Each microservice needed to validate the session, which meant either calling a central auth service or sharing the session store. Token-based auth (JWT) eliminated the lookup entirely: the token <em>is</em> the session record, signed so it can't be forged, and any service with the public key can validate it locally. The trade-off — loss of instant revocation — is the price of that decoupling.</p>
+  </section>
+
+  <!-- S8: MENTAL MODELS -->
+  <section id="s8">
+    <h2 class="section-title"><span class="num">08</span> 🗺️ Mental Models</h2>
+
+    <h3>Model 1: The Coat Check vs. the Membership Card</h3>
+    <p>Server-side sessions are like a coat check: you hand in your coat (identity proof), get a numbered ticket (session ID), and every time you want your coat you show the ticket. The limitation: only the original coat check desk can redeem it. Move to a different desk (different server) and your ticket is worthless — unless there's a central coat check registry (shared session store).</p>
+    <p>JWT is like a signed membership card you carry in your wallet: any bouncer at any door can verify it by checking the club's watermark (signature). No central desk needed. But if the club revokes your membership, you still hold a valid-looking card until it expires. <strong>The model breaks down exactly where JWT breaks down: instant revocation requires a centralized authority.</strong></p>
+
+    <h3>Model 2: The "State Budget" Frame</h3>
+    <p>Every system design decision involves a state budget. Server-side sessions spend that budget at the server layer (session store) but keep clients thin. JWTs push state to the client (the token) to keep servers thin. The total state doesn't disappear — it relocates. When you add a JWT blocklist, you're spending state back at the server layer, partly negating the trade. This frame helps you explain to an interviewer <em>why</em> there's no purely stateless revocation — state has to live somewhere.</p>
+
+    <h3>Model 3: The TTL Dial</h3>
+    <p>Think of access token TTL as a dial between security and scalability. Short TTL (1–5 min): fast revocation, but frequent refresh token round-trips and increased auth service load. Long TTL (12–24 hr): low load, but a compromised token is valid for hours. Most production systems land at 15–60 minutes for access tokens, with 7–30 day refresh tokens. Turning the dial left buys revocation at the cost of auth service load; turning it right buys scalability at the cost of security window.</p>
+  </section>
+
+  <!-- S9: HOW IT WORKS -->
+  <section id="s9">
+    <h2 class="section-title"><span class="num">09</span> ⚙️ How It Works — Mechanics</h2>
+
+    <h3>Server-Side Sessions — Happy Path</h3>
+    <ol style="margin-left:20px;font-size:14.5px;line-height:1.8;margin-bottom:16px;">
+      <li>User submits credentials (POST /login).</li>
+      <li>Server verifies credentials against the user store.</li>
+      <li>Server creates a session record <code>{ session_id, user_id, roles, expires_at }</code> and writes it to Redis.</li>
+      <li>Server returns <code>Set-Cookie: session_id=abc123; HttpOnly; Secure; SameSite=Lax</code>.</li>
+      <li>Browser attaches <code>Cookie: session_id=abc123</code> on every subsequent request.</li>
+      <li>Server extracts session ID, looks up session record in Redis, reconstructs user context.</li>
+      <li><strong>On logout:</strong> server deletes the session record. Immediately invalid.</li>
+    </ol>
+
+    <h3>JWT — Happy Path</h3>
+    <ol style="margin-left:20px;font-size:14.5px;line-height:1.8;margin-bottom:16px;">
+      <li>User submits credentials.</li>
+      <li>Server verifies credentials, builds payload: <code>{ sub, roles, iat, exp: now+3600 }</code>.</li>
+      <li>Server signs payload using RS256 private key → produces <code>header.payload.signature</code>.</li>
+      <li>Server returns the JWT (in response body or <code>Set-Cookie</code> with <code>HttpOnly</code>).</li>
+      <li>Client sends it as <code>Authorization: Bearer &lt;token&gt;</code> or in cookie on each request.</li>
+      <li>Any backend validates the signature using the public key (no network call needed), checks <code>exp</code>, reads claims.</li>
+      <li><strong>On logout (client-side only):</strong> client discards the token. Token remains cryptographically valid until <code>exp</code>.</li>
+    </ol>
+
+    <h3>Refresh Token Flow</h3>
+    <p>Access token lives 15–60 min. Refresh token lives 7–30 days and is stored server-side. When the access token expires, the client sends the refresh token to the auth service, which validates it, <strong>rotates it</strong> (issues a new refresh token, invalidates the old one), and issues a new access token. Worst-case revocation window: the access token TTL. Immediate revocation requires adding the access token's JTI to a blocklist.</p>
+  </section>
+
+  <!-- S10: REAL-WORLD EXAMPLES -->
+  <section id="s10">
+    <h2 class="section-title"><span class="num">10</span> 🏭 Real-World System Examples</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>System</th><th>How This Concept Applies</th><th>Notes</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>GitHub</strong></td>
+            <td>Server-side sessions for browser auth; JWTs (via GitHub Apps) for API auth</td>
+            <td>Two-tier: session cookies for humans, tokens for machines</td>
+          </tr>
+          <tr>
+            <td><strong>Google / GCP</strong></td>
+            <td>OAuth2 short-lived access tokens (1 hr) + refresh token flow</td>
+            <td>Refresh tokens can be revoked immediately via OAuth2 token revocation endpoint</td>
+          </tr>
+          <tr>
+            <td><strong>Stripe</strong></td>
+            <td>API keys (long-lived, server-stored) + session cookies for dashboard</td>
+            <td>API keys stored as hashes server-side — immediate revocation, no expiry ambiguity</td>
+          </tr>
+          <tr>
+            <td><strong>AWS STS</strong></td>
+            <td>Issues short-lived JWT-like temporary credentials (up to 12 hr)</td>
+            <td>Revocation via IAM policy changes, effective at next token expiry</td>
+          </tr>
+          <tr>
+            <td><strong>Kubernetes</strong></td>
+            <td>ServiceAccount JWTs signed by cluster CA for pod-to-API-server auth</td>
+            <td>Tokens are short-lived, automatically rotated by kubelet</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- S11: TRADE-OFFS -->
+  <section id="s11">
+    <h2 class="section-title"><span class="num">11</span> ⚖️ Trade-offs</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>✅ Benefit</th><th>❌ Cost / Limitation</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="benefit">Server-side sessions:</span> Instant revocation — delete the record, user is immediately logged out</td>
+            <td>Every request requires a session store lookup (network hop); shared store must be highly available</td>
+          </tr>
+          <tr>
+            <td><span class="benefit">Server-side sessions:</span> Session data can be updated; role changes take effect immediately</td>
+            <td>Session store is a stateful component; its failure takes down all auth simultaneously</td>
+          </tr>
+          <tr>
+            <td><span class="benefit">JWT (token-based):</span> Stateless — any server can validate without a network call; works across microservices and domains</td>
+            <td>Tokens cannot be revoked before expiry without a blocklist; compromised token valid until <code>exp</code></td>
+          </tr>
+          <tr>
+            <td><span class="benefit">JWT:</span> Works naturally across services/domains; no shared session store dependency</td>
+            <td>Payload is encoded not encrypted — sensitive claims readable by anyone with the token; never put PII in payload</td>
+          </tr>
+          <tr>
+            <td><span class="benefit">Short JWT TTL:</span> Bounds the revocation window on compromise</td>
+            <td>More frequent refresh token round-trips → higher auth service load; refresh token rotation must be implemented correctly</td>
+          </tr>
+          <tr>
+            <td><span class="benefit">HttpOnly cookie transport:</span> Blocks XSS-based token theft</td>
+            <td>Subject to CSRF attacks unless <code>SameSite=Strict/Lax</code> or CSRF tokens are added; 4 KB cookie size limit</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- S12: INTERVIEW APPLICATION -->
+  <section id="s12">
+    <h2 class="section-title"><span class="num">12</span> 🎯 Interview Application</h2>
+
+    <h3>Trigger Phrases</h3>
+    <ul class="trigger-list">
+      <li>"How does your system handle user authentication and sessions?"</li>
+      <li>"The system needs to scale to millions of concurrent users — how do you handle auth state?"</li>
+      <li>"What happens if we add more servers — how do sessions work?"</li>
+      <li>"How do you handle logout in a stateless microservices architecture?"</li>
+    </ul>
+
+    <h3>What You Say / Do</h3>
+    <p>In the requirements or high-level design phase, when you introduce an API gateway or auth service, briefly state your session strategy and justify it. For most scalable systems: <em>"For auth, I'll use short-lived JWTs (15–60 min) validated at the gateway, with a refresh token flow. This keeps our services stateless and freely horizontally scalable. The trade-off is we can't instantly revoke access tokens — I'd mitigate that with short TTLs and, for high-risk operations like account suspension, a lightweight JTI blocklist in Redis."</em></p>
+
+    <h3>The Trade-off Statement</h3>
+    <div class="tradeoff-statement">
+      "If we choose JWTs, we get stateless horizontal scalability — any server can validate without a shared store — but we pay with the inability to instantly revoke a token; the worst-case window equals the access token TTL. For this system, JWTs are the right call because the short TTL bounds our exposure and we don't need sub-minute revocation guarantees."
+    </div>
+  </section>
+
+  <!-- S13: MISCONCEPTIONS -->
+  <section id="s13">
+    <h2 class="section-title"><span class="num">13</span> ⚠️ Common Misconceptions &amp; Gotchas</h2>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><span><strong>Misconception:</strong> "Cookie-based auth is stateful and JWT is stateless."</span></div>
+      <div class="right"><span class="icon">✅</span><span><strong>Reality:</strong> Cookies are a transport mechanism, not a session strategy. A JWT stored in an HttpOnly cookie is still stateless. A session ID in a cookie is stateful because the session record lives server-side. The statefulness is in the <em>storage location of session data</em>, not the transport.</span></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><span><strong>Misconception:</strong> "We'll use JWTs so we don't need any server-side infrastructure for auth."</span></div>
+      <div class="right"><span class="icon">✅</span><span><strong>Reality:</strong> You still need server-side infrastructure for: issuing tokens (auth service), storing refresh tokens, rotating them on use, and optionally maintaining a blocklist. JWTs eliminate the <em>per-request session lookup</em>, not all server-side auth state.</span></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><span><strong>Misconception:</strong> "JWTs are secure because they're signed — the payload is protected."</span></div>
+      <div class="right"><span class="icon">✅</span><span><strong>Reality:</strong> The signature guarantees <em>integrity</em> (payload wasn't tampered with), not <em>confidentiality</em>. The payload is base64url-encoded — anyone who intercepts the token can read all claims. Never put sensitive information (PII, passwords, secrets) in a JWT payload.</span></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><span><strong>Misconception:</strong> "A JWT blocklist solves the revocation problem — problem solved."</span></div>
+      <div class="right"><span class="icon">✅</span><span><strong>Reality:</strong> A Redis blocklist checked on every request is functionally equivalent to a shared session store — you've added a network hop to every auth decision, need the Redis cluster to be highly available, and reintroduced the distributed state you tried to avoid. It's sometimes the right call, but it should be a deliberate trade-off, not an afterthought.</span></div>
+    </div>
+  </section>
+
+  <!-- S14: RELATIONSHIPS -->
+  <section id="s14">
+    <h2 class="section-title"><span class="num">14</span> 🔗 Relationships to Other Concepts</h2>
+    <div class="rel-grid">
+      <div class="rel-card rel-builds">
+        <div class="rel-type">Builds On</div>
+        <p><strong>3.1 — Stateless vs. Stateful Architecture.</strong> Session management is the primary mechanism for making auth stateless. You cannot reason about session strategy without the stateless/stateful distinction.</p>
+      </div>
+      <div class="rel-card rel-enables">
+        <div class="rel-type">Enables</div>
+        <p><strong>3.3 — Externalizing State to Redis</strong> (the shared session store pattern in depth) and <strong>3.4 — JWT as Stateless Session Token</strong> (deep dive on JWT mechanics and security pitfalls).</p>
+      </div>
+      <div class="rel-card rel-tension">
+        <div class="rel-type">Tension With</div>
+        <p><strong>2.5 — Consistency vs. Availability.</strong> Server-side sessions trade availability (Redis down → all auth fails) for consistency (immediate revocation). JWTs trade consistency (stale claims for up to TTL) for availability (no shared store dependency).</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- S15: QUIZ -->
+  <section id="s15">
+    <h2 class="section-title"><span class="num">15</span> 🧪 Self-Check Quiz</h2>
+    <p style="font-size:14px;color:var(--text-muted);margin-bottom:20px;">Answer each question out loud without looking. Click the hint if you're stuck — but if you need it, revisit the section referenced.</p>
+
+    <div class="quiz-item">
+      <div class="quiz-q"><span class="quiz-num">1</span><span>What is the root cause of the sticky sessions requirement in a server-side session architecture, and what is the correct architectural fix?</span></div>
+      <div class="quiz-hint" onclick="this.style.display='none';this.nextElementSibling.style.display='block'">Think through your answer before expanding — if you hesitate, revisit Section 6 (Core Concepts: Server-Side Sessions / Sticky Sessions).</div>
+      <div style="display:none;background:var(--green-light);border:1px solid #86efac;border-radius:7px;padding:10px 14px;font-size:13px;color:#14532d;margin-top:0;">Root cause: session records live in the memory of individual servers, so requests must be routed to the server holding the session. Fix: externalize session records to a shared Redis store so any server can handle any request.</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q"><span class="quiz-num">2</span><span>A user's account is suspended by an admin. Your system uses JWTs with a 1-hour TTL and no blocklist. What is the worst-case behavior, and how would you mitigate it without reintroducing a full session store?</span></div>
+      <div class="quiz-hint" onclick="this.style.display='none';this.nextElementSibling.style.display='block'">Think through your answer before expanding — if you hesitate, revisit Section 9 (Refresh Token Flow) and Section 11 (Trade-offs).</div>
+      <div style="display:none;background:var(--green-light);border:1px solid #86efac;border-radius:7px;padding:10px 14px;font-size:13px;color:#14532d;margin-top:0;">Worst case: suspended user retains access for up to 1 hour (the TTL). Mitigations: (1) shorten access token TTL to 5–15 min; (2) add a lightweight JTI blocklist in Redis for high-risk operations only (not every request); (3) use the refresh token as the revocation lever — when the refresh token is invalidated, the user cannot get a new access token after expiry.</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q"><span class="quiz-num">3</span><span>Your microservices architecture has 8 downstream services. How does each service know who the user is? Walk through the JWT validation flow a downstream service performs.</span></div>
+      <div class="quiz-hint" onclick="this.style.display='none';this.nextElementSibling.style.display='block'">Think through your answer before expanding — if you hesitate, revisit Section 9 (JWT Happy Path).</div>
+      <div style="display:none;background:var(--green-light);border:1px solid #86efac;border-radius:7px;padding:10px 14px;font-size:13px;color:#14532d;margin-top:0;">The API gateway validates the JWT and forwards it (or a derived identity header) downstream. Each service: (1) extracts the JWT from the Authorization header, (2) splits header.payload.signature, (3) re-computes the expected signature using the auth service's public key, (4) compares with the token's signature — if they match, the payload is trustworthy, (5) checks exp is in the future, (6) reads sub, roles, other claims from the payload. No network call needed.</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q"><span class="quiz-num">4</span><span>Name a real production system that uses short-lived tokens with a refresh flow. Describe what the token TTLs are and how revocation works.</span></div>
+      <div class="quiz-hint" onclick="this.style.display='none';this.nextElementSibling.style.display='block'">Think through your answer before expanding — if you hesitate, revisit Section 10 (Real-World Examples).</div>
+      <div style="display:none;background:var(--green-light);border:1px solid #86efac;border-radius:7px;padding:10px 14px;font-size:13px;color:#14532d;margin-top:0;">Google / GCP: OAuth2 access tokens expire in 1 hour. Refresh tokens are long-lived and stored server-side by Google. Revocation is immediate for refresh tokens via Google's token revocation endpoint (POST /revoke). Access token revocation takes effect at expiry (up to 1 hr window). AWS STS is similar: temporary credentials last up to 12 hr, revocation via IAM policy takes effect at next credential expiry.</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q"><span class="quiz-num">5</span><span>A candidate says "we'll use HttpOnly cookies to store the JWT — this makes it stateless and CSRF-safe." What have they got right, and what have they got wrong?</span></div>
+      <div class="quiz-hint" onclick="this.style.display='none';this.nextElementSibling.style.display='block'">Think through your answer before expanding — if you hesitate, revisit Section 6 (Cookie Transport) and Section 13 (Misconceptions).</div>
+      <div style="display:none;background:var(--green-light);border:1px solid #86efac;border-radius:7px;padding:10px 14px;font-size:13px;color:#14532d;margin-top:0;">Right: HttpOnly cookies prevent JavaScript from reading the JWT, which does block XSS-based token theft. The auth is still stateless because the JWT itself carries the session state. Wrong: HttpOnly cookies do NOT prevent CSRF. Browsers automatically attach cookies to cross-origin requests. CSRF protection requires SameSite=Strict/Lax attribute or an explicit CSRF token — not HttpOnly.</div>
+    </div>
+  </section>
+
+  <!-- S16: FURTHER READING -->
+  <section id="s16">
+    <h2 class="section-title"><span class="num">16</span> 📚 Further Reading</h2>
+    <ul class="reading-list">
+      <li><em>Designing Data-Intensive Applications</em> (DDIA) — Ch. 9, section on consistency models as they apply to session guarantees (Kleppmann)</li>
+      <li>Auth0 Engineering Blog — "Cookies vs. Tokens: The Definitive Guide" — <a href="https://auth0.com/blog" target="_blank">auth0.com/blog</a></li>
+      <li>RFC 7519 — JSON Web Token specification — the authoritative source for JWT structure and claims</li>
+      <li><em>System Design Interview Vol. 1</em> by Alex Xu — Ch. 13 (Hotel Reservation System) touches on session and auth design in a scalable web context</li>
+      <li>OWASP Session Management Cheat Sheet — <a href="https://cheatsheetseries.owasp.org" target="_blank">cheatsheetseries.owasp.org</a> — security requirements and attack vectors</li>
+    </ul>
+  </section>
+
+  <!-- S17: MY NOTES -->
+  <section id="s17">
+    <h2 class="section-title"><span class="num">17</span> ✍️ My Notes</h2>
+    <div class="callout callout-quote">Personal observations, things that confused me, analogies that helped. This section is yours.</div>
+    <div style="min-height:120px;background:var(--surface);border:1px dashed var(--border);border-radius:10px;padding:18px 20px;font-size:14px;color:var(--text-muted);font-style:italic;">Your notes go here…</div>
+  </section>
+
+</article>
+</main>
+
+<script>
+  /* ── Phase toggle ── */
+  function togglePhase(header) {
+    header.parentElement.classList.toggle('open');
+  }
+
+  /* ── Checklist persistence ── */
+  function saveChecks() {
+    const state = {};
+    document.querySelectorAll('.checklist').forEach((list, li) => {
+      state[list.id || 'list-' + li] = [...list.querySelectorAll('li')].map(l => l.classList.contains('checked'));
+    });
+    try { localStorage.setItem('checks-3.2', JSON.stringify(state)); } catch(e) {}
+  }
+
+  function loadChecks() {
+    try {
+      const state = JSON.parse(localStorage.getItem('checks-3.2') || '{}');
+      document.querySelectorAll('.checklist').forEach((list, li) => {
+        const key = list.id || 'list-' + li;
+        (state[key] || []).forEach((checked, i) => {
+          if (checked) list.querySelectorAll('li')[i]?.classList.add('checked');
+        });
+      });
+    } catch(e) {}
+  }
+
+  document.querySelectorAll('.checklist .cb').forEach(cb => {
+    cb.addEventListener('click', () => {
+      cb.closest('li').classList.toggle('checked');
+      saveChecks();
+    });
+  });
+
+  loadChecks();
+
+  /* ── Active TOC link on scroll ── */
+  const sections = document.querySelectorAll('section[id]');
+  const navLinks = document.querySelectorAll('#toc nav a');
+
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        navLinks.forEach(a => {
+          a.classList.toggle('active', a.getAttribute('href') === '#' + entry.target.id);
+        });
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+
+  sections.forEach(s => observer.observe(s));
+</script>
+
+</body>
+</html>
