@@ -39,9 +39,9 @@
 *Goal: Read deeply enough that you could explain the concept without the doc.*
 
 - [ ] Read **RFC 7519** — the JWT specification (jwt.io/introduction is a readable summary)
-- [ ] Read **Auth0's "Introduction to JSON Web Tokens"** at jwt.io — interactive decoder, structure breakdown
+- [x] Read **Auth0's "Introduction to JSON Web Tokens"** at jwt.io — interactive decoder, structure breakdown
 - [ ] Read **OWASP JWT Security Cheat Sheet** — algorithm attacks, validation checklist
-- [ ] Read through **Sections 5–9** (Core Definition → How It Works) carefully — don't skim
+- [x] Read through **Sections 5–9** (Core Definition → How It Works) carefully — don't skim
 - [ ] Re-read the **Cheatsheet** (Section 4) and try to recite it from memory after
 
 ### Phase 2 — Consolidate ✍️ 💪💪💪
@@ -299,25 +299,145 @@ In the high-level design, when you draw the request path from client through API
 
 > *Can you answer these without looking? If not, you haven't internalized it yet.*
 
-1. Decode this by hand: what is in each part of `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsInJvbGVzIjpbImFkbWluIl0sImV4cCI6MTcxNTUxMTMwMH0.<signature>`? What does `exp: 1715511300` mean and how does the server use it?
+1. A colleague says: "We don't need to store anything server-side — we're using JWTs." You need to ship a logout feature that invalidates the session immediately. What do you tell them, and what's your implementation?
 
-   > 💡 *Think through your answer before expanding — if you hesitate, revisit Section 6 (JWT Structure) and Section 9 (Validation flow).*
+JWT is stateless for verification, not for lifecycle management.
+Logout requires two stores:
 
-2. A user logs out of your application. Their JWT has 12 minutes remaining until expiry. How do you ensure they cannot use that token to access protected resources after logout?
+1. jti denylist (Redis, TTL = token expiry)
+   - On logout: write jti → blocked
+   - On every request: check denylist before granting access
+   - TTL prevents unbounded growth — entry expires when token would have anyway
 
-   > 💡 *Think through your answer before expanding — if you hesitate, revisit Section 6 (Token Revocation) and Section 9 (Denylist).*
+2. Refresh token store (Redis)
+   - On logout: delete the refresh token
+   - Prevents the user from silently obtaining a new access token after the
+     current one expires
+   - Without this, logout only buys you the remaining TTL window, not true termination
 
-3. An attacker intercepts a JWT and modifies the payload to change their `roles` from `["user"]` to `["admin"]`. Does this work? Why or why not? What specifically prevents it?
+Both are required. Denylist alone leaves the refresh token alive.
+Refresh token deletion alone leaves the current access token alive.
 
-   > 💡 *Think through your answer before expanding — if you hesitate, revisit Section 9 (Validation step 3 — signature verification).*
+2. You're designing auth for a system where service-A calls service-B. Both are internal. What token type do you issue, what claims does it carry, and who issues it?
 
-4. Your company uses JWTs for microservice auth. Should you use HS256 or RS256? What is the concrete risk of using HS256 when a new third-party partner needs to verify your tokens?
+Service-to-service auth uses the OAuth2 Client Credentials flow.
 
-   > 💡 *Think through your answer before expanding — if you hesitate, revisit Section 6 (HS256 vs RS256) and Section 10 (Real-World Examples).*
+Token type: short-lived JWT (5–15 min TTL)
 
-5. A JWT is issued with a `roles: ["admin"]` claim. Two minutes later, you demote the user from admin to regular user in your database. The JWT has 13 minutes of remaining lifetime. What access does the demoted user have during those 13 minutes, and what are your options to prevent it?
+Claims:
+  sub: service-a          (who is making the request)
+  aud: service-b          (who is the intended recipient)
+  iss: internal-auth-svc  (who vouched for this identity)
+  exp: now + 15min
+  jti: <uuid>             (for denylist capability if needed)
 
-   > 💡 *Think through your answer before expanding — if you hesitate, revisit Section 11 (Trade-offs — claims become stale) and Section 13 (Misconceptions).*
+Issuer: internal auth service
+  - Service A authenticates to auth service with client_id + client_secret
+  - Auth service mints the token
+  - Service A attaches it as Bearer token on calls to Service B
+  - Service B validates signature, checks aud == "service-b", checks exp
+
+Key point: Service B rejects any token where aud ≠ "service-b" —
+this prevents a token issued for service-C from being replayed against service-B.
+
+3. An interviewer asks: "How does your system handle a user whose role changes from viewer to admin mid-session?" Walk them through the trade-off and your decision.
+
+The core tension: JWT is immutable after issuance.
+A role change on the server does not propagate to an in-flight token.
+
+Three options, each a different point on the trade-off curve:
+
+1. Wait for natural expiry (short TTL — 5–15 min)
+   - Zero implementation cost
+   - Acceptable lag for most non-critical role changes
+   - Wrong if the change is security-sensitive (e.g., viewer → admin, or admin revoked)
+
+2. Force re-authentication
+   - Denylist current jti + delete refresh token → user logs out
+   - User re-authenticates → new token with updated role
+   - Immediate consistency, but disruptive UX
+
+3. Hybrid: role version claim + server-side version check
+   - Store role_version in JWT and in DB
+   - On each request, compare token's role_version against DB
+   - If mismatch → reject token, force re-auth
+   - Adds one DB read per request — partially surrenders JWT's stateless advantage
+   - Appropriate when role changes are rare but must be instantaneous
+
+Decision rule:
+  Non-sensitive role upgrade (viewer → editor) → option 1, short TTL is fine
+  Security-sensitive change (revoking admin, account suspension) → option 2 or 3
+
+4. You receive a JWT. Walk me through every validation step before you trust its claims. In order.
+
+JWT Validation — 7 steps in order:
+
+1. Parse
+   Split on ".". Reject if not exactly 3 parts.
+
+2. Algorithm check (before touching the signature)
+   Decode header. Verify alg == server's hardcoded expected algorithm.
+   Reject if alg is "none" or anything unexpected.
+   Never read alg from the token to decide how to verify.
+
+3. Signature verification
+   Recompute HMAC(header.payload, secret) or verify RSA/ECDSA signature
+   using the server's public key. Reject if mismatch.
+
+4. Expiry check
+   Reject if now > exp. Allow small clock skew tolerance (≤60s).
+
+5. Claims validation
+   iss → must match expected issuer (your auth service)
+   aud → must match this service's identifier
+   Note: iss identifies WHO issued the token (the authority),
+         aud identifies WHO the token is FOR (the recipient).
+   These are separate checks catching different attacks.
+
+6. Denylist check
+   Look up jti in Redis denylist. Reject if present.
+
+7. Trust and proceed
+   Claims are now verified. Extract sub, roles, etc. for authorization.
+
+5. Twitter-scale: 500M DAU, 500K RPS on the feed service. Describe your complete auth architecture — user-facing and service-to-service. What did you choose and why?
+
+Twitter-Scale Auth Architecture
+
+USER-FACING AUTH
+  Mechanism: JWT (access token) + refresh token
+  Why JWT over Redis sessions:
+    - 500K RPS → Redis session lookup per request = 500K Redis ops/sec
+    - JWT validation is CPU-only (crypto verify) — no network hop
+    - Horizontally scalable: any server can validate any token
+
+  Access token:  15 min TTL, signed RS256
+  Refresh token: 30 day TTL, stored in Redis (user_id → token mapping)
+  Storage:       HTTP-only cookie (XSS protection)
+
+  Revocation:
+    - Logout → delete refresh token + add jti to denylist (Redis, TTL=15min)
+    - Compromised account → same, immediate effect within TTL window
+
+API GATEWAY
+  - Single entry point — downstream services unreachable directly
+  - Validates JWT signature + exp + aud on every inbound request
+  - Strips any client-supplied X-User-* headers (prevent injection)
+  - Forwards X-User-ID and X-User-Roles as trusted internal headers
+  - Downstream services trust the header, not the token — no re-validation
+
+SERVICE-TO-SERVICE AUTH
+  Mechanism: Client Credentials flow
+  - Service A calls auth service with client_id + client_secret
+  - Auth service mints short-lived JWT: sub=service-a, aud=service-b, TTL=15min
+  - Service A attaches as Bearer token on calls to Service B
+  - Service B validates: signature + aud == "service-b" + exp
+
+Key justification for the interviewer:
+  JWT is chosen because stateless verification scales horizontally.
+  Redis is retained — but scoped to lifecycle management only
+  (refresh tokens + denylist), not per-request auth state.
+  The Redis hit rate is orders of magnitude lower than session-per-request.
 
 ---
 
