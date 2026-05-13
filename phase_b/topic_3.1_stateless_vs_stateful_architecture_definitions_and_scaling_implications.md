@@ -56,16 +56,16 @@
 ### Phase 3 — Apply 🔧 💪💪💪💪
 *Goal: Connect to real systems and simulate interview scenarios.*
 
-- [ ] Go through **Real-World System Examples** (Section 10) — verify each claim independently and add anything missed to **My Notes**
-- [ ] Practice the **Interview Application** (Section 12) out loud — say the trigger phrases and your response as if in a live interview
-- [ ] Work through **Common Misconceptions** (Section 13) — for each, make sure you can explain *why* the misconception is wrong, not just that it is
-- [ ] Trace the **Relationships to Other Concepts** (Section 14) — can you explain each connection without looking?
+- [x] Go through **Real-World System Examples** (Section 10) — verify each claim independently and add anything missed to **My Notes**
+- [x] Practice the **Interview Application** (Section 12) out loud — say the trigger phrases and your response as if in a live interview
+- [x] Work through **Common Misconceptions** (Section 13) — for each, make sure you can explain *why* the misconception is wrong, not just that it is
+- [x] Trace the **Relationships to Other Concepts** (Section 14) — can you explain each connection without looking?
 
 ### Phase 4 — Validate 🧪 💪💪💪💪💪
 *Goal: Confirm you actually own it, not just recognize it.*
 
-- [ ] Answer every **Self-Check Quiz** question (Section 15) out loud without looking at your notes
-- [ ] Recite the **Cheatsheet** (Section 4) from memory — if you can't, re-do Phase 2
+- [x] Answer every **Self-Check Quiz** question (Section 15) out loud without looking at your notes
+- [x] Recite the **Cheatsheet** (Section 4) from memory — if you can't, re-do Phase 2
 - [ ] Tick off items in **What Mastery Looks Like** (Section 2) — only check a box if you can demonstrate it on demand, not just if it sounds familiar
 - [ ] Teach this concept out loud to an imaginary interviewer for 2 minutes without hesitation or notes
 

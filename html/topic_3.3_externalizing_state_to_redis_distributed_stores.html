@@ -1,0 +1,1180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.3 Externalizing State to Redis / Distributed Stores</title>
+<style>
+  :root {
+    --bg: #f9f8f6;
+    --surface: #ffffff;
+    --surface-alt: #f3f2ef;
+    --border: #e5e3de;
+    --text: #1a1917;
+    --text-muted: #6b6861;
+    --accent: #2563eb;
+    --accent-light: #dbeafe;
+    --green: #16a34a;
+    --green-light: #dcfce7;
+    --red: #dc2626;
+    --red-light: #fee2e2;
+    --yellow: #d97706;
+    --yellow-light: #fef3c7;
+    --purple: #7c3aed;
+    --purple-light: #ede9fe;
+    --orange: #ea580c;
+    --orange-light: #ffedd5;
+    --code-bg: #1e1e2e;
+    --code-text: #cdd6f4;
+    --sidebar-w: 240px;
+    --content-max: 780px;
+    font-size: 16px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    display: flex;
+  }
+
+  /* ── SIDEBAR ── */
+  #toc {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: var(--sidebar-w);
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 24px 0 48px;
+    z-index: 100;
+  }
+
+  #toc-header {
+    padding: 0 16px 16px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 8px;
+  }
+
+  #toc-header .phase-tag {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: var(--accent-light);
+    border-radius: 4px;
+    padding: 2px 7px;
+    display: inline-block;
+    margin-bottom: 6px;
+  }
+
+  #toc-header h2 {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.4;
+  }
+
+  #toc nav a {
+    display: block;
+    padding: 5px 16px 5px 20px;
+    font-size: 12.5px;
+    color: var(--text-muted);
+    text-decoration: none;
+    border-left: 2px solid transparent;
+    transition: all 0.15s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+
+  /* ── MAIN CONTENT ── */
+  main {
+    margin-left: var(--sidebar-w);
+    padding: 48px 48px 96px;
+    max-width: calc(var(--sidebar-w) + var(--content-max) + 96px);
+    width: 100%;
+  }
+
+  article { max-width: var(--content-max); }
+
+  /* ── HEADER ── */
+  .doc-header {
+    margin-bottom: 40px;
+    padding-bottom: 28px;
+    border-bottom: 2px solid var(--border);
+  }
+
+  .doc-header .meta {
+    display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px;
+  }
+
+  .tag {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border-radius: 20px;
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+
+  .tag-phase  { background: var(--accent-light);  color: var(--accent); }
+  .tag-topic  { background: var(--purple-light);  color: var(--purple); }
+  .tag-date   { background: var(--surface-alt);   color: var(--text-muted); }
+
+  .doc-header h1 {
+    font-size: 30px;
+    font-weight: 800;
+    line-height: 1.25;
+    letter-spacing: -0.02em;
+    color: var(--text);
+  }
+
+  /* ── SECTIONS ── */
+  section {
+    margin-bottom: 52px;
+    scroll-margin-top: 32px;
+  }
+
+  h2.section-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 20px;
+    display: flex; align-items: center; gap: 10px;
+    letter-spacing: -0.01em;
+  }
+
+  h2.section-title .num {
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--text-muted);
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 2px 7px;
+    letter-spacing: 0.04em;
+  }
+
+  h3 {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    margin: 24px 0 10px;
+  }
+
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+
+  /* ── CALLOUT BOXES ── */
+  .callout {
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-bottom: 20px;
+    font-size: 14px;
+    border-left: 3px solid;
+  }
+
+  .callout-goal   { background: var(--accent-light);  border-color: var(--accent);  color: #1e40af; }
+  .callout-tip    { background: var(--yellow-light);  border-color: var(--yellow);  color: #92400e; }
+  .callout-quote  { background: var(--surface-alt);   border-color: var(--border);  color: var(--text-muted); font-style: italic; }
+
+  .callout strong { font-weight: 700; }
+
+  /* ── CHEATSHEET ── */
+  .cheatsheet {
+    background: var(--code-bg);
+    color: var(--code-text);
+    border-radius: 12px;
+    padding: 24px 28px;
+    font-family: "SF Mono", "Fira Code", "Cascadia Code", Menlo, monospace;
+    font-size: 13px;
+    line-height: 1.65;
+    white-space: pre-wrap;
+    overflow-x: auto;
+  }
+
+  .cheatsheet .label {
+    color: #89dceb;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    display: block;
+    margin-top: 16px;
+  }
+
+  .cheatsheet .label:first-child { margin-top: 0; }
+
+  .cheatsheet .val { color: #a6e3a1; }
+  .cheatsheet .hi  { color: #f38ba8; font-weight: 600; }
+
+  /* ── MINDMAP ── */
+  .mindmap-wrap {
+    margin: 20px 0;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    background: #fafaf8;
+    text-align: center;
+  }
+
+  .mindmap-wrap img {
+    width: 100%;
+    max-width: 100%;
+    display: block;
+  }
+
+  .mindmap-wrap .caption {
+    font-size: 12px;
+    color: var(--text-muted);
+    padding: 8px 0 10px;
+    font-style: italic;
+  }
+
+  /* ── DEFINITION BOX ── */
+  .definition {
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-left: 4px solid var(--accent);
+    border-radius: 10px;
+    padding: 18px 22px;
+    font-size: 15.5px;
+    line-height: 1.75;
+    color: var(--text);
+  }
+
+  /* ── CONCEPT GRID ── */
+  .concept-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin: 16px 0;
+  }
+
+  .concept-card {
+    border-radius: 10px;
+    padding: 16px 18px;
+    border: 1.5px solid;
+  }
+
+  .cc-blue   { background: var(--accent-light);  border-color: #93c5fd; }
+  .cc-orange { background: var(--orange-light);  border-color: #fdba74; }
+  .cc-green  { background: var(--green-light);   border-color: #86efac; }
+  .cc-purple { background: var(--purple-light);  border-color: #c4b5fd; }
+
+  .concept-card .cc-header {
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+
+  .concept-card .cc-body {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text);
+  }
+
+  /* ── FLOW STEPS ── */
+  .flow-steps { list-style: none; margin: 12px 0 18px; }
+
+  .flow-steps li {
+    display: flex;
+    gap: 14px;
+    margin-bottom: 10px;
+    font-size: 14.5px;
+    line-height: 1.6;
+    align-items: flex-start;
+  }
+
+  .flow-steps .step-num {
+    min-width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  /* ── TABLES ── */
+  .table-wrap { overflow-x: auto; margin: 14px 0; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+
+  th {
+    background: var(--surface-alt);
+    font-weight: 700;
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 2px solid var(--border);
+    font-size: 12.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+    line-height: 1.55;
+  }
+
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--surface-alt); }
+
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+
+  /* ── TOPOLOGY GRID ── */
+  .topo-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    margin: 16px 0;
+  }
+
+  .topo-card {
+    border-radius: 10px;
+    padding: 16px;
+    border: 1.5px solid;
+    text-align: center;
+  }
+
+  .topo-standalone { background: #fff9db; border-color: #ffe066; }
+  .topo-sentinel   { background: var(--green-light); border-color: #86efac; }
+  .topo-cluster    { background: var(--accent-light); border-color: #93c5fd; }
+
+  .topo-card .topo-name {
+    font-size: 13.5px;
+    font-weight: 800;
+    margin-bottom: 6px;
+  }
+
+  .topo-card .topo-tag {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    border-radius: 20px;
+    padding: 2px 8px;
+    display: inline-block;
+    margin-bottom: 10px;
+  }
+
+  .topo-standalone .topo-tag { background: #ffe066; color: #92400e; }
+  .topo-sentinel   .topo-tag { background: #86efac; color: #14532d; }
+  .topo-cluster    .topo-tag { background: #93c5fd; color: #1e3a8a; }
+
+  .topo-card .topo-body {
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: var(--text-muted);
+    text-align: left;
+  }
+
+  /* ── PHASE / STUDY ── */
+  .phase-block {
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+
+  .phase-header {
+    background: var(--surface-alt);
+    padding: 12px 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+    font-weight: 700;
+    user-select: none;
+  }
+
+  .phase-header:hover { background: #ebe9e4; }
+
+  .phase-body {
+    display: none;
+    padding: 16px 20px;
+  }
+
+  .phase-block.open .phase-body { display: block; }
+
+  .phase-goal {
+    font-size: 12.5px;
+    color: var(--text-muted);
+    font-style: italic;
+    margin-bottom: 12px;
+  }
+
+  /* ── CHECKLIST ── */
+  .checklist { list-style: none; }
+
+  .checklist li {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+    cursor: pointer;
+  }
+
+  .checklist li:last-child { border-bottom: none; }
+  .checklist li.checked .text { text-decoration: line-through; color: var(--text-muted); }
+
+  .cb {
+    width: 18px; height: 18px;
+    border: 2px solid var(--border);
+    border-radius: 4px;
+    flex-shrink: 0;
+    margin-top: 2px;
+    background: var(--surface);
+    transition: all 0.15s;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  .checklist li.checked .cb {
+    background: var(--green);
+    border-color: var(--green);
+  }
+
+  .checklist li.checked .cb::after {
+    content: '✓';
+    color: white;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  /* ── MISCONCEPTIONS ── */
+  .misconception {
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 14px;
+    border: 1.5px solid var(--border);
+  }
+
+  .wrong, .right {
+    display: flex;
+    gap: 12px;
+    padding: 12px 16px;
+    font-size: 14px;
+    line-height: 1.6;
+    align-items: flex-start;
+  }
+
+  .wrong { background: var(--red-light); border-bottom: 1px solid #fca5a5; }
+  .right { background: var(--green-light); }
+
+  .wrong .icon, .right .icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+
+  /* ── RELATIONSHIPS ── */
+  .rel-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 14px;
+    margin: 14px 0;
+  }
+
+  .rel-card {
+    border-radius: 10px;
+    padding: 16px;
+    border: 1.5px solid;
+  }
+
+  .rel-builds  { background: var(--accent-light);  border-color: #93c5fd; }
+  .rel-enables { background: var(--green-light);   border-color: #86efac; }
+  .rel-tension { background: var(--red-light);     border-color: #fca5a5; }
+
+  .rel-type {
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    margin-bottom: 8px;
+    color: var(--text-muted);
+  }
+
+  .rel-card p { font-size: 13px; line-height: 1.6; margin-bottom: 0; }
+
+  /* ── QUIZ ── */
+  .quiz-item {
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+
+  .quiz-q {
+    display: flex;
+    gap: 14px;
+    padding: 14px 16px;
+    font-size: 14.5px;
+    line-height: 1.6;
+    align-items: flex-start;
+    background: var(--surface);
+    font-weight: 500;
+  }
+
+  .quiz-num {
+    min-width: 26px; height: 26px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    font-size: 12px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; margin-top: 1px;
+  }
+
+  .quiz-hint {
+    padding: 10px 16px;
+    background: var(--yellow-light);
+    border-top: 1px solid var(--border);
+    font-size: 13px;
+    color: #92400e;
+    cursor: pointer;
+    font-style: italic;
+  }
+
+  .quiz-hint:hover { background: #fde68a; }
+
+  /* ── TRIGGER LIST ── */
+  .trigger-list { list-style: none; margin: 10px 0 16px; }
+
+  .trigger-list li {
+    padding: 8px 14px;
+    background: var(--yellow-light);
+    border-left: 3px solid var(--yellow);
+    border-radius: 0 6px 6px 0;
+    margin-bottom: 8px;
+    font-size: 14px;
+    font-style: italic;
+    color: #78350f;
+  }
+
+  /* ── TRADE-OFF STATEMENT ── */
+  .tradeoff-statement {
+    background: var(--code-bg);
+    color: #a6e3a1;
+    border-radius: 10px;
+    padding: 18px 22px;
+    font-family: "SF Mono", "Fira Code", Menlo, monospace;
+    font-size: 13.5px;
+    line-height: 1.7;
+    margin: 14px 0;
+  }
+
+  /* ── READING LIST ── */
+  .reading-list { list-style: none; }
+
+  .reading-list li {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+    line-height: 1.55;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+
+  .reading-list li::before {
+    content: '📄';
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .reading-list li:last-child { border-bottom: none; }
+
+  .reading-list a { color: var(--accent); text-decoration: none; }
+  .reading-list a:hover { text-decoration: underline; }
+
+  code {
+    font-family: "SF Mono", "Fira Code", Menlo, monospace;
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-size: 0.88em;
+    color: var(--orange);
+  }
+</style>
+</head>
+<body>
+
+<!-- ── SIDEBAR TOC ── -->
+<nav id="toc">
+  <div id="toc-header">
+    <div class="phase-tag">Phase B — Scalability</div>
+    <h2>3.3 Externalizing State to Redis</h2>
+  </div>
+  <nav>
+    <a href="#s1">01 Goal</a>
+    <a href="#s2">02 Mastery</a>
+    <a href="#s3">03 Study Phases</a>
+    <a href="#s4">04 Cheatsheet</a>
+    <a href="#s5">05 Core Definition</a>
+    <a href="#s6">06 Core Concepts</a>
+    <a href="#s7">07 First Principles</a>
+    <a href="#s8">08 Mental Models</a>
+    <a href="#s9">09 How It Works</a>
+    <a href="#s10">10 Real-World Examples</a>
+    <a href="#s11">11 Trade-offs</a>
+    <a href="#s12">12 Interview Application</a>
+    <a href="#s13">13 Misconceptions</a>
+    <a href="#s14">14 Relationships</a>
+    <a href="#s15">15 Self-Check Quiz</a>
+    <a href="#s16">16 Further Reading</a>
+    <a href="#s17">17 My Notes</a>
+  </nav>
+</nav>
+
+<main>
+<article>
+
+  <!-- HEADER -->
+  <header class="doc-header">
+    <div class="meta">
+      <span class="tag tag-phase">⚡ Phase B — Scalability Branch</span>
+      <span class="tag tag-topic">🔄 Topic 3 — Stateless Services</span>
+      <span class="tag tag-date">📅 2026-05-12</span>
+    </div>
+    <h1>3.3 Externalizing State to Redis / Distributed Stores</h1>
+  </header>
+
+  <!-- S1: GOAL -->
+  <section id="s1">
+    <h2 class="section-title"><span class="num">01</span> 🎯 Goal of This Subtopic</h2>
+    <div class="callout callout-goal">
+      <strong>Why are you studying this?</strong> What should you be able to do after this session?
+    </div>
+    <ul class="checklist" style="pointer-events:none;cursor:default;">
+      <li><span class="cb"></span><span class="text">Be able to take a stateful service design (in-memory session data on app servers) and refactor it into a stateless one by externalizing session state to Redis, explaining every architectural decision step by step.</span></li>
+      <li><span class="cb"></span><span class="text">Understand why Redis is the canonical tool for this job — its data model, TTL semantics, and sub-millisecond latency — and when an alternative store might be appropriate instead.</span></li>
+      <li><span class="cb"></span><span class="text">Identify the specific failure modes introduced by externalizing state (Redis SPOF, network hop, eviction policy collisions) and propose concrete mitigations for each.</span></li>
+      <li><span class="cb"></span><span class="text">Recognize trigger phrases in an interview that signal this pattern is needed, and articulate the trade-off statement fluently.</span></li>
+    </ul>
+  </section>
+
+  <!-- S2: MASTERY -->
+  <section id="s2">
+    <h2 class="section-title"><span class="num">02</span> ✅ What Mastery Looks Like</h2>
+    <div class="callout callout-quote">Concrete, testable proof that you own this concept — not just familiarity.</div>
+    <ul class="checklist" id="mastery-list">
+      <li><span class="cb"></span><span class="text">Can describe what "externalizing state" means mechanically — what data moves, where it goes, and what changes on the app server — without referring to notes.</span></li>
+      <li><span class="cb"></span><span class="text">Can explain the full Redis session store read/write flow step by step, including key design, serialization, TTL, and what happens on a cache miss.</span></li>
+      <li><span class="cb"></span><span class="text">Can compare standalone Redis, Redis Sentinel, and Redis Cluster and choose the right topology for a given availability and scale requirement.</span></li>
+      <li><span class="cb"></span><span class="text">Can identify at least three failure modes of a Redis-backed session store and propose a mitigation for each.</span></li>
+      <li><span class="cb"></span><span class="text">Can walk an interviewer through a stateful-to-stateless refactor of a concrete service, justifying each step against the "share-nothing" principle.</span></li>
+    </ul>
+    <div class="callout callout-tip" style="margin-top:14px;">💡 <strong>Rule of thumb:</strong> If you can teach it to someone else and field their follow-up questions, you've mastered it.</div>
+  </section>
+
+  <!-- S3: STUDY PHASES -->
+  <section id="s3">
+    <h2 class="section-title"><span class="num">03</span> 🗓️ Study Phases to Achieve Mastery</h2>
+    <div class="callout callout-quote">Work through each phase in order. Don't move to the next until you can honestly tick every item.</div>
+
+    <div class="phase-block open">
+      <div class="phase-header" onclick="togglePhase(this)">
+        <span>📖</span><span>Phase 1 — Acquire</span><span style="margin-left:auto;font-size:11px;font-weight:400;color:var(--text-muted)">💪💪</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Read deeply enough that you could explain the concept without the doc.</p>
+        <ul class="checklist" id="phase1-list">
+          <li><span class="cb"></span><span class="text">Read <em>Designing Data-Intensive Applications</em> (DDIA) Ch. 1 — "Reliability, Scalability, Maintainability" — covers share-nothing and state externalization motivation</span></li>
+          <li><span class="cb"></span><span class="text">Read the Redis official documentation: "An Introduction to Redis Data Types" and "Redis Sentinel" (redis.io/docs)</span></li>
+          <li><span class="cb"></span><span class="text">Read the AWS ElastiCache documentation: "Managing User Sessions with Amazon ElastiCache for Redis"</span></li>
+          <li><span class="cb"></span><span class="text">Read through <strong>Sections 5–9</strong> (Core Definition → How It Works) carefully — don't skim</span></li>
+          <li><span class="cb"></span><span class="text">Re-read the <strong>Cheatsheet</strong> (Section 4) and try to recite it from memory after</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-block">
+      <div class="phase-header" onclick="togglePhase(this)">
+        <span>✍️</span><span>Phase 2 — Consolidate</span><span style="margin-left:auto;font-size:11px;font-weight:400;color:var(--text-muted)">💪💪💪</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Verify you can reproduce the knowledge in your own words without looking.</p>
+        <ul class="checklist" id="phase2-list">
+          <li><span class="cb"></span><span class="text">Close the doc — write out the <strong>Core Definition</strong> from memory, then compare</span></li>
+          <li><span class="cb"></span><span class="text">Explain <strong>First Principles</strong> out loud without notes — what problem does this solve and why?</span></li>
+          <li><span class="cb"></span><span class="text">Reconstruct the <strong>How It Works</strong> mechanics step by step from memory</span></li>
+          <li><span class="cb"></span><span class="text">Restate each <strong>Trade-off</strong> row in your own words — if you can't explain the cost, you don't own it yet</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-block">
+      <div class="phase-header" onclick="togglePhase(this)">
+        <span>🔧</span><span>Phase 3 — Apply</span><span style="margin-left:auto;font-size:11px;font-weight:400;color:var(--text-muted)">💪💪💪💪</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Connect to real systems and simulate interview scenarios.</p>
+        <ul class="checklist" id="phase3-list">
+          <li><span class="cb"></span><span class="text">Go through <strong>Real-World System Examples</strong> (Section 10) — verify each claim independently and add anything missed to My Notes</span></li>
+          <li><span class="cb"></span><span class="text">Practice the <strong>Interview Application</strong> (Section 12) out loud — say the trigger phrases and your response as if in a live interview</span></li>
+          <li><span class="cb"></span><span class="text">Work through <strong>Common Misconceptions</strong> (Section 13) — for each, explain <em>why</em> the misconception is wrong, not just that it is</span></li>
+          <li><span class="cb"></span><span class="text">Trace the <strong>Relationships to Other Concepts</strong> (Section 14) — can you explain each connection without looking?</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-block">
+      <div class="phase-header" onclick="togglePhase(this)">
+        <span>🧪</span><span>Phase 4 — Validate</span><span style="margin-left:auto;font-size:11px;font-weight:400;color:var(--text-muted)">💪💪💪💪💪</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Confirm you actually own it, not just recognize it.</p>
+        <ul class="checklist" id="phase4-list">
+          <li><span class="cb"></span><span class="text">Answer every <strong>Self-Check Quiz</strong> question (Section 15) out loud without looking at your notes</span></li>
+          <li><span class="cb"></span><span class="text">Recite the <strong>Cheatsheet</strong> (Section 4) from memory — if you can't, re-do Phase 2</span></li>
+          <li><span class="cb"></span><span class="text">Tick off items in <strong>What Mastery Looks Like</strong> (Section 2) — only check if you can demonstrate it on demand</span></li>
+          <li><span class="cb"></span><span class="text">Teach this concept out loud to an imaginary interviewer for 2 minutes without hesitation</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- S4: CHEATSHEET -->
+  <section id="s4">
+    <h2 class="section-title"><span class="num">04</span> 📋 Cheatsheet</h2>
+    <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+
+    <div class="mindmap-wrap">
+      <img src="../assets/images/topic_3.3_externalizing_state_to_redis_distributed_stores_mindmap.png" alt="3.3 Externalizing State to Redis — Mindmap">
+      <div class="caption">3.3 Externalizing State to Redis / Distributed Stores — Mindmap</div>
+    </div>
+
+    <div class="cheatsheet"><span class="label">ONE-LINER</span>
+  Move all mutable session/application state from app server memory into a fast,
+  shared, external store (Redis) so every app server becomes identical and
+  interchangeable — enabling free horizontal scaling.
+
+<span class="label">KEY PROPERTIES / RULES</span>
+  <span class="val">1.</span> App servers must be stateless: they hold NO user-specific state between requests.
+     All session data lives in Redis, keyed by session/token ID.
+  <span class="val">2.</span> Redis is the canonical choice: sub-millisecond latency, native TTL per key,
+     rich data types (Hash for structured session objects), and pub/sub support.
+  <span class="val">3.</span> Key design: session:{session_id} — predictable, evictable, namespace-safe.
+  <span class="val">4.</span> TTL must be set on every session key. Never store session data without expiry
+     or you will leak memory indefinitely as sessions are abandoned.
+  <span class="val">5.</span> Redis Sentinel (HA, single primary) vs. Redis Cluster (sharded, multi-primary):
+     choose Cluster when session volume exceeds a single node's memory budget.
+
+<span class="label">DECISION RULE</span>
+  Externalize to Redis when: you need >1 app server instance, sticky sessions are
+  unacceptable, or sessions must survive app server restarts.
+  Keep in-memory when: truly single-server, session loss on restart is tolerable
+  (e.g., a developer tool or short-lived batch coordinator).
+
+<span class="label">NUMBERS TO REMEMBER</span>
+  Redis read/write latency  → &lt;1 ms (local network)
+  Max Redis single-node RAM → ~100–200 GB practical limit
+  Session TTL (web app)     → 15–30 min idle, 24 hr absolute max
+  Redis Sentinel quorum     → 3 Sentinel nodes minimum for reliable failover
+
+<span class="label">GOTCHA TO NEVER FORGET</span>
+  <span class="hi">LRU/LFU eviction will silently evict sessions under memory pressure — users get
+  logged out with no error. Use maxmemory-policy=noeviction for session stores
+  and size Redis to 2× peak session volume, relying solely on TTL cleanup.</span></div>
+  </section>
+
+  <!-- S5: CORE DEFINITION -->
+  <section id="s5">
+    <h2 class="section-title"><span class="num">05</span> 🧠 Core Definition</h2>
+    <div class="definition">
+      Externalizing state to Redis means moving all mutable per-request or per-user state (sessions, caches, counters, rate limit windows) out of app server memory and into a shared, persistent, in-memory distributed store — transforming app servers from stateful nodes that must be routed to carefully into <strong>stateless, freely interchangeable replicas</strong> that any load balancer can target without restriction.
+    </div>
+  </section>
+
+  <!-- S6: CORE CONCEPTS -->
+  <section id="s6">
+    <h2 class="section-title"><span class="num">06</span> 📦 Core Concepts</h2>
+
+    <h3>The State Externalization Problem</h3>
+    <p>When an app server holds session data in its own process memory, every subsequent request from the same user <em>must</em> land on the same server — otherwise the session is invisible. This creates sticky sessions (load balancer affinity), which breaks horizontal scaling: you can't freely add or remove nodes, node failure evicts all its sessions, and load distribution becomes uneven. The fix is to move ("externalize") session data to a store that is shared across all app servers — making the servers symmetric and replaceable.</p>
+
+    <h3>Redis as a Distributed Session Store</h3>
+    <p>Redis is an in-memory data structure store optimized for sub-millisecond reads and writes. For session storage, it provides three critical features: (1) <strong>native TTL per key</strong> — sessions expire automatically without cron jobs or GC; (2) <strong>Hash data type</strong> — structured session objects stored efficiently as field-value pairs under a single key; (3) <strong>high availability topologies</strong> — sessions don't evaporate when a single node fails. Its memory-resident design means a session lookup adds ~0.3–1 ms latency, not 5–50 ms like a database disk read.</p>
+
+    <h3>Session Key Design</h3>
+    <p>A well-designed key is <code>session:{session_id}</code>. The key must be: <strong>unique</strong> (no collisions across users or services), <strong>opaque to the client</strong> (never expose user IDs in session tokens — the session ID should be a random UUID), <strong>paired with a TTL</strong> (set on write), and <strong>predictable in structure</strong> for debugging and monitoring. Namespacing with a prefix allows Redis SCAN with pattern matching for counting active sessions without full key enumeration.</p>
+
+    <h3>Redis Topology Options</h3>
+    <div class="topo-grid">
+      <div class="topo-card topo-standalone">
+        <div class="topo-name">Standalone</div>
+        <div class="topo-tag">Dev / Test</div>
+        <div class="topo-body">Single node. No HA. If it goes down, all sessions are gone. Never use in production for a user-facing service.</div>
+      </div>
+      <div class="topo-card topo-sentinel">
+        <div class="topo-name">Sentinel</div>
+        <div class="topo-tag">Recommended HA</div>
+        <div class="topo-body">1 primary + N replicas + 3 Sentinel processes for automatic failover. Handles most web apps up to ~50–100 GB session data.</div>
+      </div>
+      <div class="topo-card topo-cluster">
+        <div class="topo-name">Cluster</div>
+        <div class="topo-tag">High Scale</div>
+        <div class="topo-body">Data sharded across 16,384 hash slots across multiple primaries. Use when session volume exceeds what a single node can hold.</div>
+      </div>
+    </div>
+
+    <h3>Serialization and Deserialization</h3>
+    <p>Session objects must be serialized before writing to Redis and deserialized on read. Common choices: <strong>JSON</strong> (human-readable, debuggable, ~10–30% larger); <strong>MessagePack</strong> (binary, compact, faster); <strong>Protobuf</strong> (typed, compact, requires schema management). Schema evolution — adding fields to session objects — must be handled carefully: old records that haven't expired yet will fail deserialization if a field is removed or renamed. Always write backward-compatible changes (add optional fields, never remove).</p>
+  </section>
+
+  <!-- S7: FIRST PRINCIPLES -->
+  <section id="s7">
+    <h2 class="section-title"><span class="num">07</span> 🔍 First Principles — Why Does This Exist?</h2>
+    <p>The root problem is that HTTP is stateless, but applications are stateful. Early web apps stored session state in app server memory because it was fast and simple — and when you ran one server, it worked perfectly. As traffic grew, teams added more servers. Immediately, they hit the "missing session" problem: a user logged in on Server A, then their next request hit Server B, which had no record of their session, and they were asked to log in again.</p>
+    <p>The first stopgap was sticky sessions — the load balancer learned which server each user was attached to and always routed to that server. This worked, but at severe cost: you couldn't rebalance load freely, any server failure took its users' sessions with it (forcing re-login), and you couldn't run a rolling deployment without evicting sessions. The system had become tightly coupled — users to servers — and that coupling was the enemy of horizontal scaling.</p>
+    <p>The correct fix is the <strong>"share-nothing" principle</strong> applied to session state: no app server should own any piece of state that another can't access. By moving session data to a dedicated, shared, fast external store, all servers become identical. The external store — Redis — becomes the single source of truth for session state. App servers are reduced to stateless request processors: they receive a session ID, look it up in Redis, do their work, and optionally update the record. Any server can handle any request. This is why externalizing state to Redis is not just a performance trick — it is the architectural prerequisite for horizontal scaling.</p>
+  </section>
+
+  <!-- S8: MENTAL MODELS -->
+  <section id="s8">
+    <h2 class="section-title"><span class="num">08</span> 🗺️ Mental Models</h2>
+
+    <h3>Model 1: The Hotel Key Card System</h3>
+    <p>Imagine a hotel where every room uses a universal card reader that calls a central keycard server to validate. Any front desk clerk can issue or revoke a card; any door reader can validate it. No room is "bonded" to a particular clerk. This is Redis-backed sessions: the central keycard server is Redis, the rooms are app servers, and the key card is the session ID. <strong>Where the model breaks:</strong> the central keycard server itself becomes the single point of failure — which is why Redis Sentinel or Cluster is necessary in production, just as hotels have backup power for their core systems.</p>
+
+    <h3>Model 2: "Dumb Servers, Smart Store"</h3>
+    <p>Think of your app server fleet as interchangeable compute workers — they should be as dumb as a calculator: take input, produce output, remember nothing. All the intelligence about <em>who the user is</em> lives in Redis. When you design a system, ask: "Does this server know anything about a specific user that it couldn't reconstruct from Redis + the database?" If the answer is yes, you have unexternalized state. This frame makes it easy to audit designs for hidden statefulness and surfaces implicit coupling before it becomes a scaling problem.</p>
+
+    <h3>Model 3: The State Evacuation</h3>
+    <p>Refactoring a stateful service to externalize state is literally an evacuation: identify every piece of data that lives in app server memory — session objects, user preferences, rate limit counters, CSRF tokens, temporary upload state — and evacuate each one to Redis with a corresponding TTL and key design. The exercise of systematically listing what to evacuate surfaces hidden stateful assumptions. <strong>Where the model breaks:</strong> not everything should go to Redis. Large binary blobs belong in object storage; durable, queryable data belongs in a relational DB. Redis is for fast, ephemeral, small session-type data only.</p>
+  </section>
+
+  <!-- S9: HOW IT WORKS -->
+  <section id="s9">
+    <h2 class="section-title"><span class="num">09</span> ⚙️ How It Works — Mechanics</h2>
+
+    <h3>Write Path — Session Creation</h3>
+    <ol class="flow-steps">
+      <li><span class="step-num">1</span><span>User authenticates (POST /login). App server validates credentials against the user DB.</span></li>
+      <li><span class="step-num">2</span><span>App server generates a cryptographically random, globally unique session ID (e.g., 128-bit UUID or <code>secrets.token_urlsafe(32)</code>). <strong>Never use sequential IDs — they are guessable.</strong></span></li>
+      <li><span class="step-num">3</span><span>App server builds the session object: <code>{ user_id, roles, email, created_at, last_active }</code>.</span></li>
+      <li><span class="step-num">4</span><span>App server serializes the object to JSON (or MessagePack).</span></li>
+      <li><span class="step-num">5</span><span>App server writes to Redis: <code>SET session:{session_id} &lt;json&gt; EX 1800</code> (30 min idle TTL). The atomic <code>SET ... EX</code> command avoids race conditions between SET and EXPIRE.</span></li>
+      <li><span class="step-num">6</span><span>App server returns <code>Set-Cookie: session_id=&lt;session_id&gt;; HttpOnly; Secure; SameSite=Lax</code> to client.</span></li>
+    </ol>
+
+    <h3>Read Path — Request Handling</h3>
+    <ol class="flow-steps">
+      <li><span class="step-num">1</span><span>Browser attaches <code>Cookie: session_id=&lt;session_id&gt;</code> on every request.</span></li>
+      <li><span class="step-num">2</span><span>App server (any server in the fleet) extracts the session ID from the cookie.</span></li>
+      <li><span class="step-num">3</span><span>App server calls <code>GET session:{session_id}</code> against Redis.</span></li>
+      <li><span class="step-num">4</span><span><strong>Cache hit:</strong> Redis returns the serialized session. App server deserializes it, reconstructs user context, processes the request. App server slides the TTL: <code>EXPIRE session:{session_id} 1800</code>.</span></li>
+      <li><span class="step-num">5</span><span><strong>Cache miss (session expired or forged):</strong> App server returns <code>401 Unauthorized</code> and clears the session cookie.</span></li>
+    </ol>
+
+    <h3>Failure Scenarios</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Failure</th><th>What Happens</th><th>Mitigation</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Redis primary fails (Sentinel)</strong></td>
+            <td>Sentinel promotes a replica in ~5–15 s. Session reads fail during the failover window.</td>
+            <td>Retry with exponential backoff; return a friendly "please try again" rather than 500.</td>
+          </tr>
+          <tr>
+            <td><strong>Memory pressure / LRU eviction</strong></td>
+            <td>Redis silently evicts least-recently-used keys, which may include active sessions. User logged out without explanation.</td>
+            <td><code>maxmemory-policy=noeviction</code> + alert at 80% memory usage + size Redis for 2× peak.</td>
+          </tr>
+          <tr>
+            <td><strong>Network partition to Redis</strong></td>
+            <td>All session lookups fail. All authenticated requests fail.</td>
+            <td>Circuit breaker: fail open for public endpoints, return 503 for auth-required endpoints, don't cascade to app crash.</td>
+          </tr>
+          <tr>
+            <td><strong>Stale session data (role change)</strong></td>
+            <td>Updated roles/permissions don't reflect in cached session until TTL expires or session is re-written.</td>
+            <td>On role change, explicitly update or delete the session record in Redis. Never rely solely on TTL for security-relevant updates.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>TTL Design: Absolute vs. Sliding</h3>
+    <p><strong>Absolute TTL:</strong> session expires N hours after creation regardless of activity. Simple implementation, but frustrating for active users who get logged out mid-session. <strong>Sliding TTL:</strong> the TTL is reset on every authenticated request via <code>EXPIRE session:{session_id} 1800</code>. Better UX, but requires a write on every request. Most production web apps use sliding TTL with an absolute cap (e.g., 30-min idle + 24-hr max enforced by a <code>created_at</code> check inside the session payload itself).</p>
+  </section>
+
+  <!-- S10: REAL-WORLD EXAMPLES -->
+  <section id="s10">
+    <h2 class="section-title"><span class="num">10</span> 🏭 Real-World System Examples</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>System</th><th>How This Concept Applies</th><th>Notes</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Django (Python)</strong></td>
+            <td><code>SESSION_ENGINE = 'django.contrib.sessions.backends.cache'</code> with <code>django-redis</code> — all session data stored in Redis, keyed by session cookie value</td>
+            <td>Default Django stores sessions in the DB; switching to Redis drops session read latency from ~5 ms to &lt;1 ms</td>
+          </tr>
+          <tr>
+            <td><strong>Express.js (Node)</strong></td>
+            <td><code>express-session</code> + <code>connect-redis</code> store — session middleware reads/writes to Redis on every authenticated request</td>
+            <td>Redis key is <code>sess:{session_id}</code>; TTL set via <code>ttl</code> option in the store config</td>
+          </tr>
+          <tr>
+            <td><strong>Spring Session (Java)</strong></td>
+            <td><code>@EnableRedisHttpSession</code> annotation — Spring auto-serializes <code>HttpSession</code> object to Redis</td>
+            <td>Schema evolution (adding fields) can break deserialization of existing Redis records — handle carefully with versioned session structures</td>
+          </tr>
+          <tr>
+            <td><strong>AWS ElastiCache for Redis</strong></td>
+            <td>Managed session store for horizontally-scaled EC2/ECS apps; pairs with ALB session stickiness disabled</td>
+            <td>ElastiCache "cluster mode disabled" with Multi-AZ replication is the Sentinel equivalent; cluster mode enables sharding for higher volume</td>
+          </tr>
+          <tr>
+            <td><strong>Shopify</strong></td>
+            <td>Rails app externalizes session data and job state to Redis clusters; Redis is core infrastructure, not optional</td>
+            <td>At Shopify scale (~1M merchants), Redis is sharded by merchant ID range to prevent single large-keyspace bottlenecks</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- S11: TRADE-OFFS -->
+  <section id="s11">
+    <h2 class="section-title"><span class="num">11</span> ⚖️ Trade-offs</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>✅ Benefit</th><th>❌ Cost / Limitation</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="benefit">Stateless app servers</span> — any server handles any request; free horizontal scaling with no sticky sessions</td>
+            <td>Redis cluster is now a <strong>stateful, high-availability dependency</strong>; its failure takes down all authenticated sessions simultaneously</td>
+          </tr>
+          <tr>
+            <td><span class="benefit">Sessions survive</span> individual app server restarts, crashes, and rolling deployments — users stay logged in during deploys</td>
+            <td>Every authenticated request incurs a Redis round-trip (~0.3–1 ms) that didn't exist with in-memory sessions — small but non-zero latency tax</td>
+          </tr>
+          <tr>
+            <td><span class="benefit">Immediate consistency</span> across all app servers — role/permission changes take effect on the next request</td>
+            <td>Redis memory must be provisioned for peak concurrent session volume; underprovisioning + LRU eviction causes <strong>silent session loss</strong></td>
+          </tr>
+          <tr>
+            <td><span class="benefit">TTL-based auto-expiry</span> requires zero app-level cleanup code or cron jobs</td>
+            <td>Serialization/deserialization of session objects adds CPU overhead; large or deeply nested session payloads amplify this on every request</td>
+          </tr>
+          <tr>
+            <td><span class="benefit">Session state shareable</span> across multiple microservices reading the same Redis key</td>
+            <td>Key design mistakes (missing TTL, key collisions, oversized values) are silent in development but catastrophic in production at scale</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- S12: INTERVIEW APPLICATION -->
+  <section id="s12">
+    <h2 class="section-title"><span class="num">12</span> 🎯 Interview Application</h2>
+
+    <h3>Trigger Phrases</h3>
+    <ul class="trigger-list">
+      <li>"The system needs to scale to multiple app servers — how do you handle session state?"</li>
+      <li>"What happens to user sessions when an app server goes down?"</li>
+      <li>"How does your authentication layer work when you have 10 servers behind a load balancer?"</li>
+      <li>"Walk me through how you'd make this service horizontally scalable."</li>
+    </ul>
+
+    <h3>What You Say / Do</h3>
+    <p>In the high-level design phase, when you introduce your app server tier, proactively state that servers will be stateless by externalizing sessions to Redis. Draw the Redis cluster as a separate box. Walk through the read/write flow once to show you understand the mechanics, then immediately call out that Redis is now a critical HA dependency — so you'd deploy it with Sentinel or Cluster depending on scale, with proper memory sizing and <code>maxmemory-policy=noeviction</code>. This signals to the interviewer that you think about the second-order failure modes, not just the happy path.</p>
+
+    <h3>The Trade-off Statement</h3>
+    <div class="tradeoff-statement">
+"If we externalize sessions to Redis, we get stateless app servers that can be freely
+scaled and load-balanced without sticky sessions — but we pay by making Redis a critical,
+high-availability dependency whose failure takes down all authenticated traffic.
+For this system, that trade-off is correct because the scaling benefits outweigh
+the operational complexity, and we can mitigate the availability risk with
+Redis Sentinel and a circuit breaker."
+    </div>
+  </section>
+
+  <!-- S13: MISCONCEPTIONS -->
+  <section id="s13">
+    <h2 class="section-title"><span class="num">13</span> ⚠️ Common Misconceptions &amp; Gotchas</h2>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><span><strong>Misconception:</strong> "We'll use a relational database (MySQL/Postgres) as the session store — it's already there and it works."</span></div>
+      <div class="right"><span class="icon">✅</span><span><strong>Reality:</strong> A relational database can store sessions, but it will become a bottleneck under load. Session lookups are high-frequency, latency-sensitive, and don't benefit from SQL's durability or query capabilities. A database session store at scale trades ~0.5 ms Redis reads for ~5–50 ms DB reads plus connection pool pressure. Redis exists specifically for this workload — it's not premature optimization, it's correct tool selection.</span></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><span><strong>Misconception:</strong> "Redis is just a cache — if it goes down, we gracefully degrade and reconstruct sessions from the DB."</span></div>
+      <div class="right"><span class="icon">✅</span><span><strong>Reality:</strong> When Redis is the session store, it is not a cache in the degradable sense — it is the <strong>authoritative session state</strong>. There is nothing in the DB to fall back to. Redis is a primary, critical data store for the session layer. Design for its availability (Sentinel/Cluster, alerting) accordingly, not for graceful degradation.</span></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><span><strong>Misconception:</strong> "Setting a TTL on session creation is enough — the session will expire when it should."</span></div>
+      <div class="right"><span class="icon">✅</span><span><strong>Reality:</strong> A fixed TTL from creation time means active users get logged out after N hours even mid-session. Production systems implement <strong>sliding TTL</strong>: the TTL is refreshed on every authenticated request (<code>EXPIRE session:{id} 1800</code>). This requires an additional Redis write on every request — a small but real cost you must consciously accept.</span></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><span><strong>Misconception:</strong> "We externalized sessions to Redis, so our system is now stateless."</span></div>
+      <div class="right"><span class="icon">✅</span><span><strong>Reality:</strong> The <em>app servers</em> are stateless, but the <em>system</em> is not — it has simply moved state to Redis. Redis itself is stateful and must be treated with the same operational rigor as a database: replication, failover, backup, monitoring. "Stateless architecture" means stateless at the compute tier; state still has to live somewhere.</span></div>
+    </div>
+  </section>
+
+  <!-- S14: RELATIONSHIPS -->
+  <section id="s14">
+    <h2 class="section-title"><span class="num">14</span> 🔗 Relationships to Other Concepts</h2>
+    <div class="rel-grid">
+      <div class="rel-card rel-builds">
+        <div class="rel-type">Builds On</div>
+        <p><strong>3.1 — Stateless vs. Stateful Architecture</strong> (the motivation for externalizing state) and <strong>3.2 — Session Management Approaches</strong> (identifies the specific data that needs externalizing — session records — and why in-memory alternatives fail at scale).</p>
+      </div>
+      <div class="rel-card rel-enables">
+        <div class="rel-type">Enables</div>
+        <p><strong>3.4 — JWT as Stateless Session Token</strong> (the alternative: encode session data in a signed token instead of Redis — no lookup, but no revocability) and <strong>3.6 — Share-Nothing Architecture</strong> (Redis-backed session stores are the canonical implementation of share-nothing at the session layer).</p>
+      </div>
+      <div class="rel-card rel-tension">
+        <div class="rel-type">Tension With</div>
+        <p><strong>5.x — Caching Systems.</strong> Redis can be session store <em>and</em> cache, but mixing these roles is dangerous: LRU eviction that clears cache entries can also evict sessions. Always use separate Redis instances or separate key namespaces with <code>maxmemory-policy=noeviction</code> on the session namespace.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- S15: QUIZ -->
+  <section id="s15">
+    <h2 class="section-title"><span class="num">15</span> 🧪 Self-Check Quiz</h2>
+    <p style="font-size:14px;color:var(--text-muted);margin-bottom:20px;">Answer each question out loud without looking. Click the hint to reveal the model answer — but if you need it, revisit the section referenced.</p>
+
+    <div class="quiz-item">
+      <div class="quiz-q"><span class="quiz-num">1</span><span>What is the root cause of the sticky sessions problem, and what does externalizing state to Redis specifically fix?</span></div>
+      <div class="quiz-hint" onclick="this.style.display='none';this.nextElementSibling.style.display='block'">Think through your answer before expanding — if you hesitate, revisit Section 7 (First Principles).</div>
+      <div style="display:none;background:var(--green-light);border:1px solid #86efac;border-radius:0 0 8px 8px;padding:12px 16px;font-size:13px;color:#14532d;line-height:1.6;">Root cause: app servers hold session state in their own process memory, so the load balancer must route subsequent requests from the same user to the same server ("sticky"). This breaks horizontal scaling because nodes can't be freely added/removed, node failure evicts all its sessions, and load can't be balanced evenly. Externalizing to Redis moves the session record out of app memory into a shared store every server can read — making app servers symmetric and interchangeable.</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q"><span class="quiz-num">2</span><span>Walk through the full read path for an authenticated request in a Redis-backed session system, from browser cookie to app server reconstructing user context.</span></div>
+      <div class="quiz-hint" onclick="this.style.display='none';this.nextElementSibling.style.display='block'">Think through your answer before expanding — if you hesitate, revisit Section 9 (How It Works — Read Path).</div>
+      <div style="display:none;background:var(--green-light);border:1px solid #86efac;border-radius:0 0 8px 8px;padding:12px 16px;font-size:13px;color:#14532d;line-height:1.6;">Browser sends <code>Cookie: session_id=&lt;id&gt;</code>. Any app server extracts the ID, calls <code>GET session:{id}</code> against Redis. Cache hit: deserialize JSON → reconstruct user context (user_id, roles, etc.) → process request → slide TTL with <code>EXPIRE session:{id} 1800</code>. Cache miss (expired or forged): return 401, clear cookie. The key insight: "any app server" — no stickiness needed.</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q"><span class="quiz-num">3</span><span>Your Redis instance is under memory pressure and evicting keys. A user complains they were suddenly logged out mid-session. What happened, and what are two ways to prevent it?</span></div>
+      <div class="quiz-hint" onclick="this.style.display='none';this.nextElementSibling.style.display='block'">Think through your answer before expanding — if you hesitate, revisit Section 9 (Failure Scenarios) and the Cheatsheet Gotcha.</div>
+      <div style="display:none;background:var(--green-light);border:1px solid #86efac;border-radius:0 0 8px 8px;padding:12px 16px;font-size:13px;color:#14532d;line-height:1.6;">Redis hit its <code>maxmemory</code> limit and the LRU eviction policy silently removed the user's session key to free space. The app server then got a cache miss and returned 401. Prevention: (1) Set <code>maxmemory-policy=noeviction</code> so Redis rejects new writes under pressure rather than silently evicting sessions — this is detectable and alertable. (2) Size the Redis instance to 2× peak concurrent session volume so memory pressure never occurs under normal load.</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q"><span class="quiz-num">4</span><span>Name a real production framework that externalizes sessions to Redis. Describe concretely how it integrates — what Redis key format, what TTL, and what the session object contains.</span></div>
+      <div class="quiz-hint" onclick="this.style.display='none';this.nextElementSibling.style.display='block'">Think through your answer before expanding — if you hesitate, revisit Section 10 (Real-World Examples).</div>
+      <div style="display:none;background:var(--green-light);border:1px solid #86efac;border-radius:0 0 8px 8px;padding:12px 16px;font-size:13px;color:#14532d;line-height:1.6;">Express.js + connect-redis: session middleware intercepts every request, reads <code>sess:{session_id}</code> from Redis, deserializes JSON into <code>req.session</code>. On response, if session was modified, re-serializes and writes back with the configured TTL (e.g., 30 min). Session object contains: <code>{ cookie: { expires, httpOnly }, user_id, roles, csrf_token, ... }</code>. The session ID travels as an HttpOnly cookie. Django with django-redis is similar but uses a different key prefix (<code>django.contrib.sessions.cache:{hash}</code>).</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q"><span class="quiz-num">5</span><span>A candidate says "we externalized state to Redis, so our system is now stateless." What is exactly right and exactly wrong about that statement?</span></div>
+      <div class="quiz-hint" onclick="this.style.display='none';this.nextElementSibling.style.display='block'">Think through your answer before expanding — if you hesitate, revisit Section 13 (Misconceptions).</div>
+      <div style="display:none;background:var(--green-light);border:1px solid #86efac;border-radius:0 0 8px 8px;padding:12px 16px;font-size:13px;color:#14532d;line-height:1.6;">Right: the app servers are stateless — they hold no user-specific state between requests, so any server can handle any request. Wrong: the system as a whole is not stateless — state was relocated to Redis, not eliminated. Redis is a stateful component that must be treated with the same operational discipline as a database (replication, failover, monitoring). "Stateless architecture" is shorthand for "stateless compute tier," not "no state anywhere."</div>
+    </div>
+  </section>
+
+  <!-- S16: FURTHER READING -->
+  <section id="s16">
+    <h2 class="section-title"><span class="num">16</span> 📚 Further Reading</h2>
+    <ul class="reading-list">
+      <li><em>Designing Data-Intensive Applications</em> (DDIA) Ch. 1 — "Reliability, Scalability, Maintainability" — Kleppmann covers share-nothing and state externalization motivation (Kleppmann, O'Reilly)</li>
+      <li>Redis official documentation — "An Introduction to Redis Data Types and Abstractions" and "Redis Sentinel" — <a href="https://redis.io/docs" target="_blank">redis.io/docs</a></li>
+      <li>AWS documentation — "Managing User Sessions with Amazon ElastiCache for Redis" — <a href="https://aws.amazon.com/elasticache" target="_blank">aws.amazon.com/elasticache</a></li>
+      <li>Martin Fowler — "Stateless Services" and "Session Object" patterns — <a href="https://martinfowler.com" target="_blank">martinfowler.com</a></li>
+      <li>ByteByteGo Newsletter — "A Crash Course in Redis" — visual walkthrough of Redis topology options and session store patterns</li>
+    </ul>
+  </section>
+
+  <!-- S17: MY NOTES -->
+  <section id="s17">
+    <h2 class="section-title"><span class="num">17</span> ✍️ My Notes</h2>
+    <div class="callout callout-quote">Personal observations, things that confused me, analogies that helped. This section is yours.</div>
+    <div style="min-height:120px;background:var(--surface);border:1px dashed var(--border);border-radius:10px;padding:18px 20px;font-size:14px;color:var(--text-muted);font-style:italic;">Your notes go here…</div>
+  </section>
+
+</article>
+</main>
+
+<script>
+  /* ── Phase toggle ── */
+  function togglePhase(header) {
+    header.parentElement.classList.toggle('open');
+  }
+
+  /* ── Checklist persistence ── */
+  const STORAGE_KEY = 'checks-3.3';
+
+  function saveChecks() {
+    const state = {};
+    document.querySelectorAll('.checklist[id]').forEach(list => {
+      state[list.id] = [...list.querySelectorAll('li')].map(l => l.classList.contains('checked'));
+    });
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
+  }
+
+  function loadChecks() {
+    try {
+      const state = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+      document.querySelectorAll('.checklist[id]').forEach(list => {
+        (state[list.id] || []).forEach((checked, i) => {
+          if (checked) list.querySelectorAll('li')[i]?.classList.add('checked');
+        });
+      });
+    } catch(e) {}
+  }
+
+  document.querySelectorAll('.checklist[id] .cb').forEach(cb => {
+    cb.addEventListener('click', () => {
+      cb.closest('li').classList.toggle('checked');
+      saveChecks();
+    });
+  });
+
+  loadChecks();
+
+  /* ── Active TOC link on scroll ── */
+  const sections = document.querySelectorAll('section[id]');
+  const navLinks = document.querySelectorAll('#toc nav a');
+
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        navLinks.forEach(a => {
+          a.classList.toggle('active', a.getAttribute('href') === '#' + entry.target.id);
+        });
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+
+  sections.forEach(s => observer.observe(s));
+</script>
+
+</body>
+</html>
