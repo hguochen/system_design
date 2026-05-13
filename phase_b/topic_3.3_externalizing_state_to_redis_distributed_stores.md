@@ -284,21 +284,60 @@ In the high-level design phase, when you introduce your app server tier, proacti
 
    > 💡 *Think through your answer before expanding — if you hesitate, revisit Section 7 (First Principles).*
 
+The root cause is that app servers should never have stored session state in their own process memory in the first place. The moment session data lives on a specific server, every subsequent request from that user must return to that same server — creating an invisible dependency between a user and a machine.
+Sticky sessions are a band-aid applied after that mistake. They paper over the coupling without fixing it, and at real cost: you can't freely add or remove servers, uneven load can't be rebalanced, a server crash evicts all its users' sessions simultaneously, and rolling deployments force logouts.
+Externalizing session data to Redis fixes the coupling entirely. Session state no longer belongs to any app server — it belongs to Redis. Every app server becomes identical and interchangeable. The load balancer can send any request to any server. You can add, remove, and restart app servers freely. This is the share-nothing principle: no server owns anything another server can't also access.
+
 2. Walk through the full read path for an authenticated request in a Redis-backed session system: from the browser sending the cookie to the app server reconstructing user context.
 
    > 💡 *Think through your answer before expanding — if you hesitate, revisit Section 9 (How It Works).*
+
+User POSTs credentials. App server validates against the user database.
+On success, app server generates a cryptographically random session ID — a 128-bit UUID. Never sequential, never derived from user data. Sequential IDs are guessable.
+App server builds the session payload: { user_id, roles, email, created_at }.
+Serializes the payload to JSON.
+Writes to Redis atomically: SET session:{session_id} <json> EX 1800. The EX 1800 sets the TTL in the same command — never a separate SET then EXPIRE, that's a race condition where the key can exist without a TTL if the server crashes between commands.
+Returns Set-Cookie: session_id=<id>; HttpOnly; Secure; SameSite=Lax to the browser.
+
+HttpOnly — JavaScript cannot read it, blocks XSS-based theft.
+Secure — HTTPS only.
+SameSite=Lax — blocks most CSRF attacks.
 
 3. Your Redis instance is under memory pressure and evicting keys. A user complains they were suddenly logged out mid-session. What happened, and what are two ways to prevent it?
 
    > 💡 *Think through your answer before expanding — if you hesitate, revisit Section 9 (Failure Scenarios) and the Cheatsheet.*
 
+Redis hit its maxmemory limit. With the default allkeys-lru eviction policy, Redis silently deleted the least-recently-used keys to free space — and one of those keys was an active session. The app server called GET session:{id}, received nil (a cache miss), treated it as an expired or invalid session, and returned 401 Unauthorized. Nothing in the app logs indicated an error — the eviction is entirely invisible at the application layer. The 401 spike looks like a client issue until you trace it to Redis.
+Prevention — two methods:
+First, set maxmemory-policy=noeviction. Under memory pressure, Redis will now reject new writes with an error rather than silently evicting data. That error surfaces in your app logs and is alertable. Silent failure becomes loud failure — always preferable.
+Second, size Redis at 2× peak concurrent session volume and alert at 80% memory utilization. Resolve the capacity issue before you ever approach the limit. Check INFO memory for used_memory vs maxmemory, and watch the evicted_keys counter — any non-zero value is a signal the problem has already started.
+
 4. Name a real production framework or system that externalizes sessions to Redis. Describe concretely how it integrates — what Redis key format, what TTL, and what the session object contains.
 
    > 💡 *Think through your answer before expanding — if you hesitate, revisit Section 10 (Real-World Examples).*
 
+Spring Session with Redis.
+Integration: the @EnableRedisHttpSession annotation instructs Spring to transparently serialize the HttpSession object to Redis on every write and deserialize it on every read. Application code continues using the standard HttpSession API — the Redis backing is invisible at the code level.
+Key format: spring:session:sessions:{session_id} — a hash stored in Redis with individual fields for session attributes. A secondary key spring:session:sessions:expires:{session_id} manages the TTL.
+TTL: 30 minutes by default, configurable via @EnableRedisHttpSession(maxInactiveIntervalInSeconds = 1800). This is a sliding TTL — Spring updates the expiry on each request.
+Session payload contains: user_id, roles or authorities, email, created_at, CSRF token, and any application-specific attributes written to the session. In a Spring Security context, the full Authentication object is serialized into the session.
+Notable gotcha: Spring uses Java serialization by default. If you add or rename a field on a serialized object and deploy, old session records in Redis will fail deserialization — throwing InvalidClassException until those records expire. Solution: use JSON serialization (GenericJackson2JsonRedisSerializer) and write backward-compatible schema changes only.
+
 5. A candidate says "we externalized state to Redis, so now our system is stateless." What is right and wrong about that statement?
 
    > 💡 *Think through your answer before expanding — if you hesitate, revisit Section 13 (Misconceptions).*
+
+When an admin suspends a user, the database record is updated immediately — but if that user has an active Redis session with a 30-minute TTL, they retain full access until that session expires. That's up to 30 minutes of unauthorized access. For an account suspension, that's unacceptable.
+The fix is to explicitly delete the session record in Redis at the moment of suspension:
+DEL session:{session_id}
+On the user's next request, the app server gets a cache miss and returns 401. Access is revoked immediately.
+The implementation challenge most candidates miss: to call DEL session:{session_id}, you need the session ID. But the admin action operates on a user_id, not a session ID. You need a lookup from user to session.
+Two standard approaches:
+
+Reverse index in Redis: maintain a user_sessions:{user_id} set containing all active session IDs for that user. On suspend, look up the set, delete each session, delete the index entry.
+Session ID on the user record: store the current session ID in your user database on login. On suspend, read it from the DB, delete the Redis key.
+
+The general rule: never rely on TTL expiry alone for security-sensitive session invalidation. Always maintain a path from user_id to session_id so you can explicitly revoke.
 
 ---
 
