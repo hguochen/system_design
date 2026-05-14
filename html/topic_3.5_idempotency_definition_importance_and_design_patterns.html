@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.5 Idempotency — Definition, Importance, and Design Patterns</title>
+<style>
+  :root {
+    --bg: #f9f8f6;
+    --surface: #ffffff;
+    --surface-alt: #f3f2ef;
+    --border: #e5e3de;
+    --text: #1a1917;
+    --text-muted: #6b6861;
+    --accent: #2563eb;
+    --accent-light: #dbeafe;
+    --green: #16a34a;
+    --green-light: #dcfce7;
+    --red: #dc2626;
+    --red-light: #fee2e2;
+    --yellow: #d97706;
+    --yellow-light: #fef3c7;
+    --purple: #7c3aed;
+    --purple-light: #ede9fe;
+    --orange: #ea580c;
+    --orange-light: #ffedd5;
+    --code-bg: #1e1e2e;
+    --code-text: #cdd6f4;
+    --sidebar-w: 240px;
+    --content-max: 780px;
+    font-size: 16px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    display: flex;
+  }
+
+  /* ── SIDEBAR ── */
+  #toc {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: var(--sidebar-w);
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 24px 0 48px;
+    z-index: 100;
+  }
+
+  #toc-header {
+    padding: 0 16px 16px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 8px;
+  }
+
+  #toc-header .phase-tag {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: var(--accent-light);
+    border-radius: 4px;
+    padding: 2px 7px;
+    display: inline-block;
+    margin-bottom: 6px;
+  }
+
+  #toc-header h2 {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.4;
+  }
+
+  #toc nav a {
+    display: block;
+    padding: 5px 16px 5px 20px;
+    font-size: 12.5px;
+    color: var(--text-muted);
+    text-decoration: none;
+    border-left: 2px solid transparent;
+    transition: all 0.15s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+
+  /* ── MAIN CONTENT ── */
+  main {
+    margin-left: var(--sidebar-w);
+    padding: 48px 48px 96px;
+    max-width: calc(var(--sidebar-w) + var(--content-max) + 96px);
+    width: 100%;
+  }
+
+  article { max-width: var(--content-max); }
+
+  /* ── HEADER ── */
+  .doc-header {
+    margin-bottom: 40px;
+    padding-bottom: 28px;
+    border-bottom: 2px solid var(--border);
+  }
+
+  .doc-header .meta {
+    display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px;
+  }
+
+  .tag {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border-radius: 20px;
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+
+  .tag-phase  { background: var(--accent-light);  color: var(--accent); }
+  .tag-topic  { background: var(--purple-light);  color: var(--purple); }
+  .tag-date   { background: var(--surface-alt);   color: var(--text-muted); }
+
+  .doc-header h1 {
+    font-size: 30px;
+    font-weight: 800;
+    line-height: 1.25;
+    letter-spacing: -0.02em;
+    color: var(--text);
+  }
+
+  /* ── SECTIONS ── */
+  section {
+    margin-bottom: 52px;
+    scroll-margin-top: 32px;
+  }
+
+  h2.section-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 20px;
+    display: flex; align-items: center; gap: 10px;
+    letter-spacing: -0.01em;
+  }
+
+  h2.section-title .num {
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--text-muted);
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 2px 7px;
+    letter-spacing: 0.04em;
+  }
+
+  h3 {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    margin: 24px 0 10px;
+  }
+
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+
+  /* ── CALLOUT BOXES ── */
+  .callout {
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-bottom: 20px;
+    font-size: 14px;
+    border-left: 3px solid;
+  }
+
+  .callout-goal   { background: var(--accent-light);  border-color: var(--accent);  color: #1e40af; }
+  .callout-tip    { background: var(--yellow-light);  border-color: var(--yellow);  color: #92400e; }
+  .callout-quote  { background: var(--surface-alt);   border-color: var(--border);  color: var(--text-muted); font-style: italic; }
+  .callout-warn   { background: var(--red-light);     border-color: var(--red);     color: #7f1d1d; }
+
+  .callout strong { font-weight: 700; }
+
+  /* ── CHEATSHEET ── */
+  .cheatsheet {
+    background: var(--code-bg);
+    color: var(--code-text);
+    border-radius: 12px;
+    padding: 24px 28px;
+    font-family: "SF Mono", "Fira Code", "Cascadia Code", Menlo, monospace;
+    font-size: 13px;
+    line-height: 1.65;
+    white-space: pre-wrap;
+    overflow-x: auto;
+  }
+
+  .cheatsheet .label {
+    color: #89dceb;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    display: block;
+    margin-top: 16px;
+  }
+
+  .cheatsheet .label:first-child { margin-top: 0; }
+
+  .cheatsheet .val { color: #a6e3a1; }
+  .cheatsheet .hi  { color: #f38ba8; font-weight: 600; }
+  .cheatsheet .dim { color: #7f849c; }
+
+  /* ── MINDMAP ── */
+  .mindmap-wrap {
+    margin: 20px 0;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    background: #fafaf8;
+    text-align: center;
+  }
+
+  .mindmap-wrap img {
+    width: 100%;
+    max-width: 100%;
+    display: block;
+  }
+
+  .mindmap-wrap .caption {
+    font-size: 12px;
+    color: var(--text-muted);
+    padding: 8px 0 10px;
+    font-style: italic;
+  }
+
+  /* ── DEFINITION BOX ── */
+  .definition {
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-left: 4px solid var(--accent);
+    border-radius: 10px;
+    padding: 18px 22px;
+    font-size: 15.5px;
+    line-height: 1.75;
+    color: var(--text);
+  }
+
+  /* ── CONCEPT GRID ── */
+  .concept-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin: 16px 0;
+  }
+
+  .concept-card {
+    border-radius: 10px;
+    padding: 16px 18px;
+    border: 1.5px solid;
+  }
+
+  .cc-blue   { background: var(--accent-light);  border-color: #93c5fd; }
+  .cc-orange { background: var(--orange-light);  border-color: #fdba74; }
+  .cc-green  { background: var(--green-light);   border-color: #86efac; }
+  .cc-purple { background: var(--purple-light);  border-color: #c4b5fd; }
+  .cc-yellow { background: var(--yellow-light);  border-color: #fcd34d; }
+
+  .concept-card .cc-header {
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+
+  .concept-card .cc-body {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text);
+  }
+
+  /* ── FLOW STEPS ── */
+  .flow-steps { list-style: none; margin: 12px 0 18px; }
+
+  .flow-steps li {
+    display: flex;
+    gap: 14px;
+    margin-bottom: 10px;
+    font-size: 14.5px;
+    line-height: 1.6;
+    align-items: flex-start;
+  }
+
+  .flow-steps .step-num {
+    min-width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .flow-steps .step-num.green { background: var(--green); }
+  .flow-steps .step-num.orange { background: var(--orange); }
+  .flow-steps .step-num.red { background: var(--red); }
+
+  /* ── TABLES ── */
+  .table-wrap { overflow-x: auto; margin: 14px 0; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+
+  th {
+    background: var(--surface-alt);
+    font-weight: 700;
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 2px solid var(--border);
+    font-size: 12.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+    line-height: 1.55;
+  }
+
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--surface-alt); }
+
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+
+  /* ── QUIZ ── */
+  .quiz-item {
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+
+  .quiz-q {
+    padding: 14px 18px;
+    font-size: 14.5px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    background: var(--surface);
+    user-select: none;
+  }
+
+  .quiz-q:hover { background: var(--surface-alt); }
+
+  .quiz-num {
+    min-width: 24px; height: 24px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    font-size: 11px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; margin-top: 1px;
+  }
+
+  .quiz-hint {
+    display: none;
+    padding: 12px 18px;
+    font-size: 13.5px;
+    color: #92400e;
+    background: var(--yellow-light);
+    border-top: 1px solid #fcd34d;
+    font-style: italic;
+  }
+
+  .quiz-item.open .quiz-hint { display: block; }
+
+  /* ── PHASE / STUDY ── */
+  .phase-block {
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+
+  .phase-header {
+    background: var(--surface-alt);
+    padding: 12px 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+    font-weight: 700;
+    user-select: none;
+  }
+
+  .phase-header:hover { background: #ebe9e4; }
+
+  .phase-body {
+    display: none;
+    padding: 16px 20px;
+  }
+
+  .phase-block.open .phase-body { display: block; }
+
+  .phase-goal {
+    font-size: 12.5px;
+    color: var(--text-muted);
+    font-style: italic;
+    margin-bottom: 12px;
+  }
+
+  /* ── CHECKLIST ── */
+  .checklist { list-style: none; }
+
+  .checklist li {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+    cursor: pointer;
+  }
+
+  .checklist li:last-child { border-bottom: none; }
+  .checklist li.checked .text { text-decoration: line-through; color: var(--text-muted); }
+
+  .cb {
+    width: 18px; height: 18px;
+    border: 2px solid var(--border);
+    border-radius: 4px;
+    flex-shrink: 0;
+    margin-top: 2px;
+    background: var(--surface);
+    transition: all 0.15s;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  .checklist li.checked .cb {
+    background: var(--green);
+    border-color: var(--green);
+  }
+
+  .checklist li.checked .cb::after {
+    content: '✓';
+    color: white;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  /* ── MISCONCEPTION ROWS ── */
+  .misconception {
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 12px;
+  }
+
+  .mc-wrong {
+    background: var(--red-light);
+    padding: 10px 16px;
+    font-size: 13.5px;
+    color: #7f1d1d;
+    border-bottom: 1px solid #fca5a5;
+  }
+
+  .mc-right {
+    background: var(--green-light);
+    padding: 10px 16px;
+    font-size: 13.5px;
+    color: #14532d;
+  }
+
+  .mc-label {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  /* ── READING LIST ── */
+  .reading-item {
+    display: flex;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+    cursor: pointer;
+    align-items: flex-start;
+  }
+
+  .reading-item:last-child { border-bottom: none; }
+  .reading-item.read .reading-title { text-decoration: line-through; color: var(--text-muted); }
+
+  /* ── SCROLLSPY ── */
+  @media (max-width: 900px) {
+    #toc { display: none; }
+    main { margin-left: 0; padding: 24px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<nav id="toc">
+  <div id="toc-header">
+    <span class="phase-tag">Phase B — Scalability</span>
+    <h2>3.5 Idempotency</h2>
+  </div>
+  <nav>
+    <a href="#s1">1. Goal</a>
+    <a href="#s2">2. Mastery Checklist</a>
+    <a href="#s3">3. Study Phases</a>
+    <a href="#s4">4. Cheatsheet</a>
+    <a href="#s5">5. Core Definition</a>
+    <a href="#s6">6. Core Concepts</a>
+    <a href="#s7">7. First Principles</a>
+    <a href="#s8">8. Mental Models</a>
+    <a href="#s9">9. How It Works</a>
+    <a href="#s10">10. Real-World Examples</a>
+    <a href="#s11">11. Trade-offs</a>
+    <a href="#s12">12. Interview Application</a>
+    <a href="#s13">13. Misconceptions</a>
+    <a href="#s14">14. Relationships</a>
+    <a href="#s15">15. Self-Check Quiz</a>
+    <a href="#s16">16. Further Reading</a>
+  </nav>
+</nav>
+
+<!-- MAIN -->
+<main>
+<article>
+
+  <!-- HEADER -->
+  <header class="doc-header">
+    <div class="meta">
+      <span class="tag tag-phase">Phase B — Scalability</span>
+      <span class="tag tag-topic">Topic 3 — Stateless Services</span>
+      <span class="tag tag-date">2026-05-13</span>
+    </div>
+    <h1>3.5 Idempotency<br><span style="font-weight:400;font-size:20px;color:var(--text-muted)">Definition, Importance, and Design Patterns</span></h1>
+  </header>
+
+  <!-- S1: GOAL -->
+  <section id="s1">
+    <h2 class="section-title"><span class="num">01</span> Goal of This Subtopic</h2>
+    <div class="callout callout-goal">
+      <strong>Why this matters:</strong> Idempotency is the contract that makes distributed retries safe. Without it, every retry is a potential double-charge, double-send, or double-dispatch.
+    </div>
+    <ul class="checklist" id="goals-list">
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Be able to define idempotency precisely and classify any operation as idempotent or non-idempotent on demand.</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Be able to design an idempotency key pattern end-to-end: key generation, storage, atomic check, TTL, and failure scenarios.</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Understand why idempotency is the foundational contract enabling at-least-once delivery and stateless service retries — and identify which interview scenarios require it.</span></li>
+    </ul>
+  </section>
+
+  <!-- S2: MASTERY -->
+  <section id="s2">
+    <h2 class="section-title"><span class="num">02</span> What Mastery Looks Like</h2>
+    <div class="callout callout-quote">If you can teach it to someone else and field their follow-up questions, you've mastered it.</div>
+    <ul class="checklist" id="mastery-list">
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Can define idempotency in one sentence and give two idempotent and two non-idempotent HTTP API examples without hesitation.</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Can design an idempotency key scheme end-to-end: key generation, storage (Redis or DB), lookup logic, TTL, and failure scenarios.</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Can explain why at-least-once delivery requires idempotent consumers and describe what breaks if the consumer is not idempotent.</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Can identify when idempotency is required in a design (payment, job dispatch, notification send) and articulate the exact design pattern to apply.</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Can explain the difference between idempotency, immutability, and purity — and why idempotency does not mean "no side effects ever."</span></li>
+    </ul>
+  </section>
+
+  <!-- S3: STUDY PHASES -->
+  <section id="s3">
+    <h2 class="section-title"><span class="num">03</span> Study Phases to Achieve Mastery</h2>
+
+    <div class="phase-block open">
+      <div class="phase-header" onclick="togglePhase(this)">
+        <span>📖 Phase 1 — Acquire</span><span style="margin-left:auto;font-size:12px;color:var(--text-muted)">💪💪</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Read deeply enough that you could explain the concept without the doc.</p>
+        <ul class="checklist">
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Read <em>Designing Data-Intensive Applications</em> — Ch. 11 on idempotent operations and retry safety</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Read <em>AWS Builder's Library: Making Retries Safe with Idempotent APIs</em></span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Read <em>Stripe Docs: Idempotent Requests</em> — production-grade lifecycle example</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Read Sections 5–9 (Core Definition → How It Works) carefully — don't skim</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Re-read the Cheatsheet (Section 4) and recite from memory after</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-block">
+      <div class="phase-header" onclick="togglePhase(this)">
+        <span>✍️ Phase 2 — Consolidate</span><span style="margin-left:auto;font-size:12px;color:var(--text-muted)">💪💪💪</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Reproduce the knowledge in your own words without looking.</p>
+        <ul class="checklist">
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Close the doc — write out the Core Definition from memory, then compare</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Explain First Principles out loud — what problem existed before idempotency keys?</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Reconstruct the How It Works mechanics (happy path, retry path, concurrent retry) step by step</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Restate each Trade-off row in your own words</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-block">
+      <div class="phase-header" onclick="togglePhase(this)">
+        <span>🔧 Phase 3 — Apply</span><span style="margin-left:auto;font-size:12px;color:var(--text-muted)">💪💪💪💪</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Connect to real systems and simulate interview scenarios.</p>
+        <ul class="checklist">
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Go through Real-World System Examples — verify each claim independently</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Practice the Interview Application out loud — trigger phrases + trade-off statement</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Work through Common Misconceptions — explain WHY each is wrong, not just that it is</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Trace the Relationships to Other Concepts without looking</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-block">
+      <div class="phase-header" onclick="togglePhase(this)">
+        <span>🧪 Phase 4 — Validate</span><span style="margin-left:auto;font-size:12px;color:var(--text-muted)">💪💪💪💪💪</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Confirm you actually own it, not just recognize it.</p>
+        <ul class="checklist">
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Answer every Self-Check Quiz question out loud without notes</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Recite the Cheatsheet from memory — if you can't, re-do Phase 2</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Tick off Mastery items — only if you can demonstrate on demand</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Teach this concept for 2 minutes to an imaginary interviewer without hesitation</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- S4: CHEATSHEET -->
+  <section id="s4">
+    <h2 class="section-title"><span class="num">04</span> Cheatsheet</h2>
+    <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+
+    <div class="mindmap-wrap">
+      <img src="../assets/images/topic_3.5_idempotency_definition_importance_and_design_patterns_mindmap.png" alt="3.5 Idempotency Mindmap">
+      <div class="caption">Mindmap — 3.5 Idempotency</div>
+    </div>
+
+    <div class="cheatsheet"><span class="label">ONE-LINER</span><span class="val">  An operation is idempotent if executing it N times with the same input
+  produces exactly the same outcome as executing it once.</span>
+
+<span class="label">KEY PROPERTIES / RULES</span><span class="val">  1. HTTP idempotent by spec: GET, PUT, DELETE, HEAD, OPTIONS.
+     NOT idempotent: POST, PATCH.
+  2. Idempotency key = client-generated UUID sent with every write.
+     Server deduplicates: same key → return cached result, no re-execute.
+  3. Check-and-store MUST be atomic (SET NX or INSERT ON CONFLICT).
+  4. TTL on key = length of your retry window (typical: 24h–7d).
+  5. Idempotency ≠ no side effects — it means same effect on retries.</span>
+
+<span class="label">DECISION RULE</span><span class="val">  Apply when: operation has side effects AND may be retried
+    (payment charge, job dispatch, notification send, inventory deduct).
+  Skip when: operation is naturally idempotent (GET, full PUT replacement).</span>
+
+<span class="label">NUMBERS TO REMEMBER</span><span class="val">  Key storage: ~100 bytes/key × retention window.
+  Stripe TTL: 24 hours.  SQS FIFO dedup window: 5 minutes.
+  Key format: UUID v4 (random) or ULID (time-ordered).</span>
+
+<span class="label">GOTCHA TO NEVER FORGET</span><span class="hi">  Check-then-store in two steps is a race condition.
+  Always use an atomic primitive: Redis SET NX or DB INSERT ON CONFLICT.</span></div>
+  </section>
+
+  <!-- S5: DEFINITION -->
+  <section id="s5">
+    <h2 class="section-title"><span class="num">05</span> Core Definition</h2>
+    <div class="definition">
+      <strong>Idempotency</strong> is the property of an operation whereby executing it multiple times with the same input produces exactly the same outcome as executing it once — subsequent calls are no-ops with respect to state change.
+      <br><br>
+      An <strong>idempotency key</strong> is the mechanism that imposes this property on operations that are not naturally idempotent: the server deduplicates requests by key and replays the stored response for retries rather than re-executing the operation.
+    </div>
+  </section>
+
+  <!-- S6: CORE CONCEPTS -->
+  <section id="s6">
+    <h2 class="section-title"><span class="num">06</span> Core Concepts</h2>
+
+    <div class="concept-grid">
+      <div class="concept-card cc-blue">
+        <div class="cc-header">Natural vs. Enforced Idempotency</div>
+        <div class="cc-body">Some operations are idempotent by math (<code>PUT /users/42</code> 100× = same state). Others aren't (<code>POST /charges</code> 100× = 100 charges). Enforced idempotency is the design pattern of adding a key to make the latter safe.</div>
+      </div>
+      <div class="concept-card cc-orange">
+        <div class="cc-header">Idempotency Key</div>
+        <div class="cc-body">A client-generated UUID sent in every request for the same logical operation. The server looks up the key: hit → return cached response; miss → execute, store, and return. The key is the client's "this is the same request" claim.</div>
+      </div>
+      <div class="concept-card cc-green">
+        <div class="cc-header">At-Least-Once + Idempotent Consumer</div>
+        <div class="cc-body">Message queues guarantee at-least-once delivery — a message may arrive multiple times. Any consumer must be idempotent: processing the same message twice must not double the effect. This is non-negotiable in distributed architectures.</div>
+      </div>
+      <div class="concept-card cc-purple">
+        <div class="cc-header">Atomic Check-and-Store</div>
+        <div class="cc-body">The key lookup + execution + result storage must be atomic. Non-atomic approaches create a race where two concurrent retries both see "key not found" and both execute. Use Redis <code>SET NX</code> or <code>INSERT … ON CONFLICT DO NOTHING</code>.</div>
+      </div>
+    </div>
+
+    <h3>Idempotency vs. Immutability vs. Purity</h3>
+    <p>Three terms often confused: <strong>Immutability</strong> = data never changes. <strong>Purity</strong> = no side effects at all (pure function). <strong>Idempotency</strong> = side effects happen exactly once regardless of retries. A payment charge is not immutable, not pure, but can be idempotent if protected by a key.</p>
+  </section>
+
+  <!-- S7: FIRST PRINCIPLES -->
+  <section id="s7">
+    <h2 class="section-title"><span class="num">07</span> First Principles — Why Does This Exist?</h2>
+    <p>Networks are unreliable. A client sends <code>POST /charges</code>. The server processes the charge, debits the card, sends back <code>200 OK</code> — but the response packet is lost. The client times out and retries. Now the user is charged twice.</p>
+    <p>This is the fundamental problem: <strong>the client cannot distinguish between a request that never arrived and a response that was lost in transit.</strong> Both look identical — silence. So retrying is the only correct client strategy, but retrying non-idempotent operations is catastrophic.</p>
+    <p>Before idempotency keys, the only options were: never retry (accept data loss) or accept double-processing (accept correctness bugs). Idempotency keys solved this by making the server responsible for deduplication — the client retries freely, and the server ensures the operation executes exactly once.</p>
+  </section>
+
+  <!-- S8: MENTAL MODELS -->
+  <section id="s8">
+    <h2 class="section-title"><span class="num">08</span> Mental Models</h2>
+
+    <h3>Model 1: The Light Switch vs. The Doorbell</h3>
+    <p>A light switch is idempotent: pressing "ON" when already ON does nothing — same state results. A doorbell is not: pressing it three times rings three times. Most write APIs are doorbells by default. An idempotency key converts your doorbell into a light switch — the server checks "was this already rung?" before acting. <em>Breaks down when:</em> the "already rung" check itself requires atomic persistent storage, which adds complexity the analogy doesn't capture.</p>
+
+    <h3>Model 2: The Post Office Certified Mail Receipt</h3>
+    <p>You send certified mail with a tracking number. If the package appears lost, you call and ask "what happened to #12345?" — you don't send a second package with a new number. The tracking number is the idempotency key. The post office uses it to look up the result, never delivering twice for the same number. Key insight: the key identifies the <em>logical transaction</em>, not the HTTP request.</p>
+
+    <h3>Model 3: Retry = Replay, Not New Request</h3>
+    <p>The mental shift: a retry is not a new request — it is a replay of the same request. Once internalized, the design follows: store the result of the first execution so you can replay it. The key is the lookup index. The TTL defines how long you're willing to replay. The client must generate the key <em>before</em> the first attempt — a new key on retry defeats the entire mechanism.</p>
+  </section>
+
+  <!-- S9: HOW IT WORKS -->
+  <section id="s9">
+    <h2 class="section-title"><span class="num">09</span> How It Works — Mechanics</h2>
+
+    <h3>Happy Path — First Request</h3>
+    <ol class="flow-steps">
+      <li><div class="step-num">1</div><div>Client generates a UUID v4 key (<code>idem-key: a3f9b2c1-…</code>) before sending the request.</div></li>
+      <li><div class="step-num">2</div><div>Client sends <code>POST /charges</code> with the key in the header.</div></li>
+      <li><div class="step-num">3</div><div>Server runs atomic check: <code>SET NX idem:a3f9b2c1 "processing" EX 86400</code> in Redis.</div></li>
+      <li><div class="step-num">4</div><div>Key doesn't exist → SET succeeds → server executes the charge business logic.</div></li>
+      <li><div class="step-num">5</div><div>Server stores result: <code>SET idem:a3f9b2c1 &lt;serialized_response&gt; EX 86400</code>.</div></li>
+      <li><div class="step-num">6</div><div>Server returns <code>201 Created</code> with charge details.</div></li>
+    </ol>
+
+    <h3>Retry Path — Response Was Lost</h3>
+    <ol class="flow-steps">
+      <li><div class="step-num green">1</div><div>Client times out and retries with the <strong>same key</strong> (<code>idem-key: a3f9b2c1-…</code>).</div></li>
+      <li><div class="step-num green">2</div><div>Server attempts <code>SET NX</code> — fails because key exists.</div></li>
+      <li><div class="step-num green">3</div><div>Server reads stored result for key <code>a3f9b2c1</code>.</div></li>
+      <li><div class="step-num green">4</div><div>Result is the cached response (not "processing") → return it immediately. No charge re-executed.</div></li>
+    </ol>
+
+    <h3>Concurrent Retry — Two Retries Simultaneously</h3>
+    <ol class="flow-steps">
+      <li><div class="step-num orange">1</div><div>Two requests with the same key arrive on different servers simultaneously.</div></li>
+      <li><div class="step-num orange">2</div><div>Both attempt <code>SET NX</code>. Redis is single-threaded — only one wins.</div></li>
+      <li><div class="step-num orange">3</div><div>Winner executes. Loser polls until value changes from "processing" to a real result.</div></li>
+      <li><div class="step-num orange">4</div><div>One charge executes. Both clients receive identical responses.</div></li>
+    </ol>
+
+    <h3>Edge Case: Server Crashes Between Execute and Store</h3>
+    <div class="callout callout-warn">
+      If the server executes the charge but crashes before storing the result, the key may be absent or stuck at "processing." On retry, another server will attempt to re-execute. The solution: make the downstream operation itself idempotent (e.g., Stripe's own idempotency keys at the payment gateway level), so re-execution is deduplicated downstream.
+    </div>
+  </section>
+
+  <!-- S10: REAL-WORLD EXAMPLES -->
+  <section id="s10">
+    <h2 class="section-title"><span class="num">10</span> Real-World System Examples</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>System</th><th>How Idempotency Applies</th><th>Notes</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Stripe Payments API</strong></td>
+            <td>Every write endpoint accepts <code>Idempotency-Key</code> header; Stripe stores results for 24 hours and replays on retry</td>
+            <td>Industry gold standard; key must be unique per logical request, not per HTTP call</td>
+          </tr>
+          <tr>
+            <td><strong>AWS SQS FIFO</strong></td>
+            <td>At-least-once delivery requires idempotent consumers; FIFO queues add <code>MessageDeduplicationId</code> for 5-min exactly-once window</td>
+            <td>Standard SQS is at-least-once; FIFO dedup is best-effort within the window</td>
+          </tr>
+          <tr>
+            <td><strong>Kubernetes Controllers</strong></td>
+            <td>All controllers are written as reconciliation loops — "apply desired state" can be called repeatedly without harm</td>
+            <td>This is why <code>kubectl apply</code> is safe to run multiple times</td>
+          </tr>
+          <tr>
+            <td><strong>Twilio / Notification APIs</strong></td>
+            <td>Accept idempotency keys to prevent double-sends when network timeouts cause client retries</td>
+            <td>Double-sending an SMS is a visible user-facing bug — idempotency is non-negotiable</td>
+          </tr>
+          <tr>
+            <td><strong>Apache Kafka Consumers</strong></td>
+            <td>Read → process idempotently → commit offset. Crash before commit = redelivery; idempotent consumer handles safely</td>
+            <td>Kafka's transactional producer provides exactly-once semantics on the producer side</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- S11: TRADE-OFFS -->
+  <section id="s11">
+    <h2 class="section-title"><span class="num">11</span> Trade-offs</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th class="benefit">Benefit</th><th class="cost">Cost / Limitation</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Safe retries in face of network timeouts and partial failures</td>
+            <td>Extra storage required for key-result pairs; must size TTL correctly</td>
+          </tr>
+          <tr>
+            <td>Prevents duplicate charges, double-sends, and double job dispatch</td>
+            <td>Key storage must be atomic with execution — adds latency and a Redis/DB dependency on every write</td>
+          </tr>
+          <tr>
+            <td>Enables at-least-once delivery without correctness bugs</td>
+            <td>Client must generate and persist the key before the first attempt</td>
+          </tr>
+          <tr>
+            <td>Decouples client retry logic from server business logic</td>
+            <td>TTL expiry means retries after the window are treated as new requests — client must not retry indefinitely</td>
+          </tr>
+          <tr>
+            <td>Composable with exponential backoff — retry aggressively if needed</td>
+            <td>Only covers exact key replays — does NOT handle concurrent different requests for the same resource (use optimistic locking for that)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- S12: INTERVIEW APPLICATION -->
+  <section id="s12">
+    <h2 class="section-title"><span class="num">12</span> Interview Application</h2>
+
+    <h3>When an Interviewer Asks / Says</h3>
+    <ul style="margin-left:18px;margin-bottom:16px;font-size:14.5px;line-height:1.8;">
+      <li>"How would you make sure a payment isn't charged twice if the client retries?"</li>
+      <li>"Our service uses a message queue — how do you handle duplicate messages?"</li>
+      <li>"The client might not know if the request succeeded — what do you do?"</li>
+      <li>"How do you make your API safe to retry without side effects?"</li>
+    </ul>
+
+    <h3>What You Say / Do</h3>
+    <p>Raise idempotency during the API design or reliability deep-dive phase. Walk through key generation, server-side storage, atomic check-and-store, and TTL. Name the storage backend immediately: Redis <code>SET NX</code> for high throughput, or a UNIQUE DB column for lower volume with transactional needs.</p>
+
+    <h3>Trade-off Statement — Memorize This</h3>
+    <div class="callout callout-tip">
+      <strong>"If we add idempotency keys, we get safe retries with no double execution, but we pay the cost of a Redis lookup on every write request and a storage dependency. For a payment API, this is non-negotiable — the alternative is double charges, which is worse than any latency penalty."</strong>
+    </div>
+  </section>
+
+  <!-- S13: MISCONCEPTIONS -->
+  <section id="s13">
+    <h2 class="section-title"><span class="num">13</span> Common Misconceptions &amp; Gotchas</h2>
+
+    <div class="misconception">
+      <div class="mc-wrong"><div class="mc-label">❌ Misconception</div>GET requests need idempotency keys because reads matter too.</div>
+      <div class="mc-right"><div class="mc-label">✅ Reality</div>GET is already idempotent by HTTP spec — calling it 100 times returns the same data. Idempotency keys are only needed for side-effecting writes that are not naturally idempotent (POST, PATCH).</div>
+    </div>
+
+    <div class="misconception">
+      <div class="mc-wrong"><div class="mc-label">❌ Misconception</div>Idempotency means the operation has no side effects.</div>
+      <div class="mc-right"><div class="mc-label">✅ Reality</div>Idempotency means the side effect happens exactly once regardless of retries. A payment charge has side effects (money moves) — the second call to the same key is a no-op, not the first.</div>
+    </div>
+
+    <div class="misconception">
+      <div class="mc-wrong"><div class="mc-label">❌ Misconception</div>You can store the idempotency key after executing the operation to keep things simple.</div>
+      <div class="mc-right"><div class="mc-label">✅ Reality</div>This creates a race condition. Two concurrent requests with the same key can both read "key not found," both execute, and you get double execution. The check-and-store must be atomic — use Redis SET NX or INSERT … ON CONFLICT DO NOTHING.</div>
+    </div>
+
+    <div class="misconception">
+      <div class="mc-wrong"><div class="mc-label">❌ Misconception</div>PUT is always idempotent, so it never needs special handling.</div>
+      <div class="mc-right"><div class="mc-label">✅ Reality</div>PUT is idempotent only for full replacements. Partial updates via PUT/PATCH may not be idempotent. Also, PUT that creates a resource on first call can still benefit from an idempotency key if the creation succeeds but the response is lost.</div>
+    </div>
+  </section>
+
+  <!-- S14: RELATIONSHIPS -->
+  <section id="s14">
+    <h2 class="section-title"><span class="num">14</span> Relationships to Other Concepts</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Relationship</th><th>Concept</th><th>How</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Builds on</strong></td>
+            <td>3.1 Stateless Architecture; 3.3 Externalizing State to Redis</td>
+            <td>Idempotency is what makes stateless retry safe; key storage is itself an externalized state pattern</td>
+          </tr>
+          <tr>
+            <td><strong>Enables</strong></td>
+            <td>12.3 Delivery Guarantees; 29.4 Idempotent Jobs; 38.7 Idempotency in Saga Steps</td>
+            <td>At-least-once + idempotent consumer = safe exactly-once semantics; each Saga step must be idempotent for safe orchestrator retries</td>
+          </tr>
+          <tr>
+            <td><strong>Tension with</strong></td>
+            <td>Low-latency write performance</td>
+            <td>Every idempotent write requires an extra Redis round-trip; mitigate with pipelining or co-location with the primary DB transaction</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- S15: QUIZ -->
+  <section id="s15">
+    <h2 class="section-title"><span class="num">15</span> Self-Check Quiz</h2>
+    <div class="callout callout-quote">Can you answer these without looking? If not, you haven't internalized it yet.</div>
+
+    <div class="quiz-item" onclick="toggleQuiz(this)">
+      <div class="quiz-q"><div class="quiz-num">1</div><div>Define idempotency in one sentence. Then classify: <code>GET /users/42</code>, <code>DELETE /users/42</code>, <code>POST /charges</code>, <code>PUT /users/42 {name:"Alice"}</code>, <code>PATCH /account {balance: balance-10}</code>.</div></div>
+      <div class="quiz-hint">Think through your answer before expanding — if you hesitate, revisit Section 5.</div>
+    </div>
+
+    <div class="quiz-item" onclick="toggleQuiz(this)">
+      <div class="quiz-q"><div class="quiz-num">2</div><div>A client POSTs a payment request. The server processes the charge but the response is dropped. The client retries with the same idempotency key. Walk through exactly what the server does. What does the client receive?</div></div>
+      <div class="quiz-hint">Think through your answer before expanding — if you hesitate, revisit Section 9.</div>
+    </div>
+
+    <div class="quiz-item" onclick="toggleQuiz(this)">
+      <div class="quiz-q"><div class="quiz-num">3</div><div>Why is it dangerous to check for the idempotency key, execute the operation, then store the key — in that order? What specific failure scenario does this create, and what primitive fixes it?</div></div>
+      <div class="quiz-hint">Think through your answer before expanding — if you hesitate, revisit Sections 6 and 9.</div>
+    </div>
+
+    <div class="quiz-item" onclick="toggleQuiz(this)">
+      <div class="quiz-q"><div class="quiz-num">4</div><div>Name two production systems that use idempotency keys and describe concretely how each uses them. What is the TTL in each case and why?</div></div>
+      <div class="quiz-hint">Think through your answer before expanding — if you hesitate, revisit Section 10.</div>
+    </div>
+
+    <div class="quiz-item" onclick="toggleQuiz(this)">
+      <div class="quiz-q"><div class="quiz-num">5</div><div>Your Kafka consumer increments a <code>total_orders</code> counter on each "order placed" event. The consumer crashes after incrementing but before committing the offset. The event is redelivered. What breaks, and how do you redesign for idempotency?</div></div>
+      <div class="quiz-hint">Think through your answer before expanding — if you hesitate, revisit Sections 6 and 7.</div>
+    </div>
+  </section>
+
+  <!-- S16: FURTHER READING -->
+  <section id="s16">
+    <h2 class="section-title"><span class="num">16</span> Further Reading</h2>
+    <div id="reading-list">
+      <div class="reading-item" onclick="toggleRead(this)">
+        <div class="cb"></div>
+        <div>
+          <div class="reading-title"><strong>Designing Data-Intensive Applications</strong> — Ch. 11: The Trouble with Distributed Systems</div>
+          <div style="font-size:12px;color:var(--text-muted)">Kleppmann — idempotent operations and retry safety</div>
+        </div>
+      </div>
+      <div class="reading-item" onclick="toggleRead(this)">
+        <div class="cb"></div>
+        <div>
+          <div class="reading-title"><strong>AWS Builder's Library: Making Retries Safe with Idempotent APIs</strong></div>
+          <div style="font-size:12px;color:var(--text-muted)">aws.amazon.com/builders-library/making-retries-safe-with-idempotent-apis/</div>
+        </div>
+      </div>
+      <div class="reading-item" onclick="toggleRead(this)">
+        <div class="cb"></div>
+        <div>
+          <div class="reading-title"><strong>Stripe API Docs: Idempotent Requests</strong></div>
+          <div style="font-size:12px;color:var(--text-muted)">stripe.com/docs/api/idempotent_requests — production-grade key lifecycle</div>
+        </div>
+      </div>
+      <div class="reading-item" onclick="toggleRead(this)">
+        <div class="cb"></div>
+        <div>
+          <div class="reading-title"><strong>Martin Fowler: Idempotent Receiver</strong></div>
+          <div style="font-size:12px;color:var(--text-muted)">martinfowler.com/articles/patterns-of-distributed-systems/idempotent-receiver.html</div>
+        </div>
+      </div>
+      <div class="reading-item" onclick="toggleRead(this)">
+        <div class="cb"></div>
+        <div>
+          <div class="reading-title"><strong>ByteByteGo: Design Idempotent API</strong></div>
+          <div style="font-size:12px;color:var(--text-muted)">blog.bytebytego.com/p/design-idempotent-api</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</article>
+</main>
+
+<script>
+  // Checkbox toggle
+  function toggle(el) {
+    el.classList.toggle('checked');
+  }
+
+  // Reading list toggle
+  function toggleRead(el) {
+    el.classList.toggle('read');
+    el.querySelector('.cb').classList.toggle('checked');
+    if (el.classList.contains('read')) {
+      el.querySelector('.cb').style.background = 'var(--green)';
+      el.querySelector('.cb').style.borderColor = 'var(--green)';
+    } else {
+      el.querySelector('.cb').style.background = '';
+      el.querySelector('.cb').style.borderColor = '';
+    }
+  }
+
+  // Phase block toggle
+  function togglePhase(header) {
+    header.parentElement.classList.toggle('open');
+  }
+
+  // Quiz toggle
+  function toggleQuiz(item) {
+    item.classList.toggle('open');
+  }
+
+  // Scrollspy
+  const sections = document.querySelectorAll('section[id]');
+  const navLinks = document.querySelectorAll('#toc nav a');
+
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        navLinks.forEach(a => a.classList.remove('active'));
+        const active = document.querySelector(`#toc nav a[href="#${entry.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+
+  sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>
