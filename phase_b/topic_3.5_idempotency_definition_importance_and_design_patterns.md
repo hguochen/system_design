@@ -20,11 +20,11 @@
 
 > *Concrete, testable proof that you own this concept — not just familiarity.*
 
-- [ ] Can define idempotency in one sentence and give two idempotent and two non-idempotent HTTP API examples without hesitation.
-- [ ] Can design an idempotency key scheme end-to-end: key generation, storage (Redis or DB), lookup logic, TTL, and failure scenarios.
-- [ ] Can explain why at-least-once delivery requires idempotent consumers and describe what breaks if the consumer is not idempotent.
-- [ ] Can identify in a system design interview when idempotency is required (payment, job dispatch, notification send) and articulate the exact design pattern to apply.
-- [ ] Can explain the difference between idempotency and immutability, and why idempotency does not mean "no side effects ever" but "same effect regardless of repeat."
+- [x] Can define idempotency in one sentence and give two idempotent and two non-idempotent HTTP API examples without hesitation.
+- [x] Can design an idempotency key scheme end-to-end: key generation, storage (Redis or DB), lookup logic, TTL, and failure scenarios.
+- [x] Can explain why at-least-once delivery requires idempotent consumers and describe what breaks if the consumer is not idempotent.
+- [x] Can identify in a system design interview when idempotency is required (payment, job dispatch, notification send) and articulate the exact design pattern to apply.
+- [x] Can explain the difference between idempotency and immutability, and why idempotency does not mean "no side effects ever" but "same effect regardless of repeat."
 
 > 💡 **Rule of thumb:** If you can teach it to someone else and field their follow-up questions, you've mastered it.
 
