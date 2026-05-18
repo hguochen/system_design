@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.7 Horizontal Scaling of Stateless Tiers</title>
+<style>
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface-alt: #f3f2ef; --border: #e5e3de;
+    --text: #1a1917; --text-muted: #6b6861; --accent: #2563eb; --accent-light: #dbeafe;
+    --green: #16a34a; --green-light: #dcfce7; --red: #dc2626; --red-light: #fee2e2;
+    --yellow: #d97706; --yellow-light: #fef3c7; --purple: #7c3aed; --purple-light: #ede9fe;
+    --orange: #ea580c; --orange-light: #ffedd5; --code-bg: #1e1e2e; --code-text: #cdd6f4;
+    --sidebar-w: 240px; --content-max: 780px; font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; }
+  #toc { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0 48px; z-index: 100; }
+  #toc-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  #toc-header .phase-tag { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-bottom: 6px; }
+  #toc-header h2 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  #toc nav a { display: block; padding: 5px 16px 5px 20px; font-size: 12.5px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all 0.15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+  main { margin-left: var(--sidebar-w); padding: 48px 48px 96px; max-width: calc(var(--sidebar-w) + var(--content-max) + 96px); width: 100%; }
+  article { max-width: var(--content-max); }
+  .doc-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 2px solid var(--border); }
+  .doc-header .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+  .tag-phase { background: var(--accent-light); color: var(--accent); }
+  .tag-topic { background: var(--purple-light); color: var(--purple); }
+  .tag-date  { background: var(--surface-alt); color: var(--text-muted); }
+  .doc-header h1 { font-size: 30px; font-weight: 800; line-height: 1.25; letter-spacing: -0.02em; color: var(--text); }
+  section { margin-bottom: 52px; scroll-margin-top: 32px; }
+  h2.section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -0.01em; }
+  h2.section-title .num { font-size: 11px; font-weight: 800; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; letter-spacing: 0.04em; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 24px 0 10px; }
+  p { margin-bottom: 14px; } p:last-child { margin-bottom: 0; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 14px; border-left: 3px solid; }
+  .callout-goal  { background: var(--accent-light); border-color: var(--accent); color: #1e40af; }
+  .callout-tip   { background: var(--yellow-light); border-color: var(--yellow); color: #92400e; }
+  .callout-quote { background: var(--surface-alt); border-color: var(--border); color: var(--text-muted); font-style: italic; }
+  .callout-warn  { background: var(--red-light); border-color: var(--red); color: #7f1d1d; }
+  .callout strong { font-weight: 700; }
+  .cheatsheet { background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 24px 28px; font-family: "SF Mono","Fira Code","Cascadia Code",Menlo,monospace; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-x: auto; }
+  .cheatsheet .label { color: #89dceb; font-weight: 700; letter-spacing: 0.05em; display: block; margin-top: 16px; }
+  .cheatsheet .label:first-child { margin-top: 0; }
+  .cheatsheet .val { color: #a6e3a1; } .cheatsheet .hi { color: #f38ba8; font-weight: 600; } .cheatsheet .dim { color: #7f849c; }
+  .mindmap-wrap { margin: 20px 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); background: #fafaf8; text-align: center; }
+  .mindmap-wrap img { width: 100%; max-width: 100%; display: block; }
+  .mindmap-wrap .caption { font-size: 12px; color: var(--text-muted); padding: 8px 0 10px; font-style: italic; }
+  .definition { background: var(--surface); border: 1.5px solid var(--border); border-left: 4px solid var(--accent); border-radius: 10px; padding: 18px 22px; font-size: 15.5px; line-height: 1.75; color: var(--text); }
+  .concept-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 16px 0; }
+  .concept-card { border-radius: 10px; padding: 16px 18px; border: 1.5px solid; }
+  .cc-blue   { background: var(--accent-light);  border-color: #93c5fd; }
+  .cc-orange { background: var(--orange-light);  border-color: #fdba74; }
+  .cc-green  { background: var(--green-light);   border-color: #86efac; }
+  .cc-purple { background: var(--purple-light);  border-color: #c4b5fd; }
+  .cc-yellow { background: var(--yellow-light);  border-color: #fcd34d; }
+  .cc-teal   { background: #e6fcf5; border-color: #63e6be; }
+  .concept-card .cc-header { font-size: 13px; font-weight: 700; margin-bottom: 8px; }
+  .concept-card .cc-body   { font-size: 13px; line-height: 1.6; color: var(--text); }
+  .flow-steps { list-style: none; margin: 12px 0 18px; }
+  .flow-steps li { display: flex; gap: 14px; margin-bottom: 10px; font-size: 14.5px; line-height: 1.6; align-items: flex-start; }
+  .flow-steps .step-num { min-width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
+  .flow-steps .step-num.green { background: var(--green); } .flow-steps .step-num.orange { background: var(--orange); } .flow-steps .step-num.red { background: var(--red); }
+  .table-wrap { overflow-x: auto; margin: 14px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: var(--surface-alt); font-weight: 700; text-align: left; padding: 10px 14px; border-bottom: 2px solid var(--border); font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.04em; }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.55; }
+  tr:last-child td { border-bottom: none; } tr:hover td { background: var(--surface-alt); }
+  .benefit { color: var(--green); font-weight: 600; } .cost { color: var(--red); font-weight: 600; }
+  .quiz-item { border: 1.5px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .quiz-q { padding: 14px 18px; font-size: 14.5px; font-weight: 600; cursor: pointer; display: flex; gap: 12px; align-items: flex-start; background: var(--surface); user-select: none; }
+  .quiz-q:hover { background: var(--surface-alt); }
+  .quiz-num { min-width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+  .quiz-hint { display: none; padding: 12px 18px; font-size: 13.5px; color: #92400e; background: var(--yellow-light); border-top: 1px solid #fcd34d; font-style: italic; }
+  .quiz-item.open .quiz-hint { display: block; }
+  .phase-block { border: 1.5px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .phase-header { background: var(--surface-alt); padding: 12px 16px; cursor: pointer; display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 700; user-select: none; }
+  .phase-header:hover { background: #ebe9e4; }
+  .phase-body { display: none; padding: 16px 20px; }
+  .phase-block.open .phase-body { display: block; }
+  .phase-goal { font-size: 12.5px; color: var(--text-muted); font-style: italic; margin-bottom: 12px; }
+  .checklist { list-style: none; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 14px; cursor: pointer; }
+  .checklist li:last-child { border-bottom: none; }
+  .checklist li.checked .text { text-decoration: line-through; color: var(--text-muted); }
+  .cb { width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; flex-shrink: 0; margin-top: 2px; background: var(--surface); transition: all 0.15s; display: flex; align-items: center; justify-content: center; }
+  .checklist li.checked .cb { background: var(--green); border-color: var(--green); }
+  .checklist li.checked .cb::after { content: '✓'; color: white; font-size: 11px; font-weight: 700; }
+  .misconception { border: 1.5px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 12px; }
+  .mc-wrong { background: var(--red-light); padding: 10px 16px; font-size: 13.5px; color: #7f1d1d; border-bottom: 1px solid #fca5a5; }
+  .mc-right { background: var(--green-light); padding: 10px 16px; font-size: 13.5px; color: #14532d; }
+  .mc-label { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 4px; }
+  .reading-item { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 14px; cursor: pointer; align-items: flex-start; }
+  .reading-item:last-child { border-bottom: none; }
+  .reading-item.read .reading-title { text-decoration: line-through; color: var(--text-muted); }
+  .trade-off-table td:first-child { color: var(--green); font-weight: 600; }
+  .trade-off-table td:last-child  { color: var(--red); }
+  .param-table th, .param-table td { font-size: 13px; }
+  @media (max-width: 900px) { #toc { display: none; } main { margin-left: 0; padding: 24px; } }
+</style>
+</head>
+<body>
+
+<nav id="toc">
+  <div id="toc-header">
+    <span class="phase-tag">Phase B — Scalability</span>
+    <h2>3.7 Horizontal Scaling of Stateless Tiers</h2>
+  </div>
+  <nav>
+    <a href="#s1">1. Goal</a>
+    <a href="#s2">2. Mastery Checklist</a>
+    <a href="#s3">3. Study Phases</a>
+    <a href="#s4">4. Cheatsheet</a>
+    <a href="#s5">5. Core Definition</a>
+    <a href="#s6">6. Core Concepts</a>
+    <a href="#s7">7. First Principles</a>
+    <a href="#s8">8. Mental Models</a>
+    <a href="#s9">9. How It Works</a>
+    <a href="#s10">10. Real-World Examples</a>
+    <a href="#s11">11. Trade-offs</a>
+    <a href="#s12">12. Interview Application</a>
+    <a href="#s13">13. Misconceptions</a>
+    <a href="#s14">14. Relationships</a>
+    <a href="#s15">15. Self-Check Quiz</a>
+    <a href="#s16">16. Further Reading</a>
+  </nav>
+</nav>
+
+<main>
+<article>
+
+  <header class="doc-header">
+    <div class="meta">
+      <span class="tag tag-phase">Phase B — Scalability</span>
+      <span class="tag tag-topic">Topic 3 — Stateless Services</span>
+      <span class="tag tag-date">2026-05-14</span>
+    </div>
+    <h1>3.7 Horizontal Scaling<br><span style="font-weight:400;font-size:20px;color:var(--text-muted)">of Stateless Tiers</span></h1>
+  </header>
+
+  <!-- S1: GOAL -->
+  <section id="s1">
+    <h2 class="section-title"><span class="num">01</span> Goal of This Subtopic</h2>
+    <div class="callout callout-goal">
+      <strong>Why this matters:</strong> Horizontal scaling of stateless tiers is the primary mechanism that makes cloud-native systems elastic. Every FAANG design will ask you how the system handles 10x traffic — this is your answer for the compute layer.
+    </div>
+    <ul class="checklist" id="goals-list">
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Be able to design a stateless tier that scales horizontally on demand — auto-scaling triggers, load balancer integration, connection draining, and warm pool strategies.</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Understand why statelessness is the prerequisite for seamless horizontal scaling and articulate this to an interviewer at the infrastructure level.</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Identify where horizontal scaling breaks down (stateful dependencies, cold-start latency, connection storms) and propose concrete mitigations.</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Compare manual, scheduled, reactive, and predictive scaling and choose the right strategy for a given traffic pattern.</span></li>
+    </ul>
+  </section>
+
+  <!-- S2: MASTERY -->
+  <section id="s2">
+    <h2 class="section-title"><span class="num">02</span> What Mastery Looks Like</h2>
+    <div class="callout callout-quote">If you can teach it to someone else and field their follow-up questions, you've mastered it.</div>
+    <ul class="checklist" id="mastery-list">
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Can explain why a stateless service can be added or removed from a pool without coordination, while a stateful one cannot, in under 60 seconds with no notes.</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Can specify a complete auto-scaling policy: metric choice, scale-out threshold, scale-in threshold, cooldown period, and why each value matters.</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Can describe connection draining (deregistration delay) and explain what breaks in its absence.</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Can identify when horizontal scaling hits a wall (e.g., stateful downstream) and propose the architectural fix.</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Can compare manual, scheduled, reactive, and predictive auto-scaling and choose for a given traffic pattern.</span></li>
+    </ul>
+  </section>
+
+  <!-- S3: STUDY PHASES -->
+  <section id="s3">
+    <h2 class="section-title"><span class="num">03</span> Study Phases to Achieve Mastery</h2>
+
+    <div class="phase-block open">
+      <div class="phase-header" onclick="togglePhase(this)">
+        <span>📖 Phase 1 — Acquire</span><span style="margin-left:auto;font-size:12px;color:var(--text-muted)">💪💪</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Read deeply enough that you could explain the concept without the doc.</p>
+        <ul class="checklist">
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Read <em>DDIA Chapter 1</em> (Kleppmann) — Scalability section: load parameters and approaches to scaling</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Read <em>AWS Auto Scaling documentation</em> — Target Tracking Scaling Policies and Warm Pools</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Read <em>Google SRE Book Chapter 19</em> — Load Balancing at the Frontend</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Read <em>ByteByteGo — "Scale from Zero to Millions of Users"</em> (System Design Interview Vol.1, Ch.1)</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Read <em>Netflix Tech Blog — Scryer: Netflix's Predictive Auto Scaling Engine</em></span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Read Sections 5–9 (Core Definition → How It Works) carefully — don't skim</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Re-read the Cheatsheet (Section 4) and recite from memory after</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-block">
+      <div class="phase-header" onclick="togglePhase(this)">
+        <span>✍️ Phase 2 — Consolidate</span><span style="margin-left:auto;font-size:12px;color:var(--text-muted)">💪💪💪</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Reproduce the knowledge in your own words without looking.</p>
+        <ul class="checklist">
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Close the doc — write out the Core Definition from memory, then compare</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Explain First Principles out loud — what pain existed before stateless horizontal scaling?</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Reconstruct the scale-out and scale-in mechanics step by step from memory</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Restate each Trade-off row — if you can't explain the cost, you don't own it yet</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-block">
+      <div class="phase-header" onclick="togglePhase(this)">
+        <span>🔧 Phase 3 — Apply</span><span style="margin-left:auto;font-size:12px;color:var(--text-muted)">💪💪💪💪</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Connect to real systems and simulate interview scenarios.</p>
+        <ul class="checklist">
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Verify each Real-World Example independently and add anything missed to My Notes</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Practice Interview Application out loud — trigger phrases + trade-off statement verbatim</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Work through Common Misconceptions — explain WHY each is wrong, not just that it is</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Trace Relationships to Other Concepts without looking</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-block">
+      <div class="phase-header" onclick="togglePhase(this)">
+        <span>🧪 Phase 4 — Validate</span><span style="margin-left:auto;font-size:12px;color:var(--text-muted)">💪💪💪💪💪</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Confirm you actually own it, not just recognize it.</p>
+        <ul class="checklist">
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Answer every Self-Check Quiz question out loud without notes</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Recite the Cheatsheet from memory — if you can't, re-do Phase 2</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Tick off Mastery items — only if you can demonstrate on demand, not just if it sounds familiar</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Teach this concept for 2 minutes to an imaginary interviewer without hesitation or notes</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- S4: CHEATSHEET -->
+  <section id="s4">
+    <h2 class="section-title"><span class="num">04</span> Cheatsheet</h2>
+    <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+
+    <div class="mindmap-wrap">
+      <img src="../assets/images/topic_3.7_horizontal_scaling_of_stateless_tiers_mindmap.png" alt="3.7 Horizontal Scaling Mindmap">
+      <div class="caption">Mindmap — 3.7 Horizontal Scaling of Stateless Tiers</div>
+    </div>
+
+    <div class="cheatsheet"><span class="label">ONE-LINER</span><span class="val">  Stateless tiers scale horizontally by adding identical instances behind a load balancer —
+  no coordination needed because no instance owns any state.</span>
+
+<span class="label">KEY PROPERTIES / RULES</span><span class="val">  1. Statelessness is the prerequisite: externalize all session/user data (Redis, DB, JWT)
+     before scaling out — otherwise scale-out silently drops state.
+  2. Metric-driven scaling: CPU 60-70%, RPS, P99 latency, or queue depth crosses threshold
+     → add instances; falls below → drain and terminate.
+  3. Connection draining (deregistration delay ~30s) lets in-flight requests finish before
+     removing an instance — skipping it drops live traffic mid-response.
+  4. Cooldown periods (60-300s) prevent scale-flapping — don't re-evaluate the metric until
+     the prior scale action has had time to stabilize.
+  5. Share-nothing: each instance reads/writes only external stores; no in-process cache or
+     local disk that would make instances unequal or stateful.</span>
+
+<span class="label">DECISION RULE</span><span class="val">  Use horizontal scaling when: traffic is unpredictable, you need more than 2x one machine's
+  capacity, or you need zero-downtime rolling deploys.
+  Avoid relying on it alone when: the bottleneck is a stateful downstream (single-writer DB)
+  — scaling the stateless tier just moves the bottleneck, it does not remove it.</span>
+
+<span class="label">NUMBERS TO REMEMBER</span><span class="val">  Scale-out CPU target:   60-70%  (not 80%+ — leave headroom for startup lag)
+  Deregistration delay:   30-60s  (match to P99 request duration + buffer)
+  Min instances for HA:   >= 2 across 2 AZs
+  Cooldown period:        60-300s (depends on instance start time)
+  Warm pool benefit:      cold-start 2-5 min → promote in ~30s</span>
+
+<span class="label">GOTCHA TO NEVER FORGET</span><span class="hi">  Scaling the stateless tier is useless if the downstream DB is a single writer.
+  10x more app servers = 10x more connections hitting the same bottleneck.</span></div>
+  </section>
+
+  <!-- S5: DEFINITION -->
+  <section id="s5">
+    <h2 class="section-title"><span class="num">05</span> Core Definition</h2>
+    <div class="definition">
+      <strong>Horizontal scaling of a stateless tier</strong> is the practice of adding or removing identical, share-nothing application instances behind a load balancer to match traffic demand — made possible because no instance holds any state that would be lost on termination or require coordination on addition.
+    </div>
+  </section>
+
+  <!-- S6: CORE CONCEPTS -->
+  <section id="s6">
+    <h2 class="section-title"><span class="num">06</span> Core Concepts</h2>
+
+    <div class="concept-grid">
+      <div class="concept-card cc-blue">
+        <div class="cc-header">Share-Nothing Architecture</div>
+        <div class="cc-body">Each instance reads/writes only external stores (Redis, DB, S3). No in-memory session data, no local file state. Instances are interchangeable — kill any one, add any new one instantly capable of any request.</div>
+      </div>
+      <div class="concept-card cc-orange">
+        <div class="cc-header">Auto-Scaling Group (ASG)</div>
+        <div class="cc-body">A managed pool of instances that automatically launches or terminates members based on metric alarms. Enforces min/desired/max counts and replaces unhealthy instances. The operational mechanism turning "scaling is possible" into "scaling happens automatically."</div>
+      </div>
+      <div class="concept-card cc-purple">
+        <div class="cc-header">Scaling Policies — Reactive vs. Predictive</div>
+        <div class="cc-body">Reactive (target tracking): adjusts when a live metric crosses a threshold, ~2–5 min lag. Predictive: uses historical patterns to pre-launch before the spike. Scheduled: simplest predictive form — "add 10 instances every weekday at 8:45am."</div>
+      </div>
+      <div class="concept-card cc-teal">
+        <div class="cc-header">Connection Draining</div>
+        <div class="cc-body">When an instance is marked for removal, the LB stops sending new requests but continues routing in-flight requests until completion or the deregistration timeout (30–300s). Without draining, in-flight requests are dropped mid-response — visible client errors.</div>
+      </div>
+      <div class="concept-card cc-green">
+        <div class="cc-header">Warm Pools</div>
+        <div class="cc-body">A set of pre-launched, pre-warmed instances outside the active LB pool. When the ASG scales out, it promotes instances from the warm pool in ~30s instead of booting from scratch (2–5 min). Primary mitigation for cold-start latency in reactive scaling.</div>
+      </div>
+      <div class="concept-card cc-yellow">
+        <div class="cc-header">Capacity Headroom &amp; Cooldown</div>
+        <div class="cc-body">Scale-out triggers at 60–70% CPU (not 90%) to ensure headroom exists before new instances come online. Cooldown periods (60–300s) prevent flapping — the metric must stabilize before another scaling action fires.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- S7: FIRST PRINCIPLES -->
+  <section id="s7">
+    <h2 class="section-title"><span class="num">07</span> First Principles — Why Does This Exist?</h2>
+    <p>Before stateless horizontal scaling, the dominant approach was <strong>vertical scaling</strong>: when traffic grew, you upgraded to a bigger server. This worked until it didn't — every machine has a ceiling, and at that ceiling you were stuck. Worse, vertical scaling required downtime to resize, making it incapable of responding to intra-day spikes.</p>
+    <p>The deeper problem was that application servers were <strong>stateful by default</strong>: HTTP sessions in memory, temp files on local disk, sticky connections. Adding a second server meant either replicating that state (complex, error-prone) or forcing users to always hit the same server (sticky sessions, which broke failover). Neither scaled cleanly.</p>
+    <p>Horizontal scaling of stateless tiers exists because engineers realized: if you move all mutable state out of the application process into dedicated stores, the application tier becomes a <strong>pure function</strong> — request in, response out. A pure function can run on any number of identical machines simultaneously with zero coordination. This is the architectural unlock that made elastic, cloud-native scaling possible.</p>
+  </section>
+
+  <!-- S8: MENTAL MODELS -->
+  <section id="s8">
+    <h2 class="section-title"><span class="num">08</span> Mental Models</h2>
+
+    <h3>Model 1: The Vending Machine Fleet</h3>
+    <p>Each stateless instance is a vending machine. Every machine dispenses the same products (all state lives in the warehouse / external store). Demand spikes → drop in more machines. They don't need to know about each other; removing one doesn't affect the others. The load balancer is the signage routing customers to an available machine. <strong>Where it breaks:</strong> if the warehouse (downstream DB) has limited throughput, more vending machines don't help — they just queue up at the same bottleneck.</p>
+
+    <h3>Model 2: The Scaling Runway</h3>
+    <p>Think of capacity headroom as an airport runway. The runway must exist <em>before</em> the plane (traffic spike) arrives. If your scale-out trigger is 90% CPU, you have almost no runway — by the time new instances come online, you've already crashed. Setting the trigger at 60–70% gives 2–5 minutes of runway. Warm pools extend the runway — instances are pre-staged and can take traffic in ~30s.</p>
+
+    <h3>Model 3: The Stateful Dependency Ceiling</h3>
+    <p>Visualize horizontal scaling as widening a pipe. You can widen the front pipe (app tier) freely, but if there's a narrower pipe further down (single-writer DB, Redis leader), total throughput is still capped at the narrowest pipe. Always ask: "What does my app tier touch that is stateful, and what is its write throughput ceiling?" Scaling past that point adds cost with zero throughput gain.</p>
+  </section>
+
+  <!-- S9: HOW IT WORKS -->
+  <section id="s9">
+    <h2 class="section-title"><span class="num">09</span> How It Works — Mechanics</h2>
+
+    <h3>Scale-Out Path</h3>
+    <ul class="flow-steps">
+      <li><div class="step-num">1</div><div>CloudWatch alarm fires: average CPU across the ASG exceeds 65% for 2 consecutive minutes (evaluation period prevents false positives from momentary spikes).</div></li>
+      <li><div class="step-num">2</div><div>ASG calculates desired count: <code>new_desired = ceil(current_desired × (current_metric / target_metric))</code>. E.g., CPU 78%, target 60%, 3 instances → ceil(3 × 78/60) = ceil(3.9) = 4.</div></li>
+      <li><div class="step-num">3</div><div>Instance launch: if warm pool exists, promote in ~30s. Without warm pool, cold boot from AMI: 2–5 min (OS boot + app startup + health check).</div></li>
+      <li><div class="step-num">4</div><div>Health check registration: LB checks /health → 200 OK. After N consecutive passes (e.g., 2 checks × 30s), live traffic is routed to the new instance.</div></li>
+      <li><div class="step-num">5</div><div>Cooldown period: ASG waits 120–300s before re-evaluating the metric to let the new instance absorb load and the metric stabilize.</div></li>
+    </ul>
+
+    <h3>Scale-In Path</h3>
+    <ul class="flow-steps">
+      <li><div class="step-num green">1</div><div>Metric drops below threshold (e.g., CPU 40%) for 5+ consecutive minutes (longer stabilization to avoid premature scale-in).</div></li>
+      <li><div class="step-num green">2</div><div>ASG selects instance to terminate: default policy — oldest launch template first, then closest to next billing hour.</div></li>
+      <li><div class="step-num green">3</div><div>Connection draining: LB deregisters the instance — no new requests, but in-flight requests continue until completion or deregistration timeout (30–60s for fast APIs).</div></li>
+      <li><div class="step-num green">4</div><div>Termination: instance terminated after drain completes. If warm pools configured, instance transitions to warm state instead.</div></li>
+    </ul>
+
+    <h3>Key Parameter Reference</h3>
+    <div class="table-wrap">
+      <table class="param-table">
+        <thead><tr><th>Parameter</th><th>Typical Value</th><th>Reasoning</th></tr></thead>
+        <tbody>
+          <tr><td>Scale-out CPU target</td><td>60–70%</td><td>Leave 30–40% headroom for startup lag</td></tr>
+          <tr><td>Scale-in stabilization</td><td>5–15 min</td><td>Prevent premature scale-in during natural dips</td></tr>
+          <tr><td>Deregistration delay</td><td>30–60s</td><td>Match to P99 request duration + buffer</td></tr>
+          <tr><td>Min instances</td><td>2 (across 2 AZs)</td><td>HA — survive one AZ failure</td></tr>
+          <tr><td>Health check interval</td><td>30s, 2 checks to pass</td><td>Fast enough for failures, slow enough to avoid false positives on startup</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- S10: REAL-WORLD EXAMPLES -->
+  <section id="s10">
+    <h2 class="section-title"><span class="num">10</span> Real-World System Examples</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>System</th><th>How This Concept Applies</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Amazon EC2 ASG + ALB</strong></td>
+            <td>The canonical implementation: ALB health-checks instances, ASG target tracking scales on ALB RequestCountPerTarget or CPU</td>
+            <td>Warm pools introduced 2021 to reduce cold-start lag for large instances</td>
+          </tr>
+          <tr>
+            <td><strong>Netflix API Tier</strong></td>
+            <td>Stateless microservices scale out; Hystrix circuit breakers prevent downstream failures from cascading through the scaled-out tier</td>
+            <td>Each streaming API instance fully replaceable — no local session storage</td>
+          </tr>
+          <tr>
+            <td><strong>Uber Trip Services</strong></td>
+            <td>Stateless services (dispatch, pricing, supply) scale independently; state in Schemaless (Cassandra-backed) and Redis</td>
+            <td>Driver location is a special case — high-frequency writes require careful sharding</td>
+          </tr>
+          <tr>
+            <td><strong>Kubernetes HPA</strong></td>
+            <td>Scales pods on CPU, memory, or custom metrics (Prometheus); pods are share-nothing by design in K8s</td>
+            <td>KEDA extends HPA to queue depth — ideal for worker pools</td>
+          </tr>
+          <tr>
+            <td><strong>AWS Lambda</strong></td>
+            <td>Ultimate stateless horizontal scaling: each invocation is an isolated function execution; scaling is per-invocation</td>
+            <td>Cold starts are the primary challenge — Provisioned Concurrency = warm pool equivalent</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- S11: TRADE-OFFS -->
+  <section id="s11">
+    <h2 class="section-title"><span class="num">11</span> Trade-offs</h2>
+    <div class="table-wrap">
+      <table class="trade-off-table">
+        <thead><tr><th>Benefit</th><th>Cost / Limitation</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Near-linear throughput scaling: 2x instances → ~2x throughput</td>
+            <td>Bounded by the most-constrained stateful downstream (single-writer DB) — scaling past that limit wastes spend</td>
+          </tr>
+          <tr>
+            <td>No single point of failure — losing any instance doesn't lose state</td>
+            <td>Requires full externalization of state upfront — retrofitting a stateful app is non-trivial effort</td>
+          </tr>
+          <tr>
+            <td>Zero-downtime rolling deploys — no coordination across instances</td>
+            <td>Cold-start latency (2–5 min) means reactive scaling lags spikes — degraded P99 during spike onset without warm pools</td>
+          </tr>
+          <tr>
+            <td>Pay only for what you use — scale down at night, up at peak</td>
+            <td>More instances = more LB connections, more distributed logs, more health check endpoints — operational complexity grows</td>
+          </tr>
+          <tr>
+            <td>Independent failure domains across AZs</td>
+            <td>Scale-flapping wastes resources and creates noise — requires careful tuning of cooldowns and stabilization windows</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- S12: INTERVIEW APPLICATION -->
+  <section id="s12">
+    <h2 class="section-title"><span class="num">12</span> Interview Application</h2>
+
+    <h3>Trigger Phrases</h3>
+    <ul class="checklist" style="cursor:default;">
+      <li style="cursor:default;"><div class="cb" style="background:#e5e7eb;border-color:#e5e7eb;"></div><span class="text">"How would you handle a 10x traffic spike on your API tier?"</span></li>
+      <li style="cursor:default;"><div class="cb" style="background:#e5e7eb;border-color:#e5e7eb;"></div><span class="text">"What happens to your design during peak hours — Black Friday, say?"</span></li>
+      <li style="cursor:default;"><div class="cb" style="background:#e5e7eb;border-color:#e5e7eb;"></div><span class="text">"The service needs to be highly available and handle variable load."</span></li>
+      <li style="cursor:default;"><div class="cb" style="background:#e5e7eb;border-color:#e5e7eb;"></div><span class="text">"Walk me through how your application tier scales."</span></li>
+    </ul>
+
+    <h3>What You Say</h3>
+    <div class="callout callout-tip">
+      State that the API tier is stateless by design (all session state in Redis, no local disk writes) which makes instances interchangeable. Then describe: ALB in front, ASG with target tracking at ~65% CPU, minimum 2 instances across 2 AZs, warm pool for fast scale-out, 30s deregistration delay for graceful scale-in. Always add the downstream caveat — "scaling the app tier is only useful if the DB can handle the additional connections; beyond a certain point we'd need read replicas or connection pooling via PgBouncer."
+    </div>
+
+    <h3>Trade-off Statement (memorize this)</h3>
+    <div class="definition" style="border-left-color: var(--purple); font-size:14.5px; font-style: italic;">
+      "If we scale horizontally, we get elastic throughput that matches demand and eliminates single-instance SPOF, but we pay with cold-start latency during spike onset and the risk of hitting stateful downstream limits. For this system, horizontal scaling is the right call because the traffic pattern is bursty and the stateless app tier is the bottleneck — not the DB, which we're already read-replicated."
+    </div>
+  </section>
+
+  <!-- S13: MISCONCEPTIONS -->
+  <section id="s13">
+    <h2 class="section-title"><span class="num">13</span> Common Misconceptions &amp; Gotchas</h2>
+
+    <div class="misconception">
+      <div class="mc-wrong"><div class="mc-label">❌ Misconception</div>Adding more app servers will always increase throughput.</div>
+      <div class="mc-right"><div class="mc-label">✅ Reality</div>Throughput is bounded by the most-constrained downstream resource. If your single-writer PostgreSQL maxes at 5,000 writes/sec, adding app servers past that saturation point adds zero throughput and just burns money on connection overhead.</div>
+    </div>
+
+    <div class="misconception">
+      <div class="mc-wrong"><div class="mc-label">❌ Misconception</div>Auto-scaling is instant — the system can respond to a traffic spike in seconds.</div>
+      <div class="mc-right"><div class="mc-label">✅ Reality</div>Reactive auto-scaling has a 2–5 minute lag (metric evaluation period + instance boot + health check) without warm pools. During that window, existing instances absorb the spike — why scale-out threshold must be set low enough to leave headroom.</div>
+    </div>
+
+    <div class="misconception">
+      <div class="mc-wrong"><div class="mc-label">❌ Misconception</div>Stateless services don't need sticky sessions at all.</div>
+      <div class="mc-right"><div class="mc-label">✅ Reality</div>The <em>application</em> tier doesn't need session affinity, but WebSocket or long-lived streaming requests need <em>connection-level</em> affinity — the LB must route to the same instance for the duration of that TCP connection. Statelessness applies to business state, not to connection state.</div>
+    </div>
+
+    <div class="misconception">
+      <div class="mc-wrong"><div class="mc-label">❌ Misconception</div>You should scale out as aggressively as possible — more instances means more reliable.</div>
+      <div class="mc-right"><div class="mc-label">✅ Reality</div>Too many instances can overwhelm the database with connections (connection storm) and increase blast radius during a bad deploy. Always pair horizontal scaling with connection pooling and set a sane maximum instance count in your ASG.</div>
+    </div>
+  </section>
+
+  <!-- S14: RELATIONSHIPS -->
+  <section id="s14">
+    <h2 class="section-title"><span class="num">14</span> Relationships to Other Concepts</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Relationship</th><th>Concept</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Builds on</strong></td><td>3.6 Share-Nothing Architecture</td><td>The design property that makes horizontal scaling safe — instances must not share state</td></tr>
+          <tr><td><strong>Builds on</strong></td><td>3.3 Externalizing State to Redis</td><td>The mechanism enforcing share-nothing at runtime</td></tr>
+          <tr><td><strong>Enables</strong></td><td>Topic 4 — Load Balancing</td><td>A scalable stateless tier is the prerequisite for meaningful load distribution</td></tr>
+          <tr><td><strong>Enables</strong></td><td>Topic 5 — Caching Systems</td><td>A larger fleet serves more traffic from the same cache layer — better cache hit rates at scale</td></tr>
+          <tr><td><strong>Tension with</strong></td><td>3.2 Session Management (server-side)</td><td>Server-side sessions are fundamentally incompatible — must choose one model</td></tr>
+          <tr><td><strong>Tension with</strong></td><td>Topic 15 — Distributed Storage</td><td>Scaling the compute tier shifts the bottleneck to the storage tier — you can't solve the whole problem by scaling only one layer</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- S15: QUIZ -->
+  <section id="s15">
+    <h2 class="section-title"><span class="num">15</span> Self-Check Quiz</h2>
+    <div class="callout callout-quote">Click to reveal the hint. Answer out loud before you look.</div>
+
+    <div class="quiz-item" onclick="toggleQuiz(this)">
+      <div class="quiz-q"><div class="quiz-num">1</div>In one sentence: what property of a stateless service makes horizontal scaling safe — and what breaks if that property is violated?</div>
+      <div class="quiz-hint">Think about what happens when a request hits Instance A but the session data was written to Instance B's memory. Revisit Section 5 if you hesitate.</div>
+    </div>
+
+    <div class="quiz-item" onclick="toggleQuiz(this)">
+      <div class="quiz-q"><div class="quiz-num">2</div>Your API tier has average CPU at 82% and scale-out trigger at 75%. New instances take 4 minutes to boot. What happens during those 4 minutes — and how would you have designed to prevent it?</div>
+      <div class="quiz-hint">What is the system doing while instances are booting? What two architectural choices would have shortened that window? Revisit Sections 6 and 9.</div>
+    </div>
+
+    <div class="quiz-item" onclick="toggleQuiz(this)">
+      <div class="quiz-q"><div class="quiz-num">3</div>What does connection draining prevent, and what is the concrete user-visible consequence of skipping it?</div>
+      <div class="quiz-hint">Think about what happens to a request that is 80% complete when the server handling it is terminated. Revisit Section 6.</div>
+    </div>
+
+    <div class="quiz-item" onclick="toggleQuiz(this)">
+      <div class="quiz-q"><div class="quiz-num">4</div>Name a real system that uses horizontal scaling of a stateless tier. How does it externalize state, and what is its primary stateful downstream bottleneck at scale?</div>
+      <div class="quiz-hint">Pick any system from Section 10. Be specific about the store used and the constraint — not just "uses Redis." Revisit Section 10.</div>
+    </div>
+
+    <div class="quiz-item" onclick="toggleQuiz(this)">
+      <div class="quiz-q"><div class="quiz-num">5</div>Your API tier scales from 5 to 50 instances during a flash sale, but P99 latency spikes anyway and database CPU hits 100%. What is wrong with the scaling strategy and what should you change?</div>
+      <div class="quiz-hint">The bottleneck moved. Where is it now? What does the scaling strategy need to address beyond the app tier? Revisit Sections 8 (Model 3) and 11.</div>
+    </div>
+  </section>
+
+  <!-- S16: FURTHER READING -->
+  <section id="s16">
+    <h2 class="section-title"><span class="num">16</span> Further Reading</h2>
+
+    <div class="reading-item" onclick="toggleRead(this)">
+      <div class="cb" style="flex-shrink:0;margin-top:2px;"></div>
+      <div>
+        <div class="reading-title"><strong>DDIA Chapter 1</strong> — Kleppmann</div>
+        <div style="font-size:13px;color:var(--text-muted);">"Scalability" section — load parameters, vertical vs. horizontal scaling, latency percentiles</div>
+      </div>
+    </div>
+
+    <div class="reading-item" onclick="toggleRead(this)">
+      <div class="cb" style="flex-shrink:0;margin-top:2px;"></div>
+      <div>
+        <div class="reading-title"><strong>AWS Auto Scaling — Target Tracking &amp; Warm Pools</strong></div>
+        <div style="font-size:13px;color:var(--text-muted);">docs.aws.amazon.com/autoscaling/ec2/userguide/as-scaling-target-tracking.html</div>
+      </div>
+    </div>
+
+    <div class="reading-item" onclick="toggleRead(this)">
+      <div class="cb" style="flex-shrink:0;margin-top:2px;"></div>
+      <div>
+        <div class="reading-title"><strong>Google SRE Book — Chapter 19: Load Balancing at the Frontend</strong></div>
+        <div style="font-size:13px;color:var(--text-muted);">sre.google/sre-book/load-balancing-frontend — how Google routes to stateless serving tiers at scale</div>
+      </div>
+    </div>
+
+    <div class="reading-item" onclick="toggleRead(this)">
+      <div class="cb" style="flex-shrink:0;margin-top:2px;"></div>
+      <div>
+        <div class="reading-title"><strong>ByteByteGo — "Scale from Zero to Millions of Users"</strong></div>
+        <div style="font-size:13px;color:var(--text-muted);">System Design Interview Vol.1, Chapter 1 — practical walk-through of horizontally scaling a web tier</div>
+      </div>
+    </div>
+
+    <div class="reading-item" onclick="toggleRead(this)">
+      <div class="cb" style="flex-shrink:0;margin-top:2px;"></div>
+      <div>
+        <div class="reading-title"><strong>Netflix Tech Blog — Scryer: Predictive Auto Scaling Engine</strong></div>
+        <div style="font-size:13px;color:var(--text-muted);">netflixtechblog.com/scryer-netflixs-predictive-auto-scaling-engine-a3f8fc922270</div>
+      </div>
+    </div>
+  </section>
+
+</article>
+</main>
+
+<script>
+  function toggle(el) {
+    el.classList.toggle('checked');
+    saveState();
+  }
+
+  function togglePhase(header) {
+    header.parentElement.classList.toggle('open');
+  }
+
+  function toggleQuiz(item) {
+    item.classList.toggle('open');
+  }
+
+  function toggleRead(item) {
+    item.classList.toggle('read');
+    const cb = item.querySelector('.cb');
+    if (item.classList.contains('read')) {
+      cb.style.background = '#16a34a'; cb.style.borderColor = '#16a34a';
+      cb.innerHTML = '<span style="color:white;font-size:11px;font-weight:700;">✓</span>';
+    } else {
+      cb.style.background = ''; cb.style.borderColor = ''; cb.innerHTML = '';
+    }
+    saveState();
+  }
+
+  function saveState() {
+    const state = {};
+    document.querySelectorAll('.checklist li').forEach((li, i) => {
+      state['li_' + i] = li.classList.contains('checked');
+    });
+    try { localStorage.setItem('3_7_state', JSON.stringify(state)); } catch(e) {}
+  }
+
+  function loadState() {
+    try {
+      const state = JSON.parse(localStorage.getItem('3_7_state') || '{}');
+      document.querySelectorAll('.checklist li').forEach((li, i) => {
+        if (state['li_' + i]) li.classList.add('checked');
+      });
+    } catch(e) {}
+  }
+
+  // Scrollspy
+  const sections = document.querySelectorAll('section[id]');
+  const navLinks = document.querySelectorAll('#toc nav a');
+
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        navLinks.forEach(a => a.classList.remove('active'));
+        const link = document.querySelector('#toc nav a[href="#' + e.target.id + '"]');
+        if (link) link.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -75% 0px' });
+
+  sections.forEach(s => observer.observe(s));
+  loadState();
+</script>
+</body>
+</html>
