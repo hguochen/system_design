@@ -35,7 +35,8 @@ Be able to distinguish L4 from L7 load balancers by the OSI layer they operate o
 ### Phase 1 — Acquire 📖 💪💪
 *Goal: Read deeply enough that you could explain the concept without the doc.*
 
-- [ ] Read the **Further Reading** resources (Section 16): AWS ALB vs. NLB docs, nginx load balancing guide, ByteByteGo L4/L7 explainer
+- [ ] Read the **Further Reading** resources (Section 16): AWS ALB vs. NLB docs, nginx load balancing guide
+- [x] ByteByteGo L4/L7 explainer - https://www.youtube.com/watch?v=LQuuoHTyYz8
 - [ ] Read through **Sections 5–9** (Core Definition → How It Works) carefully — don't skim
 - [ ] Re-read the **Cheatsheet** (Section 4) and try to recite it from memory after
 
@@ -271,22 +272,88 @@ In the high-level design phase, when drawing the entry point to your backend clu
 
    > 💡 *Think through your answer before expanding — if you hesitate, revisit Section 5.*
 
+An L4 load balancer routes based solely on the TCP/UDP 4-tuple
+(source IP, source port, destination IP, destination port) without
+inspecting the payload; an L7 load balancer terminates TLS, parses
+the HTTP request, and routes based on application-layer content
+such as URL path, headers, and cookies.
+
 2. A team is building a service that routes HTTP traffic to three different microservices based on URL path (`/auth`, `/orders`, `/products`). Should they use L4 or L7? Why can't they use the other?
 
    > 💡 *Think through what information each LB type has available before answering — revisit Section 6 if needed.*
+
+Use L7. Path-based routing (/auth, /orders, /products) requires
+reading the HTTP URL — information that only exists at Layer 7.
+An L4 LB sees only the 4-tuple (src IP, src port, dst IP, dst port);
+all three services arrive on the same port (443), so L4 has no way
+to distinguish which backend should handle the request. It would
+route blindly, sending /auth requests to the orders service or
+products service with no way to correct this.
 
 3. What is the key security risk introduced by L7 TLS termination, and what are the two standard mitigations?
 
    > 💡 *If you only know the risk but not both mitigations, revisit Section 9.*
 
+Risk: L7 TLS termination means the LB decrypts the request and
+forwards plaintext HTTP to backends. Any compromise of the internal
+network exposes all traffic in plaintext.
+
+Mitigation 1 — TLS re-origination: the LB re-encrypts the request
+before forwarding to each backend, acting as a TLS client. Backends
+must trust the LB's certificate. Provides end-to-end encryption at
+the cost of additional latency and certificate management complexity.
+
+Mitigation 2 — Trusted internal network: accept plaintext between
+LB and backends, but enforce strict network controls (private VPC,
+security groups, no external access to backend subnets). Simpler
+operationally but relies on perimeter security holding.
+
 4. Name a real production system that uses L4 load balancing and explain specifically why L7 would not have been the right choice for that use case.
 
    > 💡 *Check Section 10 if you're drawing a blank — but try to recall it first.*
+
+AWS Network Load Balancer (NLB).
+
+NLB is used when:
+1. Ultra-high throughput is required (millions of RPS) — L7 TLS
+   termination + HTTP parsing adds latency that NLB's TCP-level
+   forwarding avoids entirely.
+
+2. TLS passthrough is required — when the system mandates
+   end-to-end encryption all the way to the backend (e.g., mutual
+   TLS / mTLS between services), the LB must not terminate TLS.
+   An L7 LB cannot do this — it must decrypt to read HTTP content.
+
+3. Non-HTTP protocols — NLB handles raw TCP (e.g., database
+   connections, custom binary protocols) that L7 cannot parse.
+
+L7 would fail here because: terminating TLS breaks the e2e
+encryption mandate, and parsing HTTP adds overhead that violates
+latency SLAs.
 
 5. A user's L4 IP-hash sticky session breaks after they switch from WiFi to LTE on their mobile phone. Why does this happen, and how would an L7 LB solve it?
 
    > 💡 *This is a real-world edge case — think through IP hash's mechanism first, then revisit Section 13 if needed.*
 
+Why it breaks: L4 IP-hash computes backend selection from the
+source IP. When the user switches WiFi → LTE, their source IP
+changes. The new IP hashes to a different backend, breaking the
+session mapping entirely.
+
+How L7 solves it: L7 implements cookie-based sticky sessions.
+On the first request, the LB inserts a session affinity cookie
+into the HTTP response. On every subsequent request, the client
+sends the cookie back — the LB reads it and routes to the same
+backend regardless of the client's current IP address.
+
+This survives IP changes, NAT, and mobile network switching
+because it tracks the user via the cookie, not the IP.
+
+The broader point: IP hash breaks in two real scenarios —
+1. IP change (mobile roaming, as above)
+2. NAT — many users sharing one public IP all hash to the
+   same backend, creating load imbalance.
+Cookie-based affinity solves both.
 ---
 
 ## 16. 📚 Further Reading
@@ -305,3 +372,30 @@ In the high-level design phase, when drawing the entry point to your backend clu
 
 > *Personal observations, things that confused me, analogies that helped.*
 
+L4 vs L7 Definition
+L4 load balancer operates at the transport level and it has visibility to the IP address and the port of each request packet. 
+An L7 load balancer operates at the application level and it terminates the TLS encryption, decrypts the request packet, and reads the contents of the HTTP payload. It can read things such as the HTTP header, the URL paths, and the cookie. Based on this information, the L7 load balancer can route intelligently to intended recipients in the pool of backend servers.
+
+Core Concepts
+
+An L4 load balancer operates on the TCP and UDP layer, and it has no visibility into the required packet other than the source IP and port, and the destination IP and port. 
+
+L7 load balancer operates on the HTTP layer. It terminates the TLS encryption, reads the contents of the HTTP packet, and therefore has visibility of packet details such as the HTTP headers, the cookies, or the URL paths. Based on these contents, we can route to a specific backend that serves such requests. 
+
+In terms of connection granularity, an L4 load balancer will only be able to route based on IP address and ports, whereas an L7 load balancer can route based on the contents of the HTTP packet and route the request intelligently. 
+
+In terms of health checks, the L4 load balancer will just establish a TCP connection with the backend, and once the TCP connection is successful, it will be deemed healthy. The L7 load balancer will make an actual GET request for health check to the specific back-ends, and only when the back-end responds with HTTP/200 success, it will be deemed healthy. 
+
+VIP. For both load balancers, it will be assigned an IP address, and this will also be called the virtual IP address. This virtual IP address will be the public address given to our clients. Clients, when they send a request, it will always run through this same IP address. 
+
+When to use each
+
+Use an L4 load balancer when our service demands ultra-low latency and it allows for TLS passthrough, which means the system mandates end-to-end encryption. 
+
+We use an L7 load balancer if our system has a backend microservice architecture where there are many services, each serving different types of requests. The L7 load balancer is able to terminate the TLS encryption, read the contents of the packets, and route to the specific backend that handles the specific service request. 
+
+L4 Routing mechanism
+When a client sends a request to an L4 load balancer, the L4 load balancer will be able to see the IP address and the port. It will do a hashing of this IP address and port, and the results of the hash will be routed to a specific backend. It creates a mapping(4 tuple, source IP/port and destination IP/post) between the IP and backend. It then forwards this request to the backend for processing. Once done, any subsequent requests on the same TCP connection get routed to the same backend. Eventually, when the client has finished sending requests, it terminates the request. The TCP connection stops, and then the load balancer will remove the mapping between the IP address and port with the specific backend. 
+
+L7 Routing mechanism
+When a client sends a request to an L7 load balancer, the L7 load balancer will use it's own TLS certificate and terminate the TLS encryption. It will decrypt the payload and read the contents of the HTTP request. You can read things like the HTTP header, the URL path, the cookies, and request body in this HTTP request. Once it has parsed the contents of the request, it can now route the request to specific backends that serve such types of requests. In this case, depending on the demands, it will also do a re-origination of the TLS certificates and send it encrypted to the backend. 

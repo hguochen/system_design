@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.1 L4 vs. L7 Load Balancers</title>
+<style>
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface-alt: #f3f2ef; --border: #e5e3de;
+    --text: #1a1917; --text-muted: #6b6861; --accent: #2563eb; --accent-light: #dbeafe;
+    --green: #16a34a; --green-light: #dcfce7; --red: #dc2626; --red-light: #fee2e2;
+    --yellow: #d97706; --yellow-light: #fef3c7; --purple: #7c3aed; --purple-light: #ede9fe;
+    --orange: #ea580c; --orange-light: #ffedd5; --code-bg: #1e1e2e; --code-text: #cdd6f4;
+    --sidebar-w: 240px; --content-max: 780px; font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; }
+  #toc { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0 48px; z-index: 100; }
+  #toc-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  #toc-header .phase-tag { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-bottom: 6px; }
+  #toc-header h2 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  #toc nav a { display: block; padding: 5px 16px 5px 20px; font-size: 12.5px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all 0.15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+  main { margin-left: var(--sidebar-w); padding: 48px 48px 96px; max-width: calc(var(--sidebar-w) + var(--content-max) + 96px); width: 100%; }
+  article { max-width: var(--content-max); }
+  .doc-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 2px solid var(--border); }
+  .doc-header .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+  .tag-phase { background: var(--accent-light); color: var(--accent); }
+  .tag-topic { background: var(--purple-light); color: var(--purple); }
+  .tag-date  { background: var(--surface-alt); color: var(--text-muted); }
+  .doc-header h1 { font-size: 30px; font-weight: 800; line-height: 1.25; letter-spacing: -0.02em; color: var(--text); }
+  section { margin-bottom: 52px; scroll-margin-top: 32px; }
+  h2.section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -0.01em; }
+  h2.section-title .num { font-size: 11px; font-weight: 800; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; letter-spacing: 0.04em; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 24px 0 10px; }
+  p { margin-bottom: 14px; } p:last-child { margin-bottom: 0; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 14px; border-left: 3px solid; }
+  .callout-goal  { background: var(--accent-light); border-color: var(--accent); color: #1e40af; }
+  .callout-tip   { background: var(--yellow-light); border-color: var(--yellow); color: #92400e; }
+  .callout-quote { background: var(--surface-alt); border-color: var(--border); color: var(--text-muted); font-style: italic; }
+  .callout-warn  { background: var(--red-light); border-color: var(--red); color: #7f1d1d; }
+  .callout strong { font-weight: 700; }
+  .cheatsheet { background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 24px 28px; font-family: "SF Mono","Fira Code","Cascadia Code",Menlo,monospace; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-x: auto; }
+  .cheatsheet .label { color: #89dceb; font-weight: 700; letter-spacing: 0.05em; display: block; margin-top: 16px; }
+  .cheatsheet .label:first-child { margin-top: 0; }
+  .cheatsheet .val { color: #a6e3a1; } .cheatsheet .hi { color: #f38ba8; font-weight: 600; } .cheatsheet .dim { color: #7f849c; }
+  .mindmap-wrap { margin: 20px 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); background: #fafaf8; text-align: center; }
+  .mindmap-wrap img { width: 100%; max-width: 100%; display: block; }
+  .mindmap-wrap .caption { font-size: 12px; color: var(--text-muted); padding: 8px 0 10px; font-style: italic; }
+  .definition { background: var(--surface); border: 1.5px solid var(--border); border-left: 4px solid var(--accent); border-radius: 10px; padding: 18px 22px; font-size: 15.5px; line-height: 1.75; color: var(--text); }
+  .concept-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 16px 0; }
+  .concept-card { border-radius: 10px; padding: 16px 18px; border: 1.5px solid; }
+  .cc-blue   { background: var(--accent-light);  border-color: #93c5fd; }
+  .cc-orange { background: var(--orange-light);  border-color: #fdba74; }
+  .cc-green  { background: var(--green-light);   border-color: #86efac; }
+  .cc-purple { background: var(--purple-light);  border-color: #c4b5fd; }
+  .cc-yellow { background: var(--yellow-light);  border-color: #fcd34d; }
+  .cc-teal   { background: #e6fcf5; border-color: #63e6be; }
+  .concept-card .cc-header { font-size: 13px; font-weight: 700; margin-bottom: 8px; }
+  .concept-card .cc-body   { font-size: 13px; line-height: 1.6; color: var(--text); }
+  .flow-steps { list-style: none; margin: 12px 0 18px; }
+  .flow-steps li { display: flex; gap: 14px; margin-bottom: 10px; font-size: 14.5px; line-height: 1.6; align-items: flex-start; }
+  .flow-steps .step-num { min-width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
+  .flow-steps .step-num.green { background: var(--green); } .flow-steps .step-num.orange { background: var(--orange); } .flow-steps .step-num.red { background: var(--red); }
+  .table-wrap { overflow-x: auto; margin: 14px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: var(--surface-alt); font-weight: 700; text-align: left; padding: 10px 14px; border-bottom: 2px solid var(--border); font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.04em; }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.55; }
+  tr:last-child td { border-bottom: none; } tr:hover td { background: var(--surface-alt); }
+  .benefit { color: var(--green); font-weight: 600; } .cost { color: var(--red); font-weight: 600; }
+  .quiz-item { border: 1.5px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .quiz-q { padding: 14px 18px; font-size: 14.5px; font-weight: 600; cursor: pointer; display: flex; gap: 12px; align-items: flex-start; background: var(--surface); user-select: none; }
+  .quiz-q:hover { background: var(--surface-alt); }
+  .quiz-num { min-width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+  .quiz-hint { display: none; padding: 12px 18px; font-size: 13.5px; color: #92400e; background: var(--yellow-light); border-top: 1px solid #fcd34d; font-style: italic; }
+  .quiz-item.open .quiz-hint { display: block; }
+  .phase-block { border: 1.5px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .phase-header { background: var(--surface-alt); padding: 12px 16px; cursor: pointer; display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 700; user-select: none; }
+  .phase-header:hover { background: #ebe9e4; }
+  .phase-body { display: none; padding: 16px 20px; }
+  .phase-block.open .phase-body { display: block; }
+  .phase-goal { font-size: 12.5px; color: var(--text-muted); font-style: italic; margin-bottom: 12px; }
+  .checklist { list-style: none; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 14px; cursor: pointer; }
+  .checklist li:last-child { border-bottom: none; }
+  .checklist li.checked .text { text-decoration: line-through; color: var(--text-muted); }
+  .cb { width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; flex-shrink: 0; margin-top: 2px; background: var(--surface); transition: all 0.15s; display: flex; align-items: center; justify-content: center; }
+  .checklist li.checked .cb { background: var(--green); border-color: var(--green); }
+  .checklist li.checked .cb::after { content: '\2713'; color: white; font-size: 11px; font-weight: 700; }
+  .misconception { border: 1.5px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 12px; }
+  .mc-wrong { background: var(--red-light); padding: 10px 16px; font-size: 13.5px; color: #7f1d1d; border-bottom: 1px solid #fca5a5; }
+  .mc-right { background: var(--green-light); padding: 10px 16px; font-size: 13.5px; color: #14532d; }
+  .mc-label { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 4px; }
+  .reading-item { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 14px; cursor: pointer; align-items: flex-start; }
+  .reading-item:last-child { border-bottom: none; }
+  .reading-item.read .reading-title { text-decoration: line-through; color: var(--text-muted); }
+  .trade-off-table td:first-child { color: var(--green); font-weight: 600; }
+  .trade-off-table td:last-child  { color: var(--red); }
+  .param-table th, .param-table td { font-size: 13px; }
+  @media (max-width: 900px) { #toc { display: none; } main { margin-left: 0; padding: 24px; } }
+</style>
+</head>
+<body>
+
+<nav id="toc">
+  <div id="toc-header">
+    <span class="phase-tag">Phase B — Scalability</span>
+    <h2>4.1 L4 vs. L7 Load Balancers</h2>
+  </div>
+  <nav>
+    <a href="#s1">1. Goal</a>
+    <a href="#s2">2. Mastery Checklist</a>
+    <a href="#s3">3. Study Phases</a>
+    <a href="#s4">4. Cheatsheet</a>
+    <a href="#s5">5. Core Definition</a>
+    <a href="#s6">6. Core Concepts</a>
+    <a href="#s7">7. First Principles</a>
+    <a href="#s8">8. Mental Models</a>
+    <a href="#s9">9. How It Works</a>
+    <a href="#s10">10. Real-World Examples</a>
+    <a href="#s11">11. Trade-offs</a>
+    <a href="#s12">12. Interview Application</a>
+    <a href="#s13">13. Misconceptions</a>
+    <a href="#s14">14. Relationships</a>
+    <a href="#s15">15. Self-Check Quiz</a>
+    <a href="#s16">16. Further Reading</a>
+  </nav>
+</nav>
+
+<main>
+<article>
+
+  <header class="doc-header">
+    <div class="meta">
+      <span class="tag tag-phase">Phase B — Scalability</span>
+      <span class="tag tag-topic">Topic 4 — Load Balancing</span>
+      <span class="tag tag-date">2026-05-06</span>
+    </div>
+    <h1>4.1 L4 vs. L7<br><span style="font-weight:400;font-size:20px;color:var(--text-muted)">Load Balancers</span></h1>
+  </header>
+
+  <!-- S1: GOAL -->
+  <section id="s1">
+    <h2 class="section-title"><span class="num">01</span> Goal of This Subtopic</h2>
+    <div class="callout callout-goal">
+      <strong>Why this matters:</strong> L4 vs. L7 is the first design decision you make at the entry point of any distributed system. Getting it wrong constrains your entire routing architecture. FAANG interviewers probe this explicitly when you draw a load balancer — they want to know you understand what each type can and cannot see.
+    </div>
+    <ul class="checklist" id="goals-list">
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Be able to distinguish L4 from L7 load balancers by the OSI layer they operate on, what information each can see, and the architectural implications of that difference.</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Understand when to choose one over the other in an interview design, and be able to articulate the trade-offs confidently without hedging.</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Explain TLS termination and its security model — what the L7 LB exposes, and what mitigations exist.</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Identify when L4 is the only viable option (non-HTTP protocols, TLS passthrough) and explain why L7 cannot substitute.</span></li>
+    </ul>
+  </section>
+
+  <!-- S2: MASTERY -->
+  <section id="s2">
+    <h2 class="section-title"><span class="num">02</span> What Mastery Looks Like</h2>
+    <div class="callout callout-quote">If you can teach it to someone else and field their follow-up questions, you've mastered it.</div>
+    <ul class="checklist" id="mastery-list">
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Can explain the difference between L4 and L7 load balancing in under 60 seconds using a concrete example, without notes.</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Can select the right LB type (L4 or L7) given a specific system requirement and justify it in terms of what information is available at each layer.</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Can describe exactly how TLS termination changes the security model and what the two correct mitigations are.</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Can identify when L4 is the only viable option (non-HTTP protocols, TLS passthrough) and explain why.</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Can name at least two production systems that use each type and describe how they use it.</span></li>
+    </ul>
+  </section>
+
+  <!-- S3: STUDY PHASES -->
+  <section id="s3">
+    <h2 class="section-title"><span class="num">03</span> Study Phases to Achieve Mastery</h2>
+
+    <div class="phase-block open">
+      <div class="phase-header" onclick="togglePhase(this)">
+        <span>&#128214; Phase 1 — Acquire</span><span style="margin-left:auto;font-size:12px;color:var(--text-muted)">&#128170;&#128170;</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Read deeply enough that you could explain the concept without the doc.</p>
+        <ul class="checklist">
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Read <em>AWS Documentation: ALB vs. NLB comparison</em> — docs.aws.amazon.com/elasticloadbalancing/latest/userguide/how-elastic-load-balancing-works.html</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Read <em>nginx HTTP Load Balancing Guide</em> — docs.nginx.com/nginx/admin-guide/load-balancer/http-load-balancer/</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Read <em>ByteByteGo: System Design Interview</em> — Chapter on scalability covering L4/L7 in real interview problems</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Read <em>HAProxy Documentation: The Four Essential Sections of an HAProxy Configuration</em> — haproxy.com/documentation/</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Read <em>Cloudflare Blog: How we scaled our load balancer</em> — blog.cloudflare.com</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Read Sections 5–9 (Core Definition to How It Works) carefully — don't skim</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Re-read the Cheatsheet (Section 4) and try to recite it from memory after</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-block">
+      <div class="phase-header" onclick="togglePhase(this)">
+        <span>&#9999;&#65039; Phase 2 — Consolidate</span><span style="margin-left:auto;font-size:12px;color:var(--text-muted)">&#128170;&#128170;&#128170;</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Reproduce the knowledge in your own words without looking.</p>
+        <ul class="checklist">
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Close the doc — write out the Core Definition from memory, then compare</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Explain First Principles out loud — what pain existed before L4/L7 distinction mattered?</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Reconstruct the L4 and L7 happy paths step by step from memory</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Restate each Trade-off row in your own words — if you can't explain the cost, you don't own it yet</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-block">
+      <div class="phase-header" onclick="togglePhase(this)">
+        <span>&#128295; Phase 3 — Apply</span><span style="margin-left:auto;font-size:12px;color:var(--text-muted)">&#128170;&#128170;&#128170;&#128170;</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Connect to real systems and simulate interview scenarios.</p>
+        <ul class="checklist">
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Verify each Real-World Example independently and add anything missed to My Notes</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Practice Interview Application out loud — trigger phrases + trade-off statement verbatim</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Work through Common Misconceptions — explain WHY each is wrong, not just that it is</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Trace Relationships to Other Concepts without looking</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-block">
+      <div class="phase-header" onclick="togglePhase(this)">
+        <span>&#129514; Phase 4 — Validate</span><span style="margin-left:auto;font-size:12px;color:var(--text-muted)">&#128170;&#128170;&#128170;&#128170;&#128170;</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Confirm you actually own it, not just recognize it.</p>
+        <ul class="checklist">
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Answer every Self-Check Quiz question out loud without notes</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Recite the Cheatsheet from memory — if you can't, re-do Phase 2</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Tick off Mastery items — only if you can demonstrate on demand, not just if it sounds familiar</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Teach this concept for 2 minutes to an imaginary interviewer without hesitation or notes</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- S4: CHEATSHEET -->
+  <section id="s4">
+    <h2 class="section-title"><span class="num">04</span> Cheatsheet</h2>
+    <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+
+    <div class="mindmap-wrap">
+      <img src="../assets/images/topic_4.1_l4_vs_l7_load_balancers_mindmap.png" alt="4.1 L4 vs. L7 Load Balancers Mindmap">
+      <div class="caption">Mindmap — 4.1 L4 vs. L7 Load Balancers</div>
+    </div>
+
+    <div class="cheatsheet"><span class="label">ONE-LINER</span><span class="val">  L4 routes by IP/port (fast, blind); L7 routes by HTTP content (smart, flexible).</span>
+
+<span class="label">KEY PROPERTIES / RULES</span><span class="val">  L4: operates on TCP/UDP; cannot inspect payloads; near-zero overhead; protocol-agnostic
+  L7: operates on HTTP/HTTPS; reads headers, URL, cookies; enables content-based routing
+  L7 terminates TLS — backend sees plain HTTP; L4 can pass TLS through to the backend
+  L7 enables cookie-based sticky sessions; L4 only via IP hash (breaks behind NAT)
+  L4 is required for non-HTTP protocols: raw TCP databases, UDP, custom binary protocols</span>
+
+<span class="label">DECISION RULE</span><span class="val">  Use L7 when: microservice path routing, A/B testing, sticky sessions, auth, SSL termination
+  Use L4 when: non-HTTP protocols, TLS passthrough, maximum throughput, gaming/UDP traffic</span>
+
+<span class="label">NUMBERS / FORMULAS</span><span class="val">  L4 overhead:   ~microseconds per connection (stateful NAT table lookup)
+  L7 overhead:   TLS termination + HTTP parse, typically adds ~1-2ms per request
+  Rule of thumb: default to L7 for web services; drop to L4 only for protocol/throughput limits</span>
+
+<span class="label">GOTCHA TO NEVER FORGET</span><span class="hi">  L7 terminates TLS — the backend sees plain HTTP. You must trust the internal network
+  or re-encrypt to the backend, or your data travels unencrypted inside your own infra.</span></div>
+  </section>
+
+  <!-- S5: DEFINITION -->
+  <section id="s5">
+    <h2 class="section-title"><span class="num">05</span> Core Definition</h2>
+    <div class="definition">
+      An <strong>L4 load balancer</strong> distributes traffic based solely on TCP/UDP source/destination IP and port, without inspecting packet contents. An <strong>L7 load balancer</strong> terminates the connection, parses the HTTP request, and routes based on application-level information such as URL path, headers, and cookies.
+    </div>
+  </section>
+
+  <!-- S6: CORE CONCEPTS -->
+  <section id="s6">
+    <h2 class="section-title"><span class="num">06</span> Core Concepts</h2>
+
+    <div class="concept-grid">
+      <div class="concept-card cc-blue">
+        <div class="cc-header">OSI Layer as Information Horizon</div>
+        <div class="cc-body">The OSI layer a load balancer operates at determines what information it can see. L4 operates at the transport layer — it sees only IP, port, and TCP flags, never the payload. L7 operates at the application layer — it terminates the TCP connection, reads HTTP headers and body, and routes based on that content. The layer is not a label; it is the decision surface.</div>
+      </div>
+      <div class="concept-card cc-orange">
+        <div class="cc-header">TLS Termination</div>
+        <div class="cc-body">L7 load balancers terminate TLS: they decrypt the inbound request, read plaintext HTTP, route it, then optionally re-encrypt for the backend. This centralizes certificate management but means backend traffic is unencrypted unless you add TLS re-origination. L4 supports TLS passthrough — forwarding encrypted bytes directly to the backend — which is required for end-to-end encryption or mTLS.</div>
+      </div>
+      <div class="concept-card cc-purple">
+        <div class="cc-header">Connection vs. Request Granularity</div>
+        <div class="cc-body">L4 LBs load-balance at connection granularity: once a TCP connection lands on a backend, all requests on that connection stay there. L7 LBs load-balance at request granularity — each HTTP request or HTTP/2 stream can go to a different backend, enabling far more even distribution under keep-alive and multiplexing.</div>
+      </div>
+      <div class="concept-card cc-teal">
+        <div class="cc-header">Virtual IP (VIP)</div>
+        <div class="cc-body">Both LB types expose a single Virtual IP to clients. All traffic goes to the VIP; the LB forwards to one of N healthy backends. The client never knows which backend handled the request. This is the fundamental abstraction that makes backends independently replaceable without client changes.</div>
+      </div>
+      <div class="concept-card cc-green">
+        <div class="cc-header">Health Checks</div>
+        <div class="cc-body">L4 LBs health-check by establishing a TCP connection — if the handshake completes, the backend is healthy. L7 LBs send an actual HTTP request (typically <code>GET /health</code>) and check for a 200 response. L7 health checks catch application-layer failures — a crashed app server that still accepts TCP connections — that L4 checks entirely miss.</div>
+      </div>
+      <div class="concept-card cc-yellow">
+        <div class="cc-header">Sticky Sessions</div>
+        <div class="cc-body">L7 LBs implement sticky sessions via a cookie inserted into the HTTP response — the LB reads the cookie on subsequent requests and routes to the same backend. L4 can only achieve affinity via IP hash, which breaks when many users share a single NAT IP or when a mobile user's IP changes. L7 cookie-based affinity is far more reliable in practice.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- S7: FIRST PRINCIPLES -->
+  <section id="s7">
+    <h2 class="section-title"><span class="num">07</span> First Principles — Why Does This Exist?</h2>
+    <p>Before load balancers, scaling a service meant scaling the single machine it ran on. When a single machine hit its ceiling, the only option was vertical scaling — bigger hardware. Horizontal scaling required a way to distribute traffic across machines while presenting a single address to clients.</p>
+    <p>The first load balancers were simple: they operated at L4, hashing connection tuples to backend IPs. This worked well until applications needed smarter routing — routing <code>/api/users</code> to one microservice and <code>/api/orders</code> to another, or routing 5% of traffic to a canary deployment, or maintaining session affinity based on a user's login cookie. None of this is possible at L4 because the LB cannot see the application-layer content.</p>
+    <p>L7 load balancing emerged to solve the intelligence gap: give the LB enough context (the full HTTP request) to make routing decisions that align with application semantics. The cost is that the LB must now terminate connections, parse HTTP, and re-establish connections to backends — which is why L4 still exists for cases where that overhead or protocol boundary is unacceptable.</p>
+  </section>
+
+  <!-- S8: MENTAL MODELS -->
+  <section id="s8">
+    <h2 class="section-title"><span class="num">08</span> Mental Models</h2>
+
+    <h3>Model 1: The Doorman vs. The Concierge</h3>
+    <p>An L4 load balancer is a doorman: they check what floor you're going to (IP/port) and send you to the right elevator — fast, no questions asked, no knowledge of what you need when you get there. An L7 load balancer is a concierge: they read your request, understand what you need ("I want the sushi restaurant on the 3rd floor"), and route you accordingly. The concierge is smarter but slower and must be trusted with your information. <strong>Where it breaks down:</strong> the concierge implies seeing everything — but an L7 LB only sees HTTP content, not encrypted payloads if TLS passthrough is used.</p>
+
+    <h3>Model 2: The Envelope vs. The Letter</h3>
+    <p>L4 routes based on the outside of the envelope (to/from address). L7 opens the envelope, reads the letter, and routes based on the content. You can sort mail incredibly fast at L4 because you never open anything. But if you need to route "all letters about billing to the billing department," you must open and read — that's L7. <strong>Where it breaks down:</strong> this implies L7 always does more work. In practice, modern L7 LBs are highly optimized and the overhead for typical web traffic is negligible below millions of RPS per node.</p>
+
+    <h3>Model 3: The OSI Stack as an Information Tax</h3>
+    <p>Every layer you go up the OSI stack costs more compute (you must parse more of the packet) but gives you more information to make routing decisions. L4 pays almost no tax — just a hash table lookup. L7 pays TLS termination + HTTP parsing but can see everything the application sends. Think of it as buying routing intelligence with compute. <strong>When the tax is too high:</strong> ultra-low-latency financial systems or very high-throughput UDP streams (gaming, video) cannot afford the L7 tax.</p>
+  </section>
+
+  <!-- S9: HOW IT WORKS -->
+  <section id="s9">
+    <h2 class="section-title"><span class="num">09</span> How It Works — Mechanics</h2>
+
+    <h3>L4 — Happy Path</h3>
+    <ul class="flow-steps">
+      <li><div class="step-num">1</div><div>Client sends a TCP SYN to the VIP (e.g., <code>10.0.0.1:443</code>).</div></li>
+      <li><div class="step-num">2</div><div>The L4 LB computes a backend selection based on a hash of <code>(src_ip, src_port, dst_ip, dst_port)</code> or a round-robin counter.</div></li>
+      <li><div class="step-num">3</div><div>The LB records the mapping in its connection table: <code>{client_ip:port &rarr; backend_ip:port}</code>.</div></li>
+      <li><div class="step-num">4</div><div>It rewrites the destination IP/port on the packet (DNAT) and forwards the SYN to the selected backend.</div></li>
+      <li><div class="step-num">5</div><div>All subsequent packets on this TCP connection are forwarded to the same backend using the connection table — no re-evaluation per packet.</div></li>
+      <li><div class="step-num">6</div><div>On TCP FIN/RST, the LB removes the entry from the connection table.</div></li>
+    </ul>
+
+    <div class="callout callout-warn"><strong>L4 Failure Mode:</strong> If the backend fails mid-connection, the client's TCP stream breaks immediately. There is no graceful drain — existing connections die. New connections stop routing to the failed backend only after the health check (TCP handshake) fails.</div>
+
+    <h3>L7 — Happy Path</h3>
+    <ul class="flow-steps">
+      <li><div class="step-num green">1</div><div>Client establishes a TLS connection to the VIP. The L7 LB handles the TLS handshake, presenting its own certificate.</div></li>
+      <li><div class="step-num green">2</div><div>The LB reads the plaintext HTTP request: method, URL, headers (including <code>Host</code>, <code>Cookie</code>, custom headers).</div></li>
+      <li><div class="step-num green">3</div><div>It evaluates routing rules: path prefix, header match, cookie value, and selects a backend pool.</div></li>
+      <li><div class="step-num green">4</div><div>It reuses a pooled TCP connection to the backend (or opens a new one) and forwards the HTTP request, adding <code>X-Forwarded-For</code> and <code>X-Forwarded-Proto</code>.</div></li>
+      <li><div class="step-num green">5</div><div>The backend processes the request and returns a response, which the LB streams back to the client over the original TLS connection.</div></li>
+    </ul>
+
+    <div class="callout callout-tip"><strong>L7 Failure Advantage:</strong> The LB can retry failed requests against a different backend — the client's TLS connection stays alive. The LB also drains connections gracefully, stopping new requests to a backend being removed while allowing in-flight requests to complete. Neither is possible at L4.</div>
+
+    <h3>Key Parameter Reference</h3>
+    <div class="table-wrap">
+      <table class="param-table">
+        <thead><tr><th>Parameter</th><th>L4 Value</th><th>L7 Value</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td>Routing decision input</td><td>IP + port</td><td>URL, headers, cookies</td><td>Core distinction</td></tr>
+          <tr><td>TLS handling</td><td>Passthrough (optional)</td><td>Terminates TLS</td><td>L7 sees plaintext HTTP</td></tr>
+          <tr><td>Health check</td><td>TCP handshake</td><td>HTTP GET /health</td><td>L7 catches app crashes</td></tr>
+          <tr><td>Retry on failure</td><td>Not possible</td><td>Transparent retry</td><td>L7 advantage for idempotent ops</td></tr>
+          <tr><td>Sticky sessions</td><td>IP hash only</td><td>Cookie-based</td><td>L7 survives NAT + IP change</td></tr>
+          <tr><td>Protocol support</td><td>Any TCP/UDP</td><td>HTTP/HTTPS only</td><td>L4 required for DB, gRPC raw, UDP</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- S10: REAL-WORLD EXAMPLES -->
+  <section id="s10">
+    <h2 class="section-title"><span class="num">10</span> Real-World System Examples</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>System</th><th>How This Concept Applies</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>AWS Application Load Balancer (ALB)</strong></td>
+            <td>L7 LB: routes by path, host header, query string; sticky sessions via cookies; terminates TLS</td>
+            <td>Default choice for web/API workloads on AWS; integrates with WAF for edge security</td>
+          </tr>
+          <tr>
+            <td><strong>AWS Network Load Balancer (NLB)</strong></td>
+            <td>L4 LB: ultra-high throughput (millions of RPS); TLS passthrough option; preserves source IP natively</td>
+            <td>Used when ALB latency overhead is unacceptable or for non-HTTP protocols (databases over TCP)</td>
+          </tr>
+          <tr>
+            <td><strong>nginx</strong></td>
+            <td>Acts as both L4 (via <code>stream</code> module) and L7 (via <code>http</code> module) — configured per use case</td>
+            <td>Widely used as L7 reverse proxy for microservices; supports SSL termination and header manipulation</td>
+          </tr>
+          <tr>
+            <td><strong>HAProxy</strong></td>
+            <td>Mature L4 and L7 LB; L7 mode supports ACL-based routing on any HTTP header</td>
+            <td>Used at high scale (GitHub, Stack Overflow) for deterministic, predictable performance</td>
+          </tr>
+          <tr>
+            <td><strong>Envoy Proxy</strong></td>
+            <td>L7 load balancer and proxy serving as the data plane in service meshes (Istio)</td>
+            <td>Supports sophisticated L7 routing, circuit breaking, retries, and distributed tracing natively</td>
+          </tr>
+          <tr>
+            <td><strong>Cloudflare</strong></td>
+            <td>Global anycast L7 LB; terminates TLS at 200+ PoPs; applies WAF, bot mitigation, and caching at L7</td>
+            <td>Operates as combined CDN + L7 LB + DDoS mitigation layer — all requiring L7 content inspection</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- S11: TRADE-OFFS -->
+  <section id="s11">
+    <h2 class="section-title"><span class="num">11</span> Trade-offs</h2>
+    <div class="table-wrap">
+      <table class="trade-off-table">
+        <thead><tr><th>Benefit</th><th>Cost / Limitation</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>L7 enables content-based routing (path, header, cookie)</td>
+            <td>L7 must parse HTTP for every request — higher CPU than L4's hash table lookup</td>
+          </tr>
+          <tr>
+            <td>L7 TLS termination centralizes certificate management and offloads crypto from backends</td>
+            <td>Backend traffic is unencrypted; requires trusted internal network or TLS re-origination complexity</td>
+          </tr>
+          <tr>
+            <td>L7 retry on failure is transparent to the client, improving resilience</td>
+            <td>L7 retry can cause duplicate side effects if the backend operation is not idempotent</td>
+          </tr>
+          <tr>
+            <td>L4 is protocol-agnostic — works for any TCP/UDP service with near-zero overhead</td>
+            <td>L4 cannot distinguish between multiple services on the same IP; requires separate ports per service</td>
+          </tr>
+          <tr>
+            <td>L4 preserves the original client IP natively via DNAT</td>
+            <td>L7 requires the <code>X-Forwarded-For</code> header to pass the original client IP; backends must be configured to trust it</td>
+          </tr>
+          <tr>
+            <td>L7 performs HTTP health checks, catching app-layer failures that L4 misses</td>
+            <td>L7 health check requests add overhead; misconfigured health endpoints create false negatives</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- S12: INTERVIEW APPLICATION -->
+  <section id="s12">
+    <h2 class="section-title"><span class="num">12</span> Interview Application</h2>
+
+    <h3>Trigger Phrases</h3>
+    <ul class="checklist" style="cursor:default;">
+      <li style="cursor:default;"><div class="cb" style="background:#e5e7eb;border-color:#e5e7eb;"></div><span class="text">"Walk me through how you'd design the load balancing layer for this system."</span></li>
+      <li style="cursor:default;"><div class="cb" style="background:#e5e7eb;border-color:#e5e7eb;"></div><span class="text">"How would you route traffic to different microservices?"</span></li>
+      <li style="cursor:default;"><div class="cb" style="background:#e5e7eb;border-color:#e5e7eb;"></div><span class="text">"The system needs to support A/B testing / canary deploys."</span></li>
+      <li style="cursor:default;"><div class="cb" style="background:#e5e7eb;border-color:#e5e7eb;"></div><span class="text">"We need to support WebSocket connections at scale."</span></li>
+    </ul>
+
+    <h3>What You Say</h3>
+    <div class="callout callout-tip">
+      In the high-level design phase, when drawing the entry point to your backend cluster, call out whether you'd use L4 or L7 and why. For most web/API systems, default to L7: <em>"I'll put an L7 load balancer here — it lets us terminate TLS, route by path to different microservice pools, and add sticky sessions if needed. If we need to scale to very high throughput or support non-HTTP protocols, we can put an L4 LB in front of it."</em> Always mention TLS termination and its security implication.
+    </div>
+
+    <h3>Trade-off Statement (memorize this)</h3>
+    <div class="definition" style="border-left-color: var(--purple); font-size:14.5px; font-style: italic;">
+      "If we choose L7, we get intelligent routing and TLS termination, but we pay for it with slightly higher latency and we need to secure the backend channel. For this system, L7 is the right call because we need to route API traffic to separate microservice pools by path."
+    </div>
+  </section>
+
+  <!-- S13: MISCONCEPTIONS -->
+  <section id="s13">
+    <h2 class="section-title"><span class="num">13</span> Common Misconceptions &amp; Gotchas</h2>
+
+    <div class="misconception">
+      <div class="mc-wrong"><div class="mc-label">&#10060; Misconception</div>L4 is always faster than L7 for web traffic, so you should always prefer L4.</div>
+      <div class="mc-right"><div class="mc-label">&#9989; Reality</div>For HTTP/HTTPS workloads at typical scales (up to hundreds of thousands of RPS), the L7 overhead is negligible and the routing flexibility is worth it. L4 is only preferable at extreme throughput, for non-HTTP protocols, or when TLS passthrough is required.</div>
+    </div>
+
+    <div class="misconception">
+      <div class="mc-wrong"><div class="mc-label">&#10060; Misconception</div>An L7 LB can inspect encrypted HTTPS payloads directly.</div>
+      <div class="mc-right"><div class="mc-label">&#9989; Reality</div>An L7 LB can only inspect content after it terminates TLS. If you configure L4 TLS passthrough, the LB sees only encrypted bytes and cannot make application-layer routing decisions. "L7" means the LB terminates TLS and reads plaintext HTTP.</div>
+    </div>
+
+    <div class="misconception">
+      <div class="mc-wrong"><div class="mc-label">&#10060; Misconception</div>Sticky sessions at L4 via IP hash are equivalent to L7 cookie-based sticky sessions.</div>
+      <div class="mc-right"><div class="mc-label">&#9989; Reality</div>IP hash breaks in two real-world scenarios: (1) many users share a single public IP (corporate NAT), routing all their traffic to one backend and overloading it; (2) the user's IP changes (mobile roaming). L7 cookie-based affinity uses a session-specific cookie and is far more reliable.</div>
+    </div>
+
+    <div class="misconception">
+      <div class="mc-wrong"><div class="mc-label">&#10060; Misconception</div>L7 load balancers cannot handle WebSocket connections.</div>
+      <div class="mc-right"><div class="mc-label">&#9989; Reality</div>L7 LBs support WebSocket upgrades (HTTP 101 Switching Protocols). They handle the upgrade handshake and then proxy the persistent TCP connection. The LB must be configured with an appropriate idle timeout — default HTTP timeouts are too short for long-lived WebSocket connections.</div>
+    </div>
+  </section>
+
+  <!-- S14: RELATIONSHIPS -->
+  <section id="s14">
+    <h2 class="section-title"><span class="num">14</span> Relationships to Other Concepts</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Relationship</th><th>Concept</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Builds on</strong></td><td>Topic 3 — Stateless Services</td><td>Stateless backends make L7 load balancing trivial; stateful backends require sticky sessions, which only L7 enables cleanly via cookies</td></tr>
+          <tr><td><strong>Enables</strong></td><td>4.2 Routing Algorithms</td><td>The routing algorithm choice (round robin, least connections, IP hash, weighted) only matters in the context of which LB type is in use and what information it has</td></tr>
+          <tr><td><strong>Enables</strong></td><td>4.6 Sticky Sessions</td><td>Sticky sessions only work reliably at L7 with cookie-based affinity; L4 IP hash is a fragile fallback</td></tr>
+          <tr><td><strong>Tension with</strong></td><td>Topic 3 — Stateless Services</td><td>L7 LBs make it easy to add cookie-based sticky sessions, which reintroduces statefulness into the service layer and undermines horizontal scalability — the ideal is stateless backends that need no affinity at all</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- S15: QUIZ -->
+  <section id="s15">
+    <h2 class="section-title"><span class="num">15</span> Self-Check Quiz</h2>
+    <div class="callout callout-quote">Click to reveal the hint. Answer out loud before you look.</div>
+
+    <div class="quiz-item" onclick="toggleQuiz(this)">
+      <div class="quiz-q"><div class="quiz-num">1</div>In one sentence: what is the fundamental difference between an L4 and an L7 load balancer, in terms of what each sees and decides on?</div>
+      <div class="quiz-hint">Focus on the OSI layer and the information horizon — what data is visible at each layer? Revisit Section 5 if you hesitate.</div>
+    </div>
+
+    <div class="quiz-item" onclick="toggleQuiz(this)">
+      <div class="quiz-q"><div class="quiz-num">2</div>A team is building a service that routes HTTP traffic to three different microservices based on URL path (/auth, /orders, /products). Should they use L4 or L7? Why can't they use the other?</div>
+      <div class="quiz-hint">What information does each LB type have available? Think about what L4 can and cannot see. Revisit Section 6 if needed.</div>
+    </div>
+
+    <div class="quiz-item" onclick="toggleQuiz(this)">
+      <div class="quiz-q"><div class="quiz-num">3</div>What is the key security risk introduced by L7 TLS termination, and what are the two standard mitigations?</div>
+      <div class="quiz-hint">Where does the traffic go after the L7 LB decrypts it? What can you do to protect it on the next leg? Revisit Section 9.</div>
+    </div>
+
+    <div class="quiz-item" onclick="toggleQuiz(this)">
+      <div class="quiz-q"><div class="quiz-num">4</div>Name a real production system that uses L4 load balancing and explain specifically why L7 would not have been the right choice for that use case.</div>
+      <div class="quiz-hint">Try to recall from Section 10 before expanding. Be specific about the constraint — protocol type, throughput requirement, or TLS passthrough need.</div>
+    </div>
+
+    <div class="quiz-item" onclick="toggleQuiz(this)">
+      <div class="quiz-q"><div class="quiz-num">5</div>A user's L4 IP-hash sticky session breaks after they switch from WiFi to LTE on their mobile phone. Why does this happen, and how would an L7 LB solve it?</div>
+      <div class="quiz-hint">Think through what IP hash uses as input and what changes when the network changes. Then reason about what L7 cookie affinity uses instead. Revisit Section 13 if needed.</div>
+    </div>
+  </section>
+
+  <!-- S16: FURTHER READING -->
+  <section id="s16">
+    <h2 class="section-title"><span class="num">16</span> Further Reading</h2>
+
+    <div class="reading-item" onclick="toggleRead(this)">
+      <div class="cb" style="flex-shrink:0;margin-top:2px;"></div>
+      <div>
+        <div class="reading-title"><strong>AWS Documentation: ALB vs. NLB Comparison</strong></div>
+        <div style="font-size:13px;color:var(--text-muted);">docs.aws.amazon.com/elasticloadbalancing/latest/userguide/how-elastic-load-balancing-works.html — authoritative reference on when AWS recommends each type</div>
+      </div>
+    </div>
+
+    <div class="reading-item" onclick="toggleRead(this)">
+      <div class="cb" style="flex-shrink:0;margin-top:2px;"></div>
+      <div>
+        <div class="reading-title"><strong>nginx: HTTP Load Balancing Guide</strong></div>
+        <div style="font-size:13px;color:var(--text-muted);">docs.nginx.com/nginx/admin-guide/load-balancer/http-load-balancer/ — practical L7 LB configuration with upstream pools and health checks</div>
+      </div>
+    </div>
+
+    <div class="reading-item" onclick="toggleRead(this)">
+      <div class="cb" style="flex-shrink:0;margin-top:2px;"></div>
+      <div>
+        <div class="reading-title"><strong>ByteByteGo — System Design Interview Vol. 1</strong></div>
+        <div style="font-size:13px;color:var(--text-muted);">Chapter on scalability covers L4/L7 in the context of real interview problems — see the load balancing section</div>
+      </div>
+    </div>
+
+    <div class="reading-item" onclick="toggleRead(this)">
+      <div class="cb" style="flex-shrink:0;margin-top:2px;"></div>
+      <div>
+        <div class="reading-title"><strong>HAProxy Documentation: The Four Essential Sections</strong></div>
+        <div style="font-size:13px;color:var(--text-muted);">haproxy.com/documentation/ — understanding L4 vs. L7 mode selection in a production load balancer configuration</div>
+      </div>
+    </div>
+
+    <div class="reading-item" onclick="toggleRead(this)">
+      <div class="cb" style="flex-shrink:0;margin-top:2px;"></div>
+      <div>
+        <div class="reading-title"><strong>Cloudflare Blog: How we scaled our load balancer</strong></div>
+        <div style="font-size:13px;color:var(--text-muted);">blog.cloudflare.com — real-world account of L4/L7 architecture decisions at global PoP scale</div>
+      </div>
+    </div>
+  </section>
+
+</article>
+</main>
+
+<script>
+  function toggle(el) {
+    el.classList.toggle('checked');
+    saveState();
+  }
+
+  function togglePhase(header) {
+    header.parentElement.classList.toggle('open');
+  }
+
+  function toggleQuiz(item) {
+    item.classList.toggle('open');
+  }
+
+  function toggleRead(item) {
+    item.classList.toggle('read');
+    const cb = item.querySelector('.cb');
+    if (item.classList.contains('read')) {
+      cb.style.background = '#16a34a'; cb.style.borderColor = '#16a34a';
+      cb.innerHTML = '<span style="color:white;font-size:11px;font-weight:700;">✓</span>';
+    } else {
+      cb.style.background = ''; cb.style.borderColor = ''; cb.innerHTML = '';
+    }
+    saveState();
+  }
+
+  function saveState() {
+    const state = {};
+    document.querySelectorAll('.checklist li').forEach((li, i) => {
+      state['li_' + i] = li.classList.contains('checked');
+    });
+    try { localStorage.setItem('4_1_state', JSON.stringify(state)); } catch(e) {}
+  }
+
+  function loadState() {
+    try {
+      const state = JSON.parse(localStorage.getItem('4_1_state') || '{}');
+      document.querySelectorAll('.checklist li').forEach((li, i) => {
+        if (state['li_' + i]) li.classList.add('checked');
+      });
+    } catch(e) {}
+  }
+
+  // Scrollspy
+  const sections = document.querySelectorAll('section[id]');
+  const navLinks = document.querySelectorAll('#toc nav a');
+
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        navLinks.forEach(a => a.classList.remove('active'));
+        const link = document.querySelector('#toc nav a[href="#' + e.target.id + '"]');
+        if (link) link.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -75% 0px' });
+
+  sections.forEach(s => observer.observe(s));
+  loadState();
+</script>
+</body>
+</html>
