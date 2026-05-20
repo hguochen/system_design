@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.2 Routing Algorithms</title>
+<style>
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface-alt: #f3f2ef; --border: #e5e3de;
+    --text: #1a1917; --text-muted: #6b6861; --accent: #2563eb; --accent-light: #dbeafe;
+    --green: #16a34a; --green-light: #dcfce7; --red: #dc2626; --red-light: #fee2e2;
+    --yellow: #d97706; --yellow-light: #fef3c7; --purple: #7c3aed; --purple-light: #ede9fe;
+    --orange: #ea580c; --orange-light: #ffedd5; --code-bg: #1e1e2e; --code-text: #cdd6f4;
+    --sidebar-w: 240px; --content-max: 780px; font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; }
+  #toc { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0 48px; z-index: 100; }
+  #toc-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  #toc-header .phase-tag { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-bottom: 6px; }
+  #toc-header h2 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  #toc nav a { display: block; padding: 5px 16px 5px 20px; font-size: 12.5px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all 0.15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+  main { margin-left: var(--sidebar-w); padding: 48px 48px 96px; max-width: calc(var(--sidebar-w) + var(--content-max) + 96px); width: 100%; }
+  article { max-width: var(--content-max); }
+  .doc-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 2px solid var(--border); }
+  .doc-header .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+  .tag-phase { background: var(--accent-light); color: var(--accent); }
+  .tag-topic { background: var(--purple-light); color: var(--purple); }
+  .tag-date  { background: var(--surface-alt); color: var(--text-muted); }
+  .doc-header h1 { font-size: 30px; font-weight: 800; line-height: 1.25; letter-spacing: -0.02em; color: var(--text); }
+  section { margin-bottom: 52px; scroll-margin-top: 32px; }
+  h2.section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -0.01em; }
+  h2.section-title .num { font-size: 11px; font-weight: 800; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; letter-spacing: 0.04em; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 24px 0 10px; }
+  p { margin-bottom: 14px; } p:last-child { margin-bottom: 0; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 14px; border-left: 3px solid; }
+  .callout-goal  { background: var(--accent-light); border-color: var(--accent); color: #1e40af; }
+  .callout-tip   { background: var(--yellow-light); border-color: var(--yellow); color: #92400e; }
+  .callout-quote { background: var(--surface-alt); border-color: var(--border); color: var(--text-muted); font-style: italic; }
+  .callout-warn  { background: var(--red-light); border-color: var(--red); color: #7f1d1d; }
+  .callout strong { font-weight: 700; }
+  .cheatsheet { background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 24px 28px; font-family: "SF Mono","Fira Code","Cascadia Code",Menlo,monospace; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-x: auto; }
+  .cheatsheet .label { color: #89dceb; font-weight: 700; letter-spacing: 0.05em; display: block; margin-top: 16px; }
+  .cheatsheet .label:first-child { margin-top: 0; }
+  .cheatsheet .val { color: #a6e3a1; } .cheatsheet .hi { color: #f38ba8; font-weight: 600; } .cheatsheet .dim { color: #7f849c; }
+  .mindmap-wrap { margin: 20px 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); background: #fafaf8; text-align: center; }
+  .mindmap-wrap img { width: 100%; max-width: 100%; display: block; }
+  .mindmap-wrap .caption { font-size: 12px; color: var(--text-muted); padding: 8px 0 10px; font-style: italic; }
+  .definition { background: var(--surface); border: 1.5px solid var(--border); border-left: 4px solid var(--accent); border-radius: 10px; padding: 18px 22px; font-size: 15.5px; line-height: 1.75; color: var(--text); }
+  .algo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 16px 0; }
+  .concept-card { border-radius: 10px; padding: 16px 18px; border: 1.5px solid; }
+  .cc-blue   { background: var(--accent-light);  border-color: #93c5fd; }
+  .cc-orange { background: var(--orange-light);  border-color: #fdba74; }
+  .cc-green  { background: var(--green-light);   border-color: #86efac; }
+  .cc-purple { background: var(--purple-light);  border-color: #c4b5fd; }
+  .cc-yellow { background: var(--yellow-light);  border-color: #fcd34d; }
+  .cc-teal   { background: #e6fcf5; border-color: #63e6be; }
+  .concept-card .cc-header { font-size: 13px; font-weight: 700; margin-bottom: 8px; }
+  .concept-card .cc-body   { font-size: 13px; line-height: 1.6; color: var(--text); }
+  .flow-steps { list-style: none; margin: 12px 0 18px; }
+  .flow-steps li { display: flex; gap: 14px; margin-bottom: 10px; font-size: 14.5px; line-height: 1.6; align-items: flex-start; }
+  .flow-steps .step-num { min-width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
+  .flow-steps .step-num.green { background: var(--green); } .flow-steps .step-num.orange { background: var(--orange); } .flow-steps .step-num.red { background: var(--red); } .flow-steps .step-num.purple { background: var(--purple); }
+  .table-wrap { overflow-x: auto; margin: 14px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: var(--surface-alt); font-weight: 700; text-align: left; padding: 10px 14px; border-bottom: 2px solid var(--border); font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.04em; }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.55; }
+  tr:last-child td { border-bottom: none; } tr:hover td { background: var(--surface-alt); }
+  .benefit { color: var(--green); font-weight: 600; } .cost { color: var(--red); font-weight: 600; }
+  .quiz-item { border: 1.5px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .quiz-q { padding: 14px 18px; font-size: 14.5px; font-weight: 600; cursor: pointer; display: flex; gap: 12px; align-items: flex-start; background: var(--surface); user-select: none; }
+  .quiz-q:hover { background: var(--surface-alt); }
+  .quiz-num { min-width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+  .quiz-hint { display: none; padding: 12px 18px; font-size: 13.5px; color: #92400e; background: var(--yellow-light); border-top: 1px solid #fcd34d; font-style: italic; }
+  .quiz-item.open .quiz-hint { display: block; }
+  .phase-block { border: 1.5px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .phase-header { background: var(--surface-alt); padding: 12px 16px; cursor: pointer; display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 700; user-select: none; }
+  .phase-header:hover { background: #ebe9e4; }
+  .phase-body { display: none; padding: 16px 20px; }
+  .phase-block.open .phase-body { display: block; }
+  .phase-goal { font-size: 12.5px; color: var(--text-muted); font-style: italic; margin-bottom: 12px; }
+  .checklist { list-style: none; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 14px; cursor: pointer; }
+  .checklist li:last-child { border-bottom: none; }
+  .checklist li.checked .text { text-decoration: line-through; color: var(--text-muted); }
+  .cb { width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; flex-shrink: 0; margin-top: 2px; background: var(--surface); transition: all 0.15s; display: flex; align-items: center; justify-content: center; }
+  .checklist li.checked .cb { background: var(--green); border-color: var(--green); }
+  .checklist li.checked .cb::after { content: '\2713'; color: white; font-size: 11px; font-weight: 700; }
+  .misconception { border: 1.5px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 12px; }
+  .mc-wrong { background: var(--red-light); padding: 10px 16px; font-size: 13.5px; color: #7f1d1d; border-bottom: 1px solid #fca5a5; }
+  .mc-right { background: var(--green-light); padding: 10px 16px; font-size: 13.5px; color: #14532d; }
+  .mc-label { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 4px; }
+  .reading-item { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 14px; cursor: pointer; align-items: flex-start; }
+  .reading-item:last-child { border-bottom: none; }
+  .reading-item.read .reading-title { text-decoration: line-through; color: var(--text-muted); }
+  .trade-off-table td:first-child { color: var(--green); font-weight: 600; }
+  .trade-off-table td:last-child  { color: var(--red); }
+  .algo-compare { border: 1.5px solid var(--border); border-radius: 10px; overflow: hidden; margin: 16px 0; }
+  .algo-compare-header { background: var(--surface-alt); padding: 10px 16px; font-size: 12px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted); display: grid; grid-template-columns: 140px 1fr 1fr; gap: 10px; }
+  .algo-compare-row { display: grid; grid-template-columns: 140px 1fr 1fr; gap: 10px; padding: 10px 16px; border-top: 1px solid var(--border); font-size: 13px; align-items: start; }
+  .algo-compare-row:hover { background: var(--surface-alt); }
+  .algo-name { font-weight: 700; color: var(--text); }
+  @media (max-width: 900px) { #toc { display: none; } main { margin-left: 0; padding: 24px; } }
+</style>
+</head>
+<body>
+
+<nav id="toc">
+  <div id="toc-header">
+    <span class="phase-tag">Phase B — Scalability</span>
+    <h2>4.2 Routing Algorithms</h2>
+  </div>
+  <nav>
+    <a href="#s1">1. Goal</a>
+    <a href="#s2">2. Mastery Checklist</a>
+    <a href="#s3">3. Study Phases</a>
+    <a href="#s4">4. Cheatsheet</a>
+    <a href="#s5">5. Core Definition</a>
+    <a href="#s6">6. Core Concepts</a>
+    <a href="#s7">7. First Principles</a>
+    <a href="#s8">8. Mental Models</a>
+    <a href="#s9">9. How It Works</a>
+    <a href="#s10">10. Real-World Examples</a>
+    <a href="#s11">11. Trade-offs</a>
+    <a href="#s12">12. Interview Application</a>
+    <a href="#s13">13. Misconceptions</a>
+    <a href="#s14">14. Relationships</a>
+    <a href="#s15">15. Self-Check Quiz</a>
+    <a href="#s16">16. Further Reading</a>
+  </nav>
+</nav>
+
+<main>
+<article>
+
+  <header class="doc-header">
+    <div class="meta">
+      <span class="tag tag-phase">Phase B — Scalability</span>
+      <span class="tag tag-topic">Topic 4 — Load Balancing</span>
+      <span class="tag tag-date">2026-05-19</span>
+    </div>
+    <h1>4.2 Routing Algorithms<br><span style="font-weight:400;font-size:20px;color:var(--text-muted)">Round Robin · Least Connections · IP Hash · Weighted</span></h1>
+  </header>
+
+  <!-- S1: GOAL -->
+  <section id="s1">
+    <h2 class="section-title"><span class="num">01</span> Goal of This Subtopic</h2>
+    <div class="callout callout-goal">
+      <strong>Why this matters:</strong> Routing algorithm choice is the first thing an interviewer will probe once you draw a load balancer. Getting it right signals you understand request distribution, backend heterogeneity, and session affinity — not just that load balancers exist. The subtle failure modes (distributed least-conn, IP hash under NAT) are exactly the kind of depth FAANG interviewers look for.
+    </div>
+    <ul class="checklist" id="goals-list">
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Be able to name all four major routing algorithms from memory, explain what each measures, and describe the failure mode or edge case of each.</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Select the right algorithm for a given scenario (homogeneous vs. heterogeneous backends, varied vs. uniform request durations, sticky session requirement) and justify the choice out loud.</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Explain why least connections breaks down in a distributed multi-LB deployment — and why this is the single most common "gotcha" for this subtopic.</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Explain the two failure conditions of IP hash (NAT and IP change) and articulate why it is a last resort, not a first choice, for session affinity.</span></li>
+    </ul>
+  </section>
+
+  <!-- S2: MASTERY -->
+  <section id="s2">
+    <h2 class="section-title"><span class="num">02</span> What Mastery Looks Like</h2>
+    <div class="callout callout-quote">If you can teach it to someone else and field their follow-up questions, you've mastered it.</div>
+    <ul class="checklist" id="mastery-list">
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Can explain all four algorithms and their failure modes from memory in under 90 seconds, without notes.</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Can select the right algorithm for a given scenario (varied durations, heterogeneous capacity, affinity requirement) and justify the choice with a concrete trade-off.</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Can explain why least connections is inaccurate in a multi-LB cluster and what alternatives exist.</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Can explain the two IP hash failure conditions and why adding a backend breaks affinity for all existing clients.</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Can describe power-of-two choices as a better approximation than least connections at distributed scale.</span></li>
+    </ul>
+  </section>
+
+  <!-- S3: STUDY PHASES -->
+  <section id="s3">
+    <h2 class="section-title"><span class="num">03</span> Study Phases to Achieve Mastery</h2>
+
+    <div class="phase-block open">
+      <div class="phase-header" onclick="togglePhase(this)">
+        <span>&#128214; Phase 1 — Acquire</span><span style="margin-left:auto;font-size:12px;color:var(--text-muted)">&#128170;&#128170;</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Read deeply enough that you could explain the concept without the doc.</p>
+        <ul class="checklist">
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Read <em>nginx Upstream Module Documentation</em> — nginx.org/en/docs/http/ngx_http_upstream_module.html (round_robin, least_conn, ip_hash, hash directives)</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Read <em>HAProxy Load Balancing Algorithms</em> — docs.haproxy.org (Configuration Manual §4.2, <code>balance</code> keyword)</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Read <em>AWS ALB: Routing Algorithm Selection</em> — docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-target-groups.html#modify-routing-algorithm</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Read <em>ByteByteGo — System Design Interview Vol. 1</em>, load balancing chapter (routing algorithm discussion)</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Read <em>Envoy Proxy Load Balancing Policies</em> — envoyproxy.io/docs (load_balancers section) — covers power-of-two choices</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Read Sections 5–9 (Core Definition to How It Works) carefully — don't skim</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Re-read the Cheatsheet (Section 4) and try to recite it from memory after</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-block">
+      <div class="phase-header" onclick="togglePhase(this)">
+        <span>&#9999;&#65039; Phase 2 — Consolidate</span><span style="margin-left:auto;font-size:12px;color:var(--text-muted)">&#128170;&#128170;&#128170;</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Reproduce the knowledge in your own words without looking.</p>
+        <ul class="checklist">
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Close the doc — write out the four algorithms and their failure modes from memory, then compare</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Explain First Principles out loud — what was the routing problem before these algorithms were formalized?</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Reconstruct the decision logic for each algorithm step by step from memory</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Restate each Trade-off row in your own words — if you can't explain the cost, you don't own it yet</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-block">
+      <div class="phase-header" onclick="togglePhase(this)">
+        <span>&#128295; Phase 3 — Apply</span><span style="margin-left:auto;font-size:12px;color:var(--text-muted)">&#128170;&#128170;&#128170;&#128170;</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Connect to real systems and simulate interview scenarios.</p>
+        <ul class="checklist">
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Verify each Real-World Example independently and add anything missed to My Notes</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Practice Interview Application out loud — trigger phrases + trade-off statement verbatim</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Work through Common Misconceptions — explain WHY each is wrong, not just that it is</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Trace Relationships to Other Concepts without looking</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-block">
+      <div class="phase-header" onclick="togglePhase(this)">
+        <span>&#129514; Phase 4 — Validate</span><span style="margin-left:auto;font-size:12px;color:var(--text-muted)">&#128170;&#128170;&#128170;&#128170;&#128170;</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Confirm you actually own it, not just recognize it.</p>
+        <ul class="checklist">
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Answer every Self-Check Quiz question out loud without notes</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Recite the Cheatsheet from memory — if you can't, re-do Phase 2</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Tick off Mastery items — only if you can demonstrate on demand, not just if it sounds familiar</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Teach this concept for 2 minutes to an imaginary interviewer without hesitation or notes</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- S4: CHEATSHEET -->
+  <section id="s4">
+    <h2 class="section-title"><span class="num">04</span> Cheatsheet</h2>
+    <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+
+    <div class="mindmap-wrap">
+      <img src="../assets/images/topic_4.2_routing_algorithms_mindmap.png" alt="4.2 Routing Algorithms Mindmap">
+      <div class="caption">Mindmap — 4.2 Routing Algorithms</div>
+    </div>
+
+    <div class="cheatsheet"><span class="label">ONE-LINER</span><span class="val">  Routing algorithms decide which backend gets each request — choose based on
+  request duration variance, backend heterogeneity, and affinity requirements.</span>
+
+<span class="label">KEY PROPERTIES / RULES</span><span class="val">  Round Robin:        cycles in order; stateless; default everywhere; equal weight assumed
+  Least Connections:  routes to backend with fewest active conns; adaptive to duration variance
+  IP Hash:            hash(src_ip) % N → deterministic affinity; fragile on NAT and IP change
+  Weighted RR:        proportional slots by capacity weight; handles heterogeneous backends
+  Distributed LBs:    each node only sees its own connections — least conn is always a partial view</span>
+
+<span class="label">DECISION RULE</span><span class="val">  Use Round Robin when:      stateless backends, homogeneous capacity, short uniform requests
+  Use Least Connections when: request durations vary widely (mix of fast + slow requests)
+  Use IP Hash when:          L4 forced, sticky session needed as last resort — know its limits
+  Use Weighted RR when:      backends have different CPU/memory capacity</span>
+
+<span class="label">NUMBERS / FORMULAS</span><span class="val">  IP Hash:      backend = hash(client_ip) % N  (modular, not consistent hash)
+  Weighted RR:  backend i gets weight[i] / Σweights fraction of requests</span>
+
+<span class="label">GOTCHA TO NEVER FORGET</span><span class="hi">  Least connections only works correctly on a single LB node. In a multi-LB cluster,
+  each node sees only its own connections — "least connected" is always a local minimum.</span></div>
+  </section>
+
+  <!-- S5: DEFINITION -->
+  <section id="s5">
+    <h2 class="section-title"><span class="num">05</span> Core Definition</h2>
+    <div class="definition">
+      A load balancer <strong>routing algorithm</strong> is the decision function that selects which backend receives each incoming connection or request. The choice determines how evenly load is distributed and whether session affinity is preserved, with the trade-off between <em>distribution accuracy</em> and <em>coordination cost</em> as the central tension.
+    </div>
+  </section>
+
+  <!-- S6: CORE CONCEPTS -->
+  <section id="s6">
+    <h2 class="section-title"><span class="num">06</span> Core Concepts</h2>
+
+    <div class="algo-grid">
+      <div class="concept-card cc-blue">
+        <div class="cc-header">🔵 Round Robin</div>
+        <div class="cc-body">Cycles through the backend pool in strict order. Stateless — each LB node maintains only a counter. Assumes all backends are equal capacity and all requests equal cost. Default in nginx, HAProxy, and AWS ALB. <strong>Failure mode:</strong> backends accumulate slow in-flight requests while the counter keeps routing new arrivals at the same rate.</div>
+      </div>
+      <div class="concept-card cc-orange">
+        <div class="cc-header">🟠 Least Connections</div>
+        <div class="cc-body">Routes each request to the backend with the fewest current active connections. Adaptive — naturally steers traffic away from backends doing slow work. <strong>Failure mode:</strong> in a distributed LB cluster, each node only knows its own connection counts, not the global view. "Least" is always approximate across nodes.</div>
+      </div>
+      <div class="concept-card cc-teal">
+        <div class="cc-header">🟢 IP Hash</div>
+        <div class="cc-body"><code>backend = hash(src_ip) % N</code>. Same client IP always maps to the same backend — deterministic affinity without per-session LB state. <strong>Failure mode 1:</strong> corporate NAT routes thousands of users from one IP → one backend. <strong>Failure mode 2:</strong> mobile IP changes → silent session break. Adding/removing backends changes N and remaps most IPs.</div>
+      </div>
+      <div class="concept-card cc-green">
+        <div class="cc-header">🟩 Weighted Round Robin</div>
+        <div class="cc-body">Assigns each backend a capacity weight. A backend with weight 3 receives 3× as many requests as one with weight 1. Handles heterogeneous hardware (old vs. new instances). Weights are static — set at deploy time based on known instance size. <strong>Limitation:</strong> stale weights after scaling events; no dynamic adaptation to live load.</div>
+      </div>
+      <div class="concept-card cc-purple">
+        <div class="cc-header">🟣 Power of Two Choices</div>
+        <div class="cc-body">Pick two backends at random, compare their connection counts, route to the less loaded one. Approaches least-connections accuracy without needing global state — only two point-in-time reads per request. Used by Envoy and Linkerd as their default. <strong>Why it matters:</strong> it solves the distributed blind-spot problem that plagues pure least-connections.</div>
+      </div>
+      <div class="concept-card cc-yellow">
+        <div class="cc-header">🟡 Least Outstanding Requests (AWS)</div>
+        <div class="cc-body">AWS ALB's variant of least connections — counts in-flight HTTP requests rather than TCP connections. More accurate under HTTP/2 where many requests share one connection. Configurable per target group alongside round robin. Preferred over standard least connections for modern HTTP workloads on AWS.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- S7: FIRST PRINCIPLES -->
+  <section id="s7">
+    <h2 class="section-title"><span class="num">07</span> First Principles — Why Does This Exist?</h2>
+    <p>Once you have N backends behind a load balancer, you need a decision function for every request. Without one, all traffic goes to the same backend — defeating the purpose of having multiple. The naive solution — send to backend 0 always — isn't load balancing, it's just routing.</p>
+    <p>The first routing algorithms were round robin: simple, stateless, and fair under the assumption that all requests are equal. That assumption breaks quickly in practice. A backend handling one slow database query (10 seconds) looks identical to the round robin counter as one handling fast cache reads. The slow backend accumulates in-flight requests while the algorithm continues routing new arrivals to it at the same rate.</p>
+    <p>Least connections emerged as the answer: use connection count as a proxy for current backend load and steer new arrivals toward the less-loaded backends. It works perfectly on a single LB node. It breaks in distributed LB deployments where no node has a global view — and modern production deployments always have multiple LB nodes for availability. This spawned the "power of two choices" heuristic: sample two backends randomly, compare, pick the better one. Near-optimal distribution without global coordination.</p>
+    <p>IP hash exists for a different reason: legacy stateful applications need the same client to consistently reach the same backend. It trades distribution quality for deterministic placement — a mitigation for stateful backends, not a feature of good system design.</p>
+  </section>
+
+  <!-- S8: MENTAL MODELS -->
+  <section id="s8">
+    <h2 class="section-title"><span class="num">08</span> Mental Models</h2>
+
+    <h3>Model 1: Cashier Lanes at a Supermarket</h3>
+    <p>Round robin assigns customers to lanes in strict rotation regardless of queue length. Least connections directs each customer to the shortest queue. IP hash says "last names A–M always go to lane 1." Weighted RR gives the fastest cashier 3 customers for every 1 sent to the trainee. <strong>Where it breaks down:</strong> in a supermarket you can see all lanes. A distributed LB running least connections is like each cashier only knowing their own queue — they can't see the others, so "shortest queue" is an illusion.</p>
+
+    <h3>Model 2: The Coordination Tax Spectrum</h3>
+    <p>Place algorithms on a spectrum from zero coordination to maximum coordination. Round robin and IP hash sit at zero — no runtime state needed beyond a counter or hash. Weighted RR is semi-static — one-time configuration, zero runtime cost. Least connections requires live counter reads — low cost on one node, coordination overhead in a cluster. Power of two choices is the sweet spot: two counter reads, no lock, near-optimal accuracy. <strong>Use this model to answer:</strong> "Can we afford the coordination this algorithm requires at our LB cluster size?"</p>
+
+    <h3>Model 3: Static vs. Adaptive Algorithms</h3>
+    <p>Round robin, weighted RR, and IP hash are <strong>static</strong> — they don't respond to observed backend state. Least connections is <strong>adaptive</strong> — it reacts to live measurements. Adaptive is not always superior: it introduces sensitivity to measurement noise and can cause oscillation (a burst of connections makes a backend look busy → traffic shifts away → backend empties → traffic surges back). Static algorithms are predictable; adaptive algorithms can perform better on average but with higher variance. <strong>In practice:</strong> health-check-driven backend removal is the coarse adaptive layer; the routing algorithm handles fine-grained distribution within the healthy pool.</p>
+  </section>
+
+  <!-- S9: HOW IT WORKS -->
+  <section id="s9">
+    <h2 class="section-title"><span class="num">09</span> How It Works — Mechanics</h2>
+
+    <h3>Round Robin</h3>
+    <ul class="flow-steps">
+      <li><div class="step-num">1</div><div>Maintain an atomic counter initialized to 0 (per LB node).</div></li>
+      <li><div class="step-num">2</div><div>On each request: <code>index = (counter++) % N</code> where N = number of healthy backends.</div></li>
+      <li><div class="step-num">3</div><div>Forward request to <code>backends[index]</code>. No per-request state stored.</div></li>
+      <li><div class="step-num">4</div><div>When a backend is removed (health check failure), N decreases. Modulo naturally skips it.</div></li>
+    </ul>
+    <div class="callout callout-tip"><strong>Multi-node note:</strong> In a cluster of LB nodes, each node maintains its own independent counter. No cross-node coordination needed — each node distributes evenly from its own perspective, and the aggregate across all nodes is also even.</div>
+
+    <h3>Least Connections</h3>
+    <ul class="flow-steps">
+      <li><div class="step-num green">1</div><div>Maintain an in-memory connection counter per backend: <code>conn_count[i]</code>.</div></li>
+      <li><div class="step-num green">2</div><div>On new connection: <code>select = argmin(conn_count[i])</code>. Increment <code>conn_count[selected]</code>.</div></li>
+      <li><div class="step-num green">3</div><div>On connection close: decrement <code>conn_count[backend]</code>.</div></li>
+    </ul>
+    <div class="callout callout-warn"><strong>Distributed LB failure mode:</strong> LB node 1 sees A=10, B=5, C=3 — routes to C. LB node 2 sees A=2, B=8, C=1 — also routes to C. C gets double-routed from both nodes simultaneously, becoming the hot backend despite the algorithm's intent. Each LB node sees only its own slice of reality.</div>
+
+    <h3>IP Hash</h3>
+    <ul class="flow-steps">
+      <li><div class="step-num orange">1</div><div>Extract client source IP from the incoming request.</div></li>
+      <li><div class="step-num orange">2</div><div>Compute <code>hash(src_ip)</code> — typically CRC32 or MurmurHash.</div></li>
+      <li><div class="step-num orange">3</div><div>Map to backend: <code>index = hash(src_ip) % N</code>.</div></li>
+    </ul>
+    <div class="callout callout-warn"><strong>Scaling disruption:</strong> Adding one backend changes N from 5 to 6. Now <code>hash(ip) % 6</code> remaps approximately 5/6 of all client IPs to different backends. All sessions using remapped IPs lose affinity instantly. This is why IP hash is not a true sticky session mechanism — use consistent hashing (topic 7.4) if you need affinity that survives scaling.</div>
+
+    <h3>Weighted Round Robin (Smooth Variant)</h3>
+    <ul class="flow-steps">
+      <li><div class="step-num purple">1</div><div>Assign weights: <code>[A=3, B=1, C=1]</code>. Total weight = 5.</div></li>
+      <li><div class="step-num purple">2</div><div>Nginx's smooth weighted RR: on each request, add each backend's weight to its "current weight." Select the backend with the highest current weight. Subtract total weight from that backend's current weight.</div></li>
+      <li><div class="step-num purple">3</div><div>Result: A gets 3 out of every 5 requests, B and C get 1 each — distributed smoothly, not in bursts.</div></li>
+    </ul>
+
+    <h3>Algorithm Quick-Compare</h3>
+    <div class="algo-compare">
+      <div class="algo-compare-header">
+        <div>Algorithm</div><div>Best For</div><div>Key Weakness</div>
+      </div>
+      <div class="algo-compare-row">
+        <div class="algo-name">Round Robin</div>
+        <div>Homogeneous backends, uniform short requests</div>
+        <div>Blind to request duration variance</div>
+      </div>
+      <div class="algo-compare-row">
+        <div class="algo-name">Least Connections</div>
+        <div>Varied request durations (single LB node)</div>
+        <div>Local view only in distributed LB clusters</div>
+      </div>
+      <div class="algo-compare-row">
+        <div class="algo-name">IP Hash</div>
+        <div>L4 affinity requirement (last resort)</div>
+        <div>NAT funneling; breaks on IP change; N-change remaps all</div>
+      </div>
+      <div class="algo-compare-row">
+        <div class="algo-name">Weighted RR</div>
+        <div>Heterogeneous backend capacities</div>
+        <div>Static weights; stale after capacity changes</div>
+      </div>
+      <div class="algo-compare-row">
+        <div class="algo-name">Power of Two</div>
+        <div>Distributed LBs + varied duration</div>
+        <div>Slightly more complex; two counter reads per request</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- S10: REAL-WORLD EXAMPLES -->
+  <section id="s10">
+    <h2 class="section-title"><span class="num">10</span> Real-World System Examples</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>System</th><th>How This Concept Applies</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>nginx</strong></td>
+            <td>Default: round robin. Opt-in: <code>least_conn</code>, <code>ip_hash</code>, <code>hash $var consistent</code></td>
+            <td><code>least_conn</code> is the most common production upgrade; <code>hash ... consistent</code> uses consistent hashing for cache-affinity (not modular hash)</td>
+          </tr>
+          <tr>
+            <td><strong>HAProxy</strong></td>
+            <td><code>balance roundrobin</code> (default), <code>leastconn</code>, <code>source</code> (IP hash), <code>random</code></td>
+            <td><code>leastconn</code> recommended for long-lived connections (WebSockets, DB proxies); <code>source</code> for L4 stateful affinity</td>
+          </tr>
+          <tr>
+            <td><strong>AWS ALB</strong></td>
+            <td>Round robin (default) or Least Outstanding Requests — configurable per target group</td>
+            <td>"Least Outstanding Requests" counts in-flight HTTP requests, not TCP connections — more accurate for HTTP/2 multiplexing</td>
+          </tr>
+          <tr>
+            <td><strong>Envoy Proxy</strong></td>
+            <td>Round robin, least request (power of two choices), random, ring hash (consistent), Maglev hash</td>
+            <td><code>LEAST_REQUEST</code> uses power of two choices internally — not global least; <code>RING_HASH</code> used for cache-affinity routing in service meshes</td>
+          </tr>
+          <tr>
+            <td><strong>Kubernetes (IPVS mode)</strong></td>
+            <td>Round robin, least conn, destination hash, source hash — configurable via <code>kube-proxy --ipvs-scheduler</code></td>
+            <td>Default iptables mode uses random connection tracking; IPVS mode unlocks proper algorithm selection in production clusters</td>
+          </tr>
+          <tr>
+            <td><strong>GCP Cloud Load Balancing</strong></td>
+            <td>Round robin with session affinity overlay (generated cookie, client IP, header-based)</td>
+            <td>GCP treats affinity as a modifier on top of round robin, not a separate algorithm — cleaner model than IP hash</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- S11: TRADE-OFFS -->
+  <section id="s11">
+    <h2 class="section-title"><span class="num">11</span> Trade-offs</h2>
+    <div class="table-wrap">
+      <table class="trade-off-table">
+        <thead><tr><th>Benefit</th><th>Cost / Limitation</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Round robin requires no shared state — scales linearly across LB nodes with zero coordination</td>
+            <td>Blind to request duration variance — slow backends continue receiving requests at the same rate, creating queue buildup</td>
+          </tr>
+          <tr>
+            <td>Least connections adapts to unequal request durations, naturally reducing load on busy backends</td>
+            <td>In a distributed LB cluster, each node only sees its own connections — the "minimum" is a local minimum, not global</td>
+          </tr>
+          <tr>
+            <td>IP hash provides deterministic client-to-backend affinity with zero per-session LB state</td>
+            <td>Breaks on NAT (many users → one IP → one backend hot spot) and on IP changes; adding a backend remaps all clients</td>
+          </tr>
+          <tr>
+            <td>Weighted round robin handles heterogeneous backend capacity with no runtime measurement</td>
+            <td>Static weights require manual tuning; stale weights after scaling events cause uneven distribution until corrected</td>
+          </tr>
+          <tr>
+            <td>Power of two choices approaches least-conn accuracy with only two counter reads — no global lock needed</td>
+            <td>Slightly more complex to implement; depends on connection count accuracy at sampled backends</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- S12: INTERVIEW APPLICATION -->
+  <section id="s12">
+    <h2 class="section-title"><span class="num">12</span> Interview Application</h2>
+
+    <h3>Trigger Phrases</h3>
+    <ul class="checklist" style="cursor:default;">
+      <li style="cursor:default;"><div class="cb" style="background:#e5e7eb;border-color:#e5e7eb;"></div><span class="text">"How does your load balancer decide which backend to route to?"</span></li>
+      <li style="cursor:default;"><div class="cb" style="background:#e5e7eb;border-color:#e5e7eb;"></div><span class="text">"Some requests take much longer than others — how do you handle that at the LB level?"</span></li>
+      <li style="cursor:default;"><div class="cb" style="background:#e5e7eb;border-color:#e5e7eb;"></div><span class="text">"We need users to always reach the same backend."</span></li>
+      <li style="cursor:default;"><div class="cb" style="background:#e5e7eb;border-color:#e5e7eb;"></div><span class="text">"Our backends have different hardware specs — how do you account for that?"</span></li>
+    </ul>
+
+    <h3>What You Say</h3>
+    <div class="callout callout-tip">
+      When you draw a load balancer in a high-level design, call out the algorithm explicitly: <em>"I'll default to round robin here — our API calls are short and stateless, so all backends are equivalent."</em> If the interviewer pushes, show depth: <em>"If request durations vary significantly — like a mix of fast lookups and slow report generation — I'd switch to least connections or least outstanding requests. One gotcha: in a distributed LB setup, least connections only sees local connections per node, so for true global accuracy you'd use power-of-two-choices like Envoy does. IP hash is a last resort for sticky sessions — it breaks under NAT and when you scale."</em>
+    </div>
+
+    <h3>Trade-off Statement (memorize this)</h3>
+    <div class="definition" style="border-left-color: var(--purple); font-size:14.5px; font-style: italic;">
+      "If we use least connections, we get better distribution when request durations vary — but in a multi-LB cluster, each node only sees its own connections, not a global view. For this system, round robin is sufficient because our requests are short and homogeneous, and it eliminates all coordination overhead."
+    </div>
+  </section>
+
+  <!-- S13: MISCONCEPTIONS -->
+  <section id="s13">
+    <h2 class="section-title"><span class="num">13</span> Common Misconceptions &amp; Gotchas</h2>
+
+    <div class="misconception">
+      <div class="mc-wrong"><div class="mc-label">&#10060; Misconception</div>Least connections always produces the most even CPU load across backends.</div>
+      <div class="mc-right"><div class="mc-label">&#9989; Reality</div>Connection count is a proxy for load, not load itself. A backend with 5 active connections doing heavy DB work may be more saturated than one handling 50 fast cache reads. And in a multi-node LB cluster, each node's "least connections" is a local observation — not a global minimum. The algorithm degrades to an approximation that may route to the same hot backend from multiple LB nodes simultaneously.</div>
+    </div>
+
+    <div class="misconception">
+      <div class="mc-wrong"><div class="mc-label">&#10060; Misconception</div>IP hash gives you reliable sticky sessions equivalent to L7 cookie-based affinity.</div>
+      <div class="mc-right"><div class="mc-label">&#9989; Reality</div>IP hash breaks in two predictable, common scenarios: (1) corporate NAT routes thousands of users from one public IP → one backend gets all their traffic; (2) mobile users switching networks get a new IP → they silently land on a different backend, breaking any server-side state. For reliable affinity, use L7 cookie-based sticky sessions. IP hash is a workaround for L4 constraints, not a production-grade session solution.</div>
+    </div>
+
+    <div class="misconception">
+      <div class="mc-wrong"><div class="mc-label">&#10060; Misconception</div>Round robin is only suitable for small or trivial systems.</div>
+      <div class="mc-right"><div class="mc-label">&#9989; Reality</div>Round robin is the default in nginx, HAProxy, and AWS ALB — and runs correctly at massive scale for stateless, homogeneous fleets. Its simplicity is a deliberate design choice: zero coordination, perfect predictability, no shared state. It only becomes insufficient when request durations vary significantly, and the right fix is then least connections or power-of-two choices — not "round robin is too basic."</div>
+    </div>
+
+    <div class="misconception">
+      <div class="mc-wrong"><div class="mc-label">&#10060; Misconception</div>Adding a backend to an IP hash pool only affects some users.</div>
+      <div class="mc-right"><div class="mc-label">&#9989; Reality</div>IP hash uses modular arithmetic: <code>hash(ip) % N</code>. Changing N from 5 to 6 remaps approximately 5 out of every 6 IPs to a different backend. Almost every client loses affinity. This is why IP hash is distinct from consistent hashing (topic 7.4) — consistent hashing is specifically designed so that adding a node only remaps <code>1/N</code> of keys, not nearly all of them.</div>
+    </div>
+  </section>
+
+  <!-- S14: RELATIONSHIPS -->
+  <section id="s14">
+    <h2 class="section-title"><span class="num">14</span> Relationships to Other Concepts</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Relationship</th><th>Concept</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Builds on</strong></td><td>4.1 L4 vs. L7 Load Balancers</td><td>Algorithm choice depends on what the LB can see. IP hash is an L4 concept — L7 prefers cookie-based affinity. Least connections at L7 can count HTTP requests (more accurate); at L4 it counts TCP connections (coarser).</td></tr>
+          <tr><td><strong>Enables</strong></td><td>4.3 Health Checks and Failure Detection</td><td>Health checks interact with routing algorithms by removing unhealthy backends from the pool. When N changes, round robin adapts naturally; IP hash remaps nearly all clients — a critical operational implication.</td></tr>
+          <tr><td><strong>Enables</strong></td><td>4.6 Sticky Sessions</td><td>IP hash is the L4 form of sticky sessions. Understanding its failure modes directly motivates the L7 cookie-based affinity covered in 4.6.</td></tr>
+          <tr><td><strong>Tension with</strong></td><td>3.1 Stateless Architecture</td><td>IP hash and sticky sessions exist to compensate for stateful backends. If every backend can serve every user (stateless design), affinity is irrelevant and any algorithm works. Stateless design eliminates the routing algorithm complexity entirely.</td></tr>
+          <tr><td><strong>Previews</strong></td><td>7.4 Consistent Hashing</td><td>Consistent hashing is the production-grade answer to IP hash's N-change problem — it remaps only 1/N keys when a node is added, not nearly all of them. Understanding why IP hash breaks motivates why consistent hashing was invented.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- S15: QUIZ -->
+  <section id="s15">
+    <h2 class="section-title"><span class="num">15</span> Self-Check Quiz</h2>
+    <div class="callout callout-quote">Click to reveal the hint. Answer out loud before you look.</div>
+
+    <div class="quiz-item" onclick="toggleQuiz(this)">
+      <div class="quiz-q"><div class="quiz-num">1</div>In one sentence: what does a routing algorithm do? Name all four main algorithms.</div>
+      <div class="quiz-hint">Start with what problem it solves, then list: round robin, least connections, IP hash, weighted round robin. If you hesitate on any, revisit Section 5 or 6.</div>
+    </div>
+
+    <div class="quiz-item" onclick="toggleQuiz(this)">
+      <div class="quiz-q"><div class="quiz-num">2</div>A system receives a mix of fast API calls (&lt;50ms) and slow report generation requests (10–30 seconds). Should you use round robin or least connections, and why can't you use the other?</div>
+      <div class="quiz-hint">Think about what round robin ignores and what least connections measures. What happens to a backend accumulating slow requests under round robin? Revisit Section 6 if you hesitate.</div>
+    </div>
+
+    <div class="quiz-item" onclick="toggleQuiz(this)">
+      <div class="quiz-q"><div class="quiz-num">3</div>You have a 3-node LB cluster using least connections. Why might this still route to an overloaded backend?</div>
+      <div class="quiz-hint">What can each LB node observe? What can it NOT observe? Revisit Section 9's "Least Connections" mechanics and the distributed warning callout.</div>
+    </div>
+
+    <div class="quiz-item" onclick="toggleQuiz(this)">
+      <div class="quiz-q"><div class="quiz-num">4</div>1,000 users in a company all share a single public IP behind corporate NAT. Your LB uses IP hash with 5 backends. Describe the load distribution.</div>
+      <div class="quiz-hint">Trace through <code>hash(single_ip) % 5</code>. What value do you get for all 1,000 users? Revisit Section 6, IP Hash failure mode 1.</div>
+    </div>
+
+    <div class="quiz-item" onclick="toggleQuiz(this)">
+      <div class="quiz-q"><div class="quiz-num">5</div>You scale from 5 to 6 backends while using IP hash. What fraction of your clients lose session affinity, and how is this different from consistent hashing?</div>
+      <div class="quiz-hint">Work through the modular arithmetic: how many values of <code>hash(ip) % 5</code> map to a different backend when N becomes 6? Then contrast with consistent hashing's 1/N remapping guarantee. Revisit Section 13, misconception 4.</div>
+    </div>
+  </section>
+
+  <!-- S16: FURTHER READING -->
+  <section id="s16">
+    <h2 class="section-title"><span class="num">16</span> Further Reading</h2>
+
+    <div class="reading-item" onclick="toggleRead(this)">
+      <div class="cb" style="flex-shrink:0;margin-top:2px;"></div>
+      <div>
+        <div class="reading-title"><strong>nginx Upstream Module Documentation</strong></div>
+        <div style="font-size:13px;color:var(--text-muted);">nginx.org/en/docs/http/ngx_http_upstream_module.html — all nginx routing directives: <code>least_conn</code>, <code>ip_hash</code>, <code>hash ... consistent</code>, and weight configuration</div>
+      </div>
+    </div>
+
+    <div class="reading-item" onclick="toggleRead(this)">
+      <div class="cb" style="flex-shrink:0;margin-top:2px;"></div>
+      <div>
+        <div class="reading-title"><strong>HAProxy Load Balancing Algorithms Reference</strong></div>
+        <div style="font-size:13px;color:var(--text-muted);">docs.haproxy.org — Configuration Manual §4.2, <code>balance</code> keyword — the most comprehensive single-page comparison of LB algorithm behaviors</div>
+      </div>
+    </div>
+
+    <div class="reading-item" onclick="toggleRead(this)">
+      <div class="cb" style="flex-shrink:0;margin-top:2px;"></div>
+      <div>
+        <div class="reading-title"><strong>AWS ALB: Routing Algorithm Selection</strong></div>
+        <div style="font-size:13px;color:var(--text-muted);">docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-target-groups.html — explains Least Outstanding Requests vs. Round Robin with AWS-specific nuance for HTTP/2</div>
+      </div>
+    </div>
+
+    <div class="reading-item" onclick="toggleRead(this)">
+      <div class="cb" style="flex-shrink:0;margin-top:2px;"></div>
+      <div>
+        <div class="reading-title"><strong>Envoy Proxy Load Balancing Docs</strong></div>
+        <div style="font-size:13px;color:var(--text-muted);">envoyproxy.io/docs/envoy/latest/intro/arch_overview/upstream/load_balancing/load_balancers — covers power-of-two choices, ring hash, and Maglev hash with architecture rationale</div>
+      </div>
+    </div>
+
+    <div class="reading-item" onclick="toggleRead(this)">
+      <div class="cb" style="flex-shrink:0;margin-top:2px;"></div>
+      <div>
+        <div class="reading-title"><strong>"The Power of Two Random Choices" — Mitzenmacher (2001)</strong></div>
+        <div style="font-size:13px;color:var(--text-muted);">Academic paper behind the power-of-two heuristic used by Envoy and Linkerd. An accessible overview is on Michael Mitzenmacher's website. Explains why two random samples achieve near-optimal distribution without global state.</div>
+      </div>
+    </div>
+  </section>
+
+</article>
+</main>
+
+<script>
+  function toggle(el) {
+    el.classList.toggle('checked');
+    saveState();
+  }
+
+  function togglePhase(header) {
+    header.parentElement.classList.toggle('open');
+  }
+
+  function toggleQuiz(item) {
+    item.classList.toggle('open');
+  }
+
+  function toggleRead(item) {
+    item.classList.toggle('read');
+    const cb = item.querySelector('.cb');
+    if (item.classList.contains('read')) {
+      cb.style.background = '#16a34a'; cb.style.borderColor = '#16a34a';
+      cb.innerHTML = '<span style="color:white;font-size:11px;font-weight:700;">✓</span>';
+    } else {
+      cb.style.background = ''; cb.style.borderColor = ''; cb.innerHTML = '';
+    }
+    saveState();
+  }
+
+  function saveState() {
+    const state = {};
+    document.querySelectorAll('.checklist li').forEach((li, i) => {
+      state['li_' + i] = li.classList.contains('checked');
+    });
+    try { localStorage.setItem('4_2_state', JSON.stringify(state)); } catch(e) {}
+  }
+
+  function loadState() {
+    try {
+      const state = JSON.parse(localStorage.getItem('4_2_state') || '{}');
+      document.querySelectorAll('.checklist li').forEach((li, i) => {
+        if (state['li_' + i]) li.classList.add('checked');
+      });
+    } catch(e) {}
+  }
+
+  // Scrollspy
+  const sections = document.querySelectorAll('section[id]');
+  const navLinks = document.querySelectorAll('#toc nav a');
+
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        navLinks.forEach(a => a.classList.remove('active'));
+        const link = document.querySelector('#toc nav a[href="#' + e.target.id + '"]');
+        if (link) link.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -75% 0px' });
+
+  sections.forEach(s => observer.observe(s));
+  loadState();
+</script>
+</body>
+</html>
