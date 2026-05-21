@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.4 Failover and Redundancy</title>
+<style>
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface-alt: #f3f2ef; --border: #e5e3de;
+    --text: #1a1917; --text-muted: #6b6861; --accent: #2563eb; --accent-light: #dbeafe;
+    --green: #16a34a; --green-light: #dcfce7; --red: #dc2626; --red-light: #fee2e2;
+    --yellow: #d97706; --yellow-light: #fef3c7; --purple: #7c3aed; --purple-light: #ede9fe;
+    --orange: #ea580c; --orange-light: #ffedd5; --code-bg: #1e1e2e; --code-text: #cdd6f4;
+    --sidebar-w: 240px; --content-max: 780px; font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; }
+  #toc { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0 48px; z-index: 100; }
+  #toc-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  #toc-header .phase-tag { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-bottom: 6px; }
+  #toc-header h2 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  #toc nav a { display: block; padding: 5px 16px 5px 20px; font-size: 12.5px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all 0.15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+  main { margin-left: var(--sidebar-w); padding: 48px 48px 96px; max-width: calc(var(--sidebar-w) + var(--content-max) + 96px); width: 100%; }
+  article { max-width: var(--content-max); }
+  .doc-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 2px solid var(--border); }
+  .doc-header .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+  .tag-phase { background: var(--accent-light); color: var(--accent); }
+  .tag-topic { background: var(--purple-light); color: var(--purple); }
+  .tag-date  { background: var(--surface-alt); color: var(--text-muted); }
+  .doc-header h1 { font-size: 30px; font-weight: 800; line-height: 1.25; letter-spacing: -0.02em; color: var(--text); }
+  section { margin-bottom: 52px; scroll-margin-top: 32px; }
+  h2.section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -0.01em; }
+  h2.section-title .num { font-size: 11px; font-weight: 800; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; letter-spacing: 0.04em; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 24px 0 10px; }
+  p { margin-bottom: 14px; } p:last-child { margin-bottom: 0; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 14px; border-left: 3px solid; }
+  .callout-goal  { background: var(--accent-light); border-color: var(--accent); color: #1e40af; }
+  .callout-tip   { background: var(--yellow-light); border-color: var(--yellow); color: #92400e; }
+  .callout-quote { background: var(--surface-alt); border-color: var(--border); color: var(--text-muted); font-style: italic; }
+  .callout-warn  { background: var(--red-light); border-color: var(--red); color: #7f1d1d; }
+  .callout strong { font-weight: 700; }
+  .cheatsheet { background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 24px 28px; font-family: "SF Mono","Fira Code","Cascadia Code",Menlo,monospace; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-x: auto; }
+  .cheatsheet .label { color: #89dceb; font-weight: 700; letter-spacing: 0.05em; display: block; margin-top: 16px; }
+  .cheatsheet .label:first-child { margin-top: 0; }
+  .cheatsheet .val { color: #a6e3a1; } .cheatsheet .hi { color: #f38ba8; font-weight: 600; } .cheatsheet .dim { color: #7f849c; }
+  .mindmap-wrap { margin: 20px 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); background: #fafaf8; text-align: center; }
+  .mindmap-wrap img { width: 100%; max-width: 100%; display: block; }
+  .mindmap-wrap .caption { font-size: 12px; color: var(--text-muted); padding: 8px 0 10px; font-style: italic; }
+  .definition { background: var(--surface); border: 1.5px solid var(--border); border-left: 4px solid var(--accent); border-radius: 10px; padding: 18px 22px; font-size: 15.5px; line-height: 1.75; color: var(--text); }
+  .concept-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 16px 0; }
+  .concept-card { border-radius: 10px; padding: 16px 18px; border: 1.5px solid; }
+  .cc-blue   { background: var(--accent-light);  border-color: #93c5fd; }
+  .cc-orange { background: var(--orange-light);  border-color: #fdba74; }
+  .cc-green  { background: var(--green-light);   border-color: #86efac; }
+  .cc-purple { background: var(--purple-light);  border-color: #c4b5fd; }
+  .cc-yellow { background: var(--yellow-light);  border-color: #fcd34d; }
+  .cc-teal   { background: #e6fcf5; border-color: #63e6be; }
+  .concept-card .cc-header { font-size: 13px; font-weight: 700; margin-bottom: 8px; }
+  .concept-card .cc-body   { font-size: 13px; line-height: 1.6; color: var(--text); }
+  .flow-steps { list-style: none; margin: 12px 0 18px; }
+  .flow-steps li { display: flex; gap: 14px; margin-bottom: 10px; font-size: 14.5px; line-height: 1.6; align-items: flex-start; }
+  .flow-steps .step-num { min-width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
+  .flow-steps .step-num.green { background: var(--green); } .flow-steps .step-num.orange { background: var(--orange); } .flow-steps .step-num.red { background: var(--red); } .flow-steps .step-num.purple { background: var(--purple); }
+  .table-wrap { overflow-x: auto; margin: 14px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: var(--surface-alt); font-weight: 700; text-align: left; padding: 10px 14px; border-bottom: 2px solid var(--border); font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.04em; }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.55; }
+  tr:last-child td { border-bottom: none; } tr:hover td { background: var(--surface-alt); }
+  .benefit { color: var(--green); font-weight: 600; } .cost { color: var(--red); font-weight: 600; }
+  .quiz-item { border: 1.5px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .quiz-q { padding: 14px 18px; font-size: 14.5px; font-weight: 600; cursor: pointer; display: flex; gap: 12px; align-items: flex-start; background: var(--surface); user-select: none; }
+  .quiz-q:hover { background: var(--surface-alt); }
+  .quiz-num { min-width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+  .quiz-hint { display: none; padding: 12px 18px; font-size: 13.5px; color: #92400e; background: var(--yellow-light); border-top: 1px solid #fcd34d; font-style: italic; }
+  .quiz-item.open .quiz-hint { display: block; }
+  .phase-block { border: 1.5px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .phase-header { background: var(--surface-alt); padding: 12px 16px; cursor: pointer; display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 700; user-select: none; }
+  .phase-header:hover { background: #ebe9e4; }
+  .phase-body { display: none; padding: 16px 20px; }
+  .phase-block.open .phase-body { display: block; }
+  .phase-goal { font-size: 12.5px; color: var(--text-muted); font-style: italic; margin-bottom: 12px; }
+  .checklist { list-style: none; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 14px; cursor: pointer; }
+  .checklist li:last-child { border-bottom: none; }
+  .checklist li.checked .text { text-decoration: line-through; color: var(--text-muted); }
+  .cb { width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; flex-shrink: 0; margin-top: 2px; background: var(--surface); transition: all 0.15s; display: flex; align-items: center; justify-content: center; }
+  .checklist li.checked .cb { background: var(--green); border-color: var(--green); }
+  .checklist li.checked .cb::after { content: '\2713'; color: white; font-size: 11px; font-weight: 700; }
+  .misconception { border: 1.5px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 12px; }
+  .mc-wrong { background: var(--red-light); padding: 10px 16px; font-size: 13.5px; color: #7f1d1d; border-bottom: 1px solid #fca5a5; }
+  .mc-right { background: var(--green-light); padding: 10px 16px; font-size: 13.5px; color: #14532d; }
+  .mc-label { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 4px; }
+  .reading-item { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 14px; cursor: pointer; align-items: flex-start; }
+  .reading-item:last-child { border-bottom: none; }
+  .reading-item.read .reading-title { text-decoration: line-through; color: var(--text-muted); }
+  .trade-off-table td:first-child { color: var(--green); font-weight: 600; }
+  .trade-off-table td:last-child  { color: var(--red); }
+  code { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-family: "SF Mono","Fira Code",Menlo,monospace; font-size: 13px; }
+  @media (max-width: 900px) { #toc { display: none; } main { margin-left: 0; padding: 24px; } }
+</style>
+</head>
+<body>
+
+<nav id="toc">
+  <div id="toc-header">
+    <span class="phase-tag">Phase B — Scalability</span>
+    <h2>4.4 Failover &amp; Redundancy</h2>
+  </div>
+  <nav>
+    <a href="#s1">1. Goal</a>
+    <a href="#s2">2. Mastery Checklist</a>
+    <a href="#s3">3. Study Phases</a>
+    <a href="#s4">4. Cheatsheet</a>
+    <a href="#s5">5. Core Definition</a>
+    <a href="#s6">6. Core Concepts</a>
+    <a href="#s7">7. First Principles</a>
+    <a href="#s8">8. Mental Models</a>
+    <a href="#s9">9. How It Works</a>
+    <a href="#s10">10. Real-World Examples</a>
+    <a href="#s11">11. Trade-offs</a>
+    <a href="#s12">12. Interview Application</a>
+    <a href="#s13">13. Misconceptions</a>
+    <a href="#s14">14. Relationships</a>
+    <a href="#s15">15. Self-Check Quiz</a>
+    <a href="#s16">16. Further Reading</a>
+  </nav>
+</nav>
+
+<main>
+<article>
+
+  <header class="doc-header">
+    <div class="meta">
+      <span class="tag tag-phase">Phase B — Scalability</span>
+      <span class="tag tag-topic">Topic 4 — Load Balancing</span>
+      <span class="tag tag-date">2026-05-20</span>
+    </div>
+    <h1>4.4 Failover &amp; Redundancy<br><span style="font-weight:400;font-size:20px;color:var(--text-muted)">Active-Active · Active-Passive · VRRP · RTO &amp; RPO</span></h1>
+  </header>
+
+  <!-- S1: GOAL -->
+  <section id="s1">
+    <h2 class="section-title"><span class="num">01</span> Goal of This Subtopic</h2>
+    <div class="callout callout-goal">
+      <strong>Why this matters:</strong> Every system design you draw in a FAANG interview will include a load balancer — and every interviewer will ask "what happens when that fails?" Failover and redundancy is the answer. Getting this right means you can walk through the failure path and recovery path of any component and explain the RTO/RPO trade-offs that drove the design. It separates candidates who draw redundant components from those who understand why they work.
+    </div>
+    <ul class="checklist" id="goals-list">
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Be able to design a load balancing setup with no SPOF — including making the LB itself redundant via VRRP / floating IP.</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Distinguish active-active from active-passive and select the right one given a system's statefulness and cost constraints.</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Walk through any component's failure path: who detects it, what happens to in-flight traffic, and how the system recovers.</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Apply RTO and RPO to justify failover strategy choices (hot vs. warm vs. cold standby, sync vs. async replication).</span></li>
+    </ul>
+  </section>
+
+  <!-- S2: MASTERY -->
+  <section id="s2">
+    <h2 class="section-title"><span class="num">02</span> What Mastery Looks Like</h2>
+    <div class="callout callout-quote">If you can teach it to someone else and field their follow-up questions, you've mastered it.</div>
+    <ul class="checklist" id="mastery-list">
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Can define active-active and active-passive failover and state the availability, cost, and complexity trade-off of each without notes.</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Can design a load balancer setup with no SPOF — including how the LB itself is made redundant (floating IP / VRRP / anycast).</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Can walk through the failure path of any component: what fails, who detects it, what happens to in-flight requests, and how the system recovers.</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Can explain the difference between RTO and RPO and apply both to justify a failover strategy choice.</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Can identify when warm standby vs. hot standby vs. cold standby is appropriate based on RTO requirements.</span></li>
+    </ul>
+  </section>
+
+  <!-- S3: STUDY PHASES -->
+  <section id="s3">
+    <h2 class="section-title"><span class="num">03</span> Study Phases to Achieve Mastery</h2>
+
+    <div class="phase-block open">
+      <div class="phase-header" onclick="togglePhase(this)">
+        <span>&#128214; Phase 1 — Acquire</span><span style="margin-left:auto;font-size:12px;color:var(--text-muted)">&#128170;&#128170;</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Read deeply enough that you could explain the concept without the doc.</p>
+        <ul class="checklist">
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text"><strong>DDIA Chapter 8</strong> — "Trouble with Distributed Systems" (Kleppmann) — fundamental limits of failure detection in async networks</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text"><strong>AWS Whitepaper: High Availability and Scalability on AWS</strong> — docs.aws.amazon.com/whitepapers/latest/real-time-communication-on-aws — practical failover patterns for cloud deployments</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text"><strong>Keepalived / VRRP Overview</strong> — keepalived.readthedocs.io — how virtual IPs float between load balancers on failure</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text"><strong>ByteByteGo: "How to Avoid Single Points of Failure"</strong> — blog.bytebytego.com — visual walkthrough of redundancy at each tier</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Read Sections 5–9 (Core Definition → How It Works) carefully — don't skim</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Re-read the Cheatsheet (Section 4) and try to recite it from memory after</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-block">
+      <div class="phase-header" onclick="togglePhase(this)">
+        <span>&#9999;&#65039; Phase 2 — Consolidate</span><span style="margin-left:auto;font-size:12px;color:var(--text-muted)">&#128170;&#128170;&#128170;</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Reproduce the knowledge in your own words without looking.</p>
+        <ul class="checklist">
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Close the doc — write out the Core Definition from memory, then compare</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Explain First Principles out loud — what was the pain before redundancy patterns existed?</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Reconstruct the active-passive failover flow step by step from memory (heartbeat → dead interval → VIP claim → traffic resumes)</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Restate each Trade-off row in your own words — if you can't explain the cost, you don't own it yet</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-block">
+      <div class="phase-header" onclick="togglePhase(this)">
+        <span>&#128295; Phase 3 — Apply</span><span style="margin-left:auto;font-size:12px;color:var(--text-muted)">&#128170;&#128170;&#128170;&#128170;</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Connect to real systems and simulate interview scenarios.</p>
+        <ul class="checklist">
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Verify each Real-World Example independently and add anything missed to My Notes</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Practice Interview Application out loud — trigger phrases + full trade-off statement verbatim</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Work through Common Misconceptions — explain WHY each is wrong, not just that it is</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Trace Relationships to Other Concepts without looking</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-block">
+      <div class="phase-header" onclick="togglePhase(this)">
+        <span>&#129514; Phase 4 — Validate</span><span style="margin-left:auto;font-size:12px;color:var(--text-muted)">&#128170;&#128170;&#128170;&#128170;&#128170;</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Confirm you actually own it, not just recognize it.</p>
+        <ul class="checklist">
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Answer every Self-Check Quiz question out loud without notes</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Recite the Cheatsheet from memory — if you can't, re-do Phase 2</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Tick off Mastery items — only if you can demonstrate on demand, not just if it sounds familiar</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Teach this concept for 2 minutes to an imaginary interviewer without hesitation or notes</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- S4: CHEATSHEET -->
+  <section id="s4">
+    <h2 class="section-title"><span class="num">04</span> Cheatsheet</h2>
+    <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+
+    <div class="mindmap-wrap">
+      <img src="../assets/images/topic_4.4_failover_and_redundancy_mindmap.png" alt="4.4 Failover and Redundancy — Mindmap">
+      <div class="caption">Mindmap — 4.4 Failover &amp; Redundancy</div>
+    </div>
+
+    <div class="cheatsheet"><span class="label">ONE-LINER</span><span class="val">  Failover routes traffic away from a failed component; redundancy ensures a
+  replacement always exists. Neither works without the other.</span>
+
+<span class="label">KEY PROPERTIES / RULES</span><span class="val">  1. Active-Active:  All nodes handle traffic; failover = traffic redistributed to survivors.
+  2. Active-Passive: Hot standby claims floating IP (VRRP) in ~3s on primary failure.
+  3. LB redundancy:  LB itself must be redundant via VRRP/floating IP — it IS the SPOF otherwise.
+  4. Detection lag:  Failover can't happen faster than health check detects failure
+                    (interval × fall_threshold).
+  5. RTO vs. RPO:   RTO = how fast you recover; RPO = how much data loss is acceptable.</span>
+
+<span class="label">DECISION RULE</span><span class="val">  Use active-active when: stateless tier, cost allows it, need max utilization.
+  Use active-passive when: stateful service, cost-constrained, or split-brain risk.
+  Always: make the LB itself redundant FIRST — everything else downstream is secondary.</span>
+
+<span class="label">NUMBERS / FORMULAS</span><span class="val">  Failover detection window = health_check_interval × fall_threshold
+  e.g., 5s interval × 3 failures = up to 15s impact before failover triggers
+  VRRP dead interval: ~3s (3 × 1s advertisement interval)
+  Active-active: each node must survive at N-1 capacity (e.g., 3 nodes → each at 50% normal)</span>
+
+<span class="label">GOTCHA TO NEVER FORGET</span><span class="val">  A second LB without a floating IP just moves the SPOF — it doesn't remove it.</span></div>
+  </section>
+
+  <!-- S5: DEFINITION -->
+  <section id="s5">
+    <h2 class="section-title"><span class="num">05</span> Core Definition</h2>
+    <div class="definition">
+      <strong>Failover</strong> is the automatic (or manual) process of redirecting traffic from a failed component to a healthy standby. <strong>Redundancy</strong> is the architectural practice of provisioning duplicate components so that no single failure takes down the system. Together, they are how distributed systems provide high availability in the face of inevitable component failure.
+    </div>
+  </section>
+
+  <!-- S6: CORE CONCEPTS -->
+  <section id="s6">
+    <h2 class="section-title"><span class="num">06</span> Core Concepts</h2>
+
+    <div class="concept-grid">
+      <div class="concept-card cc-blue">
+        <div class="cc-header">&#9889; Active-Active Failover</div>
+        <div class="cc-body">All nodes simultaneously serve traffic. On failure, surviving nodes absorb the failed node's share. Requires every node to be sized for N-1 load. Stateless services fit naturally — stateful ones require externalized or replicated state.</div>
+      </div>
+      <div class="concept-card cc-orange">
+        <div class="cc-header">&#128274; Active-Passive Failover</div>
+        <div class="cc-body">Primary handles all traffic; standby idles (hot/warm/cold). On failure, a floating IP or DNS flip routes traffic to the standby. Simpler state management — no split-brain risk — at the cost of idle resource spend.</div>
+      </div>
+      <div class="concept-card cc-green">
+        <div class="cc-header">&#127760; Floating IP / VRRP</div>
+        <div class="cc-body">Two LB nodes share a Virtual IP via VRRP. The primary "owns" the VIP; on primary failure the secondary claims it in ~3 seconds. Clients see the same IP throughout — fully transparent. Works only on L2-adjacent nodes (same subnet).</div>
+      </div>
+      <div class="concept-card cc-purple">
+        <div class="cc-header">&#9201; RTO and RPO</div>
+        <div class="cc-body">RTO (Recovery Time Objective) = how fast you must restore service. RPO (Recovery Point Objective) = how much data loss is acceptable. These two numbers drive every standby type and replication strategy choice. State them early in any availability discussion.</div>
+      </div>
+      <div class="concept-card cc-yellow">
+        <div class="cc-header">&#128245; Hot / Warm / Cold Standby</div>
+        <div class="cc-body">Hot: running and fully synced — RTO of seconds, high cost. Warm: running but partially synced — RTO of minutes, moderate cost. Cold: powered off — RTO of 10s of minutes, lowest cost. Match standby type to the system's RTO budget.</div>
+      </div>
+      <div class="concept-card cc-teal">
+        <div class="cc-header">&#128270; Failover Detection Window</div>
+        <div class="cc-body">Failover can't trigger faster than the health check detects failure. Detection window = <code>interval × fall_threshold</code>. A 5s check interval with fall threshold 3 means up to 15s of user impact before traffic is rerouted.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- S7: FIRST PRINCIPLES -->
+  <section id="s7">
+    <h2 class="section-title"><span class="num">07</span> First Principles — Why Does This Exist?</h2>
+    <p>In any sufficiently large system, hardware fails, processes crash, networks partition, and deployments introduce bugs — not as exceptional events, but as the steady-state background noise of operating at scale. Before redundancy patterns were formalized, a single server failure meant full service outage. The root problem is that no software can rescue itself after a crash: the rescuer must be external to the failing component. Redundancy externalizes the rescue — a separate, healthy node monitors the failing one and takes over when it stops responding. Failover is the mechanism that completes the handoff. Together, they transform single-point failure from a service outage into a brief, bounded degradation.</p>
+  </section>
+
+  <!-- S8: MENTAL MODELS -->
+  <section id="s8">
+    <h2 class="section-title"><span class="num">08</span> Mental Models</h2>
+
+    <h3>&#127914; Model 1: The Understudy Actor</h3>
+    <p>Active-passive is a Broadway understudy: the primary actor is always on stage; the understudy watches every rehearsal and knows every line, but never performs unless the star is incapacitated. The audience (traffic) sees the same show. Cost: you pay two salaries but get one performance at a time. Limit: the understudy still needs lead time to take the stage — faster handoff requires more expensive preparation (hot vs. cold standby).</p>
+
+    <h3>&#128739;&#65039; Model 2: The Two-Lane Highway</h3>
+    <p>Active-active is a two-lane highway where both lanes carry traffic simultaneously. If one lane is blocked, traffic shifts to the other — it slows down but keeps moving. This model breaks the moment you forget that a two-lane highway at full two-lane demand is already at 100% capacity: one lane closure → gridlock. <strong>Capacity headroom for N-1 failure is non-negotiable in active-active designs.</strong></p>
+
+    <h3>&#128222; Model 3: The Floating Phone Number</h3>
+    <p>A floating IP / VRRP is like a Google Voice number: the phone number never changes, but which physical phone it rings is reassigned on the fly. Clients call the same IP (VIP) and the routing infrastructure silently updates which machine answers. This is why VRRP failover is invisible to clients — unlike DNS failover, which forces every client to re-resolve and wait out the TTL.</p>
+  </section>
+
+  <!-- S9: HOW IT WORKS -->
+  <section id="s9">
+    <h2 class="section-title"><span class="num">09</span> How It Works — Mechanics</h2>
+
+    <h3>Active-Passive Failover Flow</h3>
+    <ul class="flow-steps">
+      <li><div class="step-num">1</div><div>Primary LB serves all traffic. Secondary LB sends VRRP heartbeats to primary every 1s.</div></li>
+      <li><div class="step-num">2</div><div>Primary LB runs health checks on backends: e.g., HTTP GET <code>/health</code> every 5s, fall threshold = 3.</div></li>
+      <li><div class="step-num green">3</div><div>Backend fails 3 consecutive checks → LB marks it down, connection draining begins (15–60s), then backend removed from pool.</div></li>
+      <li><div class="step-num orange">4</div><div>Primary LB itself fails → VRRP heartbeat stops → secondary waits <code>dead_interval</code> (3 × 1s = 3s) → secondary claims the floating VIP.</div></li>
+      <li><div class="step-num green">5</div><div>Clients resume connecting to the same IP — entirely unaware of the LB switch. Recovery is transparent.</div></li>
+    </ul>
+
+    <h3>Active-Active Failover Flow</h3>
+    <ul class="flow-steps">
+      <li><div class="step-num">1</div><div>Both LBs hold the VIP via anycast or DNS round-robin. Both simultaneously receive and route traffic.</div></li>
+      <li><div class="step-num">2</div><div>Each LB independently monitors backend health and updates its own routing table.</div></li>
+      <li><div class="step-num orange">3</div><div>Backend failure: whichever LB detects it removes it from its pool. Both converge within one check cycle.</div></li>
+      <li><div class="step-num red">4</div><div>LB failure: TCP connections to the failed LB time out; clients retry and hit the surviving LB via anycast or DNS.</div></li>
+    </ul>
+
+    <div class="callout callout-tip">
+      <strong>Key parameters to memorize:</strong> Health check interval: 5–10s · Fall threshold: 2–3 failures · Rise threshold: 2–3 successes · VRRP dead interval: 3s · Connection draining: 15–60s
+    </div>
+
+    <div class="callout callout-warn">
+      <strong>Stateful failover gotcha:</strong> If the primary holds session state in memory and fails, the passive inherits the VIP but not the session state. Sessions must be externalized (Redis, DB) before failover is truly seamless.
+    </div>
+  </section>
+
+  <!-- S10: REAL-WORLD EXAMPLES -->
+  <section id="s10">
+    <h2 class="section-title"><span class="num">10</span> Real-World System Examples</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>System</th><th>How This Applies</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>AWS ELB / ALB</strong></td>
+            <td>Active-active across multiple AZs; each AZ runs independent LB nodes; cross-zone load balancing distributes traffic evenly</td>
+            <td>AWS abstracts VRRP — configure multi-AZ and AWS handles LB redundancy behind the scenes</td>
+          </tr>
+          <tr>
+            <td><strong>HAProxy + Keepalived</strong></td>
+            <td>Classic on-prem pattern: two HAProxy nodes share a VIP via VRRP (Keepalived); primary serves, secondary claims VIP if primary's heartbeat stops</td>
+            <td>VRRP dead interval ~3s; near-instant failover independent of DNS propagation</td>
+          </tr>
+          <tr>
+            <td><strong>Nginx + Keepalived</strong></td>
+            <td>Same floating-IP pattern as HAProxy; common in self-managed Kubernetes ingress setups</td>
+            <td>Keepalived supports health check scripts to demote primary if Nginx process dies even if host is alive</td>
+          </tr>
+          <tr>
+            <td><strong>Google Cloud DNS with health checks</strong></td>
+            <td>DNS-based failover: health check failure → DNS record automatically updated to backup IP</td>
+            <td>DNS TTL of 30–60s means 30–60s of client-cached stale records after failover triggers — slower than floating IP</td>
+          </tr>
+          <tr>
+            <td><strong>MySQL with MHA / Orchestrator</strong></td>
+            <td>Active-passive DB failover: replica promoted to primary on failure; VIP or DNS updated to new primary</td>
+            <td>RPO depends on sync vs. async replication; async replication can mean seconds of data loss on abrupt primary failure</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- S11: TRADE-OFFS -->
+  <section id="s11">
+    <h2 class="section-title"><span class="num">11</span> Trade-offs</h2>
+    <div class="table-wrap">
+      <table class="trade-off-table">
+        <thead><tr><th>&#9989; Benefit</th><th>&#10060; Cost / Limitation</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Active-active: full resource utilization, seamless failover</td>
+            <td>Requires stateless or replicated state; capacity must be headroom-aware (N-1 capacity planning mandatory)</td>
+          </tr>
+          <tr>
+            <td>Active-passive: simpler state management, no split-brain risk</td>
+            <td>Idle standby wastes 50%+ of resource cost; failover takes longer (VRRP or DNS flip)</td>
+          </tr>
+          <tr>
+            <td>Floating IP (VRRP): near-instant, client-transparent LB failover</td>
+            <td>Only works on L2-adjacent nodes (same subnet/VLAN); not viable across datacenters or cloud regions</td>
+          </tr>
+          <tr>
+            <td>DNS-based failover: works globally across regions</td>
+            <td>DNS TTL means 30–300s of in-flight requests still hitting the dead node after failover triggers</td>
+          </tr>
+          <tr>
+            <td>Hot standby: RTO of seconds</td>
+            <td>Doubles hardware/cloud cost; sync replication required for RPO=0, adding write latency</td>
+          </tr>
+          <tr>
+            <td>Cold standby: minimal cost</td>
+            <td>RTO of minutes to tens of minutes; unacceptable for latency-sensitive or transactional services</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- S12: INTERVIEW APPLICATION -->
+  <section id="s12">
+    <h2 class="section-title"><span class="num">12</span> Interview Application</h2>
+
+    <h3>When an interviewer asks / says:</h3>
+    <ul style="margin: 8px 0 16px 20px; font-size: 14.5px; line-height: 1.8;">
+      <li>"What happens when this load balancer goes down?"</li>
+      <li>"How do you ensure high availability for the frontend tier?"</li>
+      <li>"What's your recovery time if the primary database fails?"</li>
+      <li>"Walk me through a failure scenario — how does your system recover?"</li>
+    </ul>
+
+    <h3>What you say / do:</h3>
+    <p>When asked about availability, sweep each tier top-to-bottom: load balancer → application servers → database. For the LB, name VRRP/floating IP (on-prem) or multi-AZ ELB (cloud). For app servers, state active-active with health-check-based eviction. For database, name active-passive with an explicit RTO/RPO. This structured sweep signals system-level thinking rather than ad-hoc fixes.</p>
+
+    <h3>The trade-off statement (memorize this pattern):</h3>
+    <div class="callout callout-tip">
+      "If we choose active-active, we get zero-downtime failover and full resource utilization, but we pay in complexity — every node must be stateless or share state, and we must size each node for N-1 capacity. For this system's stateless API tier, active-active is the right call. For the database, we'll use active-passive with async replication — accepting a potential RPO of a few seconds — because synchronous replication would add write latency we can't afford at this scale."
+    </div>
+  </section>
+
+  <!-- S13: MISCONCEPTIONS -->
+  <section id="s13">
+    <h2 class="section-title"><span class="num">13</span> Common Misconceptions &amp; Gotchas</h2>
+
+    <div class="misconception">
+      <div class="mc-wrong"><div class="mc-label">&#10060; Misconception</div>Adding a second load balancer eliminates the LB SPOF.</div>
+      <div class="mc-right"><div class="mc-label">&#9989; Reality</div>Only if both share a floating IP (VRRP) or DNS round-robin routes to both. If upstream DNS still points to a single IP, the second LB is unreachable on primary failure — you've added cost without eliminating the SPOF.</div>
+    </div>
+
+    <div class="misconception">
+      <div class="mc-wrong"><div class="mc-label">&#10060; Misconception</div>Active-active is strictly better than active-passive because both nodes are utilized.</div>
+      <div class="mc-right"><div class="mc-label">&#9989; Reality</div>Active-active requires stateless design or synchronized state. For stateful services — session-heavy apps, write-heavy databases — active-active creates split-brain risk. Active-passive is often the correct and safer choice for databases.</div>
+    </div>
+
+    <div class="misconception">
+      <div class="mc-wrong"><div class="mc-label">&#10060; Misconception</div>DNS failover is fast because health checks trigger the record update immediately.</div>
+      <div class="mc-right"><div class="mc-label">&#9989; Reality</div>DNS failover triggers the update immediately, but clients cache the old record until TTL expires (30–300s). In-flight requests and new connections from clients with a stale record still hit the dead node. Floating IP failover has zero propagation delay.</div>
+    </div>
+
+    <div class="misconception">
+      <div class="mc-wrong"><div class="mc-label">&#10060; Misconception</div>Failover handles in-flight requests without any user impact.</div>
+      <div class="mc-right"><div class="mc-label">&#9989; Reality</div>TCP connections to the crashed node are dropped. Connection draining reduces the impact window for planned failovers (graceful removal) but cannot help for abrupt crashes. Brief user errors during failover are expected — minimize, don't expect to eliminate, the impact window.</div>
+    </div>
+  </section>
+
+  <!-- S14: RELATIONSHIPS -->
+  <section id="s14">
+    <h2 class="section-title"><span class="num">14</span> Relationships to Other Concepts</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Relationship</th><th>Concept</th><th>Connection</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Builds on</strong></td>
+            <td>4.3 Health Checks &amp; Failure Detection</td>
+            <td>Failover can't trigger until a health check detects the failure. Detection latency = interval × fall_threshold bounds the fastest possible failover time.</td>
+          </tr>
+          <tr>
+            <td><strong>Enables</strong></td>
+            <td>4.7 Global vs. Local Load Balancing</td>
+            <td>Multi-region failover is the global-scale extension of the same active-passive / active-active patterns, with DNS-based routing and anycast replacing VRRP.</td>
+          </tr>
+          <tr>
+            <td><strong>Tension with</strong></td>
+            <td>2.7 Stateless vs. Stateful Systems</td>
+            <td>Active-active failover is trivial for stateless services and dangerous for stateful ones. This is why stateless design (Topic 3) is the prerequisite for clean, scalable failover.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- S15: QUIZ -->
+  <section id="s15">
+    <h2 class="section-title"><span class="num">15</span> Self-Check Quiz</h2>
+    <div class="callout callout-quote">Answer each question out loud before expanding the hint. If you hesitate, the section reference tells you exactly where to review.</div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)"><div class="quiz-num">1</div><div>What is the difference between active-active and active-passive failover? Give one scenario where each is clearly the right choice.</div></div>
+      <div class="quiz-hint">Think through your answer before expanding — if you hesitate, revisit Section 6 (Core Concepts).</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)"><div class="quiz-num">2</div><div>A system uses two HAProxy load balancers with Keepalived. VRRP advertisement interval = 1s, dead interval = 3s. How long does it take for the secondary to claim the VIP after the primary crashes?</div></div>
+      <div class="quiz-hint">Think through your answer before expanding — if you hesitate, revisit Section 9 (How It Works).</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)"><div class="quiz-num">3</div><div>What is the key cost of DNS-based failover that floating IP (VRRP) avoids? When would you still use DNS-based failover despite this cost?</div></div>
+      <div class="quiz-hint">Think through your answer before expanding — if you hesitate, revisit Sections 9 and 11 (How It Works, Trade-offs).</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)"><div class="quiz-num">4</div><div>Name a real system that uses active-passive database failover. What determines its RPO in that configuration?</div></div>
+      <div class="quiz-hint">Think through your answer before expanding — if you hesitate, revisit Section 10 (Real-World Examples).</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)"><div class="quiz-num">5</div><div>An interviewer says: "Your design has two load balancers — so there's no SPOF at the LB tier, right?" What's the missing detail you need to verify before agreeing?</div></div>
+      <div class="quiz-hint">This is a gotcha — think carefully before expanding. Revisit Section 13 (Misconceptions) if you're unsure.</div>
+    </div>
+  </section>
+
+  <!-- S16: FURTHER READING -->
+  <section id="s16">
+    <h2 class="section-title"><span class="num">16</span> Further Reading</h2>
+    <div id="reading-list">
+      <div class="reading-item" onclick="toggleRead(this)">
+        <div class="cb"></div>
+        <div><span class="reading-title"><strong>DDIA Chapter 8 — "Trouble with Distributed Systems"</strong> (Kleppmann)</span><br><span style="font-size:12px;color:var(--text-muted)">Why failure detection in async networks is fundamentally bounded — the theory behind why failover always has a non-zero detection window</span></div>
+      </div>
+      <div class="reading-item" onclick="toggleRead(this)">
+        <div class="cb"></div>
+        <div><span class="reading-title"><strong>AWS Whitepaper: High Availability and Scalability on AWS</strong></span><br><span style="font-size:12px;color:var(--text-muted)">docs.aws.amazon.com/whitepapers/latest/real-time-communication-on-aws — practical failover architecture patterns for cloud deployments</span></div>
+      </div>
+      <div class="reading-item" onclick="toggleRead(this)">
+        <div class="cb"></div>
+        <div><span class="reading-title"><strong>Keepalived Documentation</strong></span><br><span style="font-size:12px;color:var(--text-muted)">keepalived.readthedocs.io — canonical reference for VRRP-based floating IP failover; covers the full VRRP state machine</span></div>
+      </div>
+      <div class="reading-item" onclick="toggleRead(this)">
+        <div class="cb"></div>
+        <div><span class="reading-title"><strong>ByteByteGo: "How to Avoid Single Points of Failure"</strong></span><br><span style="font-size:12px;color:var(--text-muted)">blog.bytebytego.com — visual, interview-ready walkthrough of redundancy patterns at each tier</span></div>
+      </div>
+    </div>
+  </section>
+
+</article>
+</main>
+
+<script>
+function toggle(el) {
+  el.classList.toggle('checked');
+  save();
+}
+function toggleQuiz(el) {
+  el.parentElement.classList.toggle('open');
+}
+function togglePhase(el) {
+  el.parentElement.classList.toggle('open');
+}
+function toggleRead(el) {
+  el.classList.toggle('read');
+  save();
+}
+function save() {
+  const state = {};
+  document.querySelectorAll('.checklist').forEach((list, li) => {
+    list.querySelectorAll('li').forEach((item, i) => {
+      state[`list-${li}-${i}`] = item.classList.contains('checked');
+    });
+  });
+  document.querySelectorAll('.reading-item').forEach((item, i) => {
+    state[`read-${i}`] = item.classList.contains('read');
+  });
+  try { sessionStorage.setItem('4.4-state', JSON.stringify(state)); } catch(e) {}
+}
+function load() {
+  try {
+    const state = JSON.parse(sessionStorage.getItem('4.4-state') || '{}');
+    document.querySelectorAll('.checklist').forEach((list, li) => {
+      list.querySelectorAll('li').forEach((item, i) => {
+        if (state[`list-${li}-${i}`]) item.classList.add('checked');
+      });
+    });
+    document.querySelectorAll('.reading-item').forEach((item, i) => {
+      if (state[`read-${i}`]) item.classList.add('read');
+    });
+  } catch(e) {}
+}
+// TOC active state
+const sections = document.querySelectorAll('section[id]');
+const links = document.querySelectorAll('#toc nav a');
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      links.forEach(l => l.classList.remove('active'));
+      const a = document.querySelector(`#toc nav a[href="#${e.target.id}"]`);
+      if (a) a.classList.add('active');
+    }
+  });
+}, { rootMargin: '-30% 0px -60% 0px' });
+sections.forEach(s => obs.observe(s));
+load();
+</script>
+</body>
+</html>

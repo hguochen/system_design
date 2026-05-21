@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.3 Health Checks and Failure Detection</title>
+<style>
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface-alt: #f3f2ef; --border: #e5e3de;
+    --text: #1a1917; --text-muted: #6b6861; --accent: #2563eb; --accent-light: #dbeafe;
+    --green: #16a34a; --green-light: #dcfce7; --red: #dc2626; --red-light: #fee2e2;
+    --yellow: #d97706; --yellow-light: #fef3c7; --purple: #7c3aed; --purple-light: #ede9fe;
+    --orange: #ea580c; --orange-light: #ffedd5; --code-bg: #1e1e2e; --code-text: #cdd6f4;
+    --sidebar-w: 240px; --content-max: 780px; font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; }
+  #toc { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0 48px; z-index: 100; }
+  #toc-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  #toc-header .phase-tag { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-bottom: 6px; }
+  #toc-header h2 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  #toc nav a { display: block; padding: 5px 16px 5px 20px; font-size: 12.5px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all 0.15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+  main { margin-left: var(--sidebar-w); padding: 48px 48px 96px; max-width: calc(var(--sidebar-w) + var(--content-max) + 96px); width: 100%; }
+  article { max-width: var(--content-max); }
+  .doc-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 2px solid var(--border); }
+  .doc-header .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+  .tag-phase { background: var(--accent-light); color: var(--accent); }
+  .tag-topic { background: var(--purple-light); color: var(--purple); }
+  .tag-date  { background: var(--surface-alt); color: var(--text-muted); }
+  .doc-header h1 { font-size: 30px; font-weight: 800; line-height: 1.25; letter-spacing: -0.02em; color: var(--text); }
+  section { margin-bottom: 52px; scroll-margin-top: 32px; }
+  h2.section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -0.01em; }
+  h2.section-title .num { font-size: 11px; font-weight: 800; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; letter-spacing: 0.04em; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 24px 0 10px; }
+  p { margin-bottom: 14px; } p:last-child { margin-bottom: 0; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 14px; border-left: 3px solid; }
+  .callout-goal  { background: var(--accent-light); border-color: var(--accent); color: #1e40af; }
+  .callout-tip   { background: var(--yellow-light); border-color: var(--yellow); color: #92400e; }
+  .callout-quote { background: var(--surface-alt); border-color: var(--border); color: var(--text-muted); font-style: italic; }
+  .callout-warn  { background: var(--red-light); border-color: var(--red); color: #7f1d1d; }
+  .callout strong { font-weight: 700; }
+  .cheatsheet { background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 24px 28px; font-family: "SF Mono","Fira Code","Cascadia Code",Menlo,monospace; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-x: auto; }
+  .cheatsheet .label { color: #89dceb; font-weight: 700; letter-spacing: 0.05em; display: block; margin-top: 16px; }
+  .cheatsheet .label:first-child { margin-top: 0; }
+  .cheatsheet .val { color: #a6e3a1; } .cheatsheet .hi { color: #f38ba8; font-weight: 600; } .cheatsheet .dim { color: #7f849c; }
+  .mindmap-wrap { margin: 20px 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); background: #fafaf8; text-align: center; }
+  .mindmap-wrap img { width: 100%; max-width: 100%; display: block; }
+  .mindmap-wrap .caption { font-size: 12px; color: var(--text-muted); padding: 8px 0 10px; font-style: italic; }
+  .definition { background: var(--surface); border: 1.5px solid var(--border); border-left: 4px solid var(--accent); border-radius: 10px; padding: 18px 22px; font-size: 15.5px; line-height: 1.75; color: var(--text); }
+  .concept-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 16px 0; }
+  .concept-card { border-radius: 10px; padding: 16px 18px; border: 1.5px solid; }
+  .cc-blue   { background: var(--accent-light);  border-color: #93c5fd; }
+  .cc-orange { background: var(--orange-light);  border-color: #fdba74; }
+  .cc-green  { background: var(--green-light);   border-color: #86efac; }
+  .cc-purple { background: var(--purple-light);  border-color: #c4b5fd; }
+  .cc-yellow { background: var(--yellow-light);  border-color: #fcd34d; }
+  .cc-teal   { background: #e6fcf5; border-color: #63e6be; }
+  .concept-card .cc-header { font-size: 13px; font-weight: 700; margin-bottom: 8px; }
+  .concept-card .cc-body   { font-size: 13px; line-height: 1.6; color: var(--text); }
+  .flow-steps { list-style: none; margin: 12px 0 18px; }
+  .flow-steps li { display: flex; gap: 14px; margin-bottom: 10px; font-size: 14.5px; line-height: 1.6; align-items: flex-start; }
+  .flow-steps .step-num { min-width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
+  .flow-steps .step-num.green { background: var(--green); } .flow-steps .step-num.orange { background: var(--orange); } .flow-steps .step-num.red { background: var(--red); } .flow-steps .step-num.purple { background: var(--purple); }
+  .table-wrap { overflow-x: auto; margin: 14px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: var(--surface-alt); font-weight: 700; text-align: left; padding: 10px 14px; border-bottom: 2px solid var(--border); font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.04em; }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.55; }
+  tr:last-child td { border-bottom: none; } tr:hover td { background: var(--surface-alt); }
+  .benefit { color: var(--green); font-weight: 600; } .cost { color: var(--red); font-weight: 600; }
+  .quiz-item { border: 1.5px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .quiz-q { padding: 14px 18px; font-size: 14.5px; font-weight: 600; cursor: pointer; display: flex; gap: 12px; align-items: flex-start; background: var(--surface); user-select: none; }
+  .quiz-q:hover { background: var(--surface-alt); }
+  .quiz-num { min-width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+  .quiz-hint { display: none; padding: 12px 18px; font-size: 13.5px; color: #92400e; background: var(--yellow-light); border-top: 1px solid #fcd34d; font-style: italic; }
+  .quiz-item.open .quiz-hint { display: block; }
+  .phase-block { border: 1.5px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .phase-header { background: var(--surface-alt); padding: 12px 16px; cursor: pointer; display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 700; user-select: none; }
+  .phase-header:hover { background: #ebe9e4; }
+  .phase-body { display: none; padding: 16px 20px; }
+  .phase-block.open .phase-body { display: block; }
+  .phase-goal { font-size: 12.5px; color: var(--text-muted); font-style: italic; margin-bottom: 12px; }
+  .checklist { list-style: none; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 14px; cursor: pointer; }
+  .checklist li:last-child { border-bottom: none; }
+  .checklist li.checked .text { text-decoration: line-through; color: var(--text-muted); }
+  .cb { width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; flex-shrink: 0; margin-top: 2px; background: var(--surface); transition: all 0.15s; display: flex; align-items: center; justify-content: center; }
+  .checklist li.checked .cb { background: var(--green); border-color: var(--green); }
+  .checklist li.checked .cb::after { content: '\2713'; color: white; font-size: 11px; font-weight: 700; }
+  .misconception { border: 1.5px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 12px; }
+  .mc-wrong { background: var(--red-light); padding: 10px 16px; font-size: 13.5px; color: #7f1d1d; border-bottom: 1px solid #fca5a5; }
+  .mc-right { background: var(--green-light); padding: 10px 16px; font-size: 13.5px; color: #14532d; }
+  .mc-label { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 4px; }
+  .reading-item { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 14px; cursor: pointer; align-items: flex-start; }
+  .reading-item:last-child { border-bottom: none; }
+  .reading-item.read .reading-title { text-decoration: line-through; color: var(--text-muted); }
+  .trade-off-table td:first-child { color: var(--green); font-weight: 600; }
+  .trade-off-table td:last-child  { color: var(--red); }
+  code { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-family: "SF Mono","Fira Code",Menlo,monospace; font-size: 13px; }
+  @media (max-width: 900px) { #toc { display: none; } main { margin-left: 0; padding: 24px; } }
+</style>
+</head>
+<body>
+
+<nav id="toc">
+  <div id="toc-header">
+    <span class="phase-tag">Phase B — Scalability</span>
+    <h2>4.3 Health Checks &amp; Failure Detection</h2>
+  </div>
+  <nav>
+    <a href="#s1">1. Goal</a>
+    <a href="#s2">2. Mastery Checklist</a>
+    <a href="#s3">3. Study Phases</a>
+    <a href="#s4">4. Cheatsheet</a>
+    <a href="#s5">5. Core Definition</a>
+    <a href="#s6">6. Core Concepts</a>
+    <a href="#s7">7. First Principles</a>
+    <a href="#s8">8. Mental Models</a>
+    <a href="#s9">9. How It Works</a>
+    <a href="#s10">10. Real-World Examples</a>
+    <a href="#s11">11. Trade-offs</a>
+    <a href="#s12">12. Interview Application</a>
+    <a href="#s13">13. Misconceptions</a>
+    <a href="#s14">14. Relationships</a>
+    <a href="#s15">15. Self-Check Quiz</a>
+    <a href="#s16">16. Further Reading</a>
+  </nav>
+</nav>
+
+<main>
+<article>
+
+  <header class="doc-header">
+    <div class="meta">
+      <span class="tag tag-phase">Phase B — Scalability</span>
+      <span class="tag tag-topic">Topic 4 — Load Balancing</span>
+      <span class="tag tag-date">2026-05-19</span>
+    </div>
+    <h1>4.3 Health Checks &amp; Failure Detection<br><span style="font-weight:400;font-size:20px;color:var(--text-muted)">Active · Passive · Thresholds · Detection Latency</span></h1>
+  </header>
+
+  <!-- S1: GOAL -->
+  <section id="s1">
+    <h2 class="section-title"><span class="num">01</span> Goal of This Subtopic</h2>
+    <div class="callout callout-goal">
+      <strong>Why this matters:</strong> Health checks are how a load balancer knows which backends are safe to send traffic to. Every high-availability design you draw in an interview has a load balancer — and every interviewer will probe what happens when a backend fails. Getting health check mechanics right (check type, thresholds, detection latency) is the difference between a design that handles failure gracefully and one that silently routes users to dead backends.
+    </div>
+    <ul class="checklist" id="goals-list">
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Be able to distinguish passive vs. active health checks and explain when each is appropriate without prompting.</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Explain why a single failed check should not immediately remove a backend (threshold-based eviction) and the cost of not doing so.</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Design a complete health check setup — check type, interval, timeout, rise/fall thresholds — for a given production scenario.</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Calculate failure detection latency for a given config and explain the user-impact window.</span></li>
+    </ul>
+  </section>
+
+  <!-- S2: MASTERY -->
+  <section id="s2">
+    <h2 class="section-title"><span class="num">02</span> What Mastery Looks Like</h2>
+    <div class="callout callout-quote">If you can teach it to someone else and field their follow-up questions, you've mastered it.</div>
+    <ul class="checklist" id="mastery-list">
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Can distinguish passive vs. active health checks and explain when each is appropriate without prompting.</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Can explain why a single failed check should not immediately remove a backend and what threshold-based eviction prevents.</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Can design a complete health check setup — check type, interval, timeout, rise/fall thresholds — for a given production scenario.</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Can identify failure detection latency for a given config and explain the user-impact window.</span></li>
+      <li onclick="toggle(this)"><div class="cb"></div><span class="text">Can explain the difference between a shallow ping check and a deep synthetic check, and why each is used.</span></li>
+    </ul>
+  </section>
+
+  <!-- S3: STUDY PHASES -->
+  <section id="s3">
+    <h2 class="section-title"><span class="num">03</span> Study Phases to Achieve Mastery</h2>
+
+    <div class="phase-block open">
+      <div class="phase-header" onclick="togglePhase(this)">
+        <span>&#128214; Phase 1 — Acquire</span><span style="margin-left:auto;font-size:12px;color:var(--text-muted)">&#128170;&#128170;</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Read deeply enough that you could explain the concept without the doc.</p>
+        <ul class="checklist">
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text"><strong>DDIA Chapter 8</strong> — "Trouble with Distributed Systems" (Kleppmann) — why detecting failures in async networks is fundamentally hard</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text"><strong>AWS ELB Health Check Docs</strong> — docs.aws.amazon.com/elasticloadbalancing/latest/application/target-group-health-checks.html — concrete production defaults</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text"><strong>HAProxy Health Check Documentation</strong> — haproxy.com/documentation — covers passive, active, and agent checks with real config examples</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text"><strong>Kubernetes Probes Documentation</strong> — kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/ — liveness vs. readiness vs. startup explained</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Read Sections 5–9 (Core Definition to How It Works) carefully — don't skim</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Re-read the Cheatsheet (Section 4) and try to recite it from memory after</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-block">
+      <div class="phase-header" onclick="togglePhase(this)">
+        <span>&#9999;&#65039; Phase 2 — Consolidate</span><span style="margin-left:auto;font-size:12px;color:var(--text-muted)">&#128170;&#128170;&#128170;</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Reproduce the knowledge in your own words without looking.</p>
+        <ul class="checklist">
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Close the doc — write out the Core Definition from memory, then compare</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Explain First Principles out loud — what was broken before health checks existed?</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Reconstruct the active check cycle step by step from memory (probe → counter → threshold → evict → probe again → restore)</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Restate each Trade-off row in your own words — if you can't explain the cost, you don't own it yet</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-block">
+      <div class="phase-header" onclick="togglePhase(this)">
+        <span>&#128295; Phase 3 — Apply</span><span style="margin-left:auto;font-size:12px;color:var(--text-muted)">&#128170;&#128170;&#128170;&#128170;</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Connect to real systems and simulate interview scenarios.</p>
+        <ul class="checklist">
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Verify each Real-World Example independently and add anything missed to My Notes</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Practice Interview Application out loud — trigger phrases + trade-off statement verbatim</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Work through Common Misconceptions — explain WHY each is wrong, not just that it is</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Trace Relationships to Other Concepts without looking</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-block">
+      <div class="phase-header" onclick="togglePhase(this)">
+        <span>&#129514; Phase 4 — Validate</span><span style="margin-left:auto;font-size:12px;color:var(--text-muted)">&#128170;&#128170;&#128170;&#128170;&#128170;</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Confirm you actually own it, not just recognize it.</p>
+        <ul class="checklist">
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Answer every Self-Check Quiz question out loud without notes</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Recite the Cheatsheet from memory — if you can't, re-do Phase 2</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Tick off Mastery items — only if you can demonstrate on demand, not just if it sounds familiar</span></li>
+          <li onclick="toggle(this)"><div class="cb"></div><span class="text">Teach this concept for 2 minutes to an imaginary interviewer without hesitation or notes</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- S4: CHEATSHEET -->
+  <section id="s4">
+    <h2 class="section-title"><span class="num">04</span> Cheatsheet</h2>
+    <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+
+    <div class="mindmap-wrap">
+      <img src="../assets/images/topic_4.3_health_checks_and_failure_detection_mindmap.png" alt="4.3 Health Checks and Failure Detection — Mindmap">
+      <div class="caption">Mindmap — 4.3 Health Checks &amp; Failure Detection</div>
+    </div>
+
+    <div class="cheatsheet"><span class="label">ONE-LINER</span><span class="val">  Health checks are how a load balancer knows which backends are safe to send
+  traffic to — and how fast it detects when one isn't.</span>
+
+<span class="label">KEY PROPERTIES / RULES</span><span class="val">  1. Active checks:   LB proactively probes each backend on a fixed interval (TCP, HTTP, HTTPS).
+  2. Passive checks:  LB watches real traffic for errors/timeouts — no extra probes.
+  3. Rise threshold:  N consecutive successes before a backend is re-added to the pool.
+  4. Fall threshold:  M consecutive failures before a backend is evicted from the pool.
+  5. Detection lag:   interval × fall_threshold (e.g., 5s × 3 = 15s of user impact).</span>
+
+<span class="label">DECISION RULE</span><span class="val">  Use active + passive combined: active catches total outages early,
+  passive catches application-level errors active pings miss (e.g., 500s on real requests).
+  Avoid passive-only in low-traffic systems — a failing backend may never see
+  enough requests to trigger eviction.</span>
+
+<span class="label">NUMBERS / FORMULAS</span><span class="val">  Detection latency = interval × fall_threshold
+  Recovery latency  = interval × rise_threshold
+  Typical prod:       interval=5s, timeout=2s, fall=3, rise=2</span>
+
+<span class="label">GOTCHA TO NEVER FORGET</span><span class="hi">  A health check endpoint that always returns 200 OK (even when the DB is down)
+  defeats the entire system — deep checks must actually validate dependencies.</span></div>
+  </section>
+
+  <!-- S5: DEFINITION -->
+  <section id="s5">
+    <h2 class="section-title"><span class="num">05</span> Core Definition</h2>
+    <div class="definition">
+      A <strong>health check</strong> is a mechanism by which a load balancer periodically tests each backend's ability to serve requests, automatically removing unresponsive or unhealthy backends from the active pool and re-adding them once they recover — ensuring traffic is only ever sent to backends that can handle it.
+    </div>
+  </section>
+
+  <!-- S6: CORE CONCEPTS -->
+  <section id="s6">
+    <h2 class="section-title"><span class="num">06</span> Core Concepts</h2>
+
+    <div class="concept-grid">
+      <div class="concept-card cc-blue">
+        <div class="cc-header">🔵 Active Health Checks</div>
+        <div class="cc-body">The LB sends synthetic probe requests to each backend on a fixed schedule, independent of real user traffic. Probes can be TCP (just connect), HTTP (verify path returns 2xx), or HTTPS. Active checks catch complete outages quickly and deterministically. <strong>Downside:</strong> a backend that passes the check but fails on real requests (e.g., <code>/health</code> is healthy but <code>/checkout</code> is broken) won't be caught.</div>
+      </div>
+      <div class="concept-card cc-orange">
+        <div class="cc-header">🟠 Passive Health Checks</div>
+        <div class="cc-body">The LB watches real traffic — if a backend returns too many 5xx responses or times out on real requests, it is evicted. Zero overhead and reflects actual production behavior. <strong>Downside:</strong> requires sufficient traffic volume to fire, making it unreliable in low-QPS systems or for lightly-used backends.</div>
+      </div>
+      <div class="concept-card cc-teal">
+        <div class="cc-header">🟢 Rise &amp; Fall Thresholds</div>
+        <div class="cc-body">A single failed probe doesn't immediately remove a backend — the <strong>fall threshold</strong> (e.g., 3 consecutive failures) prevents transient network blips from evicting healthy backends. The <strong>rise threshold</strong> (e.g., 2 consecutive successes) prevents a restarting backend from receiving full traffic before it's stable. These thresholds control the detection latency vs. false-positive trade-off.</div>
+      </div>
+      <div class="concept-card cc-purple">
+        <div class="cc-header">🟣 Shallow vs. Deep Checks</div>
+        <div class="cc-body">A <strong>shallow check</strong> (TCP connect or <code>GET /ping → 200</code>) only verifies the process is listening. A <strong>deep check</strong> (<code>GET /health</code> that queries the DB and cache internally) validates the full dependency chain. Deep checks catch "zombie" backends that are up but unusable. Risk: deep checks can cascade failures if they hammer a degraded downstream service.</div>
+      </div>
+      <div class="concept-card cc-yellow">
+        <div class="cc-header">🟡 Detection Latency Window</div>
+        <div class="cc-body">The time between a backend actually failing and the LB stopping traffic to it. Equals <code>interval × fall_threshold</code>. During this window, real users hit the failing backend and see errors. Reducing interval shortens user impact but increases probe overhead across the fleet. This is the core tuning trade-off.</div>
+      </div>
+      <div class="concept-card cc-green">
+        <div class="cc-header">🟩 Slow-Start on Recovery</div>
+        <div class="cc-body">When a backend recovers and passes its rise threshold, it shouldn't receive 100% of its weight immediately. Cold caches, unwarmed connection pools, and JVM startup mean a freshly-recovered backend can crash again under sudden full load. <strong>Slow-start</strong> linearly ramps traffic weight from 0 to full over a configurable window (e.g., 30s). HAProxy and NGINX Plus support this natively.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- S7: FIRST PRINCIPLES -->
+  <section id="s7">
+    <h2 class="section-title"><span class="num">07</span> First Principles — Why Does This Exist?</h2>
+    <p>In a distributed system, backends fail silently. A process can crash, a VM can run out of memory, a network partition can isolate a node, or a downstream database can become unavailable — all without the load balancer knowing. Without health checks, the LB continues routing traffic to the failed backend and users see a stream of errors or timeouts.</p>
+    <p>The fundamental problem is that <strong>networks are asynchronous and nodes fail independently</strong>. No component can rely on being told when another component has failed — it must detect failure on its own. This is the core challenge of distributed systems described in DDIA Chapter 8: you cannot distinguish a slow node from a dead one without a timeout, and timeouts are always a guess.</p>
+    <p>Health checks solve this by turning a passive assumption ("if I haven't heard otherwise, it must be healthy") into an active, continuous verification ("I will keep probing, and I will act on what I observe"). The rise/fall threshold mechanism is the engineering answer to the noise inherent in network communications — not every missed probe means death, but a pattern of misses almost certainly does.</p>
+  </section>
+
+  <!-- S8: MENTAL MODELS -->
+  <section id="s8">
+    <h2 class="section-title"><span class="num">08</span> Mental Models</h2>
+
+    <h3>Model 1: The Canary in the Coal Mine</h3>
+    <p>Active health checks are like sending a canary into a mine every 5 seconds. If the canary doesn't come back within 2 seconds (timeout), you count that as a failure. After 3 dead canaries in a row (fall threshold), you stop sending miners (real traffic) into that shaft. <strong>Where it breaks down:</strong> the canary only takes one path through the mine. If the main tunnel is fine but a side shaft is blocked (a specific endpoint is broken), the canary misses it — this is exactly the shallow vs. deep check distinction.</p>
+
+    <h3>Model 2: The Probation Officer</h3>
+    <p>The rise threshold is a probation mechanism. A backend that just recovered isn't immediately trusted — it must demonstrate two consecutive clean check-ins before being restored to full duty. This prevents a backend that is thrashing (crashing and restarting in a loop) from being flipped back into production on the first successful restart only to crash again under load. <strong>Where it breaks down:</strong> rise threshold alone doesn't prevent a sudden traffic spike from overwhelming a cold backend — slow-start is the complementary protection.</p>
+
+    <h3>Model 3: Detection Latency as a Tuning Dial</h3>
+    <p>Think of health check config as a dial between "fast detection" and "stability." Shorter intervals and lower thresholds mean faster failure detection but more risk of false evictions on transient blips. Longer intervals and higher thresholds mean more stability but longer windows of user-visible errors. The right position on this dial is determined by your SLO error budget: how many bad requests can your 99.9% availability target absorb before you breach it? That directly implies the maximum tolerable detection latency window.</p>
+  </section>
+
+  <!-- S9: HOW IT WORKS -->
+  <section id="s9">
+    <h2 class="section-title"><span class="num">09</span> How It Works — Mechanics</h2>
+
+    <h3>Normal Path — Active Check Cycle</h3>
+    <ul class="flow-steps">
+      <li><div class="step-num">1</div><div>The LB maintains a backend pool (e.g., 5 upstream servers). Each backend has a health state: <em>healthy</em>, <em>unhealthy</em>, or <em>draining</em>.</div></li>
+      <li><div class="step-num">2</div><div>Every <code>interval</code> seconds (e.g., 5s), the LB sends a probe to each backend — TCP SYN to port 80, or HTTP GET to <code>/health</code>.</div></li>
+      <li><div class="step-num">3</div><div>If the probe receives a valid response within <code>timeout</code> (e.g., 2s), the backend's consecutive failure counter resets to 0.</div></li>
+      <li><div class="step-num">4</div><div>If the probe fails (no response, connection refused, or wrong status code), the failure counter increments.</div></li>
+      <li><div class="step-num green">5</div><div>When the failure counter reaches <code>fall_threshold</code> (e.g., 3), the backend is marked unhealthy and removed from the active pool — new connections no longer route to it.</div></li>
+      <li><div class="step-num green">6</div><div>Probing continues on the unhealthy backend. When it passes <code>rise_threshold</code> (e.g., 2) consecutive checks, it is re-added to the pool (optionally with slow-start ramp-up).</div></li>
+    </ul>
+
+    <h3>Passive Check Mechanics (Parallel Path)</h3>
+    <p>Simultaneously, the LB watches real request responses. When a backend returns 5xx responses or connections time out at a configurable error rate, it is evicted without waiting for the next active probe cycle. This dramatically reduces detection latency for application-level failures in high-traffic systems.</p>
+
+    <h3>Failure Edge Cases</h3>
+    <div class="callout callout-warn">
+      <strong>LB probe starvation:</strong> If the LB is overwhelmed and probe threads are starved, checks may not fire on schedule — backends appear unhealthy when they aren't. This is why LBs are typically dedicated appliances or run as separate processes with guaranteed probe thread capacity.
+    </div>
+    <div class="callout callout-warn">
+      <strong>Thundering herd on recovery:</strong> When a backend recovers after an outage and all staggered checks pass simultaneously, the full traffic load hits it at once before it has warmed up its connection pool and caches. Gradual slow-start mitigates this.
+    </div>
+
+    <h3>Key Parameters to Specify in an Interview</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Parameter</th><th>Typical Range</th><th>Effect of Tuning</th></tr></thead>
+        <tbody>
+          <tr><td><code>interval</code></td><td>5–30s</td><td>Shorter → faster detection, more probe overhead</td></tr>
+          <tr><td><code>timeout</code></td><td>1–5s (must be &lt; interval)</td><td>Shorter → faster failure confirmation per probe</td></tr>
+          <tr><td><code>fall_threshold</code></td><td>2–5</td><td>Lower → faster eviction, more false positives</td></tr>
+          <tr><td><code>rise_threshold</code></td><td>2–3</td><td>Lower → faster recovery, risk of premature reinstatement</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- S10: REAL-WORLD EXAMPLES -->
+  <section id="s10">
+    <h2 class="section-title"><span class="num">10</span> Real-World System Examples</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>System</th><th>How This Concept Applies</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>AWS ALB / NLB</strong></td>
+            <td>Active HTTP/HTTPS/TCP checks with configurable interval (5–300s), timeout, healthy/unhealthy threshold. ALB checks <code>/health</code> by default; NLB uses TCP checks.</td>
+            <td>ALB health checks are per-target-group — different groups can have different check configs for different workloads</td>
+          </tr>
+          <tr>
+            <td><strong>HAProxy</strong></td>
+            <td>Active checks (HTTP/TCP) and passive checks (observing real traffic errors). Uses <code>rise</code> and <code>fall</code> params. Also supports "agent checks" — a lightweight TCP channel the backend uses to proactively signal its own load/state.</td>
+            <td>Agent checks allow a backend to voluntarily remove itself before a hard failure — e.g., when queue depth exceeds a threshold</td>
+          </tr>
+          <tr>
+            <td><strong>NGINX Plus</strong></td>
+            <td>Active upstream health checks via the <code>health_check</code> directive. NGINX open-source does passive checks only (on real traffic).</td>
+            <td>Active checks are a paid NGINX Plus feature — a common gotcha when designing with the assumption that nginx does active checks by default</td>
+          </tr>
+          <tr>
+            <td><strong>Kubernetes (kubelet)</strong></td>
+            <td>Liveness probes (restart pod if failed), readiness probes (remove from Service endpoints if failed), startup probes (give slow-starting apps extra time). Three check types: HTTP, TCP, exec.</td>
+            <td>Readiness probe is the direct health-check equivalent for LB integration — a pod failing its readiness probe is removed from the Service's endpoint slice</td>
+          </tr>
+          <tr>
+            <td><strong>Envoy (service mesh)</strong></td>
+            <td>Outlier detection — passive eviction when backends exceed error rate or consecutive 5xx thresholds. Also supports active health checks via the health_check filter.</td>
+            <td>Envoy's outlier detection has an ejection percentage cap to avoid removing all backends simultaneously during a cascade</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- S11: TRADE-OFFS -->
+  <section id="s11">
+    <h2 class="section-title"><span class="num">11</span> Trade-offs</h2>
+    <div class="table-wrap">
+      <table class="trade-off-table">
+        <thead><tr><th>Benefit</th><th>Cost / Limitation</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Fast failure detection removes unhealthy backends before users are widely impacted</td>
+            <td>Detection latency window (<code>interval × fall_threshold</code>) means some users will hit the failing backend during the detection period</td>
+          </tr>
+          <tr>
+            <td>Threshold-based eviction prevents flapping from transient network blips</td>
+            <td>Higher thresholds increase detection latency — there is no free lunch between speed and stability</td>
+          </tr>
+          <tr>
+            <td>Passive checks catch real application errors (5xx on actual requests) that active pings miss</td>
+            <td>Passive checks require traffic volume to fire — useless in low-QPS systems or for backends with sparse traffic</td>
+          </tr>
+          <tr>
+            <td>Deep health checks validate the full dependency chain (DB, cache, downstream APIs)</td>
+            <td>Deep checks add load to already-stressed dependencies and can trigger cascading failures during degraded states</td>
+          </tr>
+          <tr>
+            <td>Rise threshold prevents premature reinstatement of recovering backends</td>
+            <td>Rise threshold delays recovery — the backend is healthy but sitting idle while it accumulates check passes</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- S12: INTERVIEW APPLICATION -->
+  <section id="s12">
+    <h2 class="section-title"><span class="num">12</span> Interview Application</h2>
+
+    <h3>Trigger Phrases</h3>
+    <ul class="checklist" style="cursor:default;">
+      <li style="cursor:default;"><div class="cb" style="background:#e5e7eb;border-color:#e5e7eb;"></div><span class="text">"How does the load balancer know when a server goes down?"</span></li>
+      <li style="cursor:default;"><div class="cb" style="background:#e5e7eb;border-color:#e5e7eb;"></div><span class="text">"What happens if one of your backend servers crashes?"</span></li>
+      <li style="cursor:default;"><div class="cb" style="background:#e5e7eb;border-color:#e5e7eb;"></div><span class="text">"How do you ensure high availability in your design?"</span></li>
+      <li style="cursor:default;"><div class="cb" style="background:#e5e7eb;border-color:#e5e7eb;"></div><span class="text">"Walk me through failover in your system."</span></li>
+    </ul>
+
+    <h3>What You Say</h3>
+    <div class="callout callout-tip">
+      After introducing your load balancer in a high-level design, proactively add: <em>"The LB needs active health checks — I'd configure HTTP checks to <code>/health</code> every 5 seconds with a 2-second timeout, evicting after 3 consecutive failures and restoring after 2 consecutive passes. This gives a 15-second worst-case detection window, which I'd pair with passive checks to catch application-level errors faster in high-traffic paths."</em> This signals you understand operational realities, not just the happy path.
+    </div>
+
+    <h3>Trade-off Statement (memorize this)</h3>
+    <div class="definition" style="border-left-color: var(--purple); font-size:14.5px; font-style: italic;">
+      "If we use short intervals with low thresholds, we get faster detection but risk false evictions on transient network blips. For this system, I'd tune toward a 5-second interval with a fall threshold of 3 — that's a 15-second worst-case window — because our SLO gives us budget for that, and it avoids flapping in a noisy network environment."
+    </div>
+  </section>
+
+  <!-- S13: MISCONCEPTIONS -->
+  <section id="s13">
+    <h2 class="section-title"><span class="num">13</span> Common Misconceptions &amp; Gotchas</h2>
+
+    <div class="misconception">
+      <div class="mc-wrong"><div class="mc-label">&#10060; Misconception</div>A health check endpoint that returns 200 OK means the backend is healthy.</div>
+      <div class="mc-right"><div class="mc-label">&#9989; Reality</div>A shallow check only means the process is listening. If the health check endpoint doesn't verify database connectivity, cache availability, or critical service dependencies, a backend can appear healthy while being completely unable to serve real requests. Deep checks must explicitly query downstream dependencies — but must also be designed carefully to avoid adding load during degraded states.</div>
+    </div>
+
+    <div class="misconception">
+      <div class="mc-wrong"><div class="mc-label">&#10060; Misconception</div>Removing a backend immediately on the first failed health check is the right approach for fast detection.</div>
+      <div class="mc-right"><div class="mc-label">&#9989; Reality</div>A single failure is almost always a transient network blip. Immediate eviction causes constant flapping in any real network, which amplifies load on remaining healthy backends. Threshold-based eviction (2–3 consecutive failures) is the industry standard for a reason — it trades a few seconds of detection latency for dramatically better pool stability.</div>
+    </div>
+
+    <div class="misconception">
+      <div class="mc-wrong"><div class="mc-label">&#10060; Misconception</div>Once a backend is marked healthy again, it should immediately receive its full share of traffic.</div>
+      <div class="mc-right"><div class="mc-label">&#9989; Reality</div>A recovering backend likely has cold caches, cold connection pools, and hasn't warmed up its JVM or runtime. Flooding it with full traffic immediately often causes it to fail again. Gradual slow-start (linearly ramping from 0 to full weight over 30s) is standard in production LBs like HAProxy and NGINX Plus.</div>
+    </div>
+
+    <div class="misconception">
+      <div class="mc-wrong"><div class="mc-label">&#10060; Misconception</div>Passive checks are always better than active checks because they reflect real traffic.</div>
+      <div class="mc-right"><div class="mc-label">&#9989; Reality</div>Passive checks require traffic to fire. A backend used only 10 times per minute could stay in the pool for minutes after failing before passive eviction triggers. Active checks provide a guaranteed detection latency ceiling regardless of traffic volume. Production systems use both in combination.</div>
+    </div>
+  </section>
+
+  <!-- S14: RELATIONSHIPS -->
+  <section id="s14">
+    <h2 class="section-title"><span class="num">14</span> Relationships to Other Concepts</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Relationship</th><th>Concept</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Builds on</strong></td><td>4.1 L4 vs. L7 Load Balancers</td><td>Check type (TCP vs. HTTP) is tied directly to which layer the LB operates at. L4 LBs can only do TCP checks; L7 LBs can inspect HTTP response codes and bodies, enabling meaningful deep checks.</td></tr>
+          <tr><td><strong>Enables</strong></td><td>4.4 Failover and Redundancy</td><td>Health checks are the detection mechanism that triggers failover. Without reliable failure detection, automatic failover is impossible — you can't fail over to a healthy node if you don't know which nodes are healthy.</td></tr>
+          <tr><td><strong>Tension with</strong></td><td>4.6 Sticky Sessions</td><td>Sticky sessions tie a user to a specific backend. When health checks evict that backend, the session must be broken or migrated, creating a direct conflict between session affinity and health-based pool management.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- S15: QUIZ -->
+  <section id="s15">
+    <h2 class="section-title"><span class="num">15</span> Self-Check Quiz</h2>
+    <div class="callout callout-quote">Click to reveal the hint. Answer out loud before you look.</div>
+
+    <div class="quiz-item" onclick="toggleQuiz(this)">
+      <div class="quiz-q"><div class="quiz-num">1</div>What is the difference between an active health check and a passive health check, and when would you rely on each?</div>
+      <div class="quiz-hint">Active: LB probes backends synthetically on an interval. Passive: LB observes real traffic for errors. Use active for guaranteed detection latency regardless of traffic volume; use passive to catch application-level errors that active pings miss. Combine both in production. Revisit Section 6 if you hesitated.</div>
+    </div>
+
+    <div class="quiz-item" onclick="toggleQuiz(this)">
+      <div class="quiz-q"><div class="quiz-num">2</div>A system is configured with interval=10s, timeout=3s, fall_threshold=3, rise_threshold=2. A backend crashes at t=0. What is the worst-case time before users stop being routed to it? What is the worst-case time before a recovered backend is back in the pool?</div>
+      <div class="quiz-hint">Detection: 10s × 3 = 30 seconds worst case. Recovery: 10s × 2 = 20 seconds worst case. "Worst case" because the probe may have just fired right before the crash — you then wait a full interval before the next probe. Revisit Section 9 if you hesitated.</div>
+    </div>
+
+    <div class="quiz-item" onclick="toggleQuiz(this)">
+      <div class="quiz-q"><div class="quiz-num">3</div>Why is it dangerous to set fall_threshold=1 in a production load balancer?</div>
+      <div class="quiz-hint">A single failed probe is almost always a transient network blip — a dropped packet, a momentary timeout, a GC pause. Evicting on one failure causes constant flapping: backends are evicted and restored repeatedly, which amplifies load on the remaining pool and can cascade into a full outage. Revisit Section 6 (Rise &amp; Fall Thresholds) and Section 13 if you hesitated.</div>
+    </div>
+
+    <div class="quiz-item" onclick="toggleQuiz(this)">
+      <div class="quiz-q"><div class="quiz-num">4</div>Name a real system (not a load balancer itself) that uses health check or readiness concepts, and explain concretely how it works.</div>
+      <div class="quiz-hint">Best answer: Kubernetes readiness probes — a pod failing its readiness probe is removed from the Service's endpoint slice, stopping the LB from routing to it. Liveness probe failures cause the pod to restart. Revisit Section 10 if you hesitated.</div>
+    </div>
+
+    <div class="quiz-item" onclick="toggleQuiz(this)">
+      <div class="quiz-q"><div class="quiz-num">5</div>An interviewer pushes back: "Your health check endpoint always returns 200 — isn't that good enough?" What do you say?</div>
+      <div class="quiz-hint">No — a shallow check only verifies the process is listening, not that it can serve real requests. If the DB is down or the cache is unavailable, the backend may appear healthy while returning errors on every real request. Deep checks must query downstream dependencies. The trade-off: deep checks add load and can cascade failures if the check itself is expensive during degraded states. Revisit Sections 6 and 13.</div>
+    </div>
+  </section>
+
+  <!-- S16: FURTHER READING -->
+  <section id="s16">
+    <h2 class="section-title"><span class="num">16</span> Further Reading</h2>
+
+    <div class="reading-item" onclick="toggleRead(this)">
+      <div class="cb" style="flex-shrink:0;margin-top:2px;"></div>
+      <div>
+        <div class="reading-title"><strong>DDIA Chapter 8 — Trouble with Distributed Systems</strong></div>
+        <div style="font-size:13px;color:var(--text-muted);">Kleppmann — covers why detecting failures in asynchronous networks is fundamentally hard; the theoretical foundation for why health check design involves unavoidable trade-offs</div>
+      </div>
+    </div>
+
+    <div class="reading-item" onclick="toggleRead(this)">
+      <div class="cb" style="flex-shrink:0;margin-top:2px;"></div>
+      <div>
+        <div class="reading-title"><strong>HAProxy Health Check Documentation</strong></div>
+        <div style="font-size:13px;color:var(--text-muted);">haproxy.com/documentation — covers active, passive, and agent checks with real config examples; the most comprehensive reference for understanding rise/fall threshold behavior in practice</div>
+      </div>
+    </div>
+
+    <div class="reading-item" onclick="toggleRead(this)">
+      <div class="cb" style="flex-shrink:0;margin-top:2px;"></div>
+      <div>
+        <div class="reading-title"><strong>AWS ELB Health Check Documentation</strong></div>
+        <div style="font-size:13px;color:var(--text-muted);">docs.aws.amazon.com/elasticloadbalancing/latest/application/target-group-health-checks.html — concrete production defaults and guidance for ALB and NLB health check configuration</div>
+      </div>
+    </div>
+
+    <div class="reading-item" onclick="toggleRead(this)">
+      <div class="cb" style="flex-shrink:0;margin-top:2px;"></div>
+      <div>
+        <div class="reading-title"><strong>Kubernetes Probes Documentation</strong></div>
+        <div style="font-size:13px;color:var(--text-muted);">kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/ — liveness vs. readiness vs. startup probes explained with config examples; the clearest concrete illustration of the concepts in this subtopic</div>
+      </div>
+    </div>
+
+    <div class="reading-item" onclick="toggleRead(this)">
+      <div class="cb" style="flex-shrink:0;margin-top:2px;"></div>
+      <div>
+        <div class="reading-title"><strong>Envoy Outlier Detection Documentation</strong></div>
+        <div style="font-size:13px;color:var(--text-muted);">envoyproxy.io/docs/envoy/latest/intro/arch_overview/upstream/outlier — how passive eviction works in a service mesh context, including the ejection percentage cap that prevents removing the entire pool during a cascade</div>
+      </div>
+    </div>
+  </section>
+
+</article>
+</main>
+
+<script>
+  function toggle(el) {
+    el.classList.toggle('checked');
+    saveState();
+  }
+
+  function togglePhase(header) {
+    header.parentElement.classList.toggle('open');
+  }
+
+  function toggleQuiz(item) {
+    item.classList.toggle('open');
+  }
+
+  function toggleRead(item) {
+    item.classList.toggle('read');
+    const cb = item.querySelector('.cb');
+    if (item.classList.contains('read')) {
+      cb.style.background = '#16a34a'; cb.style.borderColor = '#16a34a';
+      cb.innerHTML = '<span style="color:white;font-size:11px;font-weight:700;">&#10003;</span>';
+    } else {
+      cb.style.background = ''; cb.style.borderColor = ''; cb.innerHTML = '';
+    }
+    saveState();
+  }
+
+  function saveState() {
+    const state = {};
+    document.querySelectorAll('.checklist li').forEach((li, i) => {
+      state['li_' + i] = li.classList.contains('checked');
+    });
+    try { localStorage.setItem('4_3_state', JSON.stringify(state)); } catch(e) {}
+  }
+
+  function loadState() {
+    try {
+      const state = JSON.parse(localStorage.getItem('4_3_state') || '{}');
+      document.querySelectorAll('.checklist li').forEach((li, i) => {
+        if (state['li_' + i]) li.classList.add('checked');
+      });
+    } catch(e) {}
+  }
+
+  // Scrollspy
+  const sections = document.querySelectorAll('section[id]');
+  const navLinks = document.querySelectorAll('#toc nav a');
+
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        navLinks.forEach(a => a.classList.remove('active'));
+        const link = document.querySelector('#toc nav a[href="#' + e.target.id + '"]');
+        if (link) link.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -75% 0px' });
+
+  sections.forEach(s => observer.observe(s));
+  loadState();
+</script>
+</body>
+</html>
