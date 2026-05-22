@@ -110,6 +110,7 @@
     <h2>4.4 Failover &amp; Redundancy</h2>
   </div>
   <nav>
+    <a href="#s0">0. Topic Overview</a>
     <a href="#s1">1. Goal</a>
     <a href="#s2">2. Mastery Checklist</a>
     <a href="#s3">3. Study Phases</a>
@@ -140,6 +141,35 @@
     </div>
     <h1>4.4 Failover &amp; Redundancy<br><span style="font-weight:400;font-size:20px;color:var(--text-muted)">Active-Active · Active-Passive · VRRP · RTO &amp; RPO</span></h1>
   </header>
+
+  <!-- S0: TOPIC OVERVIEW -->
+  <section id="s0">
+    <h2 class="section-title"><span class="num">00</span> 🗺️ Topic Overview</h2>
+
+    <h3>What This Topic Is About</h3>
+    <p>Failover and redundancy are how you design a system so that <strong>no single component failure takes down the whole service.</strong> The core idea: failure is the baseline, not the exception — hardware dies, processes crash, networks partition. This topic is about designing <em>around</em> that reality rather than hoping it doesn't happen.</p>
+    <p>There are two complementary concepts: <strong>redundancy</strong> — provisioning duplicate components so a replacement always exists — and <strong>failover</strong> — the mechanism that routes traffic <em>away</em> from the failed component and toward the replacement. This topic covers the two failover modes (active-active vs. active-passive), how the load balancer <em>itself</em> is made redundant (floating IP / VRRP), and how RTO/RPO drive your architecture choices.</p>
+
+    <h3>🎯 What to Focus On</h3>
+    <div class="concept-grid">
+      <div class="concept-card cc-blue">
+        <div class="cc-header">1. Active-active vs. active-passive</div>
+        <div class="cc-body">Compare them on availability, cost, complexity, and state requirements. Interviewers will probe <em>why</em> you chose one over the other.</div>
+      </div>
+      <div class="concept-card cc-orange">
+        <div class="cc-header">2. The LB itself is a SPOF</div>
+        <div class="cc-body">The #1 gotcha. A second LB does nothing if it doesn't share a floating IP (VRRP). Understand the VRRP mechanism mechanically.</div>
+      </div>
+      <div class="concept-card cc-purple">
+        <div class="cc-header">3. The detection lag formula</div>
+        <div class="cc-body">Failover speed is bounded by <code>check_interval × fall_threshold</code>. Know the difference between floating IP and DNS failover in terms of actual speed.</div>
+      </div>
+      <div class="concept-card cc-green">
+        <div class="cc-header">4. RTO vs. RPO as decision levers</div>
+        <div class="cc-body">Hot / warm / cold standby is just RTO expressed architecturally. Financial system → RPO = 0 → sync replication. Analytics → RPO = minutes → async is fine.</div>
+      </div>
+    </div>
+  </section>
 
   <!-- S1: GOAL -->
   <section id="s1">
@@ -333,7 +363,7 @@
 
     <h3>Active-Passive Failover Flow</h3>
     <ul class="flow-steps">
-      <li><div class="step-num">1</div><div>Primary LB serves all traffic. Secondary LB sends VRRP heartbeats to primary every 1s.</div></li>
+      <li><div class="step-num">1</div><div>Primary LB serves all traffic. Primary LB sends VRRP advertisement packets to secondary every 1s. Secondary listens — if no advertisement received within <code>dead_interval</code> (3 × 1s = 3s), it claims the floating VIP.</div></li>
       <li><div class="step-num">2</div><div>Primary LB runs health checks on backends: e.g., HTTP GET <code>/health</code> every 5s, fall threshold = 3.</div></li>
       <li><div class="step-num green">3</div><div>Backend fails 3 consecutive checks → LB marks it down, connection draining begins (15–60s), then backend removed from pool.</div></li>
       <li><div class="step-num orange">4</div><div>Primary LB itself fails → VRRP heartbeat stops → secondary waits <code>dead_interval</code> (3 × 1s = 3s) → secondary claims the floating VIP.</div></li>

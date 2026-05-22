@@ -6,6 +6,30 @@
 
 ---
 
+## 0. 🗺️ Topic Overview
+
+### What This Topic Is About
+
+Failover and redundancy are how you design a system so that **no single component failure takes down the whole service.** The core idea: failure is the baseline, not the exception — hardware dies, processes crash, networks partition. This topic is about designing *around* that reality rather than hoping it doesn't happen.
+
+There are two complementary concepts:
+- **Redundancy** — provisioning duplicate components so a replacement always exists
+- **Failover** — the mechanism that routes traffic *away* from the failed component and toward the replacement
+
+This topic covers the two failover modes (active-active vs. active-passive), how the load balancer *itself* is made redundant (floating IP / VRRP), and how RTO/RPO drive your architecture choices.
+
+### 🎯 What to Focus On
+
+**1. Active-active vs. active-passive** — you must be able to compare them on availability, cost, complexity, and state requirements. Interviewers will probe *why* you chose one over the other.
+
+**2. The LB itself is a SPOF** — this is the #1 gotcha. A second LB does nothing if it doesn't share a floating IP (VRRP). Understand how VRRP / floating IPs work mechanically.
+
+**3. The detection lag formula** — failover speed is bounded by `health_check_interval × fall_threshold`. Know this, know why it matters, know the difference between floating IP failover and DNS failover in terms of how fast they actually take effect.
+
+**4. RTO vs. RPO** — these are your decision levers. Hot standby vs. warm vs. cold is just RTO expressed as an architectural choice. Financial system → RPO = 0 → synchronous replication. Analytics → RPO = minutes → async is fine.
+
+---
+
 ## 1. 🎯 Goal of This Subtopic
 
 > *Why are you studying this? What should you be able to do after this session?*
@@ -161,7 +185,7 @@ A floating IP / VRRP is like a Google Voice number: the number never changes, bu
 > *Step-by-step explanation of the internal mechanism.*
 
 **Active-Passive Failover Flow (Happy Path):**
-1. Primary LB serves all traffic. Secondary LB runs VRRP heartbeats to primary every ~1s.
+1. Primary LB serves all traffic. Primary LB sends VRRP advertisement packets to secondary every ~1s. Secondary listens — if no advertisement is received within `dead_interval` (3 × 1s = 3s), it claims the floating VIP.
 2. Primary LB runs health checks against all backend nodes (e.g., HTTP GET /health every 5s, fall threshold = 3).
 3. If a backend fails 3 consecutive checks → LB marks it down, stops routing new connections, drains existing connections (connection draining, typically 30s), then removes from pool.
 4. If primary LB itself fails → VRRP heartbeat stops → secondary LB claims the floating VIP after `dead_interval` (typically 3s) → clients resume connecting, unaware of the switch.
@@ -266,22 +290,107 @@ When asked about availability, immediately address each tier top-to-bottom: load
 
    > 💡 *Think through your answer before expanding — if you hesitate, revisit Section 6.*
 
+Active-active: all nodes simultaneously serve traffic; on failure, the remaining 
+N-1 nodes absorb the failed node's share. Requires stateless design or 
+synchronized state, and N-1 capacity headroom on every node.
+
+Active-passive: one primary serves all traffic; one or more standbys sit idle. 
+On failure, standby claims the floating VIP via VRRP and becomes the new primary.
+
+Active-active → right choice: stateless compute tier (e.g., API servers, 
+web tier) where any node can handle any request and state is externalized.
+
+Active-passive → right choice: databases or any stateful component where 
+dual-active writes risk split-brain (two nodes accepting conflicting writes 
+simultaneously).
+
 2. A system uses two HAProxy load balancers with Keepalived. The VRRP advertisement interval is 1s and the dead interval is 3s. How long does it take for the secondary to claim the VIP after the primary crashes?
 
    > 💡 *Think through your answer before expanding — if you hesitate, revisit Section 9.*
+
+Dead interval = 3 × advertisement interval = 3 × 1s = 3 seconds.
+
+After the primary crashes, VRRP heartbeats stop. The secondary waits one full 
+dead interval (3s) without receiving an advertisement before declaring the 
+primary dead and claiming the VIP.
+
+From the client's perspective, the IP never changes — the VIP simply starts 
+answering from the secondary after that 3s window. No DNS update, no client 
+reconnection required.
+
+Note: the 3s is the detection-to-takeover window only. Any in-flight TCP 
+connections to the crashed primary are dropped — connection draining cannot 
+help a crashed (vs. gracefully removed) node.
 
 3. What is the cost of DNS-based failover that floating IP (VRRP) avoids? When would you still use DNS-based failover despite this cost?
 
    > 💡 *Think through your answer before expanding — if you hesitate, revisit Sections 9 and 11.*
 
+Cost of DNS-based failover:
+DNS failover triggers the record update immediately, but clients cache the old 
+record until TTL expires (typically 30–300s). During that window, new connections 
+from clients with a cached record still hit the dead node. This lag is 
+unavoidable — you cannot force clients to flush their DNS cache.
+
+What floating IP (VRRP) avoids:
+VRRP operates at the network layer — the VIP is reassigned between LB nodes in 
+~3s with no DNS involved. Clients never re-resolve; the same IP simply starts 
+answering from the secondary. Zero TTL lag.
+
+When to use DNS-based failover despite the cost:
+Cross-region failover — VRRP requires L2 adjacency (same subnet). It cannot 
+span regions or data centers. When failing over from US-East to US-West, 
+DNS-based cutover (e.g., Route 53 health checks) is the only viable mechanism. 
+You accept the TTL lag as the cost of geographic redundancy.
+
 4. Name a real system that uses active-passive database failover and explain what determines its RPO in that configuration.
 
    > 💡 *Think through your answer before expanding — if you hesitate, revisit Section 10.*
+
+System: MySQL with MHA (Master High Availability) or Orchestrator.
+
+Mechanism: One primary accepts all writes; one or more replicas stay in sync. 
+On primary failure, MHA promotes the most up-to-date replica to primary and 
+updates the VIP or DNS record to point at the new primary.
+
+What determines RPO:
+RPO is determined entirely by the replication mode:
+
+  Async replication (default): writes are acknowledged on the primary before 
+  being sent to the replica. If the primary crashes before replication completes, 
+  those writes are lost. RPO = seconds of replication lag at time of failure.
+
+  Semi-sync replication: primary waits for at least one replica to acknowledge 
+  receipt before confirming the write to the client. RPO ≈ 0 under normal 
+  conditions, but falls back to async if the replica acknowledgement times out.
+
+  Sync replication (e.g., MySQL Group Replication with synchronous mode): 
+  write is not confirmed until all nodes acknowledge. RPO = 0, but every write 
+  pays the round-trip latency cost to the replica.
+
+The replication mode is a direct RPO vs. write latency trade-off.
 
 5. An interviewer says: "Your design has two load balancers — so there's no SPOF at the LB tier, right?" What's the missing detail you need to verify before agreeing?
 
    > 💡 *Think through your answer before expanding — this is a gotcha question — revisit Section 13.*
 
+The missing detail: how traffic reaches the two load balancers.
+
+Two LBs only eliminate the SPOF if one of these is true:
+
+  Active-active: both LBs receive traffic via anycast or DNS round-robin. 
+  If one fails, traffic naturally flows to the surviving LB. 
+
+  Active-passive: both LBs share a floating VIP via VRRP. If the primary 
+  fails, the secondary claims the VIP in ~3s. Clients see no IP change.
+
+If neither is in place — e.g., DNS still resolves to a single LB's IP, 
+and the second LB has no path to receive traffic — then the second LB is 
+unreachable on primary failure. You haven't eliminated the SPOF, you've 
+just added an unused standby with no mechanism to activate it.
+
+Punchline for the interview: "Two load balancers without VRRP or anycast 
+just moves the SPOF — it doesn't eliminate it."
 ---
 
 ## 16. 📚 Further Reading
@@ -299,3 +408,34 @@ When asked about availability, immediately address each tier top-to-bottom: load
 
 > *Personal observations, things that confused me, analogies that helped.*
 
+One Liner
+Redundancy is an architectural practice where we provision additional nodes ready to take over the primary nodes in failure circumstances. 
+Failover is a strategy where we will redirect traffic from a field node to a healthy node The service stays operational. 
+
+Concepts
+In terms of failover, there are two strategies:
+1. Active-active
+  - In an active-active failover strategy, you will need to have at least two nodes, both running simultaneously and serving traffic together, and they will need to synchronize states constantly. In times of failure, the nodes will be receiving traffic via anycast, so the failed node will have its traffic redirected to the remaining M-1 healthy nodes. This also creates a requirement that all of the nodes in an active-active failover strategy need to be provisioned to handle M-1 traffic load. 
+2. Active-passive
+  - In an active-passive failover strategy, you have one primary node that is serving traffic and n number of passive nodes that are on standby. All of these nodes are sharing a virtual IP via the VRRP protocol. In addition, the passive nodes will be pinging the active node every 1 s to check for health and serviceability. If there are three consecutive failures, then the passive node will take over the healthy node and become the new primary. 
+
+In terms of active/passive failover strategy, the passive nodes also have a few standby modes. The first mode is hot mode, where the passive node is actually running in full service and it is synchronizing state. It's just that it's not serving traffic. Is warm mode? It's also running in full service, but it is also partially synchronizing state. And the third one is a cold standby mode in which the passive node is not running and it requires expensive booting up of the node. 
+
+We will use an active-active strategy for LBs when we are working with a stateless compute tier and budget allows such a strategy. 
+We will use an active-passive strategy when we are dealing with a stateful component, or there are overhead costs like coordination and increased latency with running simultaneous nodes together, especially so if running both active-active nodes creates a split brain. 
+
+For an active-passive failover strategy, there is a failure window. This failure window is typically captured by the interval of health pings times the number of consecutive failures that we require to be deemed as unhealthy. 
+The go-to protocol is to always make the load balancer redundant. And by making LB redundant, what we mean is that we may use either of the failover strategies. We need to either make all the load balancers sit behind any class in an active-active strategy, or we need to make the active and passive nodes share the same floating IP address. 
+
+RTO - Recovery Time Objective. This is the specified maximum amount of time that it takes for the service to recover. 
+RPO - Recovery Point Objective. This is the amount of Data loss that is acceptable, measured in the amount of time. 
+
+RPO → replication strategy (sync vs. async). RTO → standby type (hot vs. warm vs. cold).
+
+If our RPO is equal to zero, then we need to have a synchronous replication strategy. Whereas if our RPO is more than zero, then we can afford to have an asynchronous replication strategy. 
+
+DNS TTL means 30–300s of lag after failover triggers. Floating IP is near-instant. This distinction is what separates LB-tier failover from cross-region failover.
+
+If we have two load balancers, they need to either receive traffic via anycast or they need to be subjected to the same floating IP address. Without either of which, they will still be deemed a single point of failure. 
+
+VRRP only works L2-adjacent (same subnet). Cross-region requires DNS-based cutover.

@@ -1,0 +1,1224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.5 Reverse Proxies</title>
+<style>
+  :root {
+    --bg: #f9f8f6;
+    --surface: #ffffff;
+    --surface-alt: #f3f2ef;
+    --border: #e5e3de;
+    --text: #1a1917;
+    --text-muted: #6b6861;
+    --accent: #2563eb;
+    --accent-light: #dbeafe;
+    --green: #16a34a;
+    --green-light: #dcfce7;
+    --red: #dc2626;
+    --red-light: #fee2e2;
+    --yellow: #d97706;
+    --yellow-light: #fef3c7;
+    --purple: #7c3aed;
+    --purple-light: #ede9fe;
+    --code-bg: #1e1e2e;
+    --code-text: #cdd6f4;
+    --sidebar-w: 240px;
+    --content-max: 780px;
+    font-size: 16px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    display: flex;
+  }
+
+  /* ── SIDEBAR ── */
+  #toc {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: var(--sidebar-w);
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 24px 0 48px;
+    z-index: 100;
+  }
+
+  #toc-header {
+    padding: 0 16px 16px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 8px;
+  }
+
+  #toc-header .phase-tag {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: var(--accent-light);
+    border-radius: 4px;
+    padding: 2px 7px;
+    display: inline-block;
+    margin-bottom: 6px;
+  }
+
+  #toc-header h2 {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.4;
+  }
+
+  #toc nav a {
+    display: block;
+    padding: 5px 16px 5px 20px;
+    font-size: 12.5px;
+    color: var(--text-muted);
+    text-decoration: none;
+    border-left: 2px solid transparent;
+    transition: all 0.15s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+
+  /* ── MAIN CONTENT ── */
+  main {
+    margin-left: var(--sidebar-w);
+    padding: 48px 48px 96px;
+    max-width: calc(var(--sidebar-w) + var(--content-max) + 96px);
+    width: 100%;
+  }
+
+  article { max-width: var(--content-max); }
+
+  /* ── HEADER ── */
+  .doc-header {
+    margin-bottom: 40px;
+    padding-bottom: 28px;
+    border-bottom: 2px solid var(--border);
+  }
+
+  .doc-header .meta {
+    display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px;
+  }
+
+  .tag {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border-radius: 20px;
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+
+  .tag-phase  { background: var(--accent-light);  color: var(--accent); }
+  .tag-topic  { background: var(--purple-light);  color: var(--purple); }
+  .tag-date   { background: var(--surface-alt);   color: var(--text-muted); }
+
+  .doc-header h1 {
+    font-size: 30px;
+    font-weight: 800;
+    line-height: 1.25;
+    letter-spacing: -0.02em;
+    color: var(--text);
+  }
+
+  /* ── SECTIONS ── */
+  section {
+    margin-bottom: 52px;
+    scroll-margin-top: 32px;
+  }
+
+  h2.section-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 20px;
+    display: flex; align-items: center; gap: 10px;
+    letter-spacing: -0.01em;
+  }
+
+  h2.section-title .num {
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--text-muted);
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 2px 7px;
+    letter-spacing: 0.04em;
+  }
+
+  h3 {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    margin: 24px 0 10px;
+  }
+
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+
+  /* ── CALLOUT BOXES ── */
+  .callout {
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-bottom: 20px;
+    font-size: 14px;
+    border-left: 3px solid;
+  }
+
+  .callout-goal   { background: var(--accent-light);  border-color: var(--accent);  color: #1e40af; }
+  .callout-tip    { background: var(--yellow-light);  border-color: var(--yellow);  color: #92400e; }
+  .callout-quote  { background: var(--surface-alt);   border-color: var(--border);  color: var(--text-muted); font-style: italic; }
+
+  /* ── CHEATSHEET CODE BLOCK ── */
+  .cheatsheet {
+    background: var(--code-bg);
+    color: var(--code-text);
+    border-radius: 12px;
+    padding: 24px 28px;
+    font-family: "SF Mono", "Fira Code", "Cascadia Code", Menlo, monospace;
+    font-size: 13px;
+    line-height: 1.65;
+    white-space: pre-wrap;
+    overflow-x: auto;
+    margin-top: 16px;
+  }
+
+  .cheatsheet .label {
+    color: #cba6f7;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+  }
+
+  /* ── MINDMAP IMAGE ── */
+  .mindmap-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    margin: 20px 0 24px;
+    text-align: center;
+  }
+
+  .mindmap-wrap img { max-width: 100%; border-radius: 8px; }
+  .mindmap-wrap .caption { font-size: 12px; color: var(--text-muted); margin-top: 8px; }
+
+  /* ── CHECKLIST ── */
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+
+  .checklist li {
+    display: flex; align-items: flex-start; gap: 10px;
+    font-size: 14.5px; line-height: 1.55;
+  }
+
+  .checklist li .cb {
+    flex-shrink: 0;
+    width: 18px; height: 18px;
+    border: 2px solid var(--border);
+    border-radius: 4px;
+    margin-top: 2px;
+    background: var(--surface);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+
+  .checklist li.checked .cb {
+    background: var(--green);
+    border-color: var(--green);
+  }
+
+  .checklist li.checked .cb::after {
+    content: '';
+    display: block;
+    width: 5px; height: 9px;
+    border: 2px solid #fff;
+    border-top: none; border-left: none;
+    transform: rotate(45deg) translateY(-1px);
+  }
+
+  .checklist li.checked .text { color: var(--text-muted); text-decoration: line-through; }
+
+  /* ── STUDY PHASES ── */
+  .phase-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+
+  .phase-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 20px;
+    cursor: pointer; user-select: none;
+    background: var(--surface-alt);
+  }
+
+  .phase-header:hover { background: var(--border); }
+
+  .phase-label {
+    font-size: 14px; font-weight: 700;
+    display: flex; align-items: center; gap: 10px;
+  }
+
+  .phase-badge {
+    font-size: 11px; font-weight: 800;
+    letter-spacing: 0.05em; text-transform: uppercase;
+    padding: 2px 8px; border-radius: 20px;
+  }
+
+  .ph1 { background: #dbeafe; color: #1d4ed8; }
+  .ph2 { background: #fce7f3; color: #9d174d; }
+  .ph3 { background: #d1fae5; color: #065f46; }
+  .ph4 { background: #fef3c7; color: #92400e; }
+
+  .phase-chevron { font-size: 12px; color: var(--text-muted); transition: transform 0.2s; }
+  .phase-card.open .phase-chevron { transform: rotate(180deg); }
+
+  .phase-body { display: none; padding: 16px 20px 20px; }
+  .phase-card.open .phase-body { display: block; }
+
+  .phase-goal { font-size: 12.5px; color: var(--text-muted); font-style: italic; margin-bottom: 12px; }
+
+  /* ── TABLES ── */
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+
+  th {
+    background: var(--surface-alt);
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 12px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--text-muted);
+    border-bottom: 2px solid var(--border);
+  }
+
+  td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top; line-height: 1.5;
+  }
+
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+
+  /* ── MISCONCEPTIONS ── */
+  .misconception {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+
+  .misconception .wrong {
+    background: var(--red-light);
+    padding: 10px 16px;
+    font-size: 14px;
+    display: flex; align-items: flex-start; gap: 8px;
+  }
+
+  .misconception .right {
+    padding: 10px 16px;
+    font-size: 14px;
+    display: flex; align-items: flex-start; gap: 8px;
+    color: #065f46; background: var(--green-light);
+  }
+
+  .misconception .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+
+  /* ── QUIZ ── */
+  .quiz-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+
+  .quiz-q {
+    padding: 14px 18px;
+    font-size: 14.5px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  }
+
+  .quiz-q:hover { background: var(--surface-alt); }
+
+  .quiz-num {
+    flex-shrink: 0;
+    width: 24px; height: 24px;
+    background: var(--accent);
+    color: #fff;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 800;
+    margin-top: 1px;
+  }
+
+  .quiz-q .qtext { flex: 1; }
+  .quiz-toggle { font-size: 11px; color: var(--text-muted); flex-shrink: 0; margin-top: 3px; }
+
+  .quiz-hint {
+    display: none;
+    padding: 10px 18px 14px;
+    font-size: 13px;
+    color: #92400e;
+    background: var(--yellow-light);
+    border-top: 1px solid var(--border);
+  }
+
+  .quiz-item.open .quiz-hint { display: block; }
+
+  /* ── FURTHER READING ── */
+  .reading-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+
+  .reading-list li {
+    display: flex; align-items: flex-start; gap: 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 14px;
+  }
+
+  .reading-list li .cb {
+    flex-shrink: 0;
+    width: 18px; height: 18px;
+    border: 2px solid var(--border);
+    border-radius: 4px;
+    margin-top: 1px;
+    cursor: pointer;
+    background: var(--surface);
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+
+  .reading-list li.checked .cb {
+    background: var(--green);
+    border-color: var(--green);
+  }
+
+  .reading-list li.checked .cb::after {
+    content: '';
+    display: block;
+    width: 5px; height: 9px;
+    border: 2px solid #fff;
+    border-top: none; border-left: none;
+    transform: rotate(45deg) translateY(-1px);
+  }
+
+  .reading-list li.checked .rtext { color: var(--text-muted); text-decoration: line-through; }
+
+  /* ── NOTES AREA ── */
+  .notes-area {
+    width: 100%;
+    min-height: 160px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    font-family: inherit;
+    font-size: 14px;
+    color: var(--text);
+    resize: vertical;
+    line-height: 1.6;
+  }
+
+  .notes-area:focus { outline: 2px solid var(--accent); border-color: transparent; }
+
+  /* ── FOCUS LIST (Section 0) ── */
+  .focus-list { list-style: none; display: flex; flex-direction: column; gap: 14px; }
+
+  .focus-list li {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    font-size: 14.5px;
+    line-height: 1.6;
+  }
+
+  .focus-list li strong { color: var(--accent); display: block; margin-bottom: 4px; }
+
+  /* ── CONNECTIONS ── */
+  .connections { display: flex; flex-direction: column; gap: 12px; }
+
+  .conn-card {
+    display: flex; align-items: flex-start; gap: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    font-size: 14px;
+  }
+
+  .conn-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .conn-label { font-weight: 700; margin-bottom: 3px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+
+  /* ── SCROLLSPY ── */
+  @media (max-width: 900px) {
+    #toc { display: none; }
+    main { margin-left: 0; padding: 24px 20px 60px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── SIDEBAR TOC ── -->
+<aside id="toc">
+  <div id="toc-header">
+    <div class="phase-tag">Phase B — Scalability</div>
+    <h2>4.5 Reverse Proxies</h2>
+  </div>
+  <nav>
+    <a href="#s0">🗺️ Topic Overview</a>
+    <a href="#s1">🎯 Goal</a>
+    <a href="#s2">✅ Mastery</a>
+    <a href="#s3">🗓️ Study Phases</a>
+    <a href="#s4">📋 Cheatsheet</a>
+    <a href="#s5">🧠 Core Definition</a>
+    <a href="#s6">📦 Core Concepts</a>
+    <a href="#s7">🔍 First Principles</a>
+    <a href="#s8">🗺️ Mental Models</a>
+    <a href="#s9">⚙️ How It Works</a>
+    <a href="#s10">🏭 Real-World Examples</a>
+    <a href="#s11">⚖️ Trade-offs</a>
+    <a href="#s12">🎯 Interview Application</a>
+    <a href="#s13">⚠️ Misconceptions</a>
+    <a href="#s14">🔗 Relationships</a>
+    <a href="#s15">🧪 Self-Check Quiz</a>
+    <a href="#s16">📚 Further Reading</a>
+    <a href="#s17">✍️ My Notes</a>
+  </nav>
+</aside>
+
+<!-- ── MAIN ── -->
+<main>
+<article>
+
+  <!-- HEADER -->
+  <header class="doc-header">
+    <div class="meta">
+      <span class="tag tag-phase">⚡ Phase B — Scalability</span>
+      <span class="tag tag-topic">⚖️ Topic 4 — Load Balancing</span>
+      <span class="tag tag-date">📅 2026-05-21</span>
+    </div>
+    <h1>4.5 Reverse Proxies</h1>
+  </header>
+
+  <!-- ── SECTION 0: TOPIC OVERVIEW ── -->
+  <section id="s0">
+    <h2 class="section-title"><span class="num">00</span> 🗺️ Topic Overview</h2>
+
+    <h3>What This Topic Is About</h3>
+    <p>A reverse proxy sits between the internet and your backend servers, intercepting all incoming requests and forwarding them on behalf of the client. Unlike a load balancer — whose primary job is distributing traffic — a reverse proxy is a general-purpose intermediary that can perform SSL termination, caching, compression, request rewriting, authentication, and rate limiting before the request ever reaches your application servers. Mastering this topic means understanding where a reverse proxy lives in an architecture, what responsibilities it owns, and when to reach for it instead of (or alongside) a load balancer.</p>
+
+    <h3>🎯 What to Focus On</h3>
+    <ul class="focus-list">
+      <li><strong>1. Reverse proxy vs. load balancer distinction</strong>The two are often conflated, but they answer different questions: a load balancer asks "which backend should handle this request?", while a reverse proxy asks "what should I do with this request before it reaches a backend?" Many tools (Nginx, HAProxy, Envoy) do both — but conceptually they are separate responsibilities.</li>
+      <li><strong>2. What a reverse proxy terminates</strong>SSL termination at the proxy is the most common use case — offloading TLS handshake cost from app servers. Understand the full handshake flow, what gets decrypted, and what the downstream connection looks like (often plain HTTP on a private network).</li>
+      <li><strong>3. Caching and compression at the edge</strong>A reverse proxy can cache upstream responses and serve them without hitting the backend. Understand when this helps (static or semi-static responses) and when it's counterproductive (personalized responses).</li>
+      <li><strong>4. Nginx vs. HAProxy vs. Envoy</strong>Know the high-level tradeoff: Nginx is a multi-purpose web server / reverse proxy / static file server; HAProxy is purpose-built for high-performance L4/L7 proxying; Envoy is designed for the service mesh era (dynamic configuration via xDS API, observability built in).</li>
+      <li><strong>5. Security and single ingress point</strong>A reverse proxy gives you one choke point to enforce: rate limiting, IP allowlisting/blocklisting, WAF rules, authentication headers, DDoS mitigation. Understanding this as an architectural pattern — centralizing cross-cutting concerns at ingress — is what separates a surface-level answer from a senior one.</li>
+    </ul>
+  </section>
+
+  <!-- ── SECTION 1: GOAL ── -->
+  <section id="s1">
+    <h2 class="section-title"><span class="num">01</span> 🎯 Goal of This Subtopic</h2>
+    <div class="callout callout-goal">
+      <em>Why are you studying this? What should you be able to do after this session?</em>
+    </div>
+    <p>Be able to clearly articulate what a reverse proxy does, how it differs from a load balancer, and where it belongs in an architecture. Be able to list the specific functions a reverse proxy performs (SSL termination, caching, compression, auth, rate limiting, request rewriting) and justify which function belongs at the proxy vs. at the application layer. Be able to select between Nginx, HAProxy, and Envoy for a given scenario and explain the trade-off.</p>
+  </section>
+
+  <!-- ── SECTION 2: MASTERY ── -->
+  <section id="s2">
+    <h2 class="section-title"><span class="num">02</span> ✅ What Mastery Looks Like</h2>
+    <div class="callout callout-quote">Concrete, testable proof that you own this concept — not just familiarity.</div>
+    <ul class="checklist" id="mastery-list">
+      <li><span class="cb"></span><span class="text">Can explain the difference between a reverse proxy and a load balancer in one sentence without notes, and give a concrete example where you'd use each independently</span></li>
+      <li><span class="cb"></span><span class="text">Can list five distinct functions a reverse proxy can perform and explain the architectural reason each belongs at the proxy layer rather than the app layer</span></li>
+      <li><span class="cb"></span><span class="text">Can walk through SSL termination end-to-end: client TLS handshake → proxy decrypts → plain HTTP to backend → response encrypted back to client</span></li>
+      <li><span class="cb"></span><span class="text">Can describe the security benefit of a reverse proxy as a single ingress point and name three cross-cutting concerns it centralizes</span></li>
+      <li><span class="cb"></span><span class="text">Can compare Nginx, HAProxy, and Envoy at a high level and select the appropriate tool for a given interview scenario</span></li>
+    </ul>
+    <div class="callout callout-tip" style="margin-top:20px;">
+      💡 <strong>Rule of thumb:</strong> If you can teach it to someone else and field their follow-up questions, you've mastered it.
+    </div>
+  </section>
+
+  <!-- ── SECTION 3: STUDY PHASES ── -->
+  <section id="s3">
+    <h2 class="section-title"><span class="num">03</span> 🗓️ Study Phases to Achieve Mastery</h2>
+    <div class="callout callout-quote">A progressive plan from first exposure to interview-ready. Work through each phase in order.</div>
+
+    <div class="phase-card open" id="ph1">
+      <div class="phase-header" onclick="togglePhase('ph1')">
+        <div class="phase-label"><span class="phase-badge ph1">Phase 1</span> Acquire 📖</div>
+        <span class="phase-chevron">▼</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Read deeply enough that you could explain the concept without the doc.</p>
+        <ul class="checklist">
+          <li><span class="cb"></span><span class="text">Read <strong>Cloudflare Learning — "What is a Reverse Proxy?"</strong> at cloudflare.com/learning/cdn/glossary/reverse-proxy-server/</span></li>
+          <li><span class="cb"></span><span class="text">Read <strong>NGINX Documentation — "NGINX Reverse Proxy"</strong> at docs.nginx.com/nginx/admin-guide/web-server/reverse-proxy/</span></li>
+          <li><span class="cb"></span><span class="text">Read <strong>Envoy Proxy Introduction</strong> at envoyproxy.io/docs/envoy/latest/intro/what_is_envoy</span></li>
+          <li><span class="cb"></span><span class="text">Read through <strong>Sections 5–9</strong> (Core Definition → How It Works) carefully — don't skim</span></li>
+          <li><span class="cb"></span><span class="text">Re-read the <strong>Cheatsheet</strong> (Section 4) and try to recite it from memory after</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-card" id="ph2">
+      <div class="phase-header" onclick="togglePhase('ph2')">
+        <div class="phase-label"><span class="phase-badge ph2">Phase 2</span> Consolidate ✍️</div>
+        <span class="phase-chevron">▼</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Verify you can reproduce the knowledge in your own words without looking.</p>
+        <ul class="checklist">
+          <li><span class="cb"></span><span class="text">Close the doc — write out the <strong>Core Definition</strong> from memory, then compare</span></li>
+          <li><span class="cb"></span><span class="text">Explain <strong>First Principles</strong> out loud without notes — what problem does this solve and why?</span></li>
+          <li><span class="cb"></span><span class="text">Reconstruct the <strong>How It Works</strong> mechanics step by step from memory</span></li>
+          <li><span class="cb"></span><span class="text">Restate each <strong>Trade-off</strong> row in your own words — if you can't explain the cost, you don't own it yet</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-card" id="ph3">
+      <div class="phase-header" onclick="togglePhase('ph3')">
+        <div class="phase-label"><span class="phase-badge ph3">Phase 3</span> Apply 🔧</div>
+        <span class="phase-chevron">▼</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Connect to real systems and simulate interview scenarios.</p>
+        <ul class="checklist">
+          <li><span class="cb"></span><span class="text">Go through <strong>Real-World System Examples</strong> (Section 10) — verify each claim independently and add anything missed to My Notes</span></li>
+          <li><span class="cb"></span><span class="text">Practice the <strong>Interview Application</strong> (Section 12) out loud — say the trigger phrases and your response as if in a live interview</span></li>
+          <li><span class="cb"></span><span class="text">Work through <strong>Common Misconceptions</strong> (Section 13) — for each, make sure you can explain <em>why</em> the misconception is wrong</span></li>
+          <li><span class="cb"></span><span class="text">Trace the <strong>Relationships to Other Concepts</strong> (Section 14) — can you explain each connection without looking?</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-card" id="ph4">
+      <div class="phase-header" onclick="togglePhase('ph4')">
+        <div class="phase-label"><span class="phase-badge ph4">Phase 4</span> Validate 🧪</div>
+        <span class="phase-chevron">▼</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Confirm you actually own it, not just recognize it.</p>
+        <ul class="checklist">
+          <li><span class="cb"></span><span class="text">Answer every <strong>Self-Check Quiz</strong> question (Section 15) out loud without looking at your notes</span></li>
+          <li><span class="cb"></span><span class="text">Recite the <strong>Cheatsheet</strong> (Section 4) from memory — if you can't, re-do Phase 2</span></li>
+          <li><span class="cb"></span><span class="text">Tick off items in <strong>What Mastery Looks Like</strong> (Section 2) — only check a box if you can demonstrate it on demand</span></li>
+          <li><span class="cb"></span><span class="text">Teach this concept out loud to an imaginary interviewer for 2 minutes without hesitation or notes</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── SECTION 4: CHEATSHEET ── -->
+  <section id="s4">
+    <h2 class="section-title"><span class="num">04</span> 📋 Cheatsheet</h2>
+    <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+
+    <div style="background:var(--surface-alt);border:1px solid var(--border);border-radius:12px;padding:20px 16px 12px;margin:20px 0 24px;">
+      <svg id="rp-mindmap" viewBox="0 0 940 670" xmlns="http://www.w3.org/2000/svg"
+           style="width:100%;height:auto;display:block;"
+           font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif">
+      </svg>
+      <p style="text-align:center;font-size:12px;color:var(--text-muted);margin-top:10px;margin-bottom:0;">
+        4.5 Reverse Proxies — Concept Map &nbsp;·&nbsp; <em>hover a branch to highlight</em>
+      </p>
+    </div>
+    <script>
+    (function(){
+      var svg = document.getElementById('rp-mindmap');
+      var NS  = 'http://www.w3.org/2000/svg';
+
+      function mk(tag, attrs) {
+        var e = document.createElementNS(NS, tag);
+        for (var k in attrs) e.setAttribute(k, attrs[k]);
+        return e;
+      }
+      function drawText(parent, x, y, label, fs, fill, bold) {
+        var t = mk('text', { x:x, y:y, 'text-anchor':'middle', 'dominant-baseline':'central',
+          'font-size':fs, 'fill':fill||'#1a1917', 'font-weight':bold?'700':'500' });
+        t.textContent = label;
+        parent.appendChild(t);
+        return t;
+      }
+      function drawRect(parent, x, y, w, h, fill, stroke) {
+        var r = mk('rect', { x:x, y:y, width:w, height:h, rx:7, ry:7,
+          fill:fill, stroke:stroke, 'stroke-width':1.8 });
+        parent.appendChild(r); return r;
+      }
+      function drawEllipse(parent, cx, cy, rx, ry, fill, stroke) {
+        var e = mk('ellipse', { cx:cx, cy:cy, rx:rx, ry:ry,
+          fill:fill, stroke:stroke, 'stroke-width':2.5 });
+        parent.appendChild(e); return e;
+      }
+      function drawPath(parent, d, stroke, sw) {
+        var p = mk('path', { d:d, stroke:stroke, 'stroke-width':sw||2,
+          fill:'none', opacity:0.55, 'stroke-linecap':'round' });
+        parent.appendChild(p); return p;
+      }
+      function drawLine(parent, x1, y1, x2, y2, stroke) {
+        var l = mk('line', { x1:x1, y1:y1, x2:x2, y2:y2, stroke:stroke,
+          'stroke-width':1.4, opacity:0.42, 'stroke-linecap':'round' });
+        parent.appendChild(l); return l;
+      }
+
+      // ── DATA ──────────────────────────────────────────────────────────────
+      var CX = 470, CY = 335;
+
+      var BRANCHES = [
+        // ── LEFT ──
+        { label:'What It Does',
+          bx:208, by:55, bw:163, bh:40,
+          bf:'#dbe4ff', bs:'#3b5bdb', lf:'#eef2ff', ls:'#3b5bdb', side:'L',
+          leaves:[
+            {t:'SSL Termination',  x:10, y:40,  w:180, h:32},
+            {t:'Caching',          x:10, y:82,  w:180, h:32},
+            {t:'Compression',      x:10, y:124, w:180, h:32},
+            {t:'Req. Rewriting',   x:10, y:166, w:180, h:32},
+            {t:'Auth Enforcement', x:10, y:208, w:180, h:32}
+          ]},
+        { label:'SSL Termination',
+          bx:193, by:303, bw:177, bh:40,
+          bf:'#ffd8a8', bs:'#e67700', lf:'#fff4e6', ls:'#e67700', side:'L',
+          leaves:[
+            {t:'Client → HTTPS', x:8, y:280, w:180, h:32},
+            {t:'Proxy → HTTP',   x:8, y:322, w:180, h:32},
+            {t:'Certs at proxy', x:8, y:364, w:180, h:32},
+            {t:'mTLS zero-trust',x:8, y:406, w:180, h:32}
+          ]},
+        { label:'vs LB / Forward',
+          bx:193, by:520, bw:177, bh:40,
+          bf:'#b2f2bb', bs:'#2f9e44', lf:'#ebfbee', ls:'#2f9e44', side:'L',
+          leaves:[
+            {t:'LB: which backend?',   x:4, y:490, w:186, h:32},
+            {t:'Reverse: what to do?', x:4, y:532, w:186, h:32},
+            {t:'Forward: for clients', x:4, y:574, w:186, h:32},
+            {t:'Many tools do both',   x:4, y:616, w:186, h:32}
+          ]},
+        // ── RIGHT ──
+        { label:'Real Systems',
+          bx:565, by:55, bw:153, bh:40,
+          bf:'#c3fae8', bs:'#0ca678', lf:'#e6fcf5', ls:'#0ca678', side:'R',
+          leaves:[
+            {t:'Nginx',         x:733, y:40,  w:120, h:32},
+            {t:'HAProxy',       x:733, y:82,  w:120, h:32},
+            {t:'Envoy / Istio', x:731, y:124, w:124, h:32},
+            {t:'AWS ALB',       x:733, y:166, w:120, h:32},
+            {t:'Cloudflare',    x:733, y:208, w:120, h:32}
+          ]},
+        { label:'Security',
+          bx:563, by:303, bw:175, bh:40,
+          bf:'#ede9fe', bs:'#7c3aed', lf:'#f3f0ff', ls:'#7c3aed', side:'R',
+          leaves:[
+            {t:'Rate limiting',   x:752, y:280, w:175, h:32},
+            {t:'WAF rules',       x:752, y:322, w:175, h:32},
+            {t:'IP allowlist',    x:752, y:364, w:175, h:32},
+            {t:'DDoS absorption', x:752, y:406, w:175, h:32}
+          ]},
+        { label:'Trade-offs',
+          bx:565, by:520, bw:148, bh:40,
+          bf:'#ffc9c9', bs:'#c92a2a', lf:'#fff5f5', ls:'#c92a2a', side:'R',
+          leaves:[
+            {t:'SPOF → HA pair',      x:726, y:490, w:190, h:32},
+            {t:'Internal hop ~1-5ms', x:724, y:532, w:194, h:32},
+            {t:'Cache invalidation',  x:726, y:574, w:190, h:32},
+            {t:'Trust internal net',  x:726, y:616, w:190, h:32}
+          ]}
+      ];
+
+      // ── LAYERS ────────────────────────────────────────────────────────────
+      var LL = mk('g',{}), NL = mk('g',{}), TL = mk('g',{'pointer-events':'none'});
+      svg.appendChild(LL); svg.appendChild(NL); svg.appendChild(TL);
+
+      // Title
+      drawText(TL, CX, 20, '4.5 Reverse Proxies — Concept Map', 13, '#6b6861', false);
+
+      // ── DRAW BRANCHES ─────────────────────────────────────────────────────
+      BRANCHES.forEach(function(b) {
+        var bcy = b.by + b.bh / 2;
+
+        // Center → Branch: cubic bezier S-curve
+        var sx  = b.side==='L' ? CX - 87 : CX + 87;
+        var ex  = b.side==='L' ? b.bx + b.bw : b.bx;
+        var cp1x= b.side==='L' ? sx - 55 : sx + 55;
+        var cp2x= b.side==='L' ? ex + 18  : ex - 18;
+        drawPath(LL,
+          'M '+sx+','+CY+' C '+cp1x+','+CY+' '+cp2x+','+bcy+' '+ex+','+bcy,
+          b.bs, 2);
+
+        // Branch → Leaves: fan lines
+        var leafRects = [];
+        b.leaves.forEach(function(lf) {
+          var lcy = lf.y + lf.h / 2;
+          if (b.side==='L') drawLine(LL, b.bx, bcy, lf.x + lf.w, lcy, b.ls);
+          else              drawLine(LL, b.bx + b.bw, bcy, lf.x, lcy, b.ls);
+          var r = drawRect(NL, lf.x, lf.y, lf.w, lf.h, b.lf, b.ls);
+          drawText(TL, lf.x + lf.w/2, lcy, lf.t, 11.5, '#1a1917', false);
+          leafRects.push(r);
+        });
+
+        // Branch node
+        var br = drawRect(NL, b.bx, b.by, b.bw, b.bh, b.bf, b.bs);
+        drawText(TL, b.bx + b.bw/2, bcy, b.label, 12.5, '#1a1917', true);
+
+        // Hover highlight (all rects in this branch group)
+        var all = [br].concat(leafRects);
+        (function(rects, stroke) {
+          function hi(on) {
+            rects.forEach(function(r) {
+              r.setAttribute('stroke-width', on ? 2.8 : 1.8);
+              r.style.filter = on ? 'drop-shadow(0 2px 5px rgba(0,0,0,0.14))' : '';
+            });
+          }
+          rects.forEach(function(r) {
+            r.addEventListener('mouseenter', function(){ hi(true); });
+            r.addEventListener('mouseleave', function(){ hi(false); });
+          });
+        })(all, b.bs);
+      });
+
+      // Center ellipse — drawn last so it sits on top
+      drawEllipse(NL, CX, CY, 87, 42, '#a5d8ff', '#1971c2');
+      drawText(TL, CX, CY - 10, 'Reverse', 15, '#1a1917', true);
+      drawText(TL, CX, CY + 10, 'Proxy',   15, '#1a1917', true);
+
+    })();
+    </script>
+
+    <div class="cheatsheet"><span class="label">ONE-LINER</span>
+  A reverse proxy is an intermediary that sits in front of backend servers,
+  intercepting client requests to perform SSL termination, caching, auth,
+  compression, and routing — before the request ever reaches your application.
+
+<span class="label">KEY PROPERTIES / RULES</span>
+  1. Hides backend topology — clients see only the proxy's IP, never backend IPs
+  2. Terminates TLS — decrypts at the edge, forwards plain HTTP internally
+  3. Centralizes cross-cutting concerns — auth, rate limiting, WAF, compression at one choke point
+  4. Can cache upstream responses — reduces backend load for cacheable content
+  5. Different from a load balancer — LB picks a backend; reverse proxy transforms/filters the request
+
+<span class="label">DECISION RULE</span>
+  Use a reverse proxy when: you need SSL termination, request/response transformation,
+  centralized auth, caching, or a single security enforcement point in front of backends.
+  Avoid using a reverse proxy as your only traffic distribution mechanism — pair it with
+  a load balancer (or use a tool like Nginx/Envoy that does both) for horizontal scaling.
+
+<span class="label">NUMBERS / FORMULAS</span>
+  TLS handshake cost: ~1–2 RTTs for TLS 1.3 (0-RTT resumption available)
+  Nginx can handle ~10k–50k concurrent connections per instance (event-driven)
+  HAProxy can handle millions of concurrent connections at L4
+
+<span class="label">GOTCHA TO NEVER FORGET</span>
+  A reverse proxy and a load balancer are NOT the same thing — many tools do both,
+  but in interviews, conflating them signals you don't understand the distinct roles.</div>
+  </section>
+
+  <!-- ── SECTION 5: CORE DEFINITION ── -->
+  <section id="s5">
+    <h2 class="section-title"><span class="num">05</span> 🧠 Core Definition</h2>
+    <div class="callout callout-quote">What is it, in one sentence?</div>
+    <p>A <strong>reverse proxy</strong> is a server that sits in front of one or more backend servers, receiving all client requests on their behalf, optionally transforming or filtering them, and forwarding them to the appropriate backend — shielding the backend topology from the public internet and enabling centralization of cross-cutting concerns like TLS termination, caching, authentication, and compression.</p>
+  </section>
+
+  <!-- ── SECTION 6: CORE CONCEPTS ── -->
+  <section id="s6">
+    <h2 class="section-title"><span class="num">06</span> 📦 Core Concepts</h2>
+    <div class="callout callout-quote">The essential building blocks — terms and ideas you must have solid before going deeper.</div>
+
+    <h3>SSL/TLS Termination</h3>
+    <p>The reverse proxy handles the TLS handshake with the client and decrypts the traffic. The backend servers receive plain HTTP (or a new TLS connection in mTLS setups). This offloads expensive cryptographic computation from app servers, centralizes certificate management in one place, and simplifies backend deployments — backends don't need to manage certificates at all.</p>
+
+    <h3>Request Hiding and Backend Anonymity</h3>
+    <p>Because all traffic flows through the proxy, clients never see backend IP addresses, port numbers, or server counts. This provides a security benefit (backend servers are not directly internet-reachable) and operational flexibility (you can add, remove, or replace backend instances without clients noticing). It also prevents direct DDoS targeting of individual app servers.</p>
+
+    <h3>Caching</h3>
+    <p>A reverse proxy can cache upstream responses (e.g., HTTP 200 responses with appropriate <code>Cache-Control</code> headers) and serve subsequent identical requests without touching the backend. This is particularly powerful for read-heavy, low-personalization content — product pages, public API responses, static assets not yet on a CDN. It reduces backend load and latency for cache hits.</p>
+
+    <h3>Compression and Response Transformation</h3>
+    <p>The proxy can gzip or Brotli-compress responses before sending them to clients, even if the backend doesn't support compression. It can also rewrite URLs, inject or strip headers, modify response bodies, and perform A/B routing based on headers or cookies. This keeps transformation logic out of application code.</p>
+
+    <h3>Single Ingress / Security Enforcement Point</h3>
+    <p>By funneling all traffic through a single reverse proxy, you get a single enforcement point for rate limiting, IP allowlisting/blocklisting, WAF rules, and auth header validation. This is architecturally cleaner than scattering these concerns across every backend service — and much easier to audit and update.</p>
+  </section>
+
+  <!-- ── SECTION 7: FIRST PRINCIPLES ── -->
+  <section id="s7">
+    <h2 class="section-title"><span class="num">07</span> 🔍 First Principles — Why Does This Exist?</h2>
+    <div class="callout callout-quote">What fundamental problem does this concept solve? Why was it invented?</div>
+    <p>Without a reverse proxy, every backend server is directly exposed to the internet. This creates several painful realities: each server must manage its own TLS certificate, implement its own rate limiting and authentication, handle its own compression, and be directly addressable (and therefore directly attackable) by clients. Scaling out means exposing more IPs. Rotating a certificate means touching every server. Adding a new cross-cutting security rule means deploying changes to every service.</p>
+    <p>The reverse proxy exists to solve the <strong>single responsibility boundary problem at ingress</strong>: separate the concerns of "how do I talk to the internet?" from "how do I implement my business logic?" It acts as a facade — the internet sees one stable, hardened entry point, and backends operate in a clean, trusted environment where the hard parts (TLS, auth enforcement, compression, caching) are already handled.</p>
+    <p>This is the same principle as an API gateway, a service mesh sidecar, and a CDN edge node — they're all variations of "put an intermediary at the boundary to centralize cross-cutting concerns."</p>
+  </section>
+
+  <!-- ── SECTION 8: MENTAL MODELS ── -->
+  <section id="s8">
+    <h2 class="section-title"><span class="num">08</span> 🗺️ Mental Models</h2>
+    <div class="callout callout-quote">Intuition frames that help you reason about this concept fast — especially under interview pressure.</div>
+
+    <h3>Model 1: The Hotel Concierge</h3>
+    <p>A hotel concierge receives all guests at the front door, handles check-in (auth), gives them directions (routing), takes messages (caching common answers), and shields the rest of the hotel staff from direct public contact. Guests never walk directly to the kitchen or housekeeping — everything flows through the concierge desk. This captures both the request-handling role and the backend-hiding role perfectly.</p>
+    <p><em>Where it breaks down:</em> A concierge doesn't transform what the guest is saying before relaying it — a reverse proxy can actively rewrite requests and responses, which goes beyond simple forwarding.</p>
+
+    <h3>Model 2: The Corporate Building Security Checkpoint</h3>
+    <p>Every visitor enters through a single security gate where their badge is checked (auth), their bag is scanned (WAF/rate limiting), and they're told which floor to go to (routing). Backend employees (app servers) work in the building without ever worrying about validating visitor IDs themselves. The security checkpoint is the single enforcement point for all access control.</p>
+    <p><em>Where it breaks down:</em> A security checkpoint doesn't cache anything or compress communication — and it doesn't model the proxy's ability to act on responses coming back from the building.</p>
+
+    <h3>Model 3: Reverse vs. Forward Proxy — Directional Clarity</h3>
+    <p>A <strong>forward proxy</strong> sits in front of clients — clients know about it and route their requests through it (e.g., a corporate egress proxy that filters outbound traffic). A <strong>reverse proxy</strong> sits in front of servers — clients do NOT know about it and believe they're talking directly to the server. "Forward" = proxy for clients; "Reverse" = proxy for servers. This directional frame instantly disambiguates the two and prevents confusion in interviews.</p>
+  </section>
+
+  <!-- ── SECTION 9: HOW IT WORKS ── -->
+  <section id="s9">
+    <h2 class="section-title"><span class="num">09</span> ⚙️ How It Works — Mechanics</h2>
+    <div class="callout callout-quote">Step-by-step explanation of the internal mechanism.</div>
+
+    <h3>Normal Request Flow (HTTPS with SSL Termination)</h3>
+    <ol style="padding-left:20px; display:flex; flex-direction:column; gap:10px; font-size:14.5px; line-height:1.6;">
+      <li><strong>Client initiates TLS handshake</strong> with the reverse proxy's IP. The proxy presents its SSL certificate, negotiates cipher suite, and establishes the encrypted session. The client believes it is talking to the backend.</li>
+      <li><strong>Proxy decrypts the request.</strong> Now the proxy has a plain HTTP request (e.g., <code>GET /api/products HTTP/1.1</code>). It can inspect, log, modify, or reject it at this point.</li>
+      <li><strong>Proxy applies cross-cutting logic.</strong> In order: check rate limit counters, validate auth tokens (JWT, API key), check WAF rules, consult the response cache (if cache hit → return immediately without hitting backend), apply compression preferences.</li>
+      <li><strong>Proxy selects a backend and forwards the request.</strong> If also functioning as a load balancer, it picks a backend using its configured routing algorithm. It opens a connection to the backend (plain HTTP or new TLS for mTLS) and adds headers like <code>X-Forwarded-For</code>, <code>X-Real-IP</code>, or <code>X-Request-ID</code>.</li>
+      <li><strong>Backend processes and returns a response.</strong> The proxy receives it.</li>
+      <li><strong>Proxy transforms the response.</strong> Optionally: compress (gzip/Brotli), cache the response for future requests, strip internal headers, inject security headers (HSTS, CSP), rewrite redirect URLs.</li>
+      <li><strong>Proxy encrypts and returns the response</strong> to the client over the established TLS session.</li>
+    </ol>
+
+    <h3>Failure Handling</h3>
+    <p>If a backend fails to respond, the proxy can retry on another backend (if load balancing is also configured) or return a 502 Bad Gateway. If the proxy itself goes down, it becomes a SPOF — so reverse proxies are always run in HA pairs with a VIP (virtual IP) using keepalived or DNS-based failover.</p>
+
+    <h3>Connection Pooling</h3>
+    <p>The proxy maintains persistent connection pools to backends (HTTP keep-alive, HTTP/2 multiplexing). This avoids paying the TCP 3-way handshake cost on every request, dramatically improving throughput at scale.</p>
+  </section>
+
+  <!-- ── SECTION 10: REAL-WORLD EXAMPLES ── -->
+  <section id="s10">
+    <h2 class="section-title"><span class="num">10</span> 🏭 Real-World System Examples</h2>
+    <div class="callout callout-quote">Where does this appear in production systems you know?</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>System</th><th>How This Concept Applies</th><th>Notes</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Nginx</strong></td>
+            <td>The canonical reverse proxy / web server. Handles SSL termination, static file serving, upstream proxying, gzip, and basic caching in a single config.</td>
+            <td>Event-driven (epoll), handles thousands of concurrent connections with low memory. Config is declarative — <code>proxy_pass</code>, <code>upstream</code> blocks.</td>
+          </tr>
+          <tr>
+            <td><strong>Cloudflare</strong></td>
+            <td>Sits as a global reverse proxy in front of customer origins. Handles SSL termination at edge PoPs, DDoS absorption, WAF, caching, and smart routing before traffic reaches customer servers.</td>
+            <td>CDN + reverse proxy hybrid at global scale. Customer origin never sees raw internet traffic.</td>
+          </tr>
+          <tr>
+            <td><strong>AWS ALB</strong></td>
+            <td>Operates at L7 as a managed reverse proxy — SSL termination, content-based routing, header inspection.</td>
+            <td>AWS handles HA, scaling, and cert management (via ACM). Effectively a managed Nginx/HAProxy for AWS-native workloads.</td>
+          </tr>
+          <tr>
+            <td><strong>Envoy Proxy</strong></td>
+            <td>Used as the data plane in Istio service mesh. Every pod has an Envoy sidecar acting as a reverse proxy for both inbound and outbound traffic — applying mTLS, circuit breaking, retries, and observability.</td>
+            <td>Dynamic configuration via xDS API from the Istio control plane. Purpose-built for microservice-to-microservice proxying.</td>
+          </tr>
+          <tr>
+            <td><strong>HAProxy</strong></td>
+            <td>Purpose-built for high-performance TCP/HTTP proxying. Used in front of databases, message brokers, and web tiers where raw connection throughput and ultra-low latency matter.</td>
+            <td>Often deployed in active-passive pairs with keepalived for HA. Excellent at handling millions of concurrent connections.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── SECTION 11: TRADE-OFFS ── -->
+  <section id="s11">
+    <h2 class="section-title"><span class="num">11</span> ⚖️ Trade-offs</h2>
+    <div class="callout callout-quote">Every design decision has a cost. What are you giving up?</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>✅ Benefit</th><th>❌ Cost / Limitation</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="benefit">SSL termination offloads crypto from app servers</span></td>
+            <td><span class="cost">Traffic between proxy and backend is unencrypted (plain HTTP) unless you configure mTLS — creates a trust requirement for your internal network</span></td>
+          </tr>
+          <tr>
+            <td><span class="benefit">Single ingress point for security enforcement</span></td>
+            <td><span class="cost">Single point of failure — the proxy must be run in HA pairs; if misconfigured, it can block all traffic or leak headers</span></td>
+          </tr>
+          <tr>
+            <td><span class="benefit">Hides backend topology from clients</span></td>
+            <td><span class="cost">Adds a network hop with associated latency (typically 1–5ms) and resource cost; the proxy itself is now a component to operate, scale, and monitor</span></td>
+          </tr>
+          <tr>
+            <td><span class="benefit">Response caching reduces backend load</span></td>
+            <td><span class="cost">Cache invalidation is hard — stale responses can be served if TTLs are misconfigured or if the backend updates data without cache busting</span></td>
+          </tr>
+          <tr>
+            <td><span class="benefit">Centralizes cross-cutting concerns (auth, rate limiting)</span></td>
+            <td><span class="cost">Any logic centralized in the proxy is now a bottleneck for all traffic — a bug in the WAF rules or rate limiter affects every service, not just one</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── SECTION 12: INTERVIEW APPLICATION ── -->
+  <section id="s12">
+    <h2 class="section-title"><span class="num">12</span> 🎯 Interview Application</h2>
+    <div class="callout callout-quote">How do you use this concept in a design interview? What triggers it?</div>
+
+    <h3>When an Interviewer Asks / Says:</h3>
+    <ul style="padding-left:20px; display:flex; flex-direction:column; gap:6px; font-size:14.5px; margin-bottom:16px;">
+      <li>"How do you handle SSL termination for your API servers?"</li>
+      <li>"Where do you enforce rate limiting and authentication in your architecture?"</li>
+      <li>"How do you protect your backend servers from direct exposure to the internet?"</li>
+      <li>"What's the difference between a load balancer and a reverse proxy in your design?"</li>
+    </ul>
+
+    <h3>What You Say / Do:</h3>
+    <p>In the high-level design phase, place a reverse proxy (Nginx, HAProxy, or AWS ALB) as the first layer behind the DNS entry. Explicitly call out that it handles SSL termination and that backends operate on HTTP inside the VPC. In the deep-dive or trade-off discussion, mention that it centralizes auth header validation and rate limiting, and that it must be run in an HA pair to avoid SPOF. Distinguish it from the load balancer if you're using both.</p>
+
+    <h3>The Trade-off Statement (memorize this pattern):</h3>
+    <div class="callout callout-tip">
+      💬 "If we use a reverse proxy for SSL termination and auth enforcement, we get a clean separation where backends never touch certificates or auth logic — but we're trusting our internal network between the proxy and backends, so we'd add mTLS if this system requires zero-trust networking. For this design, a plain HTTP internal connection is acceptable given we're inside a private VPC."
+    </div>
+  </section>
+
+  <!-- ── SECTION 13: MISCONCEPTIONS ── -->
+  <section id="s13">
+    <h2 class="section-title"><span class="num">13</span> ⚠️ Common Misconceptions &amp; Gotchas</h2>
+    <div class="callout callout-quote">What do candidates get wrong? What nuance is the interviewer probing for?</div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> A reverse proxy and a load balancer are the same thing.</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> They have distinct roles. A load balancer distributes traffic across multiple backends. A reverse proxy intermediates on behalf of backends to perform SSL termination, caching, auth, compression, etc. Many tools (Nginx, Envoy, ALB) do both — but they are conceptually separate concerns, and conflating them in an interview will be noticed.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> SSL termination at the proxy means the entire connection is secure end-to-end.</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> SSL termination means TLS ends at the proxy. Traffic from the proxy to the backend is plain HTTP unless you explicitly configure mTLS (or TLS re-encryption). This creates a security gap if your internal network is not trusted. Zero-trust environments require mTLS sidecar proxies (like Envoy) to re-encrypt the internal hop.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> A reverse proxy eliminates the need for a CDN.</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> A reverse proxy with caching reduces backend load from a single point, but it does not solve geographic latency — it's still one location. A CDN solves latency by caching at hundreds of edge PoPs globally. For a globally distributed product, you need both: a CDN at the edge and a reverse proxy in front of your origin.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> Adding a reverse proxy automatically makes you secure against DDoS.</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> A reverse proxy gives you a single enforcement point for rate limiting and IP blocking — but if the proxy itself is saturated by volumetric DDoS traffic, it goes down just like a backend would. Real DDoS protection requires absorbing capacity at the network layer (BGP anycast, CDN with DDoS mitigation) before traffic reaches your proxy.</div></div>
+    </div>
+  </section>
+
+  <!-- ── SECTION 14: RELATIONSHIPS ── -->
+  <section id="s14">
+    <h2 class="section-title"><span class="num">14</span> 🔗 Relationships to Other Concepts</h2>
+    <div class="callout callout-quote">How does this connect to adjacent subtopics in this topic or across the roadmap?</div>
+
+    <div class="connections">
+      <div class="conn-card">
+        <span class="conn-icon">🧱</span>
+        <div>
+          <div class="conn-label">Builds on</div>
+          <strong>4.1 L4 vs. L7 Load Balancers</strong> — A reverse proxy operates at L7 (HTTP), inspecting and acting on request content. Understanding what L7 means (headers, paths, cookies are visible) is the prerequisite for understanding what a reverse proxy can do.
+        </div>
+      </div>
+      <div class="conn-card">
+        <span class="conn-icon">🔓</span>
+        <div>
+          <div class="conn-label">Enables</div>
+          <strong>4.6 Sticky Sessions</strong> — Reverse proxies are the layer where sticky session logic (cookie-based affinity, IP hash routing) is implemented. Also enables <strong>4.7 Global Load Balancing</strong> — the reverse proxy is the regional ingress that global DNS routes to.
+        </div>
+      </div>
+      <div class="conn-card">
+        <span class="conn-icon">⚡</span>
+        <div>
+          <div class="conn-label">Tension with</div>
+          <strong>5.x Caching Systems</strong> — Reverse proxy caching (server-side, origin-adjacent) and CDN caching (edge, distributed) both cache responses but solve different problems. Reverse proxy caching reduces backend load; CDN caching reduces geographic latency. Over-relying on reverse proxy caching instead of CDN for global users is a common architecture mistake.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── SECTION 15: SELF-CHECK QUIZ ── -->
+  <section id="s15">
+    <h2 class="section-title"><span class="num">15</span> 🧪 Self-Check Quiz</h2>
+    <div class="callout callout-quote">Can you answer these without looking? If not, you haven't internalized it yet.</div>
+
+    <div class="quiz-item" id="q1">
+      <div class="quiz-q" onclick="toggleQuiz('q1')">
+        <span class="quiz-num">1</span>
+        <span class="qtext">What is a reverse proxy, and how does it differ from a forward proxy and a load balancer?</span>
+        <span class="quiz-toggle">💡 hint</span>
+      </div>
+      <div class="quiz-hint">💡 Think through your answer before expanding — if you hesitate, revisit Section 5 and Section 8.</div>
+    </div>
+
+    <div class="quiz-item" id="q2">
+      <div class="quiz-q" onclick="toggleQuiz('q2')">
+        <span class="quiz-num">2</span>
+        <span class="qtext">You're designing an API gateway for a fintech app. The team asks where to enforce JWT validation. Do you put it in the reverse proxy or in each microservice? Justify with trade-offs.</span>
+        <span class="quiz-toggle">💡 hint</span>
+      </div>
+      <div class="quiz-hint">💡 Think through your answer before expanding — if you hesitate, revisit Section 12.</div>
+    </div>
+
+    <div class="quiz-item" id="q3">
+      <div class="quiz-q" onclick="toggleQuiz('q3')">
+        <span class="quiz-num">3</span>
+        <span class="qtext">What specifically does SSL termination at the reverse proxy give you, and what security assumption does it require you to make?</span>
+        <span class="quiz-toggle">💡 hint</span>
+      </div>
+      <div class="quiz-hint">💡 Think through your answer before expanding — if you hesitate, revisit Sections 6 and 13.</div>
+    </div>
+
+    <div class="quiz-item" id="q4">
+      <div class="quiz-q" onclick="toggleQuiz('q4')">
+        <span class="quiz-num">4</span>
+        <span class="qtext">Name two real production systems (not the same tool) that use a reverse proxy and explain concretely how it functions in each architecture.</span>
+        <span class="quiz-toggle">💡 hint</span>
+      </div>
+      <div class="quiz-hint">💡 Think through your answer before expanding — if you hesitate, revisit Section 10.</div>
+    </div>
+
+    <div class="quiz-item" id="q5">
+      <div class="quiz-q" onclick="toggleQuiz('q5')">
+        <span class="quiz-num">5</span>
+        <span class="qtext">A high-traffic e-commerce site is using Nginx as a reverse proxy with response caching enabled. During a flash sale, prices change every 30 seconds but the cache TTL is 60 seconds. What goes wrong and how do you fix it?</span>
+        <span class="quiz-toggle">💡 hint</span>
+      </div>
+      <div class="quiz-hint">💡 Think through your answer before expanding — if you hesitate, revisit Sections 6 and 13.</div>
+    </div>
+  </section>
+
+  <!-- ── SECTION 16: FURTHER READING ── -->
+  <section id="s16">
+    <h2 class="section-title"><span class="num">16</span> 📚 Further Reading</h2>
+    <ul class="reading-list" id="reading-list">
+      <li><span class="cb"></span><span class="rtext"><strong>Cloudflare Learning — "What is a Reverse Proxy?"</strong> — cloudflare.com/learning/cdn/glossary/reverse-proxy-server/ (concise, well-illustrated)</span></li>
+      <li><span class="cb"></span><span class="rtext"><strong>NGINX Documentation — "NGINX Reverse Proxy"</strong> — docs.nginx.com/nginx/admin-guide/web-server/reverse-proxy/ (practical config examples)</span></li>
+      <li><span class="cb"></span><span class="rtext"><strong>HAProxy Documentation — Concepts</strong> — cbonte.github.io/haproxy-dconv/ (deep dive on proxy modes and ACLs)</span></li>
+      <li><span class="cb"></span><span class="rtext"><strong>Envoy Proxy Introduction</strong> — envoyproxy.io/docs/envoy/latest/intro/what_is_envoy (covers the xDS API and how Envoy differs from Nginx/HAProxy)</span></li>
+      <li><span class="cb"></span><span class="rtext"><strong>ByteByteGo — "What is an API Gateway?"</strong> — blog.bytebytego.com (reverse proxy vs. API gateway vs. load balancer comparison, with diagrams)</span></li>
+    </ul>
+  </section>
+
+  <!-- ── SECTION 17: MY NOTES ── -->
+  <section id="s17">
+    <h2 class="section-title"><span class="num">17</span> ✍️ My Notes</h2>
+    <div class="callout callout-quote">Personal observations, things that confused me, analogies that helped.</div>
+    <textarea class="notes-area" id="my-notes" placeholder="Your personal annotations, examples that clicked, diagrams you sketched, interview stories…"></textarea>
+  </section>
+
+</article>
+</main>
+
+<script>
+  // ── Phase accordion ──────────────────────────────────────────────────────
+  function togglePhase(id) {
+    document.getElementById(id).classList.toggle('open');
+  }
+
+  // ── Quiz hints ──────────────────────────────────────────────────────────
+  function toggleQuiz(id) {
+    document.getElementById(id).classList.toggle('open');
+  }
+
+  // ── Checklist toggles ───────────────────────────────────────────────────
+  function initChecklists() {
+    document.querySelectorAll('.checklist li .cb').forEach(cb => {
+      cb.addEventListener('click', () => {
+        cb.closest('li').classList.toggle('checked');
+        saveState();
+      });
+    });
+    document.querySelectorAll('.reading-list li .cb').forEach(cb => {
+      cb.addEventListener('click', () => {
+        cb.closest('li').classList.toggle('checked');
+        saveState();
+      });
+    });
+  }
+
+  // ── Persist state in localStorage ──────────────────────────────────────
+  const KEY = 'sd_4_5_state';
+
+  function saveState() {
+    const checked = [];
+    document.querySelectorAll('.checklist li, .reading-list li').forEach((li, i) => {
+      if (li.classList.contains('checked')) checked.push(i);
+    });
+    const notes = document.getElementById('my-notes').value;
+    localStorage.setItem(KEY, JSON.stringify({ checked, notes }));
+  }
+
+  function loadState() {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (!raw) return;
+      const state = JSON.parse(raw);
+      const items = document.querySelectorAll('.checklist li, .reading-list li');
+      state.checked.forEach(i => { if (items[i]) items[i].classList.add('checked'); });
+      if (state.notes) document.getElementById('my-notes').value = state.notes;
+    } catch(e) {}
+  }
+
+  document.getElementById('my-notes').addEventListener('input', saveState);
+
+  // ── Scrollspy ────────────────────────────────────────────────────────────
+  const sections = document.querySelectorAll('section[id]');
+  const navLinks  = document.querySelectorAll('#toc nav a');
+
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        navLinks.forEach(a => {
+          a.classList.toggle('active', a.getAttribute('href') === '#' + entry.target.id);
+        });
+      }
+    });
+  }, { rootMargin: '-30% 0px -65% 0px' });
+
+  sections.forEach(s => observer.observe(s));
+
+  // ── Init ─────────────────────────────────────────────────────────────────
+  initChecklists();
+  loadState();
+</script>
+</body>
+</html>

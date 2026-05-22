@@ -1,0 +1,1157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Design Study Hub</title>
+<style>
+  :root {
+    --bg: #f9f8f6;
+    --surface: #ffffff;
+    --surface-alt: #f3f2ef;
+    --border: #e5e3de;
+    --text: #1a1917;
+    --text-muted: #6b6861;
+    --text-faint: #a09d97;
+    --accent: #2563eb;
+    --accent-light: #dbeafe;
+    --accent-hover: #1d4ed8;
+    --green: #16a34a;
+    --green-light: #dcfce7;
+    --sidebar-w: 268px;
+    font-size: 16px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  a { color: inherit; text-decoration: none; }
+  button { cursor: pointer; font-family: inherit; }
+
+  /* ─────────────────────────────────────────
+     TOP BAR (reader view only)
+  ───────────────────────────────────────── */
+  #topbar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 52px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 12px;
+    z-index: 200;
+  }
+
+  #topbar-hamburger {
+    display: none;
+    background: none;
+    border: none;
+    padding: 6px;
+    border-radius: 6px;
+    color: var(--text-muted);
+    line-height: 1;
+  }
+  #topbar-hamburger:hover { background: var(--surface-alt); }
+  #topbar-hamburger svg { display: block; }
+
+  #topbar-back {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--accent);
+    font-size: 14px;
+    font-weight: 500;
+    padding: 4px 8px;
+    border-radius: 6px;
+    border: none;
+    background: none;
+  }
+  #topbar-back:hover { background: var(--accent-light); }
+
+  #topbar-breadcrumb {
+    font-size: 14px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #topbar-breadcrumb strong { color: var(--text); }
+
+  /* ─────────────────────────────────────────
+     READER LAYOUT
+  ───────────────────────────────────────── */
+  #reader-view {
+    display: none;
+    padding-top: 52px; /* topbar height */
+  }
+
+  /* ── SIDEBAR ── */
+  #sidebar {
+    position: fixed;
+    top: 52px; left: 0; bottom: 0;
+    width: var(--sidebar-w);
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    z-index: 100;
+    padding-bottom: 32px;
+  }
+
+  #sidebar-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.35);
+    z-index: 99;
+  }
+
+  .nav-phase {
+    padding: 16px 16px 4px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    user-select: none;
+  }
+  .nav-phase:not(:first-child) { margin-top: 8px; }
+
+  .nav-topic {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+    user-select: none;
+  }
+  .nav-topic:hover { color: var(--text); }
+  .nav-topic .toggle {
+    margin-left: auto;
+    font-size: 10px;
+    transition: transform 0.15s;
+    color: var(--text-faint);
+  }
+  .nav-topic.open .toggle { transform: rotate(90deg); }
+
+  .nav-subtopics { overflow: hidden; }
+  .nav-subtopics.collapsed { display: none; }
+
+  .nav-subtopic {
+    display: block;
+    padding: 5px 16px 5px 36px;
+    font-size: 13px;
+    color: var(--text-muted);
+    border-left: 2px solid transparent;
+    cursor: pointer;
+    transition: background 0.1s;
+    line-height: 1.4;
+  }
+  .nav-subtopic:hover { background: var(--surface-alt); color: var(--text); }
+  .nav-subtopic.active {
+    background: var(--accent-light);
+    color: var(--accent);
+    border-left-color: var(--accent);
+    font-weight: 500;
+  }
+  .nav-subtopic.no-file {
+    color: var(--text-faint);
+    cursor: default;
+    pointer-events: none;
+  }
+  .nav-subtopic .badge-done {
+    display: inline-block;
+    width: 8px; height: 8px;
+    background: var(--green);
+    border-radius: 50%;
+    margin-left: 6px;
+    vertical-align: middle;
+    flex-shrink: 0;
+  }
+
+  /* ── CONTENT ── */
+  #content {
+    margin-left: var(--sidebar-w);
+    min-height: calc(100vh - 52px);
+  }
+
+  #topic-frame {
+    display: block;
+    width: 100%;
+    border: none;
+    overflow: hidden;
+  }
+
+  /* ─────────────────────────────────────────
+     HOME VIEW
+  ───────────────────────────────────────── */
+  #home-view {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 48px 24px 80px;
+  }
+
+  .home-header {
+    text-align: center;
+    margin-bottom: 48px;
+  }
+  .home-header h1 {
+    font-size: 2rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    margin-bottom: 8px;
+  }
+  .home-header p {
+    color: var(--text-muted);
+    font-size: 15px;
+  }
+  .home-header .progress-summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 16px;
+    padding: 8px 16px;
+    background: var(--green-light);
+    border-radius: 24px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--green);
+  }
+
+  .phase-section { margin-bottom: 40px; }
+
+  .phase-heading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .topic-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 14px;
+  }
+
+  .topic-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+    transition: box-shadow 0.15s, border-color 0.15s;
+  }
+  .topic-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.07); border-color: #ccc; }
+
+  .topic-card-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .topic-card-emoji { font-size: 20px; line-height: 1; margin-top: 2px; flex-shrink: 0; }
+  .topic-card-title { font-size: 14px; font-weight: 700; line-height: 1.4; }
+  .topic-card-num { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+  .subtopic-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .subtopic-pill {
+    font-size: 12px;
+    padding: 3px 9px;
+    border-radius: 99px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background 0.1s;
+    border: 1px solid transparent;
+  }
+  .subtopic-pill.has-file {
+    background: var(--accent-light);
+    color: var(--accent);
+    border-color: #bfdbfe;
+  }
+  .subtopic-pill.has-file:hover { background: #bfdbfe; }
+  .subtopic-pill.no-file {
+    background: var(--surface-alt);
+    color: var(--text-faint);
+    cursor: default;
+  }
+  .subtopic-pill.done {
+    background: var(--green-light);
+    color: var(--green);
+    border-color: #86efac;
+  }
+  .subtopic-pill.done:hover { background: #bbf7d0; }
+
+  /* ─────────────────────────────────────────
+     RESPONSIVE — MOBILE
+  ───────────────────────────────────────── */
+  @media (max-width: 767px) {
+    #topbar-hamburger { display: flex; align-items: center; justify-content: center; }
+
+    #sidebar {
+      transform: translateX(-100%);
+      transition: transform 0.22s ease;
+      top: 52px;
+    }
+    #sidebar.open { transform: translateX(0); }
+    #sidebar-overlay.open { display: block; }
+
+    #content { margin-left: 0; }
+
+    #home-view { padding: 28px 16px 60px; }
+    .home-header h1 { font-size: 1.5rem; }
+    .topic-cards { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════
+     HOME VIEW
+════════════════════════════════════════════ -->
+<div id="home-view">
+  <div class="home-header">
+    <h1>🏗️ System Design Study Hub</h1>
+    <p>FAANG-level system design — structured roadmap across 6 phases</p>
+    <div class="progress-summary" id="progress-summary">
+      <!-- filled by JS -->
+    </div>
+  </div>
+  <div id="phase-list">
+    <!-- filled by JS -->
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     READER VIEW
+════════════════════════════════════════════ -->
+<div id="reader-view">
+
+  <!-- Top bar -->
+  <div id="topbar">
+    <button id="topbar-hamburger" aria-label="Toggle navigation">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+        <line x1="3" y1="6" x2="17" y2="6"/>
+        <line x1="3" y1="10" x2="17" y2="10"/>
+        <line x1="3" y1="14" x2="17" y2="14"/>
+      </svg>
+    </button>
+    <button id="topbar-back">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="9,2 4,7 9,12"/>
+      </svg>
+      Home
+    </button>
+    <div id="topbar-breadcrumb"></div>
+  </div>
+
+  <!-- Sidebar overlay (mobile) -->
+  <div id="sidebar-overlay"></div>
+
+  <!-- Sidebar nav -->
+  <nav id="sidebar"></nav>
+
+  <!-- Content area -->
+  <div id="content">
+    <iframe id="topic-frame" title="Topic content"></iframe>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════
+     DATA REGISTRY
+════════════════════════════════════════════ -->
+<script>
+// ── TOPIC REGISTRY ──────────────────────────────────────────────────────
+// file: relative path from index.html (same folder). null = not yet written.
+// done: true = subtopic fully completed per roadmap checklist.
+const PHASES = [
+  {
+    id: 'foundation',
+    label: 'Foundation',
+    topics: [
+      {
+        num: 1, emoji: '📐',
+        label: 'Back-of-the-Envelope Estimation',
+        subtopics: [
+          { id: '1.1',  label: 'Unit conversions', file: null, done: true },
+          { id: '1.2',  label: 'Time & data size memorization', file: null, done: true },
+          { id: '1.3',  label: 'Traffic estimation', file: null, done: true },
+          { id: '1.4',  label: 'Peak traffic estimation', file: null, done: true },
+          { id: '1.5',  label: 'Read/write ratio estimation', file: null, done: true },
+          { id: '1.6',  label: 'Storage estimation', file: null, done: true },
+          { id: '1.7',  label: 'Bandwidth estimation', file: null, done: true },
+          { id: '1.8',  label: 'Cache size estimation', file: null, done: true },
+          { id: '1.9',  label: 'Server count estimation', file: null, done: true },
+          { id: '1.10', label: 'Database size estimation', file: null, done: true },
+          { id: '1.11', label: 'Replication overhead', file: null, done: true },
+          { id: '1.12', label: 'Retention & growth modeling', file: null, done: true },
+          { id: '1.13', label: 'Concurrent user estimation', file: null, done: true },
+          { id: '1.14', label: 'Object size estimation', file: null, done: true },
+          { id: '1.15', label: 'Assumption setting', file: null, done: true },
+          { id: '1.16', label: 'Sanity checking', file: null, done: true },
+          { id: '1.17', label: 'Interview communication', file: null, done: true },
+          { id: '1.18', label: 'System-specific estimation practice', file: null, done: true },
+        ]
+      }
+    ]
+  },
+  {
+    id: 'phase-a',
+    label: 'Phase A — Core First Principles',
+    topics: [
+      {
+        num: 2, emoji: '🧠',
+        label: 'System Design Core Principles & Scalability Fundamentals',
+        subtopics: [
+          { id: '2.1',  label: 'CAP theorem and its three properties', file: null, done: true },
+          { id: '2.2',  label: 'PACELC — extending CAP with latency', file: null, done: true },
+          { id: '2.3',  label: 'Latency vs. throughput — definitions and relationship', file: null, done: true },
+          { id: '2.4',  label: "Little's Law and its application", file: null, done: true },
+          { id: '2.5',  label: 'Consistency vs. availability — spectrum of trade-offs', file: null, done: true },
+          { id: '2.6',  label: 'Horizontal vs. vertical scaling — when each applies', file: null, done: true },
+          { id: '2.7',  label: 'Stateless vs. stateful systems', file: null, done: true },
+          { id: '2.8',  label: 'Bottleneck identification and resource constraints', file: null, done: true },
+          { id: '2.9',  label: 'Backpressure fundamentals', file: null, done: true },
+          { id: '2.10', label: 'Design trade-off reasoning framework', file: null, done: true },
+        ]
+      }
+    ]
+  },
+  {
+    id: 'phase-b',
+    label: 'Phase B — Scalability Branch',
+    topics: [
+      {
+        num: 3, emoji: '🔄',
+        label: 'Stateless Services',
+        subtopics: [
+          { id: '3.1', label: 'Stateless vs. stateful architecture — definitions and scaling implications', file: 'topic_3.1_stateless_vs_stateful_architecture_definitions_and_scaling_implications.html', done: true },
+          { id: '3.2', label: 'Session management approaches', file: 'topic_3.2_session_management_approaches.html', done: true },
+          { id: '3.3', label: 'Externalizing state to Redis / distributed stores', file: 'topic_3.3_externalizing_state_to_redis_distributed_stores.html', done: true },
+          { id: '3.4', label: 'JWT as stateless session token', file: 'topic_3.4_jwt_as_stateless_session_token.html', done: true },
+          { id: '3.5', label: 'Idempotency — definition, importance, and design patterns', file: 'topic_3.5_idempotency_definition_importance_and_design_patterns.html', done: true },
+          { id: '3.6', label: 'Share-nothing architecture', file: 'topic_3.6_share_nothing_architecture.html', done: true },
+          { id: '3.7', label: 'Horizontal scaling of stateless tiers', file: 'topic_3.7_horizontal_scaling_of_stateless_tiers.html', done: true },
+        ]
+      },
+      {
+        num: 4, emoji: '⚖️',
+        label: 'Load Balancing',
+        subtopics: [
+          { id: '4.1', label: 'L4 vs. L7 load balancers', file: 'topic_4.1_l4_vs_l7_load_balancers.html', done: true },
+          { id: '4.2', label: 'Routing algorithms (round robin, least connections, IP hash, weighted)', file: 'topic_4.2_routing_algorithms.html', done: true },
+          { id: '4.3', label: 'Health checks and failure detection', file: 'topic_4.3_health_checks_and_failure_detection.html', done: true },
+          { id: '4.4', label: 'Failover and redundancy', file: 'topic_4.4_failover_and_redundancy.html', done: true },
+          { id: '4.5', label: 'Reverse proxies', file: 'topic_4.5_reverse_proxies.html', done: false },
+          { id: '4.6', label: 'Sticky sessions — trade-offs and alternatives', file: null, done: false },
+          { id: '4.7', label: 'Global vs. local load balancing', file: null, done: false },
+        ]
+      },
+      {
+        num: 5, emoji: '⚡',
+        label: 'Caching Systems',
+        subtopics: [
+          { id: '5.1', label: 'Cache-aside (lazy loading)', file: null, done: false },
+          { id: '5.2', label: 'Write-through caching', file: null, done: false },
+          { id: '5.3', label: 'Write-back (write-behind) caching', file: null, done: false },
+          { id: '5.4', label: 'Eviction policies — LRU, LFU, TTL', file: null, done: false },
+          { id: '5.5', label: 'Cache consistency and invalidation strategies', file: null, done: false },
+          { id: '5.6', label: 'Cache stampede and thundering herd', file: null, done: false },
+          { id: '5.7', label: 'Hot key problem and mitigation', file: null, done: false },
+          { id: '5.8', label: 'Multi-level caching (L1/L2, local + distributed)', file: null, done: false },
+        ]
+      },
+      {
+        num: 6, emoji: '🌍',
+        label: 'CDN',
+        subtopics: [
+          { id: '6.1', label: 'CDN architecture — PoPs and edge servers', file: null, done: false },
+          { id: '6.2', label: 'Pull CDN vs. push CDN', file: null, done: false },
+          { id: '6.3', label: 'Cache invalidation at the edge', file: null, done: false },
+          { id: '6.4', label: 'Geo-routing and anycast', file: null, done: false },
+          { id: '6.5', label: 'CDN for static assets vs. dynamic content', file: null, done: false },
+          { id: '6.6', label: 'CDN for media delivery (images, video)', file: null, done: false },
+          { id: '6.7', label: 'CDN as DDoS mitigation layer', file: null, done: false },
+        ]
+      },
+      {
+        num: 7, emoji: '🔀',
+        label: 'Data Partitioning / Sharding',
+        subtopics: [
+          { id: '7.1', label: 'Horizontal partitioning vs. vertical partitioning', file: null, done: false },
+          { id: '7.2', label: 'Hash partitioning', file: null, done: false },
+          { id: '7.3', label: 'Range partitioning', file: null, done: false },
+          { id: '7.4', label: 'Consistent hashing — algorithm and virtual nodes', file: null, done: false },
+          { id: '7.5', label: 'Rebalancing — adding and removing nodes', file: null, done: false },
+          { id: '7.6', label: 'Hot partitions — detection and mitigation', file: null, done: false },
+          { id: '7.7', label: 'Cross-shard queries and distributed joins', file: null, done: false },
+        ]
+      },
+    ]
+  },
+  {
+    id: 'phase-c',
+    label: 'Phase C — Data Storage Branch',
+    topics: [
+      {
+        num: 8, emoji: '🗄️',
+        label: 'Database Fundamentals',
+        subtopics: [
+          { id: '8.1', label: 'SQL vs. NoSQL — when to use each', file: null, done: false },
+          { id: '8.2', label: 'OLTP vs. OLAP workloads', file: null, done: false },
+          { id: '8.3', label: 'Data modeling — normalization and denormalization', file: null, done: false },
+          { id: '8.4', label: 'Indexing — B-tree, LSM-tree, composite indexes', file: null, done: false },
+          { id: '8.5', label: 'Query patterns and optimization', file: null, done: false },
+          { id: '8.6', label: 'ACID transactions — properties and enforcement', file: null, done: false },
+          { id: '8.7', label: 'Read vs. write optimization', file: null, done: false },
+          { id: '8.8', label: 'N+1 query problem', file: null, done: false },
+        ]
+      },
+      {
+        num: 9, emoji: '📦',
+        label: 'Blob / Object Storage',
+        subtopics: [
+          { id: '9.1', label: 'Object store architecture — metadata vs. data separation', file: null, done: false },
+          { id: '9.2', label: 'Chunk servers and data nodes', file: null, done: false },
+          { id: '9.3', label: 'Multipart and resumable uploads', file: null, done: false },
+          { id: '9.4', label: 'Durability through erasure coding and replication', file: null, done: false },
+          { id: '9.5', label: 'Object versioning', file: null, done: false },
+          { id: '9.6', label: 'Object store vs. block store vs. file storage', file: null, done: false },
+          { id: '9.7', label: 'Content-addressable storage', file: null, done: false },
+        ]
+      },
+      {
+        num: 10, emoji: '📊',
+        label: 'Data Warehouse & Analytics Storage',
+        subtopics: [
+          { id: '10.1', label: 'Columnar vs. row storage — I/O trade-offs', file: null, done: false },
+          { id: '10.2', label: 'OLAP data modeling — star schema and snowflake schema', file: null, done: false },
+          { id: '10.3', label: 'Data lake vs. data warehouse vs. lakehouse', file: null, done: false },
+          { id: '10.4', label: 'ETL vs. ELT patterns', file: null, done: false },
+          { id: '10.5', label: 'Partitioning strategies in analytical storage', file: null, done: false },
+          { id: '10.6', label: 'Query engines (Presto, Spark SQL, BigQuery)', file: null, done: false },
+        ]
+      },
+    ]
+  },
+  {
+    id: 'phase-d',
+    label: 'Phase D — Networking Branch',
+    topics: [
+      {
+        num: 11, emoji: '🔌',
+        label: 'API Design & Service Boundaries',
+        subtopics: [
+          { id: '11.1', label: 'REST — principles, resource design, HTTP methods, status codes', file: null, done: false },
+          { id: '11.2', label: 'gRPC — Protocol Buffers, streaming, when to use over REST', file: null, done: false },
+          { id: '11.3', label: 'GraphQL — query flexibility, N+1 problem, when to use', file: null, done: false },
+          { id: '11.4', label: 'Microservice decomposition — domain boundaries and ownership', file: null, done: false },
+          { id: '11.5', label: 'API versioning strategies', file: null, done: false },
+          { id: '11.6', label: 'API contracts and backward compatibility', file: null, done: false },
+          { id: '11.7', label: 'API gateway patterns', file: null, done: false },
+        ]
+      },
+      {
+        num: 12, emoji: '📨',
+        label: 'Message Queues & Event Systems',
+        subtopics: [
+          { id: '12.1', label: 'Message queue vs. event stream semantics', file: null, done: false },
+          { id: '12.2', label: 'Pub/sub model', file: null, done: false },
+          { id: '12.3', label: 'Delivery guarantees — at-most-once, at-least-once, exactly-once', file: null, done: false },
+          { id: '12.4', label: 'Backpressure — how consumers signal and producers respond', file: null, done: false },
+          { id: '12.5', label: 'Retry mechanisms and exponential backoff', file: null, done: false },
+          { id: '12.6', label: 'Dead-letter queues', file: null, done: false },
+          { id: '12.7', label: 'Kafka vs. RabbitMQ vs. SQS — comparison', file: null, done: false },
+        ]
+      },
+      {
+        num: 13, emoji: '📡',
+        label: 'Protocols',
+        subtopics: [
+          { id: '13.1', label: 'HTTP/1.1 — keep-alive, pipelining, limitations', file: null, done: false },
+          { id: '13.2', label: 'HTTP/2 — multiplexing, header compression, server push', file: null, done: false },
+          { id: '13.3', label: 'HTTP/3 and QUIC', file: null, done: false },
+          { id: '13.4', label: 'WebSockets — full-duplex, handshake, use cases', file: null, done: false },
+          { id: '13.5', label: 'Server-Sent Events (SSE) — unidirectional streaming', file: null, done: false },
+          { id: '13.6', label: 'Long polling — mechanics and trade-offs', file: null, done: false },
+          { id: '13.7', label: 'WebRTC — signaling, ICE, STUN/TURN', file: null, done: false },
+          { id: '13.8', label: 'TCP vs. UDP trade-offs', file: null, done: false },
+        ]
+      },
+      {
+        num: 14, emoji: '🕸️',
+        label: 'Service Mesh',
+        subtopics: [
+          { id: '14.1', label: 'What service meshes solve — observability, security, traffic management', file: null, done: false },
+          { id: '14.2', label: 'Sidecar proxy pattern — data plane vs. control plane', file: null, done: false },
+          { id: '14.3', label: 'Envoy and Istio — architecture overview', file: null, done: false },
+          { id: '14.4', label: 'mTLS — establishment and certificate management in a mesh', file: null, done: false },
+          { id: '14.5', label: 'Service discovery — DNS-based vs. registry-based', file: null, done: false },
+          { id: '14.6', label: 'Traffic management — circuit breaking, retries, canary routing', file: null, done: false },
+          { id: '14.7', label: 'When service mesh is and is not appropriate', file: null, done: false },
+        ]
+      },
+    ]
+  },
+  {
+    id: 'phase-e',
+    label: 'Phase E — Reliability Branch',
+    topics: [
+      {
+        num: 15, emoji: '🖥️',
+        label: 'Distributed Storage Systems',
+        subtopics: [
+          { id: '15.1', label: 'Replication — why and how', file: null, done: false },
+          { id: '15.2', label: 'Leader/follower model', file: null, done: false },
+          { id: '15.3', label: 'Quorum reads and writes — R + W > N', file: null, done: false },
+          { id: '15.4', label: 'Durability guarantees and replication factor', file: null, done: false },
+          { id: '15.5', label: 'Synchronous vs. asynchronous replication trade-offs', file: null, done: false },
+          { id: '15.6', label: 'Replication lag and read anomalies', file: null, done: false },
+        ]
+      },
+      {
+        num: 16, emoji: '🔁',
+        label: 'Replication Strategies',
+        subtopics: [
+          { id: '16.1', label: 'Single-leader replication — recap and failure modes', file: null, done: false },
+          { id: '16.2', label: 'Multi-leader replication — use cases and conflict potential', file: null, done: false },
+          { id: '16.3', label: 'Conflict resolution — LWW, vector clocks, CRDTs', file: null, done: false },
+          { id: '16.4', label: 'Leaderless replication — Dynamo-style', file: null, done: false },
+          { id: '16.5', label: 'Read replicas — architecture and failover', file: null, done: false },
+          { id: '16.6', label: 'Write propagation and replication lag', file: null, done: false },
+        ]
+      },
+      {
+        num: 17, emoji: '🎚️',
+        label: 'Consistency Models',
+        subtopics: [
+          { id: '17.1', label: 'Linearizability (strong consistency)', file: null, done: false },
+          { id: '17.2', label: 'Sequential consistency', file: null, done: false },
+          { id: '17.3', label: 'Causal consistency', file: null, done: false },
+          { id: '17.4', label: 'Eventual consistency', file: null, done: false },
+          { id: '17.5', label: 'Read-after-write consistency — failure modes and solutions', file: null, done: false },
+          { id: '17.6', label: 'CAP theorem in practice — mapping real systems to CP vs. AP', file: null, done: false },
+          { id: '17.7', label: 'PACELC applied to real system choices', file: null, done: false },
+        ]
+      },
+      {
+        num: 18, emoji: '🗳️',
+        label: 'Consensus & Leader Election',
+        subtopics: [
+          { id: '18.1', label: 'The consensus problem — safety, liveness, FLP impossibility intuition', file: null, done: false },
+          { id: '18.2', label: 'Raft — leader election', file: null, done: false },
+          { id: '18.3', label: 'Raft — log replication and commitment', file: null, done: false },
+          { id: '18.4', label: 'Paxos — intuition and comparison to Raft', file: null, done: false },
+          { id: '18.5', label: 'Split-brain — cause and prevention', file: null, done: false },
+          { id: '18.6', label: 'When consensus is and is not needed', file: null, done: false },
+        ]
+      },
+      {
+        num: 19, emoji: '🛡️',
+        label: 'Fault Tolerance & Resilience',
+        subtopics: [
+          { id: '19.1', label: 'Retries — naive vs. exponential backoff', file: null, done: false },
+          { id: '19.2', label: 'Jitter — why it matters and how to add it', file: null, done: false },
+          { id: '19.3', label: 'Circuit breaker — states, thresholds, and state machine', file: null, done: false },
+          { id: '19.4', label: 'Graceful degradation — critical path vs. non-critical features', file: null, done: false },
+          { id: '19.5', label: 'Redundancy patterns — active-active, active-passive', file: null, done: false },
+          { id: '19.6', label: 'Bulkhead pattern', file: null, done: false },
+          { id: '19.7', label: 'Timeout strategies', file: null, done: false },
+        ]
+      },
+      {
+        num: 20, emoji: '💾',
+        label: 'Backup & Recovery',
+        subtopics: [
+          { id: '20.1', label: 'RPO vs. RTO — definitions and business implications', file: null, done: false },
+          { id: '20.2', label: 'Full, incremental, and differential backups', file: null, done: false },
+          { id: '20.3', label: 'Point-in-time recovery — WAL/binary log replay', file: null, done: false },
+          { id: '20.4', label: 'Backup storage — location, encryption, and retention', file: null, done: false },
+          { id: '20.5', label: 'Disaster recovery patterns — pilot light, warm standby, active-active', file: null, done: false },
+          { id: '20.6', label: 'Backup vs. replication — complementary roles', file: null, done: false },
+        ]
+      },
+      {
+        num: 21, emoji: '🌪️',
+        label: 'Chaos Engineering',
+        subtopics: [
+          { id: '21.1', label: 'Chaos engineering principles — hypothesis-driven experimentation', file: null, done: false },
+          { id: '21.2', label: 'Chaos Monkey and the Simian Army', file: null, done: false },
+          { id: '21.3', label: 'Designing a chaos experiment — steady state, blast radius, rollback', file: null, done: false },
+          { id: '21.4', label: 'Failure injection patterns — node kill, network partition, latency injection', file: null, done: false },
+          { id: '21.5', label: 'Chaos in production vs. staging', file: null, done: false },
+          { id: '21.6', label: 'Gamedays and chaos as an SRE practice', file: null, done: false },
+        ]
+      },
+    ]
+  },
+  {
+    id: 'phase-f',
+    label: 'Phase F — Observability Branch',
+    topics: [
+      {
+        num: 22, emoji: '👁️',
+        label: 'Observability Systems',
+        subtopics: [
+          { id: '22.1', label: 'Logging — structured logging, log levels, correlation IDs', file: null, done: false },
+          { id: '22.2', label: 'Log aggregation and storage (ELK Stack, Splunk, Loki)', file: null, done: false },
+          { id: '22.3', label: 'Metrics — counters, gauges, histograms, and summaries', file: null, done: false },
+          { id: '22.4', label: 'Metrics systems (Prometheus, Grafana, Datadog)', file: null, done: false },
+          { id: '22.5', label: 'SLO, SLA, SLI — definitions and alert design', file: null, done: false },
+          { id: '22.6', label: 'Distributed tracing — trace IDs, spans, propagation', file: null, done: false },
+          { id: '22.7', label: 'Tracing systems (Jaeger, Zipkin, OpenTelemetry)', file: null, done: false },
+          { id: '22.8', label: 'Alerting — what to alert on vs. what to log', file: null, done: false },
+        ]
+      },
+    ]
+  },
+  {
+    id: 'phase-g',
+    label: 'Phase G — Security Branch',
+    topics: [
+      {
+        num: 23, emoji: '🔐',
+        label: 'Security',
+        subtopics: [
+          { id: '23.1', label: 'Authentication vs. authorization', file: null, done: false },
+          { id: '23.2', label: 'OAuth2 — authorization code flow, client credentials, token refresh', file: null, done: false },
+          { id: '23.3', label: 'JWT — structure, signing, validation, and security pitfalls', file: null, done: false },
+          { id: '23.4', label: 'RBAC — roles, permissions, policy enforcement points', file: null, done: false },
+          { id: '23.5', label: 'API keys — issuance, scoping, rotation', file: null, done: false },
+          { id: '23.6', label: 'TLS/SSL — handshake, certificates, mTLS', file: null, done: false },
+          { id: '23.7', label: 'Encryption at rest — key management, envelope encryption', file: null, done: false },
+          { id: '23.8', label: 'DDoS protection — CDN, rate limiting, CAPTCHA, geo-blocking', file: null, done: false },
+          { id: '23.9', label: 'Secrets management (Vault, AWS Secrets Manager)', file: null, done: false },
+        ]
+      },
+    ]
+  },
+  {
+    id: 'phase-h',
+    label: 'Phase H — System Archetypes',
+    topics: [
+      {
+        num: 24, emoji: '📰',
+        label: 'Feed / Timeline Systems',
+        subtopics: [
+          { id: '24.1', label: 'Fan-out-on-write — pre-computed feed delivery', file: null, done: false },
+          { id: '24.2', label: 'Fan-out-on-read — pull model', file: null, done: false },
+          { id: '24.3', label: 'Hybrid fan-out — handling celebrities and high-follower accounts', file: null, done: false },
+          { id: '24.4', label: 'Feed storage — timeline tables, Redis sorted sets', file: null, done: false },
+          { id: '24.5', label: 'Ranking and scoring pipelines', file: null, done: false },
+          { id: '24.6', label: 'Feed pagination and cursor design', file: null, done: false },
+        ]
+      },
+      {
+        num: 25, emoji: '🚦',
+        label: 'Rate Limiting Systems',
+        subtopics: [
+          { id: '25.1', label: 'Token bucket algorithm', file: null, done: false },
+          { id: '25.2', label: 'Leaky bucket algorithm', file: null, done: false },
+          { id: '25.3', label: 'Fixed window counter', file: null, done: false },
+          { id: '25.4', label: 'Sliding window log and sliding window counter', file: null, done: false },
+          { id: '25.5', label: 'Distributed rate limiting with Redis', file: null, done: false },
+          { id: '25.6', label: 'Rate limiting at CDN, gateway, and service layers', file: null, done: false },
+          { id: '25.7', label: 'Client-facing rate limit headers and retry guidance', file: null, done: false },
+        ]
+      },
+      {
+        num: 26, emoji: '🔴',
+        label: 'Realtime Systems',
+        subtopics: [
+          { id: '26.1', label: 'WebSockets at scale — connection servers, session affinity', file: null, done: false },
+          { id: '26.2', label: 'Message fan-out across connection servers using pub/sub', file: null, done: false },
+          { id: '26.3', label: 'Long polling — mechanics and resource implications', file: null, done: false },
+          { id: '26.4', label: 'SSE — use cases and limitations', file: null, done: false },
+          { id: '26.5', label: 'Presence systems — tracking, propagation, and TTL-based expiry', file: null, done: false },
+          { id: '26.6', label: 'Reconnection logic and message deduplication', file: null, done: false },
+        ]
+      },
+      {
+        num: 27, emoji: '🔔',
+        label: 'Notification Systems',
+        subtopics: [
+          { id: '27.1', label: 'Push notification architecture — APNs and FCM', file: null, done: false },
+          { id: '27.2', label: 'Fan-out strategies for large subscriber bases', file: null, done: false },
+          { id: '27.3', label: 'Delivery guarantees and at-least-once with deduplication', file: null, done: false },
+          { id: '27.4', label: 'Notification preferences — opt-out, quiet hours, batching', file: null, done: false },
+          { id: '27.5', label: 'Delivery receipts and read status tracking', file: null, done: false },
+          { id: '27.6', label: 'Email and SMS notification channels', file: null, done: false },
+        ]
+      },
+      {
+        num: 28, emoji: '🔒',
+        label: 'Distributed Locking & Coordination',
+        subtopics: [
+          { id: '28.1', label: 'When distributed locking is needed', file: null, done: false },
+          { id: '28.2', label: 'Redis SET NX — naive lock and its failure modes', file: null, done: false },
+          { id: '28.3', label: 'Redlock algorithm — multi-node quorum locking', file: null, done: false },
+          { id: '28.4', label: 'Fencing tokens — preventing stale lock holders', file: null, done: false },
+          { id: '28.5', label: 'ZooKeeper and etcd — use cases and architecture overview', file: null, done: false },
+          { id: '28.6', label: 'Alternatives to locking — idempotency and optimistic concurrency', file: null, done: false },
+        ]
+      },
+      {
+        num: 29, emoji: '⚙️',
+        label: 'Background Processing Systems',
+        subtopics: [
+          { id: '29.1', label: 'Job queue design — data model and enqueueing', file: null, done: false },
+          { id: '29.2', label: 'Priority queues', file: null, done: false },
+          { id: '29.3', label: 'Retry logic and dead-letter queues', file: null, done: false },
+          { id: '29.4', label: 'Idempotent jobs — design for safe retry', file: null, done: false },
+          { id: '29.5', label: 'Distributed cron scheduler — avoiding double-fire', file: null, done: false },
+          { id: '29.6', label: 'Worker pool scaling — queue depth as signal', file: null, done: false },
+          { id: '29.7', label: 'Job checkpointing and partial completion', file: null, done: false },
+        ]
+      },
+    ]
+  },
+  {
+    id: 'phase-i',
+    label: 'Phase I — Search & Location Systems',
+    topics: [
+      {
+        num: 30, emoji: '🔍',
+        label: 'Search Systems',
+        subtopics: [
+          { id: '30.1', label: 'Inverted index — construction and structure', file: null, done: false },
+          { id: '30.2', label: 'Tokenization, stemming, and normalization', file: null, done: false },
+          { id: '30.3', label: 'Query processing — lookup, intersection, ranking', file: null, done: false },
+          { id: '30.4', label: 'TF-IDF and BM25 — relevance scoring concepts', file: null, done: false },
+          { id: '30.5', label: 'Search indexing pipeline — ingestion to query readiness', file: null, done: false },
+          { id: '30.6', label: 'Handling document updates and deletes', file: null, done: false },
+          { id: '30.7', label: 'Autocomplete / typeahead — trie, ranked prefix search', file: null, done: false },
+          { id: '30.8', label: 'Fuzzy matching and typo tolerance', file: null, done: false },
+        ]
+      },
+      {
+        num: 31, emoji: '🗂️',
+        label: 'Massive Distributed Search',
+        subtopics: [
+          { id: '31.1', label: 'Distributed indexing — sharding strategies for search', file: null, done: false },
+          { id: '31.2', label: 'Scatter-gather query execution', file: null, done: false },
+          { id: '31.3', label: 'Result merging and re-ranking across shards', file: null, done: false },
+          { id: '31.4', label: 'Index freshness vs. query latency trade-off', file: null, done: false },
+          { id: '31.5', label: 'Segment-based index architecture (Lucene / Elasticsearch model)', file: null, done: false },
+          { id: '31.6', label: 'Web-scale crawl-index-serve pipeline overview', file: null, done: false },
+        ]
+      },
+      {
+        num: 32, emoji: '📍',
+        label: 'Location & Geospatial Systems',
+        subtopics: [
+          { id: '32.1', label: 'Geohashing — encoding, precision, and neighbor queries', file: null, done: false },
+          { id: '32.2', label: 'Quadtree indexing — structure and range queries', file: null, done: false },
+          { id: '32.3', label: 'H3 hexagonal indexing — uniform area and hierarchical queries', file: null, done: false },
+          { id: '32.4', label: 'Proximity search at scale — "find nearby X" pattern', file: null, done: false },
+          { id: '32.5', label: 'Real-time location updates — high-frequency write design', file: null, done: false },
+          { id: '32.6', label: 'Map tile serving — zoom levels, tile generation, CDN caching', file: null, done: false },
+          { id: '32.7', label: 'Routing algorithms overview (Dijkstra, A*, contraction hierarchies)', file: null, done: false },
+        ]
+      },
+    ]
+  },
+  {
+    id: 'phase-j',
+    label: 'Phase J — Data & Analytics Systems',
+    topics: [
+      {
+        num: 33, emoji: '🌊',
+        label: 'Stream Processing Systems',
+        subtopics: [
+          { id: '33.1', label: 'Kafka architecture — brokers, topics, partitions, consumer groups', file: null, done: false },
+          { id: '33.2', label: 'Kafka throughput — sequential I/O, zero-copy, compression', file: null, done: false },
+          { id: '33.3', label: 'Flink / Spark Streaming — stateful stream processing', file: null, done: false },
+          { id: '33.4', label: 'Windowing — tumbling, sliding, session', file: null, done: false },
+          { id: '33.5', label: 'Watermarks and late-arriving data', file: null, done: false },
+          { id: '33.6', label: 'Stream-table joins and stateful operators', file: null, done: false },
+          { id: '33.7', label: 'Real-time pipeline design patterns', file: null, done: false },
+        ]
+      },
+      {
+        num: 34, emoji: '🏭',
+        label: 'Batch Processing Systems',
+        subtopics: [
+          { id: '34.1', label: 'MapReduce — map phase, shuffle/sort, reduce phase', file: null, done: false },
+          { id: '34.2', label: 'ETL pipeline design — transformation stages and failure handling', file: null, done: false },
+          { id: '34.3', label: 'ETL vs. ELT for cloud data warehouses', file: null, done: false },
+          { id: '34.4', label: 'Partitioning, parallelism, and idempotent reprocessing', file: null, done: false },
+          { id: '34.5', label: 'Data lineage and quality checks in batch pipelines', file: null, done: false },
+        ]
+      },
+    ]
+  },
+];
+</script>
+
+<!-- ═══════════════════════════════════════════
+     APP LOGIC
+════════════════════════════════════════════ -->
+<script>
+(function () {
+  // ── DOM refs ──────────────────────────────
+  const homeView     = document.getElementById('home-view');
+  const readerView   = document.getElementById('reader-view');
+  const topbar       = document.getElementById('topbar');
+  const hamburger    = document.getElementById('topbar-hamburger');
+  const backBtn      = document.getElementById('topbar-back');
+  const breadcrumb   = document.getElementById('topbar-breadcrumb');
+  const sidebarEl    = document.getElementById('sidebar');
+  const overlay      = document.getElementById('sidebar-overlay');
+  const contentEl    = document.getElementById('content');
+  const frame        = document.getElementById('topic-frame');
+  const phaseList    = document.getElementById('phase-list');
+  const progressEl   = document.getElementById('progress-summary');
+
+  let activeSubtopicId = null;
+  let openTopicNums = new Set();
+
+  // ── PROGRESS SUMMARY ─────────────────────
+  function calcProgress() {
+    let total = 0, done = 0, hasFile = 0;
+    PHASES.forEach(ph => ph.topics.forEach(t => t.subtopics.forEach(s => {
+      total++;
+      if (s.done) done++;
+      if (s.file) hasFile++;
+    })));
+    return { total, done, hasFile };
+  }
+
+  // ── BUILD HOME VIEW ───────────────────────
+  function buildHome() {
+    const { total, done, hasFile } = calcProgress();
+    progressEl.innerHTML = `✅ ${done} / ${total} subtopics completed &nbsp;·&nbsp; 📄 ${hasFile} notes available`;
+
+    phaseList.innerHTML = '';
+
+    PHASES.forEach(phase => {
+      const section = document.createElement('div');
+      section.className = 'phase-section';
+
+      const heading = document.createElement('div');
+      heading.className = 'phase-heading';
+      heading.textContent = phase.label;
+      section.appendChild(heading);
+
+      const cards = document.createElement('div');
+      cards.className = 'topic-cards';
+
+      phase.topics.forEach(topic => {
+        const card = document.createElement('div');
+        card.className = 'topic-card';
+
+        const header = document.createElement('div');
+        header.className = 'topic-card-header';
+        header.innerHTML = `
+          <div class="topic-card-emoji">${topic.emoji}</div>
+          <div>
+            <div class="topic-card-title">${topic.label}</div>
+            <div class="topic-card-num">Topic ${topic.num}</div>
+          </div>`;
+        card.appendChild(header);
+
+        const pills = document.createElement('div');
+        pills.className = 'subtopic-pills';
+        topic.subtopics.forEach(sub => {
+          const pill = document.createElement('span');
+          pill.className = 'subtopic-pill';
+          pill.textContent = sub.id;
+          pill.title = sub.label;
+
+          if (sub.done && sub.file) {
+            pill.classList.add('done');
+            pill.addEventListener('click', () => openSubtopic(sub, topic, phase));
+          } else if (sub.done) {
+            pill.classList.add('done');
+            pill.style.cursor = 'default';
+          } else if (sub.file) {
+            pill.classList.add('has-file');
+            pill.addEventListener('click', () => openSubtopic(sub, topic, phase));
+          } else {
+            pill.classList.add('no-file');
+          }
+
+          pills.appendChild(pill);
+        });
+        card.appendChild(pills);
+        cards.appendChild(card);
+      });
+
+      section.appendChild(cards);
+      phaseList.appendChild(section);
+    });
+  }
+
+  // ── BUILD SIDEBAR NAV ─────────────────────
+  function buildSidebar(activeId) {
+    sidebarEl.innerHTML = '';
+
+    PHASES.forEach(phase => {
+      const phaseHeader = document.createElement('div');
+      phaseHeader.className = 'nav-phase';
+      phaseHeader.textContent = phase.label;
+      sidebarEl.appendChild(phaseHeader);
+
+      phase.topics.forEach(topic => {
+        // Topic header (collapsible)
+        const topicEl = document.createElement('div');
+        topicEl.className = 'nav-topic';
+        const isOpen = openTopicNums.has(topic.num);
+        if (isOpen) topicEl.classList.add('open');
+
+        topicEl.innerHTML = `
+          <span>${topic.emoji}</span>
+          <span>${topic.num}. ${topic.label}</span>
+          <span class="toggle">▶</span>`;
+
+        const subtopicsEl = document.createElement('div');
+        subtopicsEl.className = 'nav-subtopics' + (isOpen ? '' : ' collapsed');
+
+        topicEl.addEventListener('click', () => {
+          const nowOpen = !topicEl.classList.contains('open');
+          topicEl.classList.toggle('open', nowOpen);
+          subtopicsEl.classList.toggle('collapsed', !nowOpen);
+          if (nowOpen) openTopicNums.add(topic.num);
+          else openTopicNums.delete(topic.num);
+        });
+
+        sidebarEl.appendChild(topicEl);
+
+        topic.subtopics.forEach(sub => {
+          const subEl = document.createElement('div');
+          subEl.className = 'nav-subtopic' + (sub.file ? '' : ' no-file');
+          if (sub.id === activeId) subEl.classList.add('active');
+
+          subEl.innerHTML = `${sub.id} ${sub.label}${sub.done ? '<span class="badge-done"></span>' : ''}`;
+          subEl.title = sub.label;
+
+          if (sub.file) {
+            subEl.addEventListener('click', () => {
+              closeSidebarMobile();
+              openSubtopic(sub, topic, phase);
+            });
+          }
+
+          subtopicsEl.appendChild(subEl);
+        });
+
+        sidebarEl.appendChild(subtopicsEl);
+      });
+    });
+  }
+
+  // ── OPEN A SUBTOPIC ───────────────────────
+  function openSubtopic(sub, topic, phase) {
+    activeSubtopicId = sub.id;
+    openTopicNums.add(topic.num);
+
+    // Show reader view
+    homeView.style.display = 'none';
+    readerView.style.display = 'block';
+
+    // Breadcrumb
+    breadcrumb.innerHTML = `${phase.label} &rsaquo; T${topic.num} &rsaquo; <strong>${sub.id} ${sub.label}</strong>`;
+
+    // Rebuild sidebar with current active
+    buildSidebar(sub.id);
+
+    // Scroll active nav item into view
+    requestAnimationFrame(() => {
+      const activeEl = sidebarEl.querySelector('.nav-subtopic.active');
+      if (activeEl) activeEl.scrollIntoView({ block: 'nearest' });
+    });
+
+    // Load iframe
+    frame.style.height = '600px'; // placeholder while loading
+    frame.src = sub.file;
+
+    frame.onload = () => {
+      try {
+        const doc = frame.contentDocument || frame.contentWindow.document;
+        const h = doc.documentElement.scrollHeight;
+        frame.style.height = h + 'px';
+      } catch (e) {
+        frame.style.height = '100vh';
+      }
+    };
+
+    // Scroll outer page to top
+    window.scrollTo(0, 0);
+  }
+
+  // ── SHOW HOME ─────────────────────────────
+  function showHome() {
+    readerView.style.display = 'none';
+    homeView.style.display = 'block';
+    activeSubtopicId = null;
+    window.scrollTo(0, 0);
+  }
+
+  // ── MOBILE SIDEBAR ───────────────────────
+  hamburger.addEventListener('click', () => {
+    sidebarEl.classList.toggle('open');
+    overlay.classList.toggle('open');
+  });
+  overlay.addEventListener('click', closeSidebarMobile);
+
+  function closeSidebarMobile() {
+    sidebarEl.classList.remove('open');
+    overlay.classList.remove('open');
+  }
+
+  // ── BACK BUTTON ───────────────────────────
+  backBtn.addEventListener('click', showHome);
+
+  // ── URL HASH ROUTING ─────────────────────
+  // Support deep-linking: index.html#3.2
+  function routeFromHash() {
+    const hash = location.hash.replace('#', '').trim();
+    if (!hash) return;
+    for (const phase of PHASES) {
+      for (const topic of phase.topics) {
+        for (const sub of topic.subtopics) {
+          if (sub.id === hash && sub.file) {
+            openSubtopic(sub, topic, phase);
+            return;
+          }
+        }
+      }
+    }
+  }
+
+  window.addEventListener('hashchange', routeFromHash);
+
+  // ── INIT ─────────────────────────────────
+  buildHome();
+
+  // Auto-expand topics that have available files in sidebar on first open
+  PHASES.forEach(phase => phase.topics.forEach(topic => {
+    if (topic.subtopics.some(s => s.file)) openTopicNums.add(topic.num);
+  }));
+
+  routeFromHash();
+})();
+</script>
+</body>
+</html>
