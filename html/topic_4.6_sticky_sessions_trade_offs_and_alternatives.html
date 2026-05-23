@@ -1,0 +1,1197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.6 Sticky Sessions — Trade-offs and Alternatives</title>
+<style>
+  :root {
+    --bg: #f9f8f6;
+    --surface: #ffffff;
+    --surface-alt: #f3f2ef;
+    --border: #e5e3de;
+    --text: #1a1917;
+    --text-muted: #6b6861;
+    --accent: #2563eb;
+    --accent-light: #dbeafe;
+    --green: #16a34a;
+    --green-light: #dcfce7;
+    --red: #dc2626;
+    --red-light: #fee2e2;
+    --yellow: #d97706;
+    --yellow-light: #fef3c7;
+    --purple: #7c3aed;
+    --purple-light: #ede9fe;
+    --code-bg: #1e1e2e;
+    --code-text: #cdd6f4;
+    --sidebar-w: 240px;
+    --content-max: 780px;
+    font-size: 16px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    display: flex;
+  }
+
+  /* ── SIDEBAR ── */
+  #toc {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: var(--sidebar-w);
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 24px 0 48px;
+    z-index: 100;
+  }
+
+  #toc-header {
+    padding: 0 16px 16px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 8px;
+  }
+
+  #toc-header .phase-tag {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: var(--accent-light);
+    border-radius: 4px;
+    padding: 2px 7px;
+    display: inline-block;
+    margin-bottom: 6px;
+  }
+
+  #toc-header h2 {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.4;
+  }
+
+  #toc nav a {
+    display: block;
+    padding: 5px 16px 5px 20px;
+    font-size: 12.5px;
+    color: var(--text-muted);
+    text-decoration: none;
+    border-left: 2px solid transparent;
+    transition: all 0.15s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+
+  /* ── MAIN CONTENT ── */
+  main {
+    margin-left: var(--sidebar-w);
+    padding: 48px 48px 96px;
+    max-width: calc(var(--sidebar-w) + var(--content-max) + 96px);
+    width: 100%;
+  }
+
+  article { max-width: var(--content-max); }
+
+  /* ── HEADER ── */
+  .doc-header {
+    margin-bottom: 40px;
+    padding-bottom: 28px;
+    border-bottom: 2px solid var(--border);
+  }
+
+  .doc-header .meta {
+    display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px;
+  }
+
+  .tag {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border-radius: 20px;
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+
+  .tag-phase  { background: var(--accent-light);  color: var(--accent); }
+  .tag-topic  { background: var(--purple-light);  color: var(--purple); }
+  .tag-date   { background: var(--surface-alt);   color: var(--text-muted); }
+
+  .doc-header h1 {
+    font-size: 30px;
+    font-weight: 800;
+    line-height: 1.25;
+    letter-spacing: -0.02em;
+    color: var(--text);
+  }
+
+  /* ── SECTIONS ── */
+  section {
+    margin-bottom: 52px;
+    scroll-margin-top: 32px;
+  }
+
+  h2.section-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 20px;
+    display: flex; align-items: center; gap: 10px;
+    letter-spacing: -0.01em;
+  }
+
+  h2.section-title .num {
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--text-muted);
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 2px 7px;
+    letter-spacing: 0.04em;
+  }
+
+  h3 {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    margin: 24px 0 10px;
+  }
+
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+
+  /* ── CALLOUT BOXES ── */
+  .callout {
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-bottom: 20px;
+    font-size: 14px;
+    border-left: 3px solid;
+  }
+
+  .callout-goal   { background: var(--accent-light);  border-color: var(--accent);  color: #1e40af; }
+  .callout-tip    { background: var(--yellow-light);  border-color: var(--yellow);  color: #92400e; }
+  .callout-quote  { background: var(--surface-alt);   border-color: var(--border);  color: var(--text-muted); font-style: italic; }
+
+  /* ── CHEATSHEET CODE BLOCK ── */
+  .cheatsheet {
+    background: var(--code-bg);
+    color: var(--code-text);
+    border-radius: 12px;
+    padding: 24px 28px;
+    font-family: "SF Mono", "Fira Code", "Cascadia Code", Menlo, monospace;
+    font-size: 13px;
+    line-height: 1.65;
+    white-space: pre-wrap;
+    overflow-x: auto;
+    margin-top: 16px;
+  }
+
+  .cheatsheet .label {
+    color: #cba6f7;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+  }
+
+  /* ── MINDMAP IMAGE ── */
+  .mindmap-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    margin: 20px 0 24px;
+    text-align: center;
+  }
+
+  .mindmap-wrap img { max-width: 100%; border-radius: 8px; }
+  .mindmap-wrap .caption { font-size: 12px; color: var(--text-muted); margin-top: 8px; }
+
+  /* ── CHECKLIST ── */
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+
+  .checklist li {
+    display: flex; align-items: flex-start; gap: 10px;
+    font-size: 14.5px; line-height: 1.55;
+  }
+
+  .checklist li .cb {
+    flex-shrink: 0;
+    width: 18px; height: 18px;
+    border: 2px solid var(--border);
+    border-radius: 4px;
+    margin-top: 2px;
+    background: var(--surface);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+
+  .checklist li.checked .cb {
+    background: var(--green);
+    border-color: var(--green);
+  }
+
+  .checklist li.checked .cb::after {
+    content: '';
+    display: block;
+    width: 5px; height: 9px;
+    border: 2px solid #fff;
+    border-top: none; border-left: none;
+    transform: rotate(45deg) translateY(-1px);
+  }
+
+  .checklist li.checked .text { color: var(--text-muted); text-decoration: line-through; }
+
+  /* ── STUDY PHASES ── */
+  .phase-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+
+  .phase-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 20px;
+    cursor: pointer; user-select: none;
+    background: var(--surface-alt);
+  }
+
+  .phase-header:hover { background: var(--border); }
+
+  .phase-label {
+    font-size: 14px; font-weight: 700;
+    display: flex; align-items: center; gap: 10px;
+  }
+
+  .phase-badge {
+    font-size: 11px; font-weight: 800;
+    letter-spacing: 0.05em; text-transform: uppercase;
+    padding: 2px 8px; border-radius: 20px;
+  }
+
+  .ph1 { background: #dbeafe; color: #1d4ed8; }
+  .ph2 { background: #fce7f3; color: #9d174d; }
+  .ph3 { background: #d1fae5; color: #065f46; }
+  .ph4 { background: #fef3c7; color: #92400e; }
+
+  .phase-chevron { font-size: 12px; color: var(--text-muted); transition: transform 0.2s; }
+  .phase-card.open .phase-chevron { transform: rotate(180deg); }
+
+  .phase-body { display: none; padding: 16px 20px 20px; }
+  .phase-card.open .phase-body { display: block; }
+
+  .phase-goal { font-size: 12.5px; color: var(--text-muted); font-style: italic; margin-bottom: 12px; }
+
+  /* ── TABLES ── */
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+
+  th {
+    background: var(--surface-alt);
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 12px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--text-muted);
+    border-bottom: 2px solid var(--border);
+  }
+
+  td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top; line-height: 1.5;
+  }
+
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+
+  /* ── MISCONCEPTIONS ── */
+  .misconception {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+
+  .misconception .wrong {
+    background: var(--red-light);
+    padding: 10px 16px;
+    font-size: 14px;
+    display: flex; align-items: flex-start; gap: 8px;
+  }
+
+  .misconception .right {
+    padding: 10px 16px;
+    font-size: 14px;
+    display: flex; align-items: flex-start; gap: 8px;
+    color: #065f46; background: var(--green-light);
+  }
+
+  .misconception .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+
+  /* ── QUIZ ── */
+  .quiz-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+
+  .quiz-q {
+    padding: 14px 18px;
+    font-size: 14.5px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  }
+
+  .quiz-q:hover { background: var(--surface-alt); }
+
+  .quiz-num {
+    flex-shrink: 0;
+    width: 24px; height: 24px;
+    background: var(--accent);
+    color: #fff;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 800;
+    margin-top: 1px;
+  }
+
+  .quiz-q .qtext { flex: 1; }
+  .quiz-toggle { font-size: 11px; color: var(--text-muted); flex-shrink: 0; margin-top: 3px; }
+
+  .quiz-hint {
+    display: none;
+    padding: 10px 18px 14px;
+    font-size: 13px;
+    color: #92400e;
+    background: var(--yellow-light);
+    border-top: 1px solid var(--border);
+  }
+
+  .quiz-item.open .quiz-hint { display: block; }
+
+  /* ── FURTHER READING ── */
+  .reading-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+
+  .reading-list li {
+    display: flex; align-items: flex-start; gap: 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 14px;
+  }
+
+  .reading-list li .cb {
+    flex-shrink: 0;
+    width: 18px; height: 18px;
+    border: 2px solid var(--border);
+    border-radius: 4px;
+    margin-top: 1px;
+    cursor: pointer;
+    background: var(--surface);
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+
+  .reading-list li.checked .cb {
+    background: var(--green);
+    border-color: var(--green);
+  }
+
+  .reading-list li.checked .cb::after {
+    content: '';
+    display: block;
+    width: 5px; height: 9px;
+    border: 2px solid #fff;
+    border-top: none; border-left: none;
+    transform: rotate(45deg) translateY(-1px);
+  }
+
+  .reading-list li.checked .rtext { color: var(--text-muted); text-decoration: line-through; }
+
+  /* ── NOTES AREA ── */
+  .notes-area {
+    width: 100%;
+    min-height: 160px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    font-family: inherit;
+    font-size: 14px;
+    color: var(--text);
+    resize: vertical;
+    line-height: 1.6;
+  }
+
+  .notes-area:focus { outline: 2px solid var(--accent); border-color: transparent; }
+
+  /* ── FOCUS LIST (Section 0) ── */
+  .focus-list { list-style: none; display: flex; flex-direction: column; gap: 14px; }
+
+  .focus-list li {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    font-size: 14.5px;
+    line-height: 1.6;
+  }
+
+  .focus-list li strong { color: var(--accent); display: block; margin-bottom: 4px; }
+
+  /* ── CONNECTIONS ── */
+  .connections { display: flex; flex-direction: column; gap: 12px; }
+
+  .conn-card {
+    display: flex; align-items: flex-start; gap: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    font-size: 14px;
+  }
+
+  .conn-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .conn-label { font-weight: 700; margin-bottom: 3px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+
+  /* ── TRADE-OFF STATEMENT ── */
+  .tradeoff-box {
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--accent);
+    border-radius: 8px;
+    padding: 14px 18px;
+    font-size: 14px;
+    font-style: italic;
+    color: var(--text);
+    margin-top: 14px;
+  }
+
+  /* ── SCROLLSPY ── */
+  @media (max-width: 900px) {
+    #toc { display: none; }
+    main { margin-left: 0; padding: 24px 20px 60px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── SIDEBAR TOC ── -->
+<aside id="toc">
+  <div id="toc-header">
+    <div class="phase-tag">Phase B — Scalability</div>
+    <h2>4.6 Sticky Sessions</h2>
+  </div>
+  <nav>
+    <a href="#s0">🗺️ Topic Overview</a>
+    <a href="#s1">🎯 Goal</a>
+    <a href="#s2">✅ Mastery</a>
+    <a href="#s3">🗓️ Study Phases</a>
+    <a href="#s4">📋 Cheatsheet</a>
+    <a href="#s5">🧠 Core Definition</a>
+    <a href="#s6">📦 Core Concepts</a>
+    <a href="#s7">🔍 First Principles</a>
+    <a href="#s8">🗺️ Mental Models</a>
+    <a href="#s9">⚙️ How It Works</a>
+    <a href="#s10">🏭 Real-World Examples</a>
+    <a href="#s11">⚖️ Trade-offs</a>
+    <a href="#s12">🎯 Interview Application</a>
+    <a href="#s13">⚠️ Misconceptions</a>
+    <a href="#s14">🔗 Relationships</a>
+    <a href="#s15">🧪 Self-Check Quiz</a>
+    <a href="#s16">📚 Further Reading</a>
+    <a href="#s17">✍️ My Notes</a>
+  </nav>
+</aside>
+
+<!-- ── MAIN ── -->
+<main>
+<article>
+
+  <!-- HEADER -->
+  <header class="doc-header">
+    <div class="meta">
+      <span class="tag tag-phase">⚡ Phase B — Scalability</span>
+      <span class="tag tag-topic">⚖️ Topic 4 — Load Balancing</span>
+      <span class="tag tag-date">📅 2026-05-22</span>
+    </div>
+    <h1>4.6 Sticky Sessions — Trade-offs and Alternatives</h1>
+  </header>
+
+  <!-- ── SECTION 0: TOPIC OVERVIEW ── -->
+  <section id="s0">
+    <h2 class="section-title"><span class="num">00</span> 🗺️ Topic Overview</h2>
+
+    <h3>What This Topic Is About</h3>
+    <p>Sticky sessions (session affinity) is a load balancer configuration that routes a client consistently to the same backend server across multiple requests. It exists because some services store session state locally on the server — without affinity, a request landing on a different server finds no session and fails. The central tension is that stickiness restores stateful behavior on top of a load-balanced tier, directly undermining the horizontal scalability that load balancing is supposed to enable.</p>
+
+    <h3>🎯 What to Focus On</h3>
+    <ul class="focus-list">
+      <li><strong>1. Why stickiness is needed in the first place</strong>It only exists as a band-aid over server-side session state. Understand the root cause (stateful server design), not just the symptom. The correct fix is stateless redesign, not better stickiness.</li>
+      <li><strong>2. Cookie-based vs. IP-hash affinity mechanisms</strong>Cookie-based (LB inserts Set-Cookie header) works at L7 and survives IP changes. IP-hash (hash of source IP % num_backends) works at L4/L7 but collapses catastrophically under NAT. Know the failure modes of each.</li>
+      <li><strong>3. The scaling trap</strong>Adding backend nodes doesn't help existing sticky users. Node failure drops all pinned sessions with no recovery. Load skews toward "hot" nodes over time. Interviewers specifically probe this.</li>
+      <li><strong>4. The three correct alternatives</strong>Redis session store (externalized state), JWT stateless auth (client carries state), and stateless service redesign (no server-side state at all). Be able to propose and justify each in an interview.</li>
+      <li><strong>5. When stickiness is pragmatically acceptable</strong>Legacy migration, COTS software, and WebSocket transport-layer affinity (protocol requirement, not a design smell). Know the distinction between unavoidable and avoidable stickiness.</li>
+    </ul>
+  </section>
+
+  <!-- ── SECTION 1: GOAL ── -->
+  <section id="s1">
+    <h2 class="section-title"><span class="num">01</span> 🎯 Goal of This Subtopic</h2>
+    <div class="callout callout-goal">
+      <em>Why are you studying this? What should you be able to do after this session?</em>
+    </div>
+    <p>Be able to explain why sticky sessions exist, how they are implemented (cookie-based vs. IP-hash), and why they create a ceiling on horizontal scalability. More importantly, be able to propose the correct architectural alternatives — externalizing session state to Redis, token-based auth, or stateless service redesign — and justify the trade-off between refactoring cost and scalability benefit in a given interview scenario.</p>
+  </section>
+
+  <!-- ── SECTION 2: MASTERY ── -->
+  <section id="s2">
+    <h2 class="section-title"><span class="num">02</span> ✅ What Mastery Looks Like</h2>
+    <div class="callout callout-quote">Concrete, testable proof that you own this concept — not just familiarity.</div>
+    <ul class="checklist" id="mastery-list">
+      <li><span class="cb"></span><span class="text">Can explain the problem sticky sessions solve and why that problem arises from stateful server design</span></li>
+      <li><span class="cb"></span><span class="text">Can describe both implementation mechanisms (cookie-based and IP-hash) and name a failure scenario specific to each</span></li>
+      <li><span class="cb"></span><span class="text">Can articulate exactly why sticky sessions prevent free horizontal scaling — both in terms of new server utilization and node failure impact</span></li>
+      <li><span class="cb"></span><span class="text">Can propose three concrete alternatives to sticky sessions and explain the trade-off of each vs. stickiness</span></li>
+      <li><span class="cb"></span><span class="text">Can identify in a system design interview when a proposed architecture implicitly requires sticky sessions and call it out proactively</span></li>
+    </ul>
+    <div class="callout callout-tip" style="margin-top:20px;">
+      💡 <strong>Rule of thumb:</strong> If you can teach it to someone else and field their follow-up questions, you've mastered it.
+    </div>
+  </section>
+
+  <!-- ── SECTION 3: STUDY PHASES ── -->
+  <section id="s3">
+    <h2 class="section-title"><span class="num">03</span> 🗓️ Study Phases to Achieve Mastery</h2>
+    <div class="callout callout-quote">A progressive plan from first exposure to interview-ready. Work through each phase in order.</div>
+
+    <div class="phase-card open" id="ph1">
+      <div class="phase-header" onclick="togglePhase('ph1')">
+        <div class="phase-label"><span class="phase-badge ph1">Phase 1</span> Acquire 📖</div>
+        <span class="phase-chevron">▼</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Read deeply enough that you could explain the concept without the doc.</p>
+        <ul class="checklist">
+          <li><span class="cb"></span><span class="text">Read <strong>DDIA Chapter 1</strong> (Scalability section) — frames why stateless architecture enables horizontal scale</span></li>
+          <li><span class="cb"></span><span class="text">Read <strong>AWS Elastic Load Balancing — Sticky Sessions docs</strong> at docs.aws.amazon.com/elasticloadbalancing — concrete cookie duration-based implementation</span></li>
+          <li><span class="cb"></span><span class="text">Read <strong>HAProxy sticky session config guide</strong> at haproxy.com/documentation — stick-table and IP-hash implementation reference</span></li>
+          <li><span class="cb"></span><span class="text">Read <strong>ByteByteGo — "How do you scale a web app?"</strong> (YouTube, Alex Xu) — covers the stateless evolution arc</span></li>
+          <li><span class="cb"></span><span class="text">Read through <strong>Sections 5–9</strong> (Core Definition → How It Works) carefully — don't skim</span></li>
+          <li><span class="cb"></span><span class="text">Re-read the <strong>Cheatsheet</strong> (Section 4) and try to recite it from memory after</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-card" id="ph2">
+      <div class="phase-header" onclick="togglePhase('ph2')">
+        <div class="phase-label"><span class="phase-badge ph2">Phase 2</span> Consolidate ✍️</div>
+        <span class="phase-chevron">▼</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Verify you can reproduce the knowledge in your own words without looking.</p>
+        <ul class="checklist">
+          <li><span class="cb"></span><span class="text">Close the doc — write out the <strong>Core Definition</strong> from memory, then compare</span></li>
+          <li><span class="cb"></span><span class="text">Explain <strong>First Principles</strong> out loud without notes — what problem does this solve and why?</span></li>
+          <li><span class="cb"></span><span class="text">Reconstruct the <strong>How It Works</strong> mechanics step by step from memory</span></li>
+          <li><span class="cb"></span><span class="text">Restate each <strong>Trade-off</strong> row in your own words — if you can't explain the cost, you don't own it yet</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-card" id="ph3">
+      <div class="phase-header" onclick="togglePhase('ph3')">
+        <div class="phase-label"><span class="phase-badge ph3">Phase 3</span> Apply 🔧</div>
+        <span class="phase-chevron">▼</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Connect to real systems and simulate interview scenarios.</p>
+        <ul class="checklist">
+          <li><span class="cb"></span><span class="text">Go through <strong>Real-World System Examples</strong> (Section 10) — verify each claim and add anything missed to My Notes</span></li>
+          <li><span class="cb"></span><span class="text">Practice the <strong>Interview Application</strong> (Section 12) out loud — say the trigger phrases and your response as if in a live interview</span></li>
+          <li><span class="cb"></span><span class="text">Work through <strong>Common Misconceptions</strong> (Section 13) — for each, explain <em>why</em> it's wrong, not just that it is</span></li>
+          <li><span class="cb"></span><span class="text">Trace the <strong>Relationships to Other Concepts</strong> (Section 14) — can you explain each connection without looking?</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-card" id="ph4">
+      <div class="phase-header" onclick="togglePhase('ph4')">
+        <div class="phase-label"><span class="phase-badge ph4">Phase 4</span> Validate 🧪</div>
+        <span class="phase-chevron">▼</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Confirm you actually own it, not just recognize it.</p>
+        <ul class="checklist">
+          <li><span class="cb"></span><span class="text">Answer every <strong>Self-Check Quiz</strong> question (Section 15) out loud without notes</span></li>
+          <li><span class="cb"></span><span class="text">Recite the <strong>Cheatsheet</strong> (Section 4) from memory — if you can't, re-do Phase 2</span></li>
+          <li><span class="cb"></span><span class="text">Tick off items in <strong>What Mastery Looks Like</strong> (Section 2) — only check a box if you can demonstrate it on demand</span></li>
+          <li><span class="cb"></span><span class="text">Teach this concept out loud to an imaginary interviewer for 2 minutes without hesitation or notes</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── SECTION 4: CHEATSHEET ── -->
+  <section id="s4">
+    <h2 class="section-title"><span class="num">04</span> 📋 Cheatsheet</h2>
+    <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+
+    <div style="background:var(--surface-alt);border:1px solid var(--border);border-radius:12px;padding:20px 16px 12px;margin:20px 0 24px;">
+      <svg id="ss-mindmap" viewBox="0 0 960 700" xmlns="http://www.w3.org/2000/svg"
+           style="width:100%;height:auto;display:block;"
+           font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif">
+      </svg>
+      <p style="text-align:center;font-size:12px;color:var(--text-muted);margin-top:10px;margin-bottom:0;">
+        4.6 Sticky Sessions — Concept Map &nbsp;·&nbsp; <em>hover a branch to highlight</em>
+      </p>
+    </div>
+    <script>
+    (function(){
+      var svg = document.getElementById('ss-mindmap');
+      var NS  = 'http://www.w3.org/2000/svg';
+
+      function mk(tag, attrs) {
+        var e = document.createElementNS(NS, tag);
+        for (var k in attrs) e.setAttribute(k, attrs[k]);
+        return e;
+      }
+      function drawText(parent, x, y, label, fs, fill, bold) {
+        var t = mk('text', { x:x, y:y, 'text-anchor':'middle', 'dominant-baseline':'central',
+          'font-size':fs, 'fill':fill||'#1a1917', 'font-weight':bold?'700':'500' });
+        t.textContent = label;
+        parent.appendChild(t);
+        return t;
+      }
+      function drawRect(parent, x, y, w, h, fill, stroke) {
+        var r = mk('rect', { x:x, y:y, width:w, height:h, rx:7, ry:7,
+          fill:fill, stroke:stroke, 'stroke-width':1.8 });
+        parent.appendChild(r); return r;
+      }
+      function drawEllipse(parent, cx, cy, rx, ry, fill, stroke) {
+        var e = mk('ellipse', { cx:cx, cy:cy, rx:rx, ry:ry,
+          fill:fill, stroke:stroke, 'stroke-width':2.5 });
+        parent.appendChild(e); return e;
+      }
+      function drawPath(parent, d, stroke, sw) {
+        var p = mk('path', { d:d, stroke:stroke, 'stroke-width':sw||2,
+          fill:'none', opacity:0.55, 'stroke-linecap':'round' });
+        parent.appendChild(p); return p;
+      }
+      function drawLine(parent, x1, y1, x2, y2, stroke) {
+        var l = mk('line', { x1:x1, y1:y1, x2:x2, y2:y2, stroke:stroke,
+          'stroke-width':1.4, opacity:0.42, 'stroke-linecap':'round' });
+        parent.appendChild(l); return l;
+      }
+
+      // ── DATA ──────────────────────────────────────────────────────────────
+      var CX = 480, CY = 350;
+
+      var BRANCHES = [
+        // ── LEFT ──
+        { label:'Why It Exists',
+          bx:200, by:60, bw:160, bh:40,
+          bf:'#dbe4ff', bs:'#3b5bdb', lf:'#eef2ff', ls:'#3b5bdb', side:'L',
+          leaves:[
+            {t:'Server-side state',   x:8,  y:46,  w:184, h:32},
+            {t:'HTTP is stateless',   x:8,  y:88,  w:184, h:32},
+            {t:'Session ID cookie',   x:8,  y:130, w:184, h:32},
+            {t:'Zero code change',    x:8,  y:172, w:184, h:32}
+          ]},
+        { label:'Cookie-Based',
+          bx:185, by:310, bw:175, bh:40,
+          bf:'#ffd8a8', bs:'#e67700', lf:'#fff4e6', ls:'#e67700', side:'L',
+          leaves:[
+            {t:'LB injects Set-Cookie', x:4,  y:296, w:176, h:32},
+            {t:'Survives IP changes',   x:4,  y:338, w:176, h:32},
+            {t:'L7 (HTTP) only',        x:4,  y:380, w:176, h:32},
+            {t:'AWSALB / SERVERID',     x:4,  y:422, w:176, h:32}
+          ]},
+        { label:'When Acceptable',
+          bx:200, by:540, bw:160, bh:40,
+          bf:'#c3fae8', bs:'#0ca678', lf:'#e6fcf5', ls:'#0ca678', side:'L',
+          leaves:[
+            {t:'Legacy migration',    x:8,  y:518, w:184, h:32},
+            {t:'WebSocket transport', x:8,  y:560, w:184, h:32},
+            {t:'COTS software',       x:8,  y:602, w:184, h:32}
+          ]},
+        // ── RIGHT ──
+        { label:'IP-Hash',
+          bx:596, by:60, bw:148, bh:40,
+          bf:'#ede9fe', bs:'#7c3aed', lf:'#f3f0ff', ls:'#7c3aed', side:'R',
+          leaves:[
+            {t:'hash(src_IP) % N', x:758, y:46,  w:180, h:32},
+            {t:'L4 or L7',         x:758, y:88,  w:180, h:32},
+            {t:'NAT collapse ⚠',   x:758, y:130, w:180, h:32},
+            {t:'Resets on scale',   x:758, y:172, w:180, h:32}
+          ]},
+        { label:'Scaling Traps',
+          bx:596, by:310, bw:160, bh:40,
+          bf:'#ffc9c9', bs:'#c92a2a', lf:'#fff5f5', ls:'#c92a2a', side:'R',
+          leaves:[
+            {t:'New nodes stay idle',   x:770, y:296, w:172, h:32},
+            {t:'Node fail = lost sess', x:770, y:338, w:172, h:32},
+            {t:'Load skews over time',  x:770, y:380, w:172, h:32},
+            {t:'No session redundancy', x:770, y:422, w:172, h:32}
+          ]},
+        { label:'Alternatives',
+          bx:596, by:540, bw:155, bh:40,
+          bf:'#b2f2bb', bs:'#2f9e44', lf:'#ebfbee', ls:'#2f9e44', side:'R',
+          leaves:[
+            {t:'Redis session store', x:764, y:518, w:180, h:32},
+            {t:'JWT stateless auth',  x:764, y:560, w:180, h:32},
+            {t:'Stateless redesign',  x:764, y:602, w:180, h:32}
+          ]}
+      ];
+
+      // ── LAYERS ────────────────────────────────────────────────────────────
+      var LL = mk('g',{}), NL = mk('g',{}), TL = mk('g',{'pointer-events':'none'});
+      svg.appendChild(LL); svg.appendChild(NL); svg.appendChild(TL);
+
+      // Title
+      drawText(TL, CX, 20, '4.6 Sticky Sessions — Concept Map', 13, '#6b6861', false);
+
+      // ── DRAW BRANCHES ─────────────────────────────────────────────────────
+      BRANCHES.forEach(function(b) {
+        var bcy = b.by + b.bh / 2;
+
+        var sx  = b.side==='L' ? CX - 90 : CX + 90;
+        var ex  = b.side==='L' ? b.bx + b.bw : b.bx;
+        var cp1x= b.side==='L' ? sx - 55 : sx + 55;
+        var cp2x= b.side==='L' ? ex + 18  : ex - 18;
+        drawPath(LL,
+          'M '+sx+','+CY+' C '+cp1x+','+CY+' '+cp2x+','+bcy+' '+ex+','+bcy,
+          b.bs, 2);
+
+        var leafRects = [];
+        b.leaves.forEach(function(lf) {
+          var lcy = lf.y + lf.h / 2;
+          if (b.side==='L') drawLine(LL, b.bx, bcy, lf.x + lf.w, lcy, b.ls);
+          else              drawLine(LL, b.bx + b.bw, bcy, lf.x, lcy, b.ls);
+          var r = drawRect(NL, lf.x, lf.y, lf.w, lf.h, b.lf, b.ls);
+          drawText(TL, lf.x + lf.w/2, lcy, lf.t, 11.5, '#1a1917', false);
+          leafRects.push(r);
+        });
+
+        var br = drawRect(NL, b.bx, b.by, b.bw, b.bh, b.bf, b.bs);
+        drawText(TL, b.bx + b.bw/2, bcy, b.label, 12.5, '#1a1917', true);
+
+        var all = [br].concat(leafRects);
+        (function(rects) {
+          function hi(on) {
+            rects.forEach(function(r) {
+              r.setAttribute('stroke-width', on ? 2.8 : 1.8);
+              r.style.filter = on ? 'drop-shadow(0 2px 5px rgba(0,0,0,0.14))' : '';
+            });
+          }
+          rects.forEach(function(r) {
+            r.addEventListener('mouseenter', function(){ hi(true); });
+            r.addEventListener('mouseleave', function(){ hi(false); });
+          });
+        })(all);
+      });
+
+      // Center ellipse — drawn last so it sits on top
+      drawEllipse(NL, CX, CY, 90, 44, '#a5d8ff', '#1971c2');
+      drawText(TL, CX, CY - 11, 'Sticky', 15, '#1a1917', true);
+      drawText(TL, CX, CY + 9,  'Sessions', 15, '#1a1917', true);
+
+    })();
+    </script>
+
+    <div class="cheatsheet"><span class="label">ONE-LINER</span>
+  Sticky sessions route a client to the same server every time — a band-aid
+  over server-side state that caps horizontal scalability.
+
+<span class="label">KEY PROPERTIES / RULES</span>
+  1. Implemented via cookie-based affinity (LB inserts Set-Cookie)
+     or IP-hash affinity (source IP deterministically maps to a node).
+  2. Breaks even load distribution — "hot" users cluster on the same node.
+  3. Node failure drops ALL sessions pinned to that node — no redundancy.
+  4. New servers don't absorb existing sticky traffic — no re-balancing.
+  5. The correct fix is stateless redesign, not better stickiness.
+
+<span class="label">DECISION RULE</span>
+  Use sticky sessions when: you cannot refactor server-side state in the
+  short term (legacy migration, COTS software, WebSocket transport layer).
+  Avoid sticky sessions when: designing a new system or scaling beyond a
+  few nodes — externalize state to Redis or use JWTs instead.
+
+<span class="label">NUMBERS / FORMULAS</span>
+  Cookie TTL = session timeout (e.g., 30 min); keep short to limit drift.
+  IP-hash: hash(src_IP) % num_backends — recomputes on every scaling event.
+
+<span class="label">GOTCHA TO NEVER FORGET</span>
+  IP-hash collapses under NAT — thousands of corporate users share one IP,
+  all routing to one server. Cookie-based affinity is generally preferred.</div>
+  </section>
+
+  <!-- ── SECTION 5: CORE DEFINITION ── -->
+  <section id="s5">
+    <h2 class="section-title"><span class="num">05</span> 🧠 Core Definition</h2>
+    <div class="callout callout-quote">What is it, in one sentence?</div>
+    <p>Sticky sessions (session affinity) is a load balancer configuration that consistently routes all requests from a given client to the same backend server, allowing that server to serve the client's locally-stored session state across multiple requests — at the cost of free horizontal scaling and per-session fault tolerance.</p>
+  </section>
+
+  <!-- ── SECTION 6: CORE CONCEPTS ── -->
+  <section id="s6">
+    <h2 class="section-title"><span class="num">06</span> 📦 Core Concepts</h2>
+    <div class="callout callout-quote">The essential building blocks — terms and ideas you must have solid before going deeper.</div>
+
+    <h3>Server-Side Session State</h3>
+    <p>When a server stores user session data (auth tokens, shopping cart, multi-step workflow state) in its own process memory or local disk, that data is only accessible on that specific server. If the next request lands on a different backend, the session is lost — this is the root problem sticky sessions paper over. Without affinity, every stateful server-side request requires either state replication across nodes or centralized state storage.</p>
+
+    <h3>Cookie-Based Affinity</h3>
+    <p>The load balancer injects a special affinity cookie (e.g., <code>AWSALB</code> for AWS ALB, <code>SERVERID</code> for HAProxy) into the HTTP response. On every subsequent request, the client sends this cookie back and the LB routes directly to the encoded backend — bypassing the normal routing algorithm. This is L7-only (the LB must be HTTP-aware). It survives client IP changes (mobile network switches, VPN connects) making it more robust than IP-hash for most use cases.</p>
+
+    <h3>IP-Hash Affinity</h3>
+    <p>The LB computes <code>hash(source_IP) % num_backends</code> and routes deterministically — no cookie required, works at L4 or L7. Critically, this computation changes when backends are added or removed, causing mass session disruption on every scaling event. It also degrades severely under corporate NAT or CGNAT (carrier-grade NAT), where thousands of users share one public IP and all route to a single backend.</p>
+
+    <h3>Session Draining (Connection Draining)</h3>
+    <p>When a backend must be removed (deployment, failure recovery), active sticky sessions cannot be instantly cut off without data loss. Draining stops sending new sessions to the departing node while allowing in-flight sticky sessions to complete. The LB monitors active connections and removes the node once they reach zero (or a configurable timeout). This helps for planned maintenance but offers no protection during sudden node failures.</p>
+
+    <h3>Stateless Alternatives</h3>
+    <p>The architecturally correct remedy for sticky sessions. Options: (1) <strong>Redis session store</strong> — externalize session objects so any backend can serve any request; (2) <strong>JWT auth</strong> — client carries all session state in a cryptographically signed token, no server-side storage; (3) <strong>stateless service redesign</strong> — eliminate all server-side session state so affinity is never needed. All three restore true horizontal scalability and per-node redundancy.</p>
+  </section>
+
+  <!-- ── SECTION 7: FIRST PRINCIPLES ── -->
+  <section id="s7">
+    <h2 class="section-title"><span class="num">07</span> 🔍 First Principles — Why Does This Exist?</h2>
+    <div class="callout callout-quote">What fundamental problem does this concept solve? Why was it invented?</div>
+    <p>HTTP is stateless by design — each request carries no memory of prior requests. Web applications needed persistent sessions (login state, cart contents, multi-step workflows) so they began storing session objects in server memory, keyed by a session ID cookie. This worked fine with a single server.</p>
+    <p>When load balancers appeared to distribute traffic across a pool of servers, the problem surfaced immediately: if server A issued session ID <code>abc123</code> and stored it in memory, a subsequent request carrying <code>abc123</code> landing on server B would find no matching session and fail with a 401 or empty cart.</p>
+    <p>The immediate fix: tell the LB "once you've sent a client to server A, keep sending them there." This preserved existing application code with zero refactoring. Sticky sessions were invented as a compatibility shim between stateful application architectures and the load-balanced multi-server deployments that scale required. The cost was that horizontal scalability benefit was partially surrendered — you added more servers, but existing users didn't benefit from them.</p>
+  </section>
+
+  <!-- ── SECTION 8: MENTAL MODELS ── -->
+  <section id="s8">
+    <h2 class="section-title"><span class="num">08</span> 🗺️ Mental Models</h2>
+    <div class="callout callout-quote">Intuition frames that help you reason about this concept fast — especially under pressure.</div>
+
+    <h3>Model 1: The Assigned Cashier</h3>
+    <p>Imagine a supermarket where each shopper's tab is stored in their assigned cashier's personal notepad. The load balancer (store manager) assigns each new shopper to a specific cashier (sticky session). If that cashier goes on break (node failure), the tab is gone — the other cashiers know nothing about it. If the store adds new cashiers, the manager doesn't reassign existing shoppers — new cashiers stand idle while the original ones are overloaded. The fix: move all tabs to a central register system (Redis) so any cashier can look up any shopper's tab. This captures loss-on-failure, uneven load, and the correct fix in one frame.</p>
+
+    <h3>Model 2: Reserved Parking vs. Pay-and-Display</h3>
+    <p>Cookie-based affinity is a reserved parking spot — a valet gives you a ticket (cookie) guaranteeing your car (session) goes to space B-7 every time. IP-hash is always assigning parking level by license plate region — works for individual cars but if a bus parks (corporate IP with 5,000 users), the entire fleet floods one level. The "correct fix" framing: stateless services are self-driving cars that park anywhere and know where they are without a reserved space. This model breaks down for session draining mechanics but is ideal for the IP-hash NAT problem.</p>
+
+    <h3>Model 3: The Sticky-Note Anti-Pattern</h3>
+    <p>Think of server-side session state as sticky notes plastered on one server's monitor. Sticky sessions are the rule "always send this user back to the server with their notes." If that server burns down, the notes are gone. If you add a new monitor (server), you can't move notes automatically. The right answer isn't better rules about who can read whose sticky notes — it's to stop using sticky notes and use a shared whiteboard (Redis/JWT) that anyone can read. This model makes the anti-pattern nature of stickiness viscerally clear.</p>
+  </section>
+
+  <!-- ── SECTION 9: HOW IT WORKS ── -->
+  <section id="s9">
+    <h2 class="section-title"><span class="num">09</span> ⚙️ How It Works — Mechanics</h2>
+    <div class="callout callout-quote">Step-by-step explanation of the internal mechanism.</div>
+
+    <h3>Cookie-Based Affinity — Happy Path</h3>
+    <p>1. Client sends first request; no affinity cookie present yet.<br>
+    2. LB selects backend via normal algorithm (e.g., round robin) → assigns B2.<br>
+    3. LB inserts: <code>Set-Cookie: AWSALB=&lt;encoded_B2_id&gt;; Path=/; Max-Age=86400</code> into HTTP response.<br>
+    4. Client stores cookie; sends it on every subsequent request.<br>
+    5. LB reads cookie, extracts B2 ID, routes directly to B2 — bypassing normal algorithm.<br>
+    6. On B2 failure: LB detects via health check, removes B2. Requests with stale cookie are rerouted to a new backend. Session state is lost unless externalized to Redis.</p>
+
+    <h3>IP-Hash Affinity — Mechanics and Failure</h3>
+    <p>LB computes <code>hash(source_IP) % num_backends</code> → deterministic routing, no cookie needed. On node count change (add/remove), the modulus changes and all hash mappings recompute — causing mass session disruption. Under corporate NAT: thousands of users share one public IP, all hashing to the same backend → hot node, defeats the purpose of load balancing entirely.</p>
+
+    <h3>Session Draining During Deployment</h3>
+    <p>Operator marks B2 as "draining." LB stops routing new sessions to B2 but continues honoring existing affinity cookies pointing to B2. LB monitors active connection count on B2; once zero (or drain timeout expires), B2 is removed. Sessions that didn't complete gracefully are dropped. Planned deployments work; sudden crashes do not — there's no draining on an unexpected failure.</p>
+
+    <h3>The Hidden Single Point of Failure</h3>
+    <p>With stickiness, each user's session availability equals the availability of their pinned node (e.g., 99.9% for one server). Without stickiness, each request can hit any of N nodes — effective session availability is approximately <code>1 − (0.001)^N</code> ≈ 100%. Stickiness silently degrades user-level reliability even when the overall cluster is highly available.</p>
+  </section>
+
+  <!-- ── SECTION 10: REAL-WORLD EXAMPLES ── -->
+  <section id="s10">
+    <h2 class="section-title"><span class="num">10</span> 🏭 Real-World System Examples</h2>
+    <div class="callout callout-quote">Where does this appear in production systems you know?</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>System</th><th>How This Concept Applies</th><th>Notes</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>AWS ALB</strong></td>
+            <td>Duration-based sticky sessions via <code>AWSALB</code> cookie; configurable TTL (1 sec – 7 days). Application-based stickiness uses a custom cookie from the target.</td>
+            <td>AWS docs recommend session stores for stateless design instead; stickiness is explicitly called a scaling limitation.</td>
+          </tr>
+          <tr>
+            <td><strong>HAProxy</strong></td>
+            <td>Implements stickiness via <code>stick-table</code> (cookie-based) and <code>balance source</code> (IP-hash). Widely used in on-prem and self-hosted deployments.</td>
+            <td>NAT collapse applies to <code>balance source</code>; <code>stick on cookie</code> is more robust for public internet traffic.</td>
+          </tr>
+          <tr>
+            <td><strong>NGINX</strong></td>
+            <td><code>ip_hash</code> directive pins clients to upstreams. Cookie-based sticky requires NGINX Plus or Lua module in open-source.</td>
+            <td>Open-source NGINX's <code>ip_hash</code> is the most common entry-point into the NAT collapse gotcha.</td>
+          </tr>
+          <tr>
+            <td><strong>Legacy Java EE / PHP</strong></td>
+            <td>Tomcat <code>JSESSIONID</code>, PHP <code>PHPSESSID</code> stored in server memory — the canonical motivating use case for stickiness.</td>
+            <td>Modern containerized versions externalize sessions to Redis; stickiness during migration is the acceptable stopgap.</td>
+          </tr>
+          <tr>
+            <td><strong>WebSocket connections</strong></td>
+            <td>WebSocket upgrades require all frames of a session to traverse the same TCP connection to the same backend. LBs must maintain affinity for connection lifetime.</td>
+            <td>This is a legitimate, unavoidable use case — the connection itself is stateful at the transport layer. Not an anti-pattern.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── SECTION 11: TRADE-OFFS ── -->
+  <section id="s11">
+    <h2 class="section-title"><span class="num">11</span> ⚖️ Trade-offs</h2>
+    <div class="callout callout-quote">Every design decision has a cost. What are you giving up?</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>✅ Benefit</th><th>❌ Cost / Limitation</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="benefit">Zero application code change — works with existing stateful apps</td>
+            <td class="cost">New backend nodes don't absorb existing sticky traffic — scaling benefit is limited to new sessions only</td>
+          </tr>
+          <tr>
+            <td class="benefit">Simple to configure at the LB level (one flag or directive)</td>
+            <td class="cost">Node failure drops all sessions pinned to that node — no redundancy at the session level</td>
+          </tr>
+          <tr>
+            <td class="benefit">No external state store required — avoids Redis operational overhead</td>
+            <td class="cost">Load distribution skews over time as active users cluster on specific nodes</td>
+          </tr>
+          <tr>
+            <td class="benefit">Works for WebSocket transport-layer affinity (protocol requirement)</td>
+            <td class="cost">Increases deployment complexity: session draining required for rolling deploys; no instant blue/green switch</td>
+          </tr>
+          <tr>
+            <td class="benefit">Buys migration time from stateful to stateless architecture</td>
+            <td class="cost">IP-hash variant collapses under NAT — silently creates a hot node with no warning</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── SECTION 12: INTERVIEW APPLICATION ── -->
+  <section id="s12">
+    <h2 class="section-title"><span class="num">12</span> 🎯 Interview Application</h2>
+    <div class="callout callout-quote">How do you use this concept in a design interview? What triggers it?</div>
+
+    <h3>When an interviewer asks / says:</h3>
+    <ul style="margin-left:20px; margin-bottom:14px; font-size:14.5px; line-height:1.8;">
+      <li>"How would you handle user sessions across multiple servers?"</li>
+      <li>"What happens if a backend node goes down mid-session?"</li>
+      <li>"Why can't you just add more servers to handle the load?" (in a context implying server-side state)</li>
+      <li>"The app currently uses in-memory session storage — how do you scale it?"</li>
+    </ul>
+
+    <h3>What you say / do:</h3>
+    <p>Proactively flag sticky sessions as a smell: <em>"If this service stores session state server-side, we'd need sticky sessions to function correctly — but that limits our scaling. I'd prefer to externalize session state to Redis so any node can serve any request, which gives us true horizontal scalability and fault tolerance."</em> Frame it as a design decision you're consciously making, not a given — show you recognize the trade-off and know the superior alternative.</p>
+
+    <h3>The trade-off statement (memorize this):</h3>
+    <div class="tradeoff-box">
+      "If we choose sticky sessions, we preserve compatibility with server-side session state without refactoring, but we pay in reduced horizontal scalability and no session-level redundancy — a node failure drops all active sessions on that node. For a new system, the right call is to externalize state to Redis and design stateless services; for a legacy migration, sticky sessions can be an acceptable interim while we refactor."
+    </div>
+  </section>
+
+  <!-- ── SECTION 13: MISCONCEPTIONS ── -->
+  <section id="s13">
+    <h2 class="section-title"><span class="num">13</span> ⚠️ Common Misconceptions &amp; Gotchas</h2>
+    <div class="callout callout-quote">What do candidates get wrong? What nuance is the interviewer probing for?</div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> Sticky sessions give you session redundancy — if one server fails, the other servers pick up the sessions.</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Stickiness is about routing, not replication. Sessions pinned to a failed node are simply lost. The other nodes know nothing about those sessions. True redundancy requires externalizing state.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> IP-hash affinity is more reliable than cookie-based because it doesn't depend on client cookies.</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> IP-hash is fragile under NAT/CGNAT — thousands of users behind one public IP all hash to one server, creating a hot node. Cookie-based affinity is generally more robust and widely preferred for HTTP workloads.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> Adding more backend nodes while using sticky sessions scales performance proportionally for existing users.</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> New nodes only absorb new sessions. Existing sessions remain pinned to their original nodes until they expire or those nodes restart. The scaling benefit is limited to net-new traffic only.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> WebSocket stickiness is the same anti-pattern as HTTP session stickiness and should be eliminated the same way.</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> WebSocket stickiness is a protocol requirement — a WebSocket upgrade and all subsequent frames must use the same TCP connection to the same backend. This is unavoidable. Redis Pub/Sub handles message fan-out, but the persistent TCP connection still needs affinity.</div></div>
+    </div>
+  </section>
+
+  <!-- ── SECTION 14: RELATIONSHIPS ── -->
+  <section id="s14">
+    <h2 class="section-title"><span class="num">14</span> 🔗 Relationships to Other Concepts</h2>
+    <div class="callout callout-quote">How does this connect to adjacent subtopics across the roadmap?</div>
+    <div class="connections">
+      <div class="conn-card">
+        <div class="conn-icon">⬆️</div>
+        <div>
+          <div class="conn-label">Builds on</div>
+          <strong>3.1 Stateless vs. Stateful Architecture</strong> — sticky sessions are the load balancing manifestation of server-side state. You can't understand why stickiness is a problem without first understanding why stateless services scale and stateful ones don't.
+        </div>
+      </div>
+      <div class="conn-card">
+        <div class="conn-icon">🔓</div>
+        <div>
+          <div class="conn-label">Enables</div>
+          <strong>3.3 Externalizing State to Redis</strong> — the canonical remedy for sticky sessions is to externalize session state; understanding stickiness motivates why Redis session stores exist and why they matter architecturally.
+        </div>
+      </div>
+      <div class="conn-card">
+        <div class="conn-icon">⚡</div>
+        <div>
+          <div class="conn-label">Tension with</div>
+          <strong>4.2 Routing Algorithms</strong> — all routing algorithms (round robin, least connections, weighted) assume any backend can handle any request. Sticky sessions override the routing algorithm for pinned clients, reducing effective load distribution and making "least connections" partially ineffective.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── SECTION 15: SELF-CHECK QUIZ ── -->
+  <section id="s15">
+    <h2 class="section-title"><span class="num">15</span> 🧪 Self-Check Quiz</h2>
+    <div class="callout callout-quote">Can you answer these without looking? If not, you haven't internalized it yet.</div>
+
+    <div class="quiz-item" id="q1">
+      <div class="quiz-q" onclick="toggleQuiz('q1')">
+        <span class="quiz-num">1</span>
+        <span class="qtext">What is a sticky session, and what underlying server design flaw makes it necessary?</span>
+        <span class="quiz-toggle">Show hint ▼</span>
+      </div>
+      <div class="quiz-hint">💡 Think through your answer before expanding — if you hesitate, revisit Section 5 (Core Definition) and Section 7 (First Principles).</div>
+    </div>
+
+    <div class="quiz-item" id="q2">
+      <div class="quiz-q" onclick="toggleQuiz('q2')">
+        <span class="quiz-num">2</span>
+        <span class="qtext">A team has 10 backend nodes storing session tokens in server memory. An interviewer asks "How do you scale this?" What is the wrong answer, the stopgap answer, and the right answer?</span>
+        <span class="quiz-toggle">Show hint ▼</span>
+      </div>
+      <div class="quiz-hint">💡 Think through your answer — if you hesitate, revisit Sections 6 and 9 (Core Concepts and How It Works).</div>
+    </div>
+
+    <div class="quiz-item" id="q3">
+      <div class="quiz-q" onclick="toggleQuiz('q3')">
+        <span class="quiz-num">3</span>
+        <span class="qtext">You configure IP-hash affinity on your LB. Three months later, one backend runs at 80% CPU while the other three are at 10%. What is the most likely cause, and what do you do?</span>
+        <span class="quiz-toggle">Show hint ▼</span>
+      </div>
+      <div class="quiz-hint">💡 Think through your answer — if you hesitate, revisit the IP-hash Core Concept in Section 6 and the NAT gotcha in the Cheatsheet.</div>
+    </div>
+
+    <div class="quiz-item" id="q4">
+      <div class="quiz-q" onclick="toggleQuiz('q4')">
+        <span class="quiz-num">4</span>
+        <span class="qtext">Name two production systems that use or have historically used sticky sessions, and explain why each did so.</span>
+        <span class="quiz-toggle">Show hint ▼</span>
+      </div>
+      <div class="quiz-hint">💡 Think through your answer — if you hesitate, revisit Section 10 (Real-World System Examples).</div>
+    </div>
+
+    <div class="quiz-item" id="q5">
+      <div class="quiz-q" onclick="toggleQuiz('q5')">
+        <span class="quiz-num">5</span>
+        <span class="qtext">A team proposes: "Can't we just replicate session state across all servers so sticky sessions aren't needed?" What are the problems with this approach compared to externalizing to Redis?</span>
+        <span class="quiz-toggle">Show hint ▼</span>
+      </div>
+      <div class="quiz-hint">💡 Think about write amplification (every write goes to N servers), consistency challenges (which replica is authoritative?), and operational cost vs. a single authoritative Redis store.</div>
+    </div>
+  </section>
+
+  <!-- ── SECTION 16: FURTHER READING ── -->
+  <section id="s16">
+    <h2 class="section-title"><span class="num">16</span> 📚 Further Reading</h2>
+    <div class="callout callout-quote">Links, chapters, or resources for deeper understanding.</div>
+    <ul class="reading-list">
+      <li><span class="cb"></span><span class="rtext"><strong>DDIA — Designing Data-Intensive Applications</strong>, Martin Kleppmann — Chapter 1 (Scalability section) and Chapter 5 (Replication) for context on stateful vs. stateless scaling</span></li>
+      <li><span class="cb"></span><span class="rtext"><strong>AWS ELB Sticky Sessions docs</strong>: docs.aws.amazon.com/elasticloadbalancing/latest/application/sticky-sessions.html — concrete cookie duration-based and application-based stickiness config</span></li>
+      <li><span class="cb"></span><span class="rtext"><strong>HAProxy sticky session configuration guide</strong>: haproxy.com/documentation/haproxy-configuration-tutorials/load-balancing/sticky-sessions/ — low-level stick-table and IP-hash implementation reference</span></li>
+      <li><span class="cb"></span><span class="rtext"><strong>ByteByteGo — "How do you scale a web app?"</strong> (YouTube, Alex Xu) — covers the stateless evolution arc: single server → LB → externalize sessions → stateless design</span></li>
+    </ul>
+  </section>
+
+  <!-- ── SECTION 17: MY NOTES ── -->
+  <section id="s17">
+    <h2 class="section-title"><span class="num">17</span> ✍️ My Notes</h2>
+    <div class="callout callout-quote">Personal observations, things that confused me, analogies that helped.</div>
+    <textarea class="notes-area" placeholder="Your personal notes go here — analogies that clicked, interview stories, things to remember..."></textarea>
+  </section>
+
+</article>
+</main>
+
+<script>
+  // ── PHASE TOGGLE ──
+  function togglePhase(id) {
+    document.getElementById(id).classList.toggle('open');
+  }
+
+  // ── QUIZ TOGGLE ──
+  function toggleQuiz(id) {
+    const item = document.getElementById(id);
+    const isOpen = item.classList.contains('open');
+    document.querySelectorAll('.quiz-item').forEach(q => {
+      q.classList.remove('open');
+      q.querySelector('.quiz-toggle').textContent = 'Show hint ▼';
+    });
+    if (!isOpen) {
+      item.classList.add('open');
+      item.querySelector('.quiz-toggle').textContent = 'Hide hint ▲';
+    }
+  }
+
+  // ── CHECKLIST TOGGLE ──
+  document.querySelectorAll('.checklist .cb, .reading-list .cb').forEach(cb => {
+    cb.addEventListener('click', () => {
+      cb.closest('li').classList.toggle('checked');
+    });
+  });
+
+  // ── SCROLLSPY ──
+  const sections = document.querySelectorAll('section[id]');
+  const navLinks = document.querySelectorAll('#toc nav a');
+
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        navLinks.forEach(a => a.classList.remove('active'));
+        const active = document.querySelector(`#toc nav a[href="#${entry.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+
+  sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>

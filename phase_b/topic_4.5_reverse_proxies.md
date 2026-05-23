@@ -290,31 +290,84 @@ In the high-level design phase, place a reverse proxy (Nginx, HAProxy, or AWS AL
 
    > 💡 *Think through your answer before expanding — if you hesitate, revisit Section 5 and Section 8.*
 
-A reverse proxy is a server that sits in front of your cluster of servers. It intercepts all requests from the client to the server, and through this interception, it can perform a number of cross-cutting concerns to offload the server's responsibility. A forward proxy is basically a server that sits in front of the client and makes a request on behalf of the client. A load balancer is a service that routes requests to different application servers. 
+A reverse proxy is a server that sits in front of backend servers and
+intercepts all client requests on their behalf — performing SSL termination,
+caching, auth, compression, and rate limiting before forwarding to the backend.
+Clients believe they're talking directly to the backend; they're not.
+
+Forward proxy: sits in front of *clients*, not servers. The client explicitly
+routes through it (e.g., a corporate egress proxy). The server doesn't know
+about it. Direction is client → proxy → internet.
+
+Load balancer: its sole job is *distribution* — picking which backend handles
+the request. It doesn't transform or filter. A reverse proxy intermediates and
+acts on the request. Many tools (Nginx, ALB, Envoy) do both, but they are
+conceptually distinct responsibilities.
 
 2. You're designing an API gateway for a fintech app. The team asks where to enforce JWT validation. Do you put it in the reverse proxy or in each microservice? Justify your answer with trade-offs.
 
    > 💡 *Think through your answer before expanding — if you hesitate, revisit Section 12.*
 
-JWT validation To sit in the reverse proxy, because having the authentication sitting inside a single server will make our operational complexity a lot easier. We only need to change one place where we need to perform updates on our authentication logic.
+Reverse proxy (or a dedicated API gateway layer acting as reverse proxy).
 
-In addition, we should offload the responsibility of TLS termination from the backend servers to a single location, which is the reverse proxy itself. That means we will only perform TLS termination at one place instead of all the servers doing TLS encryption and decryption. Cryptography is an expensive operation, and we don't want every one of our application servers to do the same thing. The trade-off for using a reverse proxy is that now we have introduced a server between us and the cluster of servers. We are introducing a single point of failure. To mitigate this concern, we need to make the reverse proxy highly available. That is to introduce a minimum highly available pair and subject them to a robust failover strategy. 
+Reason: centralizing JWT validation at the proxy means backends receive a
+pre-validated, trusted identity header (e.g., X-User-Id). Backends never
+handle crypto; they only implement business logic. This satisfies the
+single-responsibility principle and makes auth policy changes a one-place
+operation.
+
+Trade-offs to state:
+✅ Single enforcement point — easier to audit, rotate keys, update logic
+✅ Backends stay stateless and single-responsibility
+❌ Proxy is now a SPOF for all auth → must run in HA pair
+❌ If the proxy passes a wrong header, all services trust it — misconfiguration
+   blast radius is total
+
+For fintech specifically: also add mTLS between proxy and backends so internal
+traffic is also authenticated, not just the client-facing edge.
 
 3. What specifically does SSL termination at the reverse proxy give you, and what security assumption does it require you to make?
 
    > 💡 *Think through your answer before expanding — if you hesitate, revisit Sections 6 and 13.*
 
-For me, SSL termination at the reverse proxy will allow us to inspect the payload and perform additional cross-cutting concerns by reading the payload. For example, we can perform authentication at the reverse proxy and also perform any limiting logic at the reverse proxy. All of these cross-cutting concerns do not necessarily need to sit inside our application layer. The security assumption we're making here is that within our internal DPC network, data can be transferred in plain text HTTP. If this assumption is to be challenged (for example, if we need end-to-end encryption when data moves across servers), then we will need to do mutual TLS at the reverse proxy layer and re-encrypt the payload as we forward the request to our application service. 
+What it gives you:
+- Offloads expensive TLS handshake computation from every app server
+- Centralizes certificate management — one cert on the proxy, not N certs
+  across N backends
+- Enables L7 inspection — once decrypted, the proxy can read headers, cookies,
+  paths, and payload for auth, WAF, routing, and caching decisions
+
+Security assumption required:
+- You are trusting the internal network between the proxy and backends.
+  Traffic travels as plain HTTP inside the VPC — if that network is compromised,
+  data is readable.
+
+If the assumption cannot be made (zero-trust mandate):
+- Configure mTLS re-encryption: proxy re-encrypts the request toward backends.
+- Backends must now have their own TLS certificates — managed via cert-manager,
+  HashiCorp Vault, or Istio CA for automated rotation.
+- This is the Envoy sidecar model — every service has a proxy that handles
+  mTLS transparently so app code never deals with crypto directly.
 
 4. Name two real production systems (not the same tool) that use a reverse proxy and explain concretely how it functions in each architecture.
 
    > 💡 *Think through your answer before expanding — if you hesitate, revisit Section 10.*
 
-Nginx.
-The canonical reverse proxy / web server. Handles SSL termination, static file serving, upstream proxying, gzip, and basic caching in a single config.
+Nginx:
+  Deployed as a reverse proxy in front of a web or API tier. Config uses
+  `proxy_pass` to forward requests to an `upstream` backend group.
+  Handles: SSL termination (ssl_certificate / ssl_certificate_key), gzip
+  compression, static file serving (for assets), and basic response caching.
+  Event-driven (epoll), handles 10k–50k concurrent connections per instance.
+  HA deployment: active-passive pair with keepalived + VRRP for VIP failover.
 
-AWS ALB.
-Operates at L7 as a managed reverse proxy — SSL termination, content-based routing, header inspection.
+AWS ALB (Application Load Balancer):
+  AWS's managed L7 reverse proxy. Terminates TLS using ACM-managed certs
+  (zero cert rotation ops). Routes traffic based on URL path rules
+  (e.g., /api/* → target group A, /static/* → target group B).
+  Header inspection enables host-based routing for multi-tenant setups.
+  AWS handles HA, scaling, and health checks — you only configure listener
+  rules and target groups.
 
 5. A high-traffic e-commerce site is using Nginx as a reverse proxy with response caching enabled. During a flash sale, prices change every 30 seconds but the cache TTL is 60 seconds. What goes wrong and how do you fix it?
 
