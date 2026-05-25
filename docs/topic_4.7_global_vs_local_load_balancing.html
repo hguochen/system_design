@@ -1,0 +1,1223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.7 Global vs. Local Load Balancing</title>
+<style>
+  :root {
+    --bg: #f9f8f6;
+    --surface: #ffffff;
+    --surface-alt: #f3f2ef;
+    --border: #e5e3de;
+    --text: #1a1917;
+    --text-muted: #6b6861;
+    --accent: #2563eb;
+    --accent-light: #dbeafe;
+    --green: #16a34a;
+    --green-light: #dcfce7;
+    --red: #dc2626;
+    --red-light: #fee2e2;
+    --yellow: #d97706;
+    --yellow-light: #fef3c7;
+    --purple: #7c3aed;
+    --purple-light: #ede9fe;
+    --code-bg: #1e1e2e;
+    --code-text: #cdd6f4;
+    --sidebar-w: 240px;
+    --content-max: 780px;
+    font-size: 16px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    display: flex;
+  }
+
+  /* ── SIDEBAR ── */
+  #toc {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: var(--sidebar-w);
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 24px 0 48px;
+    z-index: 100;
+  }
+
+  #toc-header {
+    padding: 0 16px 16px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 8px;
+  }
+
+  #toc-header .phase-tag {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: var(--accent-light);
+    border-radius: 4px;
+    padding: 2px 7px;
+    display: inline-block;
+    margin-bottom: 6px;
+  }
+
+  #toc-header h2 {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.4;
+  }
+
+  #toc nav a {
+    display: block;
+    padding: 5px 16px 5px 20px;
+    font-size: 12.5px;
+    color: var(--text-muted);
+    text-decoration: none;
+    border-left: 2px solid transparent;
+    transition: all 0.15s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+
+  /* ── MAIN CONTENT ── */
+  main {
+    margin-left: var(--sidebar-w);
+    padding: 48px 48px 96px;
+    max-width: calc(var(--sidebar-w) + var(--content-max) + 96px);
+    width: 100%;
+  }
+
+  article { max-width: var(--content-max); }
+
+  /* ── HEADER ── */
+  .doc-header {
+    margin-bottom: 40px;
+    padding-bottom: 28px;
+    border-bottom: 2px solid var(--border);
+  }
+
+  .doc-header .meta {
+    display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px;
+  }
+
+  .tag {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border-radius: 20px;
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+
+  .tag-phase  { background: var(--accent-light);  color: var(--accent); }
+  .tag-topic  { background: var(--purple-light);  color: var(--purple); }
+  .tag-date   { background: var(--surface-alt);   color: var(--text-muted); }
+
+  .doc-header h1 {
+    font-size: 30px;
+    font-weight: 800;
+    line-height: 1.25;
+    letter-spacing: -0.02em;
+    color: var(--text);
+  }
+
+  /* ── SECTIONS ── */
+  section {
+    margin-bottom: 52px;
+    scroll-margin-top: 32px;
+  }
+
+  h2.section-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 20px;
+    display: flex; align-items: center; gap: 10px;
+    letter-spacing: -0.01em;
+  }
+
+  h2.section-title .num {
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--text-muted);
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 2px 7px;
+    letter-spacing: 0.04em;
+  }
+
+  h3 {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    margin: 24px 0 10px;
+  }
+
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+
+  /* ── CALLOUT BOXES ── */
+  .callout {
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-bottom: 20px;
+    font-size: 14px;
+    border-left: 3px solid;
+  }
+
+  .callout-goal   { background: var(--accent-light);  border-color: var(--accent);  color: #1e40af; }
+  .callout-tip    { background: var(--yellow-light);  border-color: var(--yellow);  color: #92400e; }
+  .callout-quote  { background: var(--surface-alt);   border-color: var(--border);  color: var(--text-muted); font-style: italic; }
+
+  /* ── CHEATSHEET CODE BLOCK ── */
+  .cheatsheet {
+    background: var(--code-bg);
+    color: var(--code-text);
+    border-radius: 12px;
+    padding: 24px 28px;
+    font-family: "SF Mono", "Fira Code", "Cascadia Code", Menlo, monospace;
+    font-size: 13px;
+    line-height: 1.65;
+    white-space: pre-wrap;
+    overflow-x: auto;
+    margin-top: 16px;
+  }
+
+  .cheatsheet .label {
+    color: #cba6f7;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+  }
+
+  /* ── MINDMAP SVG WRAP ── */
+  .mindmap-wrap {
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 16px 12px;
+    margin: 20px 0 24px;
+  }
+
+  .mindmap-wrap p.caption {
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 10px;
+    margin-bottom: 0;
+  }
+
+  /* ── CHECKLIST ── */
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+
+  .checklist li {
+    display: flex; align-items: flex-start; gap: 10px;
+    font-size: 14.5px; line-height: 1.55;
+  }
+
+  .checklist li .cb {
+    flex-shrink: 0;
+    width: 18px; height: 18px;
+    border: 2px solid var(--border);
+    border-radius: 4px;
+    margin-top: 2px;
+    background: var(--surface);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+
+  .checklist li.checked .cb {
+    background: var(--green);
+    border-color: var(--green);
+  }
+
+  .checklist li.checked .cb::after {
+    content: '';
+    display: block;
+    width: 5px; height: 9px;
+    border: 2px solid #fff;
+    border-top: none; border-left: none;
+    transform: rotate(45deg) translateY(-1px);
+  }
+
+  .checklist li.checked .text { color: var(--text-muted); text-decoration: line-through; }
+
+  /* ── STUDY PHASES ── */
+  .phase-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+
+  .phase-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 20px;
+    cursor: pointer; user-select: none;
+    background: var(--surface-alt);
+  }
+
+  .phase-header:hover { background: var(--border); }
+
+  .phase-label {
+    font-size: 14px; font-weight: 700;
+    display: flex; align-items: center; gap: 10px;
+  }
+
+  .phase-badge {
+    font-size: 11px; font-weight: 800;
+    letter-spacing: 0.05em; text-transform: uppercase;
+    padding: 2px 8px; border-radius: 20px;
+  }
+
+  .ph1 { background: #dbeafe; color: #1d4ed8; }
+  .ph2 { background: #fce7f3; color: #9d174d; }
+  .ph3 { background: #d1fae5; color: #065f46; }
+  .ph4 { background: #fef3c7; color: #92400e; }
+
+  .phase-chevron { font-size: 12px; color: var(--text-muted); transition: transform 0.2s; }
+  .phase-card.open .phase-chevron { transform: rotate(180deg); }
+
+  .phase-body { display: none; padding: 16px 20px 20px; }
+  .phase-card.open .phase-body { display: block; }
+
+  .phase-goal { font-size: 12.5px; color: var(--text-muted); font-style: italic; margin-bottom: 12px; }
+
+  /* ── TABLES ── */
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+
+  th {
+    background: var(--surface-alt);
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 12px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--text-muted);
+    border-bottom: 2px solid var(--border);
+  }
+
+  td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top; line-height: 1.5;
+  }
+
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+
+  /* ── MISCONCEPTIONS ── */
+  .misconception {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+
+  .misconception .wrong {
+    background: var(--red-light);
+    padding: 10px 16px;
+    font-size: 14px;
+    display: flex; align-items: flex-start; gap: 8px;
+  }
+
+  .misconception .right {
+    padding: 10px 16px;
+    font-size: 14px;
+    display: flex; align-items: flex-start; gap: 8px;
+    color: #065f46; background: var(--green-light);
+  }
+
+  .misconception .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+
+  /* ── QUIZ ── */
+  .quiz-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+
+  .quiz-q {
+    padding: 14px 18px;
+    font-size: 14.5px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  }
+
+  .quiz-q:hover { background: var(--surface-alt); }
+
+  .quiz-num {
+    flex-shrink: 0;
+    width: 24px; height: 24px;
+    background: var(--accent);
+    color: #fff;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 800;
+    margin-top: 1px;
+  }
+
+  .quiz-q .qtext { flex: 1; }
+  .quiz-toggle { font-size: 11px; color: var(--text-muted); flex-shrink: 0; margin-top: 3px; }
+
+  .quiz-hint {
+    display: none;
+    padding: 10px 18px 14px;
+    font-size: 13px;
+    color: #92400e;
+    background: var(--yellow-light);
+    border-top: 1px solid var(--border);
+  }
+
+  .quiz-item.open .quiz-hint { display: block; }
+
+  /* ── FURTHER READING ── */
+  .reading-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+
+  .reading-list li {
+    display: flex; align-items: flex-start; gap: 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 14px;
+  }
+
+  .reading-list li .cb {
+    flex-shrink: 0;
+    width: 18px; height: 18px;
+    border: 2px solid var(--border);
+    border-radius: 4px;
+    margin-top: 1px;
+    cursor: pointer;
+    background: var(--surface);
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+
+  .reading-list li.checked .cb {
+    background: var(--green);
+    border-color: var(--green);
+  }
+
+  .reading-list li.checked .cb::after {
+    content: '';
+    display: block;
+    width: 5px; height: 9px;
+    border: 2px solid #fff;
+    border-top: none; border-left: none;
+    transform: rotate(45deg) translateY(-1px);
+  }
+
+  .reading-list li.checked .rtext { color: var(--text-muted); text-decoration: line-through; }
+
+  /* ── NOTES AREA ── */
+  .notes-area {
+    width: 100%;
+    min-height: 160px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    font-family: inherit;
+    font-size: 14px;
+    color: var(--text);
+    resize: vertical;
+    line-height: 1.6;
+  }
+
+  .notes-area:focus { outline: 2px solid var(--accent); border-color: transparent; }
+
+  /* ── FOCUS LIST (Section 0) ── */
+  .focus-list { list-style: none; display: flex; flex-direction: column; gap: 14px; }
+
+  .focus-list li {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    font-size: 14.5px;
+    line-height: 1.6;
+  }
+
+  .focus-list li strong { color: var(--accent); display: block; margin-bottom: 4px; }
+
+  /* ── CONNECTIONS ── */
+  .connections { display: flex; flex-direction: column; gap: 12px; }
+
+  .conn-card {
+    display: flex; align-items: flex-start; gap: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    font-size: 14px;
+  }
+
+  .conn-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .conn-label { font-weight: 700; margin-bottom: 3px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+
+  /* ── TRADE-OFF STATEMENT ── */
+  .tradeoff-box {
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--accent);
+    border-radius: 8px;
+    padding: 14px 18px;
+    font-size: 14px;
+    font-style: italic;
+    color: var(--text);
+    margin-top: 14px;
+  }
+
+  /* ── SCROLLSPY ── */
+  @media (max-width: 900px) {
+    #toc { display: none; }
+    main { margin-left: 0; padding: 24px 20px 60px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── SIDEBAR TOC ── -->
+<aside id="toc">
+  <div id="toc-header">
+    <div class="phase-tag">Phase B — Scalability</div>
+    <h2>4.7 Global vs. Local Load Balancing</h2>
+  </div>
+  <nav>
+    <a href="#s0">🗺️ Topic Overview</a>
+    <a href="#s1">🎯 Goal</a>
+    <a href="#s2">✅ Mastery</a>
+    <a href="#s3">🗓️ Study Phases</a>
+    <a href="#s4">📋 Cheatsheet</a>
+    <a href="#s5">🧠 Core Definition</a>
+    <a href="#s6">📦 Core Concepts</a>
+    <a href="#s7">🔍 First Principles</a>
+    <a href="#s8">🗺️ Mental Models</a>
+    <a href="#s9">⚙️ How It Works</a>
+    <a href="#s10">🏭 Real-World Examples</a>
+    <a href="#s11">⚖️ Trade-offs</a>
+    <a href="#s12">🎯 Interview Application</a>
+    <a href="#s13">⚠️ Misconceptions</a>
+    <a href="#s14">🔗 Relationships</a>
+    <a href="#s15">🧪 Self-Check Quiz</a>
+    <a href="#s16">📚 Further Reading</a>
+    <a href="#s17">✍️ My Notes</a>
+  </nav>
+</aside>
+
+<!-- ── MAIN ── -->
+<main>
+<article>
+
+  <!-- HEADER -->
+  <header class="doc-header">
+    <div class="meta">
+      <span class="tag tag-phase">⚡ Phase B — Scalability</span>
+      <span class="tag tag-topic">⚖️ Topic 4 — Load Balancing</span>
+      <span class="tag tag-date">📅 2026-05-24</span>
+    </div>
+    <h1>4.7 Global vs. Local Load Balancing</h1>
+  </header>
+
+  <!-- ── SECTION 0: TOPIC OVERVIEW ── -->
+  <section id="s0">
+    <h2 class="section-title"><span class="num">00</span> 🗺️ Topic Overview</h2>
+
+    <h3>What This Topic Is About</h3>
+    <p>Global vs. local load balancing is the architectural distinction between routing traffic within a single data center (local) and routing traffic across multiple data centers or cloud regions worldwide (global). Local LB — covered in 4.1–4.6 — distributes requests across a server fleet within one region. Global LB sits one tier above: it decides which region a user's request should reach before local LB takes over. The central tension is between latency reduction and fault isolation on one side, and the operational complexity of cross-region health steering and data locality on the other.</p>
+
+    <h3>🎯 What to Focus On</h3>
+    <ul class="focus-list">
+      <li><strong>1. The mandatory two-tier hierarchy</strong>Global LB selects the region; local LB selects the server within that region. Every globally distributed system has both. Be able to draw and explain this stack end-to-end in an interview.</li>
+      <li><strong>2. DNS-based geo-routing vs. anycast</strong>DNS routing returns different IPs based on the client's geolocation or measured RTT. Anycast assigns one IP to many PoPs and uses BGP routing to reach the nearest one. Know how each works, what layer it operates at, and its failure modes.</li>
+      <li><strong>3. DNS TTL failover lag — the #1 gotcha</strong>When a region fails, DNS-based routing can't redirect clients until their cached TTL expires. Real-world lag is often 2–5× the configured TTL due to resolver non-compliance. This is the most probed follow-up on global LB.</li>
+      <li><strong>4. Session and data locality after global failover</strong>If a user's session data lives in EU-West and global LB redirects them to US-East, their session is gone. Stateless design (JWTs) or global session replication is required to survive regional redirects cleanly.</li>
+      <li><strong>5. Health checking at region granularity</strong>Global LBs probe regional endpoints, not individual servers. Threshold-based failover (e.g., 3 of 3 checkers agree) prevents flapping. Understand the detection window: check interval × failure threshold.</li>
+    </ul>
+  </section>
+
+  <!-- ── SECTION 1: GOAL ── -->
+  <section id="s1">
+    <h2 class="section-title"><span class="num">01</span> 🎯 Goal of This Subtopic</h2>
+    <div class="callout callout-goal">
+      <em>Why are you studying this? What should you be able to do after this session?</em>
+    </div>
+    <p>Be able to explain the difference between global and local load balancing, describe the two-tier traffic routing architecture used by globally distributed systems, and reason about when to apply DNS-based routing vs. anycast. Critically, articulate the failover latency problem caused by DNS TTLs, propose mitigation strategies, and identify what breaks with session/data locality when global LB redirects a user to a different region.</p>
+  </section>
+
+  <!-- ── SECTION 2: MASTERY ── -->
+  <section id="s2">
+    <h2 class="section-title"><span class="num">02</span> ✅ What Mastery Looks Like</h2>
+    <div class="callout callout-quote">Concrete, testable proof that you own this concept — not just familiarity.</div>
+    <ul class="checklist" id="mastery-list">
+      <li><span class="cb"></span><span class="text">Can explain the two-tier hierarchy (global LB selects region → local LB selects server) with a concrete traffic flow example</span></li>
+      <li><span class="cb"></span><span class="text">Can compare DNS-based geo-routing and anycast: how each works, what layer it operates at, and the failure modes of each</span></li>
+      <li><span class="cb"></span><span class="text">Can articulate the DNS TTL failover problem and propose at least two mitigations (short TTL + health check integration, anycast fallback)</span></li>
+      <li><span class="cb"></span><span class="text">Can identify what happens to user sessions when global LB redirects a user to a different region mid-session</span></li>
+      <li><span class="cb"></span><span class="text">Can name at least three real production systems that use global LB and describe which mechanism each uses and why</span></li>
+    </ul>
+    <div class="callout callout-tip" style="margin-top:20px;">
+      💡 <strong>Rule of thumb:</strong> If you can teach it to someone else and field their follow-up questions, you've mastered it.
+    </div>
+  </section>
+
+  <!-- ── SECTION 3: STUDY PHASES ── -->
+  <section id="s3">
+    <h2 class="section-title"><span class="num">03</span> 🗓️ Study Phases to Achieve Mastery</h2>
+    <div class="callout callout-quote">A progressive plan from first exposure to interview-ready. Work through each phase in order.</div>
+
+    <div class="phase-card open" id="ph1">
+      <div class="phase-header" onclick="togglePhase('ph1')">
+        <div class="phase-label"><span class="phase-badge ph1">Phase 1</span> Acquire 📖</div>
+        <span class="phase-chevron">▼</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Read deeply enough that you could explain the concept without the doc.</p>
+        <ul class="checklist">
+          <li><span class="cb"></span><span class="text">Read <strong>AWS Route 53 — Routing Policies</strong> (docs.aws.amazon.com/Route53) — covers latency, geolocation, failover, and health-check-integrated routing</span></li>
+          <li><span class="cb"></span><span class="text">Read <strong>Cloudflare — How Anycast Works</strong> (cloudflare.com/learning/cdn/glossary/anycast-network-routing) — concise, authoritative explanation of BGP-based anycast</span></li>
+          <li><span class="cb"></span><span class="text">Read <strong>ByteByteGo — "How does Google Global Load Balancer work?"</strong> (blog.bytebytego.com) — covers Maglev/Andromeda two-tier architecture with real traffic flow diagrams</span></li>
+          <li><span class="cb"></span><span class="text">Read <strong>Google Cloud — Global vs. Regional Load Balancing</strong> (cloud.google.com/load-balancing/docs) — practical decision framework</span></li>
+          <li><span class="cb"></span><span class="text">Read through <strong>Sections 5–9</strong> (Core Definition → How It Works) carefully — don't skim</span></li>
+          <li><span class="cb"></span><span class="text">Re-read the <strong>Cheatsheet</strong> (Section 4) and try to recite it from memory after</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-card" id="ph2">
+      <div class="phase-header" onclick="togglePhase('ph2')">
+        <div class="phase-label"><span class="phase-badge ph2">Phase 2</span> Consolidate ✍️</div>
+        <span class="phase-chevron">▼</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Verify you can reproduce the knowledge in your own words without looking.</p>
+        <ul class="checklist">
+          <li><span class="cb"></span><span class="text">Close the doc — write out the <strong>Core Definition</strong> from memory, then compare</span></li>
+          <li><span class="cb"></span><span class="text">Explain <strong>First Principles</strong> out loud without notes — what problem does this solve and why?</span></li>
+          <li><span class="cb"></span><span class="text">Reconstruct the <strong>How It Works</strong> mechanics step by step from memory</span></li>
+          <li><span class="cb"></span><span class="text">Restate each <strong>Trade-off</strong> row in your own words — if you can't explain the cost, you don't own it yet</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-card" id="ph3">
+      <div class="phase-header" onclick="togglePhase('ph3')">
+        <div class="phase-label"><span class="phase-badge ph3">Phase 3</span> Apply 🔧</div>
+        <span class="phase-chevron">▼</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Connect to real systems and simulate interview scenarios.</p>
+        <ul class="checklist">
+          <li><span class="cb"></span><span class="text">Go through <strong>Real-World System Examples</strong> (Section 10) — verify each claim and add anything missed to My Notes</span></li>
+          <li><span class="cb"></span><span class="text">Practice the <strong>Interview Application</strong> (Section 12) out loud — say the trigger phrases and your response as if in a live interview</span></li>
+          <li><span class="cb"></span><span class="text">Work through <strong>Common Misconceptions</strong> (Section 13) — for each, explain <em>why</em> it's wrong, not just that it is</span></li>
+          <li><span class="cb"></span><span class="text">Trace the <strong>Relationships to Other Concepts</strong> (Section 14) — can you explain each connection without looking?</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-card" id="ph4">
+      <div class="phase-header" onclick="togglePhase('ph4')">
+        <div class="phase-label"><span class="phase-badge ph4">Phase 4</span> Validate 🧪</div>
+        <span class="phase-chevron">▼</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Confirm you actually own it, not just recognize it.</p>
+        <ul class="checklist">
+          <li><span class="cb"></span><span class="text">Answer every <strong>Self-Check Quiz</strong> question (Section 15) out loud without notes</span></li>
+          <li><span class="cb"></span><span class="text">Recite the <strong>Cheatsheet</strong> (Section 4) from memory — if you can't, re-do Phase 2</span></li>
+          <li><span class="cb"></span><span class="text">Tick off items in <strong>What Mastery Looks Like</strong> (Section 2) — only check a box if you can demonstrate it on demand</span></li>
+          <li><span class="cb"></span><span class="text">Teach this concept out loud to an imaginary interviewer for 2 minutes without hesitation or notes</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── SECTION 4: CHEATSHEET ── -->
+  <section id="s4">
+    <h2 class="section-title"><span class="num">04</span> 📋 Cheatsheet</h2>
+    <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+
+    <!-- INLINE SVG MINDMAP -->
+    <div class="mindmap-wrap">
+      <svg id="glb-mindmap" viewBox="0 0 960 700" xmlns="http://www.w3.org/2000/svg"
+           style="width:100%;height:auto;display:block;"
+           font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif">
+      </svg>
+      <p class="caption">4.7 Global vs. Local Load Balancing — Concept Map &nbsp;·&nbsp; <em>hover a branch to highlight</em></p>
+    </div>
+    <script>
+    (function(){
+      var svg = document.getElementById('glb-mindmap');
+      var NS  = 'http://www.w3.org/2000/svg';
+
+      function mk(tag, attrs) {
+        var e = document.createElementNS(NS, tag);
+        for (var k in attrs) e.setAttribute(k, attrs[k]);
+        return e;
+      }
+      function drawText(parent, x, y, lines, fs, fill, bold) {
+        if (!Array.isArray(lines)) lines = [lines];
+        var lineH = fs * 1.3;
+        var totalH = lines.length * lineH;
+        var startY = y - (totalH - lineH) / 2;
+        lines.forEach(function(line, i) {
+          var t = mk('text', { x: x, y: startY + i * lineH,
+            'text-anchor': 'middle', 'dominant-baseline': 'central',
+            'font-size': fs, fill: fill || '#1a1917',
+            'font-weight': bold ? '700' : '500' });
+          t.textContent = line;
+          parent.appendChild(t);
+        });
+      }
+      function drawRect(parent, x, y, w, h, fill, stroke) {
+        var r = mk('rect', { x: x, y: y, width: w, height: h, rx: 7, ry: 7,
+          fill: fill, stroke: stroke, 'stroke-width': 1.8 });
+        parent.appendChild(r); return r;
+      }
+      function drawEllipse(parent, cx, cy, rx, ry, fill, stroke) {
+        var e = mk('ellipse', { cx: cx, cy: cy, rx: rx, ry: ry,
+          fill: fill, stroke: stroke, 'stroke-width': 2.5 });
+        parent.appendChild(e); return e;
+      }
+      function drawPath(parent, d, stroke, sw) {
+        var p = mk('path', { d: d, stroke: stroke, 'stroke-width': sw || 2,
+          fill: 'none', opacity: 0.55, 'stroke-linecap': 'round' });
+        parent.appendChild(p); return p;
+      }
+      function drawLine(parent, x1, y1, x2, y2, stroke) {
+        var l = mk('line', { x1: x1, y1: y1, x2: x2, y2: y2, stroke: stroke,
+          'stroke-width': 1.4, opacity: 0.42, 'stroke-linecap': 'round' });
+        parent.appendChild(l); return l;
+      }
+
+      var CX = 480, CY = 350;
+
+      var BRANCHES = [
+        // ── LEFT ──
+        {
+          label: 'Local LB',
+          bx: 185, by: 55, bw: 155, bh: 40,
+          bf: '#dbe4ff', bs: '#3b5bdb', lf: '#eef2ff', ls: '#3b5bdb', side: 'L',
+          leaves: [
+            { t: 'Within one datacenter', x: 6, y: 44, w: 179, h: 30 },
+            { t: 'L4 / L7 algorithms',    x: 6, y: 84, w: 179, h: 30 },
+            { t: 'Server-level routing',  x: 6, y: 124, w: 179, h: 30 },
+            { t: 'μs decision latency',   x: 6, y: 164, w: 179, h: 30 }
+          ]
+        },
+        {
+          label: 'DNS-Based',
+          bx: 170, by: 310, bw: 170, bh: 40,
+          bf: '#ffd8a8', bs: '#e67700', lf: '#fff4e6', ls: '#e67700', side: 'L',
+          leaves: [
+            { t: 'Geo / latency routing', x: 4, y: 296, w: 166, h: 30 },
+            { t: 'TTL = failover lag',    x: 4, y: 336, w: 166, h: 30 },
+            { t: 'Health-check fused',    x: 4, y: 376, w: 166, h: 30 },
+            { t: 'Route 53 / NS1',        x: 4, y: 416, w: 166, h: 30 }
+          ]
+        },
+        {
+          label: 'Failover',
+          bx: 195, by: 545, bw: 150, bh: 40,
+          bf: '#ffc9c9', bs: '#c92a2a', lf: '#fff5f5', ls: '#c92a2a', side: 'L',
+          leaves: [
+            { t: 'TTL lag: 2–5× config',  x: 8, y: 522, w: 172, h: 30 },
+            { t: 'Resolver non-compliance',x: 8, y: 562, w: 172, h: 30 },
+            { t: '10s checks × 3 = 30s',  x: 8, y: 602, w: 172, h: 30 }
+          ]
+        },
+        // ── RIGHT ──
+        {
+          label: 'Global LB',
+          bx: 620, by: 55, bw: 150, bh: 40,
+          bf: '#c3fae8', bs: '#0ca678', lf: '#e6fcf5', ls: '#0ca678', side: 'R',
+          leaves: [
+            { t: 'Across regions/DCs',    x: 780, y: 44, w: 168, h: 30 },
+            { t: 'Region-level routing',  x: 780, y: 84, w: 168, h: 30 },
+            { t: 'Geo + health aware',    x: 780, y: 124, w: 168, h: 30 },
+            { t: 'Sits above local LB',   x: 780, y: 164, w: 168, h: 30 }
+          ]
+        },
+        {
+          label: 'Anycast',
+          bx: 620, by: 310, bw: 150, bh: 40,
+          bf: '#ede9fe', bs: '#7c3aed', lf: '#f3f0ff', ls: '#7c3aed', side: 'R',
+          leaves: [
+            { t: 'One IP → many PoPs',    x: 780, y: 296, w: 168, h: 30 },
+            { t: 'BGP routes to nearest', x: 780, y: 336, w: 168, h: 30 },
+            { t: '<1s failover',          x: 780, y: 376, w: 168, h: 30 },
+            { t: 'Cloudflare / GFE',      x: 780, y: 416, w: 168, h: 30 }
+          ]
+        },
+        {
+          label: 'Real Systems',
+          bx: 620, by: 545, bw: 150, bh: 40,
+          bf: '#b2f2bb', bs: '#2f9e44', lf: '#ebfbee', ls: '#2f9e44', side: 'R',
+          leaves: [
+            { t: 'AWS Route 53',          x: 780, y: 522, w: 168, h: 30 },
+            { t: 'Google GCLB (Maglev)',  x: 780, y: 562, w: 168, h: 30 },
+            { t: 'Netflix Open Connect',  x: 780, y: 602, w: 168, h: 30 }
+          ]
+        }
+      ];
+
+      var LL = mk('g', {}), NL = mk('g', {}), TL = mk('g', { 'pointer-events': 'none' });
+      svg.appendChild(LL); svg.appendChild(NL); svg.appendChild(TL);
+
+      drawText(TL, CX, 20, '4.7 Global vs. Local Load Balancing — Concept Map', 13, '#6b6861', false);
+
+      BRANCHES.forEach(function(b) {
+        var bcy = b.by + b.bh / 2;
+        var sx  = b.side === 'L' ? CX - 90 : CX + 90;
+        var ex  = b.side === 'L' ? b.bx + b.bw : b.bx;
+        var cp1x = b.side === 'L' ? sx - 55 : sx + 55;
+        var cp2x = b.side === 'L' ? ex + 18  : ex - 18;
+        drawPath(LL, 'M ' + sx + ',' + CY + ' C ' + cp1x + ',' + CY + ' ' + cp2x + ',' + bcy + ' ' + ex + ',' + bcy, b.bs, 2);
+
+        var leafRects = [];
+        b.leaves.forEach(function(lf) {
+          var lcy = lf.y + lf.h / 2;
+          if (b.side === 'L') drawLine(LL, b.bx, bcy, lf.x + lf.w, lcy, b.ls);
+          else                drawLine(LL, b.bx + b.bw, bcy, lf.x, lcy, b.ls);
+          var r = drawRect(NL, lf.x, lf.y, lf.w, lf.h, b.lf, b.ls);
+          drawText(TL, lf.x + lf.w / 2, lcy, lf.t, 11.5, '#1a1917', false);
+          leafRects.push(r);
+        });
+
+        var br = drawRect(NL, b.bx, b.by, b.bw, b.bh, b.bf, b.bs);
+        drawText(TL, b.bx + b.bw / 2, bcy, b.label, 12.5, '#1a1917', true);
+
+        var all = [br].concat(leafRects);
+        (function(rects) {
+          function hi(on) {
+            rects.forEach(function(r) {
+              r.setAttribute('stroke-width', on ? 2.8 : 1.8);
+              r.style.filter = on ? 'drop-shadow(0 2px 5px rgba(0,0,0,0.14))' : '';
+            });
+          }
+          rects.forEach(function(r) {
+            r.addEventListener('mouseenter', function() { hi(true); });
+            r.addEventListener('mouseleave', function() { hi(false); });
+          });
+        })(all);
+      });
+
+      // Center ellipse — on top
+      drawEllipse(NL, CX, CY, 88, 44, '#a5d8ff', '#1971c2');
+      drawText(TL, CX, CY - 9, ['Global vs.', 'Local LB'], 13, '#1a1917', true);
+
+    })();
+    </script>
+
+    <div class="cheatsheet"><span class="label">ONE-LINER</span>
+  Global LB routes traffic to the right region; local LB routes it to the
+  right server — they form a mandatory two-tier stack in any global system.
+
+<span class="label">KEY PROPERTIES / RULES</span>
+  1. Global LB operates at DNS or network layer (L3/L7); local LB at L4/L7.
+  2. DNS-based: latency/geo-routing, TTL-bounded failover, operationally simple.
+  3. Anycast: BGP routes packets to nearest PoP — sub-second failover, no TTL.
+  4. DNS TTL = failover lag; a downed region still gets traffic until TTL expires.
+  5. Global LB health checks are region-level, not server-level.
+
+<span class="label">DECISION RULE</span>
+  Use DNS-based global LB when: operationally simple geo-routing is enough
+  and ~60s failover lag is acceptable (most stateless web apps).
+  Use anycast when: you need sub-second failover or DDoS absorption at edge
+  (CDNs, DNS resolvers, real-time systems).
+
+<span class="label">NUMBERS / FORMULAS</span>
+  DNS TTL recommendation: 60–300s prod; 30–60s during maintenance windows.
+  Anycast failover: <1s (BGP route withdrawal propagation).
+  Health check detection window: check_interval × failure_threshold
+    e.g., 30s × 3 = 90s max detection lag before failover begins.
+
+<span class="label">GOTCHA TO NEVER FORGET</span>
+  DNS TTL is NOT the only latency — resolvers cache aggressively and often
+  ignore TTLs. Real failover lag is TTL + resolver non-compliance; plan for
+  2–5× your configured TTL value.</div>
+  </section>
+
+  <!-- ── SECTION 5: CORE DEFINITION ── -->
+  <section id="s5">
+    <h2 class="section-title"><span class="num">05</span> 🧠 Core Definition</h2>
+    <div class="callout callout-quote">What is it, in one sentence?</div>
+    <p>Local load balancing distributes traffic across servers within a single data center using L4/L7 mechanisms; global load balancing sits above this layer and steers traffic across multiple geographically distributed data centers or cloud regions — typically via DNS-based geo-routing or anycast — to minimize latency, absorb regional failures, and distribute capacity across the globe.</p>
+  </section>
+
+  <!-- ── SECTION 6: CORE CONCEPTS ── -->
+  <section id="s6">
+    <h2 class="section-title"><span class="num">06</span> 📦 Core Concepts</h2>
+    <div class="callout callout-quote">The essential building blocks — terms and ideas you must have solid before going deeper.</div>
+
+    <h3>Local Load Balancing</h3>
+    <p>Local LB operates within a single data center or availability zone, distributing requests across a fleet of identical servers using algorithms like round robin, least connections, or IP hash. It operates at L4 (TCP/UDP) or L7 (HTTP) and makes decisions in microseconds based on per-server health and load. Local LB is unaware of geography — it assumes all backends are reachable and roughly equivalent in cost. Everything in subtopics 4.1–4.6 describes local LB.</p>
+
+    <h3>Global Load Balancing (GSLB)</h3>
+    <p>GSLB routes incoming traffic to one of several regional clusters worldwide before local LB takes over. Its decisions are coarser — select the US-East cluster, not server-7 within US-East. GSLB health checks operate at the region level: it probes a regional virtual IP or health endpoint and marks the entire region healthy or unhealthy. The two primary mechanisms are DNS-based routing and anycast.</p>
+
+    <h3>DNS-Based Geo-Routing</h3>
+    <p>The DNS resolver returns different A/AAAA records based on the requesting client's location or measured RTT to each region. AWS Route 53 supports latency-based routing (return the IP of the region with lowest measured RTT to the client), geolocation routing (return the IP for the geographically closest region), and failover routing (primary/secondary with health check integration). Failover is bounded by DNS TTL — clients cache the DNS response and continue routing to the old IP until the TTL expires, even if the health check has already failed the region.</p>
+
+    <h3>Anycast</h3>
+    <p>Anycast assigns the same IP address to servers in multiple locations. BGP routing naturally delivers packets to the topologically nearest instance of that IP. When a PoP goes down, BGP withdraws the route and packets are automatically redirected to the next-nearest PoP — typically within milliseconds. Cloudflare, Google's DNS (8.8.8.8), and large CDNs use anycast extensively. The trade-off: anycast requires BGP control (your own AS and IP block), making it complex to operate and inaccessible to most application teams directly.</p>
+
+    <h3>Two-Tier Traffic Architecture</h3>
+    <p>Every globally distributed system uses a two-tier model: (1) Global LB steers the client to the correct region, and (2) Local LB within that region distributes the request across servers. The global tier is coarse, health-check-driven, and geography-aware. The local tier is fine-grained, server-aware, and latency-optimized. Confusing the two layers in an interview is a common mistake — be explicit about which tier you're describing at each step.</p>
+
+    <h3>Region-Level Health Checks</h3>
+    <p>Global LBs do not health-check individual servers — that's the local LB's job. GSLB health checks probe a regional endpoint (e.g., <code>/healthz</code> on a regional load balancer VIP) and mark the entire region in or out. Threshold-based failover (e.g., fail after 3 consecutive check failures) prevents flapping during transient blips. Check interval × failure threshold = maximum detection window before failover begins: e.g., 30s × 3 = 90s.</p>
+  </section>
+
+  <!-- ── SECTION 7: FIRST PRINCIPLES ── -->
+  <section id="s7">
+    <h2 class="section-title"><span class="num">07</span> 🔍 First Principles — Why Does This Exist?</h2>
+    <div class="callout callout-quote">What fundamental problem does this concept solve? Why was it invented?</div>
+    <p>A single local load balancer — even a highly available, redundant one — is physically located in one data center. Two fundamental problems forced global load balancing into existence:</p>
+    <p><strong>Latency is physics.</strong> Light travels ~200km/ms in fiber. A user in Tokyo making a request to a US-East data center experiences ~150ms of irreducible round-trip latency just from the speed of light, before the application processes anything. For latency-sensitive applications, this is unacceptable. You must place compute near users — and then you need a mechanism to route users to the nearest compute.</p>
+    <p><strong>Single-region failure is catastrophic.</strong> A natural disaster, power grid failure, cloud provider outage, or network partition can take an entire data center offline. With a single region, this means total application unavailability. With multiple regions, you need a mechanism that detects the regional failure and redirects traffic to surviving regions — automatically and quickly.</p>
+    <p>Local LB only solves within-region distribution. It cannot reason about geography or cross-region failover. GSLB was invented specifically to add the geographic routing layer that local LB was never designed to handle.</p>
+  </section>
+
+  <!-- ── SECTION 8: MENTAL MODELS ── -->
+  <section id="s8">
+    <h2 class="section-title"><span class="num">08</span> 🗺️ Mental Models</h2>
+    <div class="callout callout-quote">Intuition frames that help you reason about this concept fast — especially under pressure.</div>
+
+    <h3>Model 1: Airport Hub-and-Spoke</h3>
+    <p>Think of global LB as the international flight booking system and local LB as the ground transport network within each city. When you book a flight from Singapore, the booking system (GSLB) decides you'll fly into New York JFK — not London or Tokyo. Once you land at JFK, the ground transport (local LB) gets you to your specific hotel. The booking system has no idea which hotel you're going to — that's not its job. It just picks the right city. If JFK closes due to a storm (region failure), the booking system reroutes your flight to Chicago. This captures the two-tier hierarchy and regional failover cleanly. It breaks down for anycast — there's no geographic pre-assignment; BGP just routes you to whichever "airport" is nearest at the routing level.</p>
+
+    <h3>Model 2: DNS TTL as a Stale Road Map</h3>
+    <p>Imagine your GPS downloaded a road closure map at midnight (DNS resolution). You're navigating at 6am using that stale map. If a highway closed at 3am (region went down), your GPS still routes you that way until you re-download the map (DNS TTL expires and you re-resolve). Short TTLs = more frequent map downloads = fresher data, but more DNS query load. Many GPS systems (resolvers) also ignore the "expiry time" on the map and cache even longer than instructed — which is why real failover lag is 2–5× the configured TTL. This makes the TTL problem viscerally concrete.</p>
+
+    <h3>Model 3: Anycast as Campus Wi-Fi Roaming</h3>
+    <p>Anycast is like enterprise Wi-Fi roaming — you have one network SSID (one IP address), and whichever access point is nearest connects your device automatically as you walk around campus. If one access point fails, your device seamlessly connects to the next nearest one without any action on your part. There's no "check which access point is closest" step — the network handles it at the routing layer. This captures the BGP-level transparency and sub-second failover of anycast. It breaks down when explaining why not every system uses anycast — you need BGP control and your own IP block, which requires significant network infrastructure that most application teams don't own.</p>
+  </section>
+
+  <!-- ── SECTION 9: HOW IT WORKS ── -->
+  <section id="s9">
+    <h2 class="section-title"><span class="num">09</span> ⚙️ How It Works — Mechanics</h2>
+    <div class="callout callout-quote">Step-by-step explanation of the internal mechanism.</div>
+
+    <h3>DNS-Based Geo-Routing — Happy Path</h3>
+    <p>1. User in Tokyo types <code>api.example.com</code>. Their device queries their local DNS resolver.<br>
+    2. The resolver queries the authoritative DNS (e.g., Route 53). Route 53 checks the client resolver's IP geolocation or measured RTT to each regional endpoint.<br>
+    3. Route 53 returns the IP of the Tokyo regional cluster (or nearest available healthy region). TTL is set to 60 seconds.<br>
+    4. Client connects to the Tokyo regional IP → hits the regional load balancer → local LB distributes to a healthy server in the Tokyo cluster.<br>
+    5. Client caches the Tokyo IP for 60 seconds; all requests within that window bypass DNS entirely.</p>
+
+    <h3>DNS-Based Geo-Routing — Regional Failure</h3>
+    <p>1. Tokyo cluster fails health checks (e.g., 3 consecutive failures over 30s = 90s detection lag).<br>
+    2. Route 53 marks Tokyo as unhealthy and begins returning the Singapore IP for new DNS queries.<br>
+    3. Clients who already resolved Tokyo continue hitting it for up to their remaining TTL. With TTL=60s, worst case is 60s of failed requests being sent to the dead region before re-resolution kicks in — and resolvers may cache longer.<br>
+    4. Client re-resolves → gets Singapore IP → traffic redirects. Total failover lag: health check detection time + TTL expiry.</p>
+
+    <h3>Anycast — Routing and Failover</h3>
+    <p>1. Cloudflare advertises <code>104.16.x.x/20</code> from 300+ PoPs globally via BGP. Every PoP announces the same prefix.<br>
+    2. The internet's BGP routers naturally route your packets to the topologically nearest PoP — not because Cloudflare directs you, but because BGP shortest-path routing does it automatically.<br>
+    3. If the Tokyo PoP goes down, it withdraws its BGP announcement. Within seconds, BGP convergence redirects packets to the next-nearest PoP (e.g., Singapore).<br>
+    4. No DNS change. No TTL wait. The IP address never changes — only which physical server answers it.</p>
+
+    <h3>Health Check Design at Global Scale</h3>
+    <p>Global LB health checkers probe regional endpoints from multiple vantage points simultaneously to avoid false positives from a single checker's connectivity issue. Threshold: typically 2-of-3 checkers must agree the region is unhealthy before failover triggers. This prevents a single packet loss event from taking a region out. The check interval (10–30s) × failure threshold (3) gives the maximum detection window: e.g., 30s × 3 = 90s detection lag before failover begins.</p>
+  </section>
+
+  <!-- ── SECTION 10: REAL-WORLD EXAMPLES ── -->
+  <section id="s10">
+    <h2 class="section-title"><span class="num">10</span> 🏭 Real-World System Examples</h2>
+    <div class="callout callout-quote">Where does this appear in production systems you know?</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>System</th><th>How This Concept Applies</th><th>Notes</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>AWS Route 53</strong></td>
+            <td>Latency-based and geolocation routing policies with health-check integration for automatic regional failover. Routes clients to the nearest healthy AWS region.</td>
+            <td>Most common DNS-based GSLB for AWS-hosted services; supports A/B failover between primary and secondary regions with health-check-gated switching.</td>
+          </tr>
+          <tr>
+            <td><strong>Cloudflare</strong></td>
+            <td>Anycast from 300+ PoPs globally — all traffic hits the nearest PoP; local LB within each PoP forwards to origin. DDoS attacks are absorbed across all PoPs simultaneously.</td>
+            <td>Anycast is why Cloudflare can absorb massive DDoS — attack traffic is distributed across all PoPs rather than concentrated on one target.</td>
+          </tr>
+          <tr>
+            <td><strong>Google GCLB (Maglev)</strong></td>
+            <td>Single anycast IP fronts Google's worldwide infrastructure. Maglev software LB handles local distribution within each region. Andromeda handles the virtual networking layer.</td>
+            <td>Google's Maglev paper (NSDI 2016) describes this two-tier architecture explicitly — one of the best public references on production-scale global LB design.</td>
+          </tr>
+          <tr>
+            <td><strong>Netflix Open Connect</strong></td>
+            <td>DNS-based geo-routing steers clients to the nearest Open Connect Appliance (OCA) cluster. ISPs host OCAs directly in their networks. GSLB routes clients to the nearest healthy OCA cluster.</td>
+            <td>Netflix supplements DNS with client-side adaptive streaming — the client SDK measures and selects the optimal server, adding a second selection layer beyond DNS.</td>
+          </tr>
+          <tr>
+            <td><strong>Fastly / Akamai CDN</strong></td>
+            <td>Anycast + DNS-based hybrid — edge PoPs use anycast for initial routing, with DNS-based overrides for specific client populations or compliance regions.</td>
+            <td>CDNs were the earliest adopters of GSLB; the CDN use case drove much of the operational tooling now used for general-purpose global LB.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── SECTION 11: TRADE-OFFS ── -->
+  <section id="s11">
+    <h2 class="section-title"><span class="num">11</span> ⚖️ Trade-offs</h2>
+    <div class="callout callout-quote">Every design decision has a cost. What are you giving up?</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>✅ Benefit</th><th>❌ Cost / Limitation</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="benefit">Reduced latency — users reach the nearest region, shaving 50–200ms of RTT</td>
+            <td class="cost">DNS TTL creates a failover lag window — clients continue hitting failed regions until TTL expires (and resolvers may ignore TTLs)</td>
+          </tr>
+          <tr>
+            <td class="benefit">Regional fault isolation — a regional outage doesn't affect other regions</td>
+            <td class="cost">Session continuity breaks when global LB redirects a user to a different region if session data is region-local</td>
+          </tr>
+          <tr>
+            <td class="benefit">Capacity distribution across regions — traffic spikes in one geography don't overload a single data center</td>
+            <td class="cost">Operational complexity multiplies significantly — multiple regional deployments, data replication, cross-region health monitoring</td>
+          </tr>
+          <tr>
+            <td class="benefit">DDoS absorption at edge with anycast — attack traffic is spread across all PoPs</td>
+            <td class="cost">Anycast requires BGP control and your own IP block — only feasible for large infrastructure operators; inaccessible to typical application teams</td>
+          </tr>
+          <tr>
+            <td class="benefit">Enables data residency compliance — EU data stays in EU regions</td>
+            <td class="cost">Cross-region data consistency is hard — eventual consistency is often the only practical model; strong consistency at global scale is extremely expensive</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── SECTION 12: INTERVIEW APPLICATION ── -->
+  <section id="s12">
+    <h2 class="section-title"><span class="num">12</span> 🎯 Interview Application</h2>
+    <div class="callout callout-quote">How do you use this concept in a design interview? What triggers it?</div>
+
+    <h3>When an interviewer asks / says:</h3>
+    <ul style="margin-left:20px; margin-bottom:14px; font-size:14.5px; line-height:1.8;">
+      <li>"How would you design this system for global users?" or "Users are distributed across the US, Europe, and Asia."</li>
+      <li>"What happens if an entire data center goes down?"</li>
+      <li>"How do you minimize latency for international users?"</li>
+      <li>"Walk me through your traffic routing architecture end to end."</li>
+    </ul>
+
+    <h3>What you say / do:</h3>
+    <p>Introduce the two-tier model explicitly: <em>"I'd use global load balancing to steer users to their nearest regional cluster, then local load balancing within each region to distribute across servers. For GSLB I'd use DNS-based latency routing with health-check-integrated failover for most services, or anycast for edge/CDN components where sub-second failover matters."</em> Then proactively call out the TTL failover lag as a known limitation and address session locality if state is involved — showing you understand the second-order implications.</p>
+
+    <h3>The trade-off statement (memorize this):</h3>
+    <div class="tradeoff-box">
+      "If we use DNS-based global LB, we get simple geo-routing and regional failover with familiar tooling, but we pay with TTL-bounded failover lag — clients can continue hitting a dead region for up to our TTL window, and resolvers may cache even longer. For most stateless APIs this is acceptable; for real-time or financial systems I'd supplement with anycast or lower the TTL to 30 seconds, accepting higher DNS query volume as the cost."
+    </div>
+  </section>
+
+  <!-- ── SECTION 13: MISCONCEPTIONS ── -->
+  <section id="s13">
+    <h2 class="section-title"><span class="num">13</span> ⚠️ Common Misconceptions &amp; Gotchas</h2>
+    <div class="callout callout-quote">What do candidates get wrong? What nuance is the interviewer probing for?</div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> DNS failover is near-instantaneous — update the record and clients redirect immediately.</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Clients cache DNS responses for the full TTL and many resolvers cache even longer in violation of the TTL spec. Real failover lag is often 2–5× the configured TTL. True instant failover requires anycast or an application-level redirect mechanism.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> Global LB and CDN are the same thing.</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> CDNs are one use case for global LB, but GSLB is broader. A GSLB routes to origin data centers; a CDN routes to edge caches. CDNs use GSLB internally, but a database or API service can use GSLB with no CDN layer at all.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> Global LB handles session persistence — it always sends the same user to the same region.</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Global LB does not provide sticky sessions at the regional level (unless specifically configured). On failover, users will be redirected to a different region and their session data — if stored regionally — is unavailable. You must either replicate session state globally, use stateless JWTs, or accept session loss on regional failover.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> Anycast is always better than DNS-based routing because failover is faster.</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Anycast routes to the topologically nearest PoP as seen by BGP, which may not be the lowest-latency PoP due to asymmetric routing. DNS-based latency routing actively measures RTT to each region and routes based on empirical latency data, which can outperform BGP topology for certain client locations. Also, anycast requires BGP control plane access most teams don't have.</div></div>
+    </div>
+  </section>
+
+  <!-- ── SECTION 14: RELATIONSHIPS ── -->
+  <section id="s14">
+    <h2 class="section-title"><span class="num">14</span> 🔗 Relationships to Other Concepts</h2>
+    <div class="callout callout-quote">How does this connect to adjacent subtopics across the roadmap?</div>
+    <div class="connections">
+      <div class="conn-card">
+        <div class="conn-icon">⬆️</div>
+        <div>
+          <div class="conn-label">Builds on</div>
+          <strong>4.3 Health Checks and Failure Detection</strong> — global LB relies on the same health check concepts, applied at region granularity rather than server granularity. Regional health probing uses the same HTTP/TCP primitives, just targeting a regional VIP instead of individual servers. The thresholding and hysteresis logic is identical in principle.
+        </div>
+      </div>
+      <div class="conn-card">
+        <div class="conn-icon">🔓</div>
+        <div>
+          <div class="conn-label">Enables</div>
+          <strong>Topic 6 — CDN</strong> (CDNs are the most common real-world deployment of global LB via anycast PoPs — the CDN architecture is GSLB applied to edge caching) and <strong>Topic 37 — Global Multi-Region Systems</strong> (the full active-active / active-passive multi-region architecture builds directly on global LB as its traffic-steering foundation).
+        </div>
+      </div>
+      <div class="conn-card">
+        <div class="conn-icon">⚡</div>
+        <div>
+          <div class="conn-label">Tension with</div>
+          <strong>4.6 Sticky Sessions</strong> — global LB failover fundamentally conflicts with session affinity. If a user's session is sticky to US-East and global LB redirects them to EU-West during a regional failure, their session is lost. Stateless design (3.1, 3.7) or global session replication is the only clean resolution to this tension.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── SECTION 15: SELF-CHECK QUIZ ── -->
+  <section id="s15">
+    <h2 class="section-title"><span class="num">15</span> 🧪 Self-Check Quiz</h2>
+    <div class="callout callout-quote">Can you answer these without looking? If not, you haven't internalized it yet.</div>
+
+    <div class="quiz-item" id="q1">
+      <div class="quiz-q" onclick="toggleQuiz('q1')">
+        <span class="quiz-num">1</span>
+        <span class="qtext">Explain the two-tier load balancing hierarchy used in globally distributed systems. What does each tier decide, and what mechanisms does each use?</span>
+        <span class="quiz-toggle">Show hint ▼</span>
+      </div>
+      <div class="quiz-hint">💡 Think through your answer before expanding — if you hesitate, revisit Section 5 (Core Definition) and Section 6 (Core Concepts — Two-Tier Traffic Architecture).</div>
+    </div>
+
+    <div class="quiz-item" id="q2">
+      <div class="quiz-q" onclick="toggleQuiz('q2')">
+        <span class="quiz-num">2</span>
+        <span class="qtext">A company uses DNS-based geo-routing with a 5-minute TTL. Their US-East region fails at 14:00. A user in New York last resolved DNS at 13:58. What happens, and when will they be redirected to the failover region?</span>
+        <span class="quiz-toggle">Show hint ▼</span>
+      </div>
+      <div class="quiz-hint">💡 Think through the timeline: when did the health check fail? How long until TTL expires? How long do resolvers actually cache? If you hesitate, revisit Section 9 (DNS-Based Geo-Routing — Regional Failure) and the Cheatsheet gotcha.</div>
+    </div>
+
+    <div class="quiz-item" id="q3">
+      <div class="quiz-q" onclick="toggleQuiz('q3')">
+        <span class="quiz-num">3</span>
+        <span class="qtext">What are the trade-offs between DNS-based geo-routing and anycast? When would you choose one over the other?</span>
+        <span class="quiz-toggle">Show hint ▼</span>
+      </div>
+      <div class="quiz-hint">💡 Think about: failover speed, operational requirements (BGP control), routing accuracy (empirical RTT vs. BGP topology), and who can realistically use each. Revisit Section 6 (Anycast) and Section 11 (Trade-offs) if needed.</div>
+    </div>
+
+    <div class="quiz-item" id="q4">
+      <div class="quiz-q" onclick="toggleQuiz('q4')">
+        <span class="quiz-num">4</span>
+        <span class="qtext">Name two real-world systems that use global load balancing and describe which mechanism (DNS-based or anycast) each uses and why.</span>
+        <span class="quiz-toggle">Show hint ▼</span>
+      </div>
+      <div class="quiz-hint">💡 Think through your answer — if you hesitate, revisit Section 10 (Real-World System Examples). AWS Route 53 and Cloudflare are the canonical pair.</div>
+    </div>
+
+    <div class="quiz-item" id="q5">
+      <div class="quiz-q" onclick="toggleQuiz('q5')">
+        <span class="quiz-num">5</span>
+        <span class="qtext">A globally distributed e-commerce site uses DNS-based global LB and stores user shopping carts in a regional Redis. The EU-West region fails and global LB redirects EU users to US-East. What breaks, and how would you architect the system to survive this failover cleanly?</span>
+        <span class="quiz-toggle">Show hint ▼</span>
+      </div>
+      <div class="quiz-hint">💡 Think about what data is region-local (session, cart state in Redis), what the user experiences (empty cart, logout), and what the fix looks like: globally replicated session store, stateless JWTs, or accepting cart loss on failover with a UX message. This is a full system design question — think in layers.</div>
+    </div>
+  </section>
+
+  <!-- ── SECTION 16: FURTHER READING ── -->
+  <section id="s16">
+    <h2 class="section-title"><span class="num">16</span> 📚 Further Reading</h2>
+    <div class="callout callout-quote">Links, chapters, or resources for deeper understanding.</div>
+    <ul class="reading-list">
+      <li><span class="cb"></span><span class="rtext"><strong>AWS Route 53 — Routing Policies</strong>: docs.aws.amazon.com/Route53/latest/DeveloperGuide/routing-policy.html — covers latency, geolocation, failover, and weighted routing with health-check integration</span></li>
+      <li><span class="cb"></span><span class="rtext"><strong>Cloudflare — How Anycast Works</strong>: cloudflare.com/learning/cdn/glossary/anycast-network-routing — concise, authoritative explanation of BGP-based anycast routing</span></li>
+      <li><span class="cb"></span><span class="rtext"><strong>ByteByteGo — "How does Google Global Load Balancer work?"</strong>: blog.bytebytego.com — covers the Maglev/Andromeda two-tier architecture with real traffic flow diagrams</span></li>
+      <li><span class="cb"></span><span class="rtext"><strong>Google Cloud Load Balancing Docs — Global vs. Regional</strong>: cloud.google.com/load-balancing/docs/choosing-load-balancer — practical decision framework for global vs. regional LB selection</span></li>
+      <li><span class="cb"></span><span class="rtext"><strong>DDIA Chapter 5 — Replication</strong> (Kleppmann): covers the geo-replication data consistency challenges that arise from multi-region deployments enabled by global LB</span></li>
+    </ul>
+  </section>
+
+  <!-- ── SECTION 17: MY NOTES ── -->
+  <section id="s17">
+    <h2 class="section-title"><span class="num">17</span> ✍️ My Notes</h2>
+    <div class="callout callout-quote">Personal observations, things that confused me, analogies that helped.</div>
+    <textarea class="notes-area" placeholder="Your personal notes go here — analogies that clicked, interview stories, things to remember..."></textarea>
+  </section>
+
+</article>
+</main>
+
+<script>
+  // ── PHASE TOGGLE ──
+  function togglePhase(id) {
+    document.getElementById(id).classList.toggle('open');
+  }
+
+  // ── QUIZ TOGGLE ──
+  function toggleQuiz(id) {
+    const item = document.getElementById(id);
+    const isOpen = item.classList.contains('open');
+    document.querySelectorAll('.quiz-item').forEach(q => {
+      q.classList.remove('open');
+      q.querySelector('.quiz-toggle').textContent = 'Show hint ▼';
+    });
+    if (!isOpen) {
+      item.classList.add('open');
+      item.querySelector('.quiz-toggle').textContent = 'Hide hint ▲';
+    }
+  }
+
+  // ── CHECKLIST TOGGLE ──
+  document.querySelectorAll('.checklist .cb, .reading-list .cb').forEach(cb => {
+    cb.addEventListener('click', () => {
+      cb.closest('li').classList.toggle('checked');
+    });
+  });
+
+  // ── SCROLLSPY ──
+  const sections = document.querySelectorAll('section[id]');
+  const navLinks = document.querySelectorAll('#toc nav a');
+
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        navLinks.forEach(a => a.classList.remove('active'));
+        const active = document.querySelector(`#toc nav a[href="#${entry.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+
+  sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>
