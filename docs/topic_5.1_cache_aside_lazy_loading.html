@@ -1,0 +1,1215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.1 Cache-aside (Lazy Loading)</title>
+<style>
+  :root {
+    --bg: #f9f8f6;
+    --surface: #ffffff;
+    --surface-alt: #f3f2ef;
+    --border: #e5e3de;
+    --text: #1a1917;
+    --text-muted: #6b6861;
+    --accent: #2563eb;
+    --accent-light: #dbeafe;
+    --green: #16a34a;
+    --green-light: #dcfce7;
+    --red: #dc2626;
+    --red-light: #fee2e2;
+    --yellow: #d97706;
+    --yellow-light: #fef3c7;
+    --purple: #7c3aed;
+    --purple-light: #ede9fe;
+    --code-bg: #1e1e2e;
+    --code-text: #cdd6f4;
+    --sidebar-w: 240px;
+    --content-max: 780px;
+    font-size: 16px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    display: flex;
+  }
+
+  /* ── SIDEBAR ── */
+  #toc {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: var(--sidebar-w);
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 24px 0 48px;
+    z-index: 100;
+  }
+
+  #toc-header {
+    padding: 0 16px 16px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 8px;
+  }
+
+  #toc-header .phase-tag {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: var(--accent-light);
+    border-radius: 4px;
+    padding: 2px 7px;
+    display: inline-block;
+    margin-bottom: 6px;
+  }
+
+  #toc-header h2 {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.4;
+  }
+
+  #toc nav a {
+    display: block;
+    padding: 5px 16px 5px 20px;
+    font-size: 12.5px;
+    color: var(--text-muted);
+    text-decoration: none;
+    border-left: 2px solid transparent;
+    transition: all 0.15s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+
+  /* ── MAIN CONTENT ── */
+  main {
+    margin-left: var(--sidebar-w);
+    padding: 48px 48px 96px;
+    max-width: calc(var(--sidebar-w) + var(--content-max) + 96px);
+    width: 100%;
+  }
+
+  article { max-width: var(--content-max); }
+
+  /* ── HEADER ── */
+  .doc-header {
+    margin-bottom: 40px;
+    padding-bottom: 28px;
+    border-bottom: 2px solid var(--border);
+  }
+
+  .doc-header .meta {
+    display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px;
+  }
+
+  .tag {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border-radius: 20px;
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+
+  .tag-phase  { background: var(--accent-light);  color: var(--accent); }
+  .tag-topic  { background: var(--purple-light);  color: var(--purple); }
+  .tag-date   { background: var(--surface-alt);   color: var(--text-muted); }
+
+  .doc-header h1 {
+    font-size: 30px;
+    font-weight: 800;
+    line-height: 1.25;
+    letter-spacing: -0.02em;
+    color: var(--text);
+  }
+
+  /* ── SECTIONS ── */
+  section {
+    margin-bottom: 52px;
+    scroll-margin-top: 32px;
+  }
+
+  h2.section-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 20px;
+    display: flex; align-items: center; gap: 10px;
+    letter-spacing: -0.01em;
+  }
+
+  h2.section-title .num {
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--text-muted);
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 2px 7px;
+    letter-spacing: 0.04em;
+  }
+
+  h3 {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    margin: 24px 0 10px;
+  }
+
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+
+  /* ── CALLOUT BOXES ── */
+  .callout {
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-bottom: 20px;
+    font-size: 14px;
+    border-left: 3px solid;
+  }
+
+  .callout-goal   { background: var(--accent-light);  border-color: var(--accent);  color: #1e40af; }
+  .callout-tip    { background: var(--yellow-light);  border-color: var(--yellow);  color: #92400e; }
+  .callout-quote  { background: var(--surface-alt);   border-color: var(--border);  color: var(--text-muted); font-style: italic; }
+
+  /* ── CHEATSHEET CODE BLOCK ── */
+  .cheatsheet {
+    background: var(--code-bg);
+    color: var(--code-text);
+    border-radius: 12px;
+    padding: 24px 28px;
+    font-family: "SF Mono", "Fira Code", "Cascadia Code", Menlo, monospace;
+    font-size: 13px;
+    line-height: 1.65;
+    white-space: pre-wrap;
+    overflow-x: auto;
+    margin-top: 16px;
+  }
+
+  .cheatsheet .label {
+    color: #cba6f7;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+  }
+
+  /* ── MINDMAP SVG WRAP ── */
+  .mindmap-wrap {
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 16px 12px;
+    margin: 20px 0 24px;
+  }
+
+  .mindmap-wrap p.caption {
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 10px;
+    margin-bottom: 0;
+  }
+
+  /* ── CHECKLIST ── */
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+
+  .checklist li {
+    display: flex; align-items: flex-start; gap: 10px;
+    font-size: 14.5px; line-height: 1.55;
+  }
+
+  .checklist li .cb {
+    flex-shrink: 0;
+    width: 18px; height: 18px;
+    border: 2px solid var(--border);
+    border-radius: 4px;
+    margin-top: 2px;
+    background: var(--surface);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+
+  .checklist li.checked .cb {
+    background: var(--green);
+    border-color: var(--green);
+  }
+
+  .checklist li.checked .cb::after {
+    content: '';
+    display: block;
+    width: 5px; height: 9px;
+    border: 2px solid #fff;
+    border-top: none; border-left: none;
+    transform: rotate(45deg) translateY(-1px);
+  }
+
+  .checklist li.checked .text { color: var(--text-muted); text-decoration: line-through; }
+
+  /* ── STUDY PHASES ── */
+  .phase-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+
+  .phase-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 20px;
+    cursor: pointer; user-select: none;
+    background: var(--surface-alt);
+  }
+
+  .phase-header:hover { background: var(--border); }
+
+  .phase-label {
+    font-size: 14px; font-weight: 700;
+    display: flex; align-items: center; gap: 10px;
+  }
+
+  .phase-badge {
+    font-size: 11px; font-weight: 800;
+    letter-spacing: 0.05em; text-transform: uppercase;
+    padding: 2px 8px; border-radius: 20px;
+  }
+
+  .ph1 { background: #dbeafe; color: #1d4ed8; }
+  .ph2 { background: #fce7f3; color: #9d174d; }
+  .ph3 { background: #d1fae5; color: #065f46; }
+  .ph4 { background: #fef3c7; color: #92400e; }
+
+  .phase-chevron { font-size: 12px; color: var(--text-muted); transition: transform 0.2s; }
+  .phase-card.open .phase-chevron { transform: rotate(180deg); }
+
+  .phase-body { display: none; padding: 16px 20px 20px; }
+  .phase-card.open .phase-body { display: block; }
+
+  .phase-goal { font-size: 12.5px; color: var(--text-muted); font-style: italic; margin-bottom: 12px; }
+
+  /* ── TABLES ── */
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+
+  th {
+    background: var(--surface-alt);
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 12px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--text-muted);
+    border-bottom: 2px solid var(--border);
+  }
+
+  td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top; line-height: 1.5;
+  }
+
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+
+  /* ── MISCONCEPTIONS ── */
+  .misconception {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+
+  .misconception .wrong {
+    background: var(--red-light);
+    padding: 10px 16px;
+    font-size: 14px;
+    display: flex; align-items: flex-start; gap: 8px;
+  }
+
+  .misconception .right {
+    padding: 10px 16px;
+    font-size: 14px;
+    display: flex; align-items: flex-start; gap: 8px;
+    color: #065f46; background: var(--green-light);
+  }
+
+  .misconception .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+
+  /* ── QUIZ ── */
+  .quiz-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+
+  .quiz-q {
+    padding: 14px 18px;
+    font-size: 14.5px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  }
+
+  .quiz-q:hover { background: var(--surface-alt); }
+
+  .quiz-num {
+    flex-shrink: 0;
+    width: 24px; height: 24px;
+    background: var(--accent);
+    color: #fff;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 800;
+    margin-top: 1px;
+  }
+
+  .quiz-q .qtext { flex: 1; }
+  .quiz-toggle { font-size: 11px; color: var(--text-muted); flex-shrink: 0; margin-top: 3px; }
+
+  .quiz-hint {
+    display: none;
+    padding: 10px 18px 14px;
+    font-size: 13px;
+    color: #92400e;
+    background: var(--yellow-light);
+    border-top: 1px solid var(--border);
+  }
+
+  .quiz-item.open .quiz-hint { display: block; }
+
+  /* ── FURTHER READING ── */
+  .reading-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+
+  .reading-list li {
+    display: flex; align-items: flex-start; gap: 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 14px;
+  }
+
+  .reading-list li .cb {
+    flex-shrink: 0;
+    width: 18px; height: 18px;
+    border: 2px solid var(--border);
+    border-radius: 4px;
+    margin-top: 1px;
+    cursor: pointer;
+    background: var(--surface);
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+
+  .reading-list li.checked .cb {
+    background: var(--green);
+    border-color: var(--green);
+  }
+
+  .reading-list li.checked .cb::after {
+    content: '';
+    display: block;
+    width: 5px; height: 9px;
+    border: 2px solid #fff;
+    border-top: none; border-left: none;
+    transform: rotate(45deg) translateY(-1px);
+  }
+
+  .reading-list li.checked .rtext { color: var(--text-muted); text-decoration: line-through; }
+
+  /* ── NOTES AREA ── */
+  .notes-area {
+    width: 100%;
+    min-height: 160px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    font-family: inherit;
+    font-size: 14px;
+    color: var(--text);
+    resize: vertical;
+    line-height: 1.6;
+  }
+
+  .notes-area:focus { outline: 2px solid var(--accent); border-color: transparent; }
+
+  /* ── FOCUS LIST (Section 0) ── */
+  .focus-list { list-style: none; display: flex; flex-direction: column; gap: 14px; }
+
+  .focus-list li {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    font-size: 14.5px;
+    line-height: 1.6;
+  }
+
+  .focus-list li strong { color: var(--accent); display: block; margin-bottom: 4px; }
+
+  /* ── CONNECTIONS ── */
+  .connections { display: flex; flex-direction: column; gap: 12px; }
+
+  .conn-card {
+    display: flex; align-items: flex-start; gap: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    font-size: 14px;
+  }
+
+  .conn-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .conn-label { font-weight: 700; margin-bottom: 3px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+
+  /* ── TRADE-OFF STATEMENT ── */
+  .tradeoff-box {
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--accent);
+    border-radius: 8px;
+    padding: 14px 18px;
+    font-size: 14px;
+    font-style: italic;
+    color: var(--text);
+    margin-top: 14px;
+  }
+
+  /* ── SCROLLSPY ── */
+  @media (max-width: 900px) {
+    #toc { display: none; }
+    main { margin-left: 0; padding: 24px 20px 60px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── SIDEBAR TOC ── -->
+<aside id="toc">
+  <div id="toc-header">
+    <div class="phase-tag">Phase B — Scalability</div>
+    <h2>5.1 Cache-aside (Lazy Loading)</h2>
+  </div>
+  <nav>
+    <a href="#s0">🗺️ Topic Overview</a>
+    <a href="#s1">🎯 Goal</a>
+    <a href="#s2">✅ Mastery</a>
+    <a href="#s3">🗓️ Study Phases</a>
+    <a href="#s4">📋 Cheatsheet</a>
+    <a href="#s5">🧠 Core Definition</a>
+    <a href="#s6">📦 Core Concepts</a>
+    <a href="#s7">🔍 First Principles</a>
+    <a href="#s8">🗺️ Mental Models</a>
+    <a href="#s9">⚙️ How It Works</a>
+    <a href="#s10">🏭 Real-World Examples</a>
+    <a href="#s11">⚖️ Trade-offs</a>
+    <a href="#s12">🎯 Interview Application</a>
+    <a href="#s13">⚠️ Misconceptions</a>
+    <a href="#s14">🔗 Relationships</a>
+    <a href="#s15">🧪 Self-Check Quiz</a>
+    <a href="#s16">📚 Further Reading</a>
+    <a href="#s17">✍️ My Notes</a>
+  </nav>
+</aside>
+
+<!-- ── MAIN ── -->
+<main>
+<article>
+
+  <!-- HEADER -->
+  <header class="doc-header">
+    <div class="meta">
+      <span class="tag tag-phase">⚡ Phase B — Scalability</span>
+      <span class="tag tag-topic">⚡ Topic 5 — Caching Systems</span>
+      <span class="tag tag-date">📅 2026-05-24</span>
+    </div>
+    <h1>5.1 Cache-aside (Lazy Loading)</h1>
+  </header>
+
+  <!-- ── SECTION 0: TOPIC OVERVIEW ── -->
+  <section id="s0">
+    <h2 class="section-title"><span class="num">00</span> 🗺️ Topic Overview</h2>
+
+    <h3>What This Topic Is About</h3>
+    <p>Cache-aside (lazy loading) is the most common caching strategy in production systems. The application owns the cache interaction: on a read, it checks the cache first; on a miss, it loads from the database and populates the cache itself. This subtopic is about understanding exactly how that lifecycle works, when it is the right choice, and what failure modes it introduces — because nearly every read-heavy system you design in an interview will rely on it.</p>
+
+    <h3>🎯 What to Focus On</h3>
+    <ul class="focus-list">
+      <li><strong>1. The three-step read path (check → miss → load → populate)</strong>This is the core pattern you must be able to recite and draw. Every interview discussion of caching starts here.</li>
+      <li><strong>2. The cache miss cost and when it bites you</strong>Cold starts, cache flushes, and new deployments all produce bursts of misses. Understanding why this is expensive and how to mitigate it (warming, probabilistic expiry) differentiates a senior answer from a junior one.</li>
+      <li><strong>3. Staleness as a first-class concern</strong>Cache-aside only populates on read. Writes go directly to DB, leaving the cache stale until TTL expires or you explicitly invalidate. Know how stale data manifests and what the remediation options are.</li>
+      <li><strong>4. What cache-aside does NOT solve</strong>It does not guarantee consistency on write, does not protect against thundering herd on its own, and does not work well for write-heavy workloads. Knowing the limits is as important as knowing the pattern.</li>
+      <li><strong>5. Choosing the right TTL</strong>TTL is the primary consistency knob in cache-aside. Too short = high miss rate; too long = stale data. Be ready to reason about this trade-off given a system's read/write ratio and consistency requirements.</li>
+    </ul>
+  </section>
+
+  <!-- ── SECTION 1: GOAL ── -->
+  <section id="s1">
+    <h2 class="section-title"><span class="num">01</span> 🎯 Goal of This Subtopic</h2>
+    <div class="callout callout-goal">
+      <em>Why are you studying this? What should you be able to do after this session?</em>
+    </div>
+    <p>Be able to explain the cache-aside read and write flow step by step, identify scenarios where it is the correct caching strategy, and articulate the consistency and cold-start trade-offs it introduces. You should be able to contrast it with write-through and write-back without hesitation, and propose a TTL and invalidation strategy for a given read/write pattern.</p>
+  </section>
+
+  <!-- ── SECTION 2: MASTERY ── -->
+  <section id="s2">
+    <h2 class="section-title"><span class="num">02</span> ✅ What Mastery Looks Like</h2>
+    <div class="callout callout-quote">Concrete, testable proof that you own this concept — not just familiarity.</div>
+    <ul class="checklist" id="mastery-list">
+      <li><span class="cb"></span><span class="text">Can walk through the full cache-aside read flow (hit path and miss path) in under 60 seconds without notes</span></li>
+      <li><span class="cb"></span><span class="text">Can explain why cache-aside leaves the cache stale on writes, and propose at least two remediation strategies (explicit invalidation, TTL-based expiry)</span></li>
+      <li><span class="cb"></span><span class="text">Can identify a scenario where cache-aside is the wrong choice (write-heavy workload, strong consistency required) and explain why</span></li>
+      <li><span class="cb"></span><span class="text">Can describe the thundering herd problem in the context of a cold cache and propose at least one mitigation</span></li>
+      <li><span class="cb"></span><span class="text">Can choose a reasonable TTL for a given system given its read/write ratio and staleness tolerance</span></li>
+    </ul>
+    <div class="callout callout-tip" style="margin-top:20px;">
+      💡 <strong>Rule of thumb:</strong> If you can teach it to someone else and field their follow-up questions, you've mastered it.
+    </div>
+  </section>
+
+  <!-- ── SECTION 3: STUDY PHASES ── -->
+  <section id="s3">
+    <h2 class="section-title"><span class="num">03</span> 🗓️ Study Phases to Achieve Mastery</h2>
+    <div class="callout callout-quote">A progressive plan from first exposure to interview-ready. Work through each phase in order.</div>
+
+    <div class="phase-card open" id="ph1">
+      <div class="phase-header" onclick="togglePhase('ph1')">
+        <div class="phase-label"><span class="phase-badge ph1">Phase 1</span> Acquire 📖</div>
+        <span class="phase-chevron">▼</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Read deeply enough that you could explain the concept without the doc.</p>
+        <ul class="checklist">
+          <li><span class="cb"></span><span class="text">Read <strong>Designing Data-Intensive Applications</strong> (Kleppmann) — Ch. 5, section on caching and replication lag</span></li>
+          <li><span class="cb"></span><span class="text">Read <strong>AWS ElastiCache Developer Guide — Caching Strategies: Lazy Loading</strong>: docs.aws.amazon.com/AmazonElastiCache/latest/red-ug/Strategies.html</span></li>
+          <li><span class="cb"></span><span class="text">Read <strong>ByteByteGo System Design Interview Vol. 1</strong> (Alex Xu) — Ch. 6: Design a Key-Value Store, caching subsection</span></li>
+          <li><span class="cb"></span><span class="text">Read through <strong>Sections 5–9</strong> (Core Definition → How It Works) carefully — don't skim</span></li>
+          <li><span class="cb"></span><span class="text">Re-read the <strong>Cheatsheet</strong> (Section 4) and try to recite it from memory after</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-card" id="ph2">
+      <div class="phase-header" onclick="togglePhase('ph2')">
+        <div class="phase-label"><span class="phase-badge ph2">Phase 2</span> Consolidate ✍️</div>
+        <span class="phase-chevron">▼</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Verify you can reproduce the knowledge in your own words without looking.</p>
+        <ul class="checklist">
+          <li><span class="cb"></span><span class="text">Close the doc — write out the <strong>Core Definition</strong> from memory, then compare</span></li>
+          <li><span class="cb"></span><span class="text">Explain <strong>First Principles</strong> out loud without notes — what problem does this solve and why?</span></li>
+          <li><span class="cb"></span><span class="text">Reconstruct the <strong>How It Works</strong> mechanics (hit path, miss path, write path) step by step from memory</span></li>
+          <li><span class="cb"></span><span class="text">Restate each <strong>Trade-off</strong> row in your own words — if you can't explain the cost, you don't own it yet</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-card" id="ph3">
+      <div class="phase-header" onclick="togglePhase('ph3')">
+        <div class="phase-label"><span class="phase-badge ph3">Phase 3</span> Apply 🔧</div>
+        <span class="phase-chevron">▼</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Connect to real systems and simulate interview scenarios.</p>
+        <ul class="checklist">
+          <li><span class="cb"></span><span class="text">Go through <strong>Real-World System Examples</strong> (Section 10) — verify each claim and add anything missed to My Notes</span></li>
+          <li><span class="cb"></span><span class="text">Practice the <strong>Interview Application</strong> (Section 12) out loud — say the trigger phrases and your response as if in a live interview</span></li>
+          <li><span class="cb"></span><span class="text">Work through <strong>Common Misconceptions</strong> (Section 13) — for each, explain <em>why</em> it's wrong, not just that it is</span></li>
+          <li><span class="cb"></span><span class="text">Trace the <strong>Relationships to Other Concepts</strong> (Section 14) — can you explain each connection without looking?</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-card" id="ph4">
+      <div class="phase-header" onclick="togglePhase('ph4')">
+        <div class="phase-label"><span class="phase-badge ph4">Phase 4</span> Validate 🧪</div>
+        <span class="phase-chevron">▼</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Confirm you actually own it, not just recognize it.</p>
+        <ul class="checklist">
+          <li><span class="cb"></span><span class="text">Answer every <strong>Self-Check Quiz</strong> question (Section 15) out loud without notes</span></li>
+          <li><span class="cb"></span><span class="text">Recite the <strong>Cheatsheet</strong> (Section 4) from memory — if you can't, re-do Phase 2</span></li>
+          <li><span class="cb"></span><span class="text">Tick off items in <strong>What Mastery Looks Like</strong> (Section 2) — only check if you can demonstrate it on demand</span></li>
+          <li><span class="cb"></span><span class="text">Teach this concept to an imaginary interviewer for 2 minutes without hesitation or notes</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── SECTION 4: CHEATSHEET ── -->
+  <section id="s4">
+    <h2 class="section-title"><span class="num">04</span> 📋 Cheatsheet</h2>
+    <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+
+    <!-- INLINE SVG MINDMAP -->
+    <div class="mindmap-wrap">
+      <svg id="ca-mindmap" viewBox="0 0 960 680" xmlns="http://www.w3.org/2000/svg"
+           style="width:100%;height:auto;display:block;"
+           font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif">
+      </svg>
+      <p class="caption">5.1 Cache-aside (Lazy Loading) — Concept Map &nbsp;·&nbsp; <em>hover a branch to highlight</em></p>
+    </div>
+    <script>
+    (function(){
+      var svg = document.getElementById('ca-mindmap');
+      var NS  = 'http://www.w3.org/2000/svg';
+
+      function mk(tag, attrs) {
+        var e = document.createElementNS(NS, tag);
+        for (var k in attrs) e.setAttribute(k, attrs[k]);
+        return e;
+      }
+      function drawText(parent, x, y, lines, fs, fill, bold) {
+        if (!Array.isArray(lines)) lines = [lines];
+        var lineH = fs * 1.35;
+        var totalH = lines.length * lineH;
+        var startY = y - (totalH - lineH) / 2;
+        lines.forEach(function(line, i) {
+          var t = mk('text', { x: x, y: startY + i * lineH,
+            'text-anchor': 'middle', 'dominant-baseline': 'central',
+            'font-size': fs, fill: fill || '#1a1917',
+            'font-weight': bold ? '700' : '500' });
+          t.textContent = line;
+          parent.appendChild(t);
+        });
+      }
+      function drawRect(parent, x, y, w, h, fill, stroke, sw) {
+        var r = mk('rect', { x: x, y: y, width: w, height: h, rx: 7, ry: 7,
+          fill: fill, stroke: stroke, 'stroke-width': sw || 1.8 });
+        parent.appendChild(r); return r;
+      }
+      function drawEllipse(parent, cx, cy, rx, ry, fill, stroke) {
+        var e = mk('ellipse', { cx: cx, cy: cy, rx: rx, ry: ry,
+          fill: fill, stroke: stroke, 'stroke-width': 2.5 });
+        parent.appendChild(e); return e;
+      }
+      function drawPath(parent, d, stroke, sw) {
+        var p = mk('path', { d: d, stroke: stroke, 'stroke-width': sw || 2,
+          fill: 'none', opacity: 0.6, 'stroke-linecap': 'round' });
+        parent.appendChild(p); return p;
+      }
+      function drawLine(parent, x1, y1, x2, y2, stroke) {
+        var l = mk('line', { x1: x1, y1: y1, x2: x2, y2: y2, stroke: stroke,
+          'stroke-width': 1.3, opacity: 0.40, 'stroke-linecap': 'round' });
+        parent.appendChild(l); return l;
+      }
+      function addHover(rects) {
+        function hi(on) {
+          rects.forEach(function(r) {
+            r.setAttribute('stroke-width', on ? 2.8 : 1.8);
+            r.style.filter = on ? 'drop-shadow(0 2px 5px rgba(0,0,0,0.14))' : '';
+          });
+        }
+        rects.forEach(function(r) {
+          r.addEventListener('mouseenter', function() { hi(true); });
+          r.addEventListener('mouseleave', function() { hi(false); });
+        });
+      }
+
+      var CX = 480, CY = 310;
+      var LL = mk('g', {}), NL = mk('g', {}), TL = mk('g', { 'pointer-events': 'none' });
+      svg.appendChild(LL); svg.appendChild(NL); svg.appendChild(TL);
+
+      // ── Branch definitions ──
+      var BRANCHES = [
+        // LEFT
+        {
+          label: 'Read Flow',
+          bx: 145, by: 48, bw: 160, bh: 40,
+          bf: '#dbe4ff', bs: '#3b5bdb', side: 'L',
+          leaves: [
+            { t: '1. Check Cache',     x: 14,  y: 115, w: 148, h: 28 },
+            { t: '2. HIT: return',     x: 168, y: 115, w: 148, h: 28, lf: '#b2f2bb', ls: '#2f9e44' },
+            { t: '3. MISS: read DB',   x: 14,  y: 153, w: 148, h: 28, lf: '#ffc9c9', ls: '#c92a2a' },
+            { t: '4. Write+TTL',       x: 168, y: 153, w: 148, h: 28 },
+            { t: '5. Return result',   x: 90,  y: 191, w: 150, h: 28 }
+          ]
+        },
+        {
+          label: 'Real Systems',
+          bx: 135, by: 530, bw: 170, bh: 40,
+          bf: '#b2f2bb', bs: '#2f9e44', side: 'L',
+          leaves: [
+            { t: 'Redis + Postgres', x: 14,  y: 592, w: 145, h: 28 },
+            { t: 'Facebook TAO',     x: 165, y: 592, w: 145, h: 28 },
+            { t: 'Netflix EVCache',  x: 14,  y: 630, w: 145, h: 28 },
+            { t: 'Twitter Redis',    x: 165, y: 630, w: 145, h: 28 }
+          ]
+        },
+        // RIGHT
+        {
+          label: 'Write Path',
+          bx: 638, by: 48, bw: 160, bh: 40,
+          bf: '#ffd8a8', bs: '#e67700', side: 'R',
+          leaves: [
+            { t: 'Write to DB only',     x: 806, y: 115, w: 148, h: 28 },
+            { t: 'Cache stays stale',    x: 806, y: 153, w: 148, h: 28, lf: '#ffc9c9', ls: '#c92a2a' },
+            { t: 'Stale window = TTL',   x: 806, y: 191, w: 148, h: 28 },
+            { t: 'Delete on write',      x: 806, y: 229, w: 148, h: 28, lf: '#c3fae8', ls: '#0ca678' }
+          ]
+        },
+        {
+          label: 'Trade-offs',
+          bx: 648, by: 420, bw: 155, bh: 40,
+          bf: '#ffc9c9', bs: '#c92a2a', side: 'R',
+          leaves: [
+            { t: 'MISS = DB round-trip',   x: 810, y: 420, w: 148, h: 28 },
+            { t: 'Cold-start miss storm',  x: 810, y: 458, w: 148, h: 28 },
+            { t: 'Write = stale cache',    x: 810, y: 496, w: 148, h: 28 },
+            { t: 'No auto write-sync',     x: 810, y: 534, w: 148, h: 28 }
+          ]
+        }
+      ];
+
+      // Draw branches
+      BRANCHES.forEach(function(b) {
+        var bcy = b.by + b.bh / 2;
+        var sx  = b.side === 'L' ? CX - 85 : CX + 85;
+        var ex  = b.side === 'L' ? b.bx + b.bw : b.bx;
+        var cp1x = b.side === 'L' ? sx - 50 : sx + 50;
+        var cp2x = b.side === 'L' ? ex + 20  : ex - 20;
+        drawPath(LL, 'M ' + sx + ',' + CY + ' C ' + cp1x + ',' + CY + ' ' + cp2x + ',' + bcy + ' ' + ex + ',' + bcy, b.bs, 2.2);
+
+        var leafRects = [];
+        b.leaves.forEach(function(lf) {
+          var lcy = lf.y + lf.h / 2;
+          var lfill = lf.lf || b.bf;
+          var lstroke = lf.ls || b.bs;
+          if (b.side === 'L') drawLine(LL, b.bx + b.bw / 2, b.by + b.bh, lf.x + lf.w / 2, lf.y, b.ls || b.bs);
+          else                drawLine(LL, b.bx + b.bw / 2, b.by + b.bh, lf.x + lf.w / 2, lf.y, b.ls || b.bs);
+          var r = drawRect(NL, lf.x, lf.y, lf.w, lf.h, lfill, lstroke, 1.4);
+          drawText(TL, lf.x + lf.w / 2, lcy, lf.t, 11, '#1a1917', false);
+          leafRects.push(r);
+        });
+
+        var br = drawRect(NL, b.bx, b.by, b.bw, b.bh, b.bf, b.bs, 2);
+        drawText(TL, b.bx + b.bw / 2, bcy, b.label, 13, '#1a1917', true);
+        addHover([br].concat(leafRects));
+      });
+
+      // ── Bottom branch: Mitigations ──
+      var MX = 375, MY = 590, MW = 210, MH = 40;
+      var mcy = MY + MH / 2;
+      drawPath(LL, 'M ' + CX + ',' + (CY + 44) + ' C ' + CX + ',' + (CY + 120) + ' ' + (MX + MW / 2) + ',' + (MY - 60) + ' ' + (MX + MW / 2) + ',' + MY, '#0ca678', 2.2);
+      var mr = drawRect(NL, MX, MY, MW, MH, '#c3fae8', '#0ca678', 2);
+      drawText(TL, MX + MW / 2, mcy, 'Mitigations', 13, '#1a1917', true);
+
+      var mLeaves = [
+        { t: 'TTL jitter',         x: 250, y: 648, w: 118, h: 28 },
+        { t: 'Single-flight lock', x: 376, y: 648, w: 148, h: 28 },
+        { t: 'Cache warming',      x: 532, y: 648, w: 130, h: 28 }
+      ];
+      var mLeafRects = [mr];
+      mLeaves.forEach(function(lf) {
+        drawLine(LL, MX + MW / 2, MY + MH, lf.x + lf.w / 2, lf.y, '#0ca678');
+        var r = drawRect(NL, lf.x, lf.y, lf.w, lf.h, '#c3fae8', '#0ca678', 1.4);
+        drawText(TL, lf.x + lf.w / 2, lf.y + lf.h / 2, lf.t, 11, '#1a1917', false);
+        mLeafRects.push(r);
+      });
+      addHover(mLeafRects);
+
+      // Center ellipse — on top
+      drawEllipse(NL, CX, CY, 92, 44, '#a5d8ff', '#1971c2');
+      drawText(TL, CX, CY - 8, ['Cache-aside', '(Lazy Loading)'], 13, '#1a1917', true);
+
+    })();
+    </script>
+
+    <div class="cheatsheet"><span class="label">ONE-LINER</span>
+  Application checks cache first; on miss, loads from DB and populates cache itself.
+
+<span class="label">KEY PROPERTIES / RULES</span>
+  Read path: Check cache -> HIT: return. MISS: read DB -> write cache -> return.
+  Write path: Write directly to DB. Cache entry becomes stale immediately.
+  Cache is only populated on demand (lazy) -- never pre-warmed by default.
+  Resilient to cache failures -- app falls back to DB transparently.
+  Stale data window = time from write to TTL expiry.
+
+<span class="label">DECISION RULE</span>
+  Use cache-aside when: read-heavy workload, data read far more than written,
+    some staleness is acceptable, app can tolerate cold-start miss bursts.
+  Avoid cache-aside when: write-heavy (cache always stale), strong consistency
+    required (can't accept stale reads), or data is too volatile to cache.
+
+<span class="label">NUMBERS / FORMULAS</span>
+  Cache hit rate target: >= 80-90% for cache to justify its cost
+  TTL rule of thumb: set to the maximum acceptable staleness window
+  Thundering herd risk: proportional to (miss_rate x concurrent_requests)
+
+<span class="label">GOTCHA TO NEVER FORGET</span>
+  Writes go to DB only -- the cached copy is immediately stale after every write.</div>
+  </section>
+
+  <!-- ── SECTION 5: CORE DEFINITION ── -->
+  <section id="s5">
+    <h2 class="section-title"><span class="num">05</span> 🧠 Core Definition</h2>
+    <div class="callout callout-quote">What is it, in one sentence?</div>
+    <p>Cache-aside (lazy loading) is a read caching strategy where the application — not the cache — is responsible for loading data from the database on a cache miss and writing it into the cache, so the cache only ever contains data that has actually been requested.</p>
+  </section>
+
+  <!-- ── SECTION 6: CORE CONCEPTS ── -->
+  <section id="s6">
+    <h2 class="section-title"><span class="num">06</span> 📦 Core Concepts</h2>
+    <div class="callout callout-quote">The essential building blocks — terms and ideas you must have solid before going deeper.</div>
+
+    <h3>The Miss Path (Lazy Population)</h3>
+    <p>On a cache miss, the application queries the database, receives the result, writes it into the cache with a TTL, and returns it to the caller. The cache is populated <em>lazily</em> — only for keys that are actually requested. Unused keys never consume cache memory, but every first access to any key incurs a full database round-trip.</p>
+
+    <h3>Cache Hit vs. Miss Ratio</h3>
+    <p>The hit rate measures how often the cache serves a request without touching the database. A high hit rate (&gt;90%) means most reads are served at in-memory speed. A low hit rate means the cache is providing little value. Hit rate is the primary metric for evaluating cache effectiveness and is directly influenced by TTL, workload access patterns, and cache size.</p>
+
+    <h3>TTL (Time To Live)</h3>
+    <p>TTL is the expiry time set on each cache entry at population time. When TTL expires, the key is evicted and the next request triggers a fresh database read. TTL is the primary mechanism for bounding staleness: shorter TTL means fresher data but higher miss rate; longer TTL means better hit rate but stale data for longer. There is no automatic cache invalidation on write — TTL is the only staleness guard unless you add explicit invalidation logic.</p>
+
+    <h3>Stale Data Window</h3>
+    <p>After a write to the database, the cached copy is immediately stale. Any reader who hits the cache before TTL expires will receive the old value. This stale window is <code>[time of write → time of TTL expiry]</code>. For some systems (product listings, recommendation feeds) this is acceptable. For others (account balances, inventory counts) it is not, and cache-aside without explicit invalidation is the wrong choice.</p>
+
+    <h3>Explicit Cache Invalidation</h3>
+    <p>To reduce the stale data window below the TTL, applications can explicitly delete the cache entry on write. The safest pattern is to <strong>delete</strong> (not update) the cache key on write — on the next read, it is repopulated from the freshest database value. Updating the cache on write risks a race condition between concurrent writers.</p>
+  </section>
+
+  <!-- ── SECTION 7: FIRST PRINCIPLES ── -->
+  <section id="s7">
+    <h2 class="section-title"><span class="num">07</span> 🔍 First Principles — Why Does This Exist?</h2>
+    <div class="callout callout-quote">What fundamental problem does this concept solve? Why was it invented?</div>
+    <p>Databases are slow relative to in-memory stores. A typical PostgreSQL read under load takes 5–50ms; a Redis read takes &lt;1ms. At scale, if every user request hits the database, it becomes the bottleneck — saturating on connections, CPU, or disk I/O.</p>
+    <p>The naive fix — cache everything on startup — is expensive and wasteful. Most data in large systems follows a power-law access distribution: a small fraction of keys (hot keys) account for the vast majority of reads. Pre-loading everything wastes memory on cold data that will never be read.</p>
+    <p>Cache-aside solves this precisely: the cache grows organically to reflect the actual working set. Hot keys get cached quickly because they are requested often. Cold keys never enter the cache. The result is a cache that concentrates memory on what actually matters, without requiring the application to know in advance what that is.</p>
+  </section>
+
+  <!-- ── SECTION 8: MENTAL MODELS ── -->
+  <section id="s8">
+    <h2 class="section-title"><span class="num">08</span> 🗺️ Mental Models</h2>
+    <div class="callout callout-quote">Intuition frames that help you reason about this concept fast — especially under pressure.</div>
+
+    <h3>Model 1: The Lazy Librarian</h3>
+    <p>Imagine a librarian who never pre-stocks shelves. When you ask for a book, they check the shelf (cache). If it's there, they hand it to you instantly. If not, they walk to the archive (database), retrieve it, put a copy on the shelf for next time, and hand it to you. Books nobody requests never end up on the shelf. Books everyone requests are always on the shelf after the first request. The limitation: if someone edits the archive copy, the shelf copy is out of date until someone notices and swaps it. <em>This model breaks down when writes are frequent — the shelf is perpetually stale.</em></p>
+
+    <h3>Model 2: The Miss-Driven Fill</h3>
+    <p>Think of cache-aside as a self-organizing filter. Data flows from DB into cache only when pulled by actual demand. The cache naturally converges on the hot working set without any explicit configuration. The miss rate is highest at cold start (empty cache) and drops as the cache warms up. <em>This highlights the warm-up cost — expect elevated DB load immediately after a deployment or cache flush.</em></p>
+
+    <h3>Model 3: The Cache as a Hint, Not the Source of Truth</h3>
+    <p>In cache-aside, the database is always the source of truth. The cache is a performance hint that may be stale. Design decisions should be made with this frame: if your system can't tolerate acting on a stale hint (banking transactions, inventory deduction), cache-aside is structurally wrong for that data type, regardless of TTL.</p>
+  </section>
+
+  <!-- ── SECTION 9: HOW IT WORKS ── -->
+  <section id="s9">
+    <h2 class="section-title"><span class="num">09</span> ⚙️ How It Works — Mechanics</h2>
+    <div class="callout callout-quote">Step-by-step explanation of the internal mechanism.</div>
+
+    <h3>Read path — cache hit</h3>
+    <p>1. Application receives a read request for key <code>K</code>.<br>
+    2. Application queries the cache for <code>K</code>.<br>
+    3. Cache returns the value. Application returns it to the caller. Done. (~0.5ms)</p>
+
+    <h3>Read path — cache miss</h3>
+    <p>1. Application receives a read request for key <code>K</code>.<br>
+    2. Application queries the cache for <code>K</code>. Cache returns nil/miss.<br>
+    3. Application queries the database for <code>K</code>. (~5–50ms)<br>
+    4. Application writes the result to the cache with TTL <code>T</code>.<br>
+    5. Application returns the result to the caller.</p>
+
+    <h3>Write path</h3>
+    <p>1. Application receives a write request updating key <code>K</code> to value <code>V</code>.<br>
+    2. Application writes <code>V</code> directly to the database.<br>
+    3. Application either: (a) does nothing to the cache — entry expires at TTL, OR (b) explicitly deletes the cache entry for <code>K</code> (preferred — prevents stale reads).<br>
+    4. The next read for <code>K</code> will be a cache miss and repopulate with the fresh value.</p>
+
+    <h3>Cold start and thundering herd</h3>
+    <p>On first deployment or after a cache flush, the cache is empty. Every read is a miss. The database absorbs 100% of read traffic until the cache warms. If many keys share the same TTL and were populated simultaneously, they all expire simultaneously — causing a burst of concurrent misses that all hit the database at once. Mitigation: add random jitter to TTLs (e.g., TTL = base ± 10%) to spread expiry times across time.</p>
+  </section>
+
+  <!-- ── SECTION 10: REAL-WORLD EXAMPLES ── -->
+  <section id="s10">
+    <h2 class="section-title"><span class="num">10</span> 🏭 Real-World System Examples</h2>
+    <div class="callout callout-quote">Where does this appear in production systems you know?</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>System</th><th>How This Concept Applies</th><th>Notes</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Facebook TAO</strong></td>
+            <td>Social graph edges and objects are lazily loaded into TAO (distributed cache) on first access. Cache misses trigger reads from MySQL.</td>
+            <td>TAO adds explicit invalidation on write, not just TTL — reducing the stale window significantly in practice.</td>
+          </tr>
+          <tr>
+            <td><strong>Twitter / X Timeline</strong></td>
+            <td>User timelines and tweet objects are cached in Redis using cache-aside. A miss triggers a database or Cassandra read and repopulates the cache.</td>
+            <td>Hot users' timelines have near-100% hit rate; cold accounts may always miss. Hot key problem surfaces here.</td>
+          </tr>
+          <tr>
+            <td><strong>Netflix EVCache</strong></td>
+            <td>Metadata (titles, user preferences) is cached with cache-aside via EVCache (Memcached clusters). On miss, the backing store is queried and the result cached.</td>
+            <td>Netflix adds probabilistic early expiration to avoid synchronized stampedes across the fleet.</td>
+          </tr>
+          <tr>
+            <td><strong>Amazon Product Pages</strong></td>
+            <td>Product listings, prices, and reviews are cached with TTL-based cache-aside. Writes (price updates) invalidate the cache entry explicitly.</td>
+            <td>Staleness of a few seconds on product price is acceptable; inventory counts use stricter invalidation.</td>
+          </tr>
+          <tr>
+            <td><strong>Redis + PostgreSQL (typical web app)</strong></td>
+            <td>The canonical pattern: app checks Redis → miss → query Postgres → write to Redis with TTL → return. Used by Rails, Django, and most web frameworks via their caching middleware.</td>
+            <td>This is what you should describe in an interview when introducing a cache layer for the first time.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── SECTION 11: TRADE-OFFS ── -->
+  <section id="s11">
+    <h2 class="section-title"><span class="num">11</span> ⚖️ Trade-offs</h2>
+    <div class="callout callout-quote">Every design decision has a cost. What are you giving up?</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>✅ Benefit</th><th>❌ Cost / Limitation</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="benefit">Cache only holds requested data — efficient memory use for large datasets</td>
+            <td class="cost">Cold start / cache flush causes a miss storm that hammers the database with full read traffic</td>
+          </tr>
+          <tr>
+            <td class="benefit">Resilient to cache failure — app transparently falls back to the database</td>
+            <td class="cost">Every cache miss has full DB round-trip latency; users during cold start get slow responses</td>
+          </tr>
+          <tr>
+            <td class="benefit">Simple to implement — no special write path needed; works with any key-value store</td>
+            <td class="cost">Stale data window between a write and TTL expiry — readers may receive outdated values</td>
+          </tr>
+          <tr>
+            <td class="benefit">Flexible per-key TTLs — different data types can have different freshness requirements</td>
+            <td class="cost">Thundering herd when many keys expire simultaneously — all misses pile onto the database at once</td>
+          </tr>
+          <tr>
+            <td class="benefit">Self-organizing — naturally caches the hot working set without pre-configuration</td>
+            <td class="cost">Not suitable for write-heavy workloads — cache is constantly bypassed and left stale</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── SECTION 12: INTERVIEW APPLICATION ── -->
+  <section id="s12">
+    <h2 class="section-title"><span class="num">12</span> 🎯 Interview Application</h2>
+    <div class="callout callout-quote">How do you use this concept in a design interview? What triggers it?</div>
+
+    <h3>When an interviewer asks / says:</h3>
+    <ul style="margin-left:20px; margin-bottom:14px; font-size:14.5px; line-height:1.8;">
+      <li>"How would you handle the read scalability of this system?"</li>
+      <li>"This is a read-heavy workload — what would you do?"</li>
+      <li>"How do you reduce load on the database?"</li>
+      <li>"Walk me through how a user profile read works end to end."</li>
+    </ul>
+
+    <h3>What you say / do:</h3>
+    <p>In the high-level design or deep dive phase, introduce the cache layer: <em>"Since this is read-heavy, I'd put a Redis cache in front of the database using a cache-aside pattern. On a read, the application checks Redis first — on a hit, we return immediately at sub-millisecond latency. On a miss, we read from the database, populate Redis with a TTL of [X seconds], and return the result."</em> Then proactively address the trade-off before the interviewer asks.</p>
+
+    <h3>The trade-off statement (memorize this):</h3>
+    <div class="tradeoff-box">
+      "If we use cache-aside, we get sub-millisecond reads for hot data and automatically concentrate cache memory on the working set, but we pay with stale data up to TTL on writes and a miss storm on cold start. For this system, cache-aside is the right call because the workload is read-heavy with a high read-to-write ratio, and we can tolerate a few seconds of staleness on [data type] — it's not financial data."
+    </div>
+  </section>
+
+  <!-- ── SECTION 13: MISCONCEPTIONS ── -->
+  <section id="s13">
+    <h2 class="section-title"><span class="num">13</span> ⚠️ Common Misconceptions &amp; Gotchas</h2>
+    <div class="callout callout-quote">What do candidates get wrong? What nuance is the interviewer probing for?</div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> Cache-aside keeps the cache in sync with the database automatically.</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Cache-aside has no write synchronization. Writes go to DB only; the cache entry becomes stale immediately and stays stale until TTL expires or you explicitly delete it. Sync is the application's responsibility.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> You should update the cache on write (not delete) so the value is fresh immediately.</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Updating the cache on write introduces a race condition between concurrent writers — two writers can overwrite each other's cached values in the wrong order. The safer pattern is to delete the cache key on write; the next read repopulates it from the freshest DB value.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> A longer TTL always means better performance so you should maximize it.</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Longer TTL reduces miss rate (good) but increases the staleness window (bad). The right TTL is determined by the system's consistency requirements, not by maximizing hit rate. A financial balance cached for 24 hours is unacceptable; a product image URL cached for 24 hours is fine.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> Cache-aside handles the thundering herd problem automatically.</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Cache-aside by itself does nothing about thundering herd. When many goroutines/threads simultaneously miss the same key, all of them hit the database concurrently. Mitigation requires explicit locking (single-flight pattern), probabilistic early expiration, or background refresh.</div></div>
+    </div>
+  </section>
+
+  <!-- ── SECTION 14: RELATIONSHIPS ── -->
+  <section id="s14">
+    <h2 class="section-title"><span class="num">14</span> 🔗 Relationships to Other Concepts</h2>
+    <div class="callout callout-quote">How does this connect to adjacent subtopics across the roadmap?</div>
+    <div class="connections">
+      <div class="conn-card">
+        <div class="conn-icon">⬆️</div>
+        <div>
+          <div class="conn-label">Builds on</div>
+          <strong>5.4 Eviction policies (LRU, LFU, TTL)</strong> — understanding how the cache evicts entries is necessary to reason about what happens when the cache is full and a new miss tries to populate it. Also builds on <strong>2.5 Consistency vs. availability</strong> — choosing cache-aside implicitly accepts eventual consistency between cache and DB.
+        </div>
+      </div>
+      <div class="conn-card">
+        <div class="conn-icon">🔓</div>
+        <div>
+          <div class="conn-label">Enables</div>
+          <strong>5.2 Write-through caching</strong> and <strong>5.3 Write-back caching</strong> — cache-aside is the baseline read-path pattern; write-through and write-back extend the write path to keep the cache in sync. <strong>5.6 Cache stampede / thundering herd</strong> — the cold-start and simultaneous-expiry problems in cache-aside are the root cause of stampedes studied in 5.6.
+        </div>
+      </div>
+      <div class="conn-card">
+        <div class="conn-icon">⚡</div>
+        <div>
+          <div class="conn-label">Tension with</div>
+          <strong>5.5 Cache consistency and invalidation</strong> — cache-aside structurally creates inconsistency windows. The entire cache invalidation subtopic exists to solve the problem cache-aside creates. Also in tension with <strong>2.1 CAP theorem</strong> — choosing cache-aside means accepting that cache and DB are not always consistent (availability over consistency at the caching layer).
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── SECTION 15: SELF-CHECK QUIZ ── -->
+  <section id="s15">
+    <h2 class="section-title"><span class="num">15</span> 🧪 Self-Check Quiz</h2>
+    <div class="callout callout-quote">Can you answer these without looking? If not, you haven't internalized it yet.</div>
+
+    <div class="quiz-item" id="q1">
+      <div class="quiz-q" onclick="toggleQuiz('q1')">
+        <span class="quiz-num">1</span>
+        <span class="qtext">Walk me through the exact steps that happen when a user requests a piece of data that is not currently in the cache under the cache-aside pattern.</span>
+        <span class="quiz-toggle">Show hint ▼</span>
+      </div>
+      <div class="quiz-hint">💡 Think through your answer before expanding — if you hesitate, revisit Section 9 (How It Works — miss path).</div>
+    </div>
+
+    <div class="quiz-item" id="q2">
+      <div class="quiz-q" onclick="toggleQuiz('q2')">
+        <span class="quiz-num">2</span>
+        <span class="qtext">A product catalog service uses cache-aside with a 10-minute TTL. A product's price is updated in the database. A user requests that product 30 seconds later. What value do they receive, and why?</span>
+        <span class="quiz-toggle">Show hint ▼</span>
+      </div>
+      <div class="quiz-hint">💡 Think through your answer — if you hesitate, revisit Sections 6 (Stale Data Window) and 13 (Misconceptions).</div>
+    </div>
+
+    <div class="quiz-item" id="q3">
+      <div class="quiz-q" onclick="toggleQuiz('q3')">
+        <span class="quiz-num">3</span>
+        <span class="qtext">What is the main performance cost of cache-aside, and under what conditions does it become most severe?</span>
+        <span class="quiz-toggle">Show hint ▼</span>
+      </div>
+      <div class="quiz-hint">💡 Think about: what happens on a miss, and when do misses cluster together? Revisit Sections 9 (cold start) and 11 (Trade-offs) if needed.</div>
+    </div>
+
+    <div class="quiz-item" id="q4">
+      <div class="quiz-q" onclick="toggleQuiz('q4')">
+        <span class="quiz-num">4</span>
+        <span class="qtext">Name one real production system that uses cache-aside and explain concretely how it applies the pattern — not just "it uses a cache."</span>
+        <span class="quiz-toggle">Show hint ▼</span>
+      </div>
+      <div class="quiz-hint">💡 Think through your answer — if you hesitate, revisit Section 10 (Real-World System Examples). Facebook TAO and Netflix EVCache are the best examples to internalize.</div>
+    </div>
+
+    <div class="quiz-item" id="q5">
+      <div class="quiz-q" onclick="toggleQuiz('q5')">
+        <span class="quiz-num">5</span>
+        <span class="qtext">You have a cache-aside setup where 10,000 cache keys all expire at midnight simultaneously. What problem occurs at midnight, and how do you fix it?</span>
+        <span class="quiz-toggle">Show hint ▼</span>
+      </div>
+      <div class="quiz-hint">💡 This is the thundering herd / cache stampede scenario. Name the problem and give a concrete fix. Revisit Section 9 (thundering herd) and Section 13 (Misconception 4) if needed.</div>
+    </div>
+  </section>
+
+  <!-- ── SECTION 16: FURTHER READING ── -->
+  <section id="s16">
+    <h2 class="section-title"><span class="num">16</span> 📚 Further Reading</h2>
+    <div class="callout callout-quote">Links, chapters, or resources for deeper understanding.</div>
+    <ul class="reading-list">
+      <li><span class="cb"></span><span class="rtext"><strong>Designing Data-Intensive Applications</strong> (Martin Kleppmann) — Chapter 5, section on caching and replication lag; the foundational reference for understanding cache-database consistency trade-offs</span></li>
+      <li><span class="cb"></span><span class="rtext"><strong>AWS ElastiCache Developer Guide — Caching Strategies: Lazy Loading</strong>: docs.aws.amazon.com/AmazonElastiCache/latest/red-ug/Strategies.html — authoritative, practical guide with code patterns</span></li>
+      <li><span class="cb"></span><span class="rtext"><strong>ByteByteGo System Design Interview Vol. 1</strong> (Alex Xu) — Chapter 6: Design a Key-Value Store, caching subsection — interview-oriented treatment with worked examples</span></li>
+      <li><span class="cb"></span><span class="rtext"><strong>Facebook Engineering — TAO: Distributed Data Store for the Social Graph</strong> (USENIX ATC 2013): usenix.org — real-world cache-aside at Facebook scale with explicit invalidation strategy</span></li>
+      <li><span class="cb"></span><span class="rtext"><strong>Cloudflare Blog — How we built rate limiting capable of scaling to millions of domains</strong> — for TTL and cache invalidation patterns at scale</span></li>
+    </ul>
+  </section>
+
+  <!-- ── SECTION 17: MY NOTES ── -->
+  <section id="s17">
+    <h2 class="section-title"><span class="num">17</span> ✍️ My Notes</h2>
+    <div class="callout callout-quote">Personal observations, things that confused me, analogies that helped.</div>
+    <textarea class="notes-area" placeholder="Your personal notes go here — analogies that clicked, interview stories, things to remember..."></textarea>
+  </section>
+
+</article>
+</main>
+
+<script>
+  // ── PHASE TOGGLE ──
+  function togglePhase(id) {
+    document.getElementById(id).classList.toggle('open');
+  }
+
+  // ── QUIZ TOGGLE ──
+  function toggleQuiz(id) {
+    const item = document.getElementById(id);
+    const isOpen = item.classList.contains('open');
+    document.querySelectorAll('.quiz-item').forEach(q => {
+      q.classList.remove('open');
+      q.querySelector('.quiz-toggle').textContent = 'Show hint ▼';
+    });
+    if (!isOpen) {
+      item.classList.add('open');
+      item.querySelector('.quiz-toggle').textContent = 'Hide hint ▲';
+    }
+  }
+
+  // ── CHECKLIST TOGGLE ──
+  document.querySelectorAll('.checklist .cb, .reading-list .cb').forEach(cb => {
+    cb.addEventListener('click', () => {
+      cb.closest('li').classList.toggle('checked');
+    });
+  });
+
+  // ── SCROLLSPY ──
+  const sections = document.querySelectorAll('section[id]');
+  const navLinks = document.querySelectorAll('#toc nav a');
+
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        navLinks.forEach(a => a.classList.remove('active'));
+        const active = document.querySelector(`#toc nav a[href="#${entry.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+
+  sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>
