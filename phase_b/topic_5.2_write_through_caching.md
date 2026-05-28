@@ -288,21 +288,66 @@ In the deep-dive phase of your design, when discussing the cache layer, state: "
 
    > 💡 *Think through the two-write path before answering — if you hesitate on the ACK timing, revisit Section 9.*
 
+Model Answer:
+1. Client sends write request
+2. Write to DB first — if this fails, abort; do not touch cache
+3. On DB success, write to cache
+4. Only after both succeed, ACK the client
+Guarantee: any subsequent cache read returns fresh data
+
 2. Your system stores user shopping cart data. Reads are 20x more frequent than writes. A product team says stale cart reads cause user complaints. Would you use write-through, cache-aside, or write-back? Justify your choice.
 
    > 💡 *Apply the decision rule from Section 4 — read ratio, plus the stale-read constraint.*
+
+A stale cache problem is basically the symptom of data being still in the cache. Our response is still serving data from cache. The fix for this will be to change our caching strategy to use a write-through approach. A write-through approach guarantees consistency after every write by making sure that for a write, it writes both to the database and the cache. The next time the user reads the cache, he will be able to see the updated data as served from cache. 
+
+Model Answer:
+Write-through. Reads are 20x writes (read-heavy ✅ fits write-through profile).
+Stale reads cause user complaints → strong consistency required.
+Write-through guarantees cache is always fresh after every write.
+Write-back is eliminated: durability risk is unacceptable for cart data.
+Cache-aside is eliminated: it tolerates staleness by design.
 
 3. What is the write latency cost of write-through compared to a direct DB write? Under what workload does this cost become a real bottleneck?
 
    > 💡 *Think in terms of write amplification and write/read ratio — revisit Section 6 if unclear.*
 
+The latency caused by the write-through caching strategy is that for every logical write, we are now doubling the amount of physical writes. In write-heavy workloads or in applications that have final application of writes, this will become a real bottleneck because the writes are more than doubled and will degrade the user experience. 
+
+Model Answer:
+Direct DB write: ~5ms
+Write-through: ~1ms (cache) + ~5ms (DB) + ~20% overhead ≈ 7ms
+Cost becomes a bottleneck under:
+- Write-heavy workloads: every logical write doubles physical writes
+- Fan-out writes: one logical write triggers N cache updates (e.g., social feed)
+In both cases, write amplification compounds and degrades throughput.
+
 4. Name a real production system that uses write-through and explain why write-through was chosen over cache-aside in that context.
 
    > 💡 *Use the examples from Section 10 — bonus points if you can explain the consistency requirement that drives the choice.*
 
+Model Answer:
+Facebook TAO: uses write-through caching for social graph data.
+Consistency requirement: when a user updates their profile or relationship,
+followers must see fresh data on next read — stale reads cause trust issues.
+Write-through ensures cache is updated synchronously with every DB write.
+Alternative: financial systems (banking ledgers) use write-through because
+serving a stale balance is unacceptable regardless of read/write ratio.
+
 5. You deploy write-through caching on Monday. On Tuesday you add 10 new cache nodes. What happens to the cache hit rate on those new nodes, and what is the fix?
 
    > 💡 *This tests the cold-start problem — revisit Section 6 (Cache Warming Gap) if you're unsure.*
+
+The new nodes will be empty, without any hot working sets, and therefore are considered a cold start. All the hits on these cache nodes will miss and directly fall over to a database read. The fix to the cold start problem is to pre-warm the cache nodes with previously known hot working sets. 
+
+Model Answer:
+New nodes start empty — cache hit rate drops to ~0% on those nodes.
+All reads fall through to DB, spiking DB load.
+Fix: pre-warm the cache before routing traffic to new nodes.
+Pre-warming methods:
+1. Bulk load — copy hot keys from existing nodes or DB query
+2. Write replay — replay recent write log to populate the cache
+3. Gradual traffic shift — ramp traffic slowly, letting the cache warm naturally
 
 ---
 
@@ -322,3 +367,29 @@ In the deep-dive phase of your design, when discussing the cache layer, state: "
 
 > *Personal observations, things that confused me, analogies that helped.*
 
+One Liner
+Write through caching is a caching strategy where we write to both the cache and the DB synchronously before answering an acknowledgement to the client. In this caching strategy, we ensure consistency of data between the cache and the database. For every successful write, we will always be serving fresh data on the cache. 
+
+When to use Write through caching
+We will use a write-through caching strategy when we have a read heavy workload and we need strong consistency of data. In addition, we can also tolerate a higher latency due to synchronized writes to both DB and cache. 
+
+When to avoid write through caching
+If we have a write-heavy workload, then for every logical write we are effectively doubling the number of physical writes. That's when we should avoid a write-through strategy. In addition, if we have a read-heavy workload but for each write we have a fan-out amplification for the writes, then we should also avoid using a write-through strategy. 
+
+A write to cache will take about 1 ms, and a write to a DB will take about 5 ms typically. The overhead of writing to both DB and cache synchronously is the cumulative latency of writing to cache and writing to DB. In this case, it is 6 ms, but we also had to factor in an overhead of around 20%, so we are looking at a 7 ms latency due to both writes. 
+
+The write-through strategy only guarantees that after successful writes, we will always be serving fresh data in the cache, but it will not help in cases where we have a cache cold start or we have data that is never written but read. 
+
+The two problems with write-through caching strategy are:
+1. Latency
+For every logical write, we are effectively doubling the amount of physical writes. This increases the latency due to double writes. In order to use this strategy, we must be willing to accept the trade-off of a higher latency. 
+2. Data write atomicity
+Because the right to database and the right to cache are not atomic, either of these rights can fail. In the case where our right to database fails, the data is not persistent. The right to DB, if it's successful, must now evict the successful right so that, in the next read, the cache will not have the data that is not persistent and will hit the database to fetch the old data. And if we have a cache write fail where the DB run succeeds, it will make the cache useless on next read because we will incur a DB read to fetch the data. In this case, consistency is still guaranteed. 
+
+To avoid consistency problems, we should try to write to DB first and, upon success, write to cache. 
+
+How to remediate write through atomicity?
+
+1. We try to write to cache with an idempotency key, so on subsequent writes we just need to check the idempotency key to prevent double writing. 
+2. So if a write to cache fails, we log it and write the event to Kafka queue, and subsequently we have workers to process the queue and try to write the data to cache again. This will mean that we will have a brief window of stale data. 
+3. You can use a two-phase commit to run atomically, where neither commits until both are ready to commit the change. This will eliminate the failure window entirely, but increases the latency and complexity cost. 
