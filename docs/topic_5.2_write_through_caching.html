@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.2 Write-Through Caching</title>
+<style>
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface-alt: #f3f2ef;
+    --border: #e5e3de; --text: #1a1917; --text-muted: #6b6861;
+    --accent: #2563eb; --accent-light: #dbeafe;
+    --green: #16a34a; --green-light: #dcfce7;
+    --red: #dc2626; --red-light: #fee2e2;
+    --yellow: #d97706; --yellow-light: #fef3c7;
+    --purple: #7c3aed; --purple-light: #ede9fe;
+    --code-bg: #1e1e2e; --code-text: #cdd6f4;
+    --sidebar-w: 240px; --content-max: 780px;
+    font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; }
+  #toc { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0 48px; z-index: 100; }
+  #toc-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  #toc-header .phase-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-bottom: 6px; }
+  #toc-header h2 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  #toc nav a { display: block; padding: 5px 16px 5px 20px; font-size: 12.5px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+  main { margin-left: var(--sidebar-w); padding: 48px 48px 96px; max-width: calc(var(--sidebar-w) + var(--content-max) + 96px); width: 100%; }
+  article { max-width: var(--content-max); }
+  .doc-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 2px solid var(--border); }
+  .doc-header .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+  .tag-phase { background: var(--accent-light); color: var(--accent); }
+  .tag-topic { background: var(--purple-light); color: var(--purple); }
+  .tag-date  { background: var(--surface-alt);  color: var(--text-muted); }
+  .doc-header h1 { font-size: 30px; font-weight: 800; line-height: 1.25; letter-spacing: -.02em; color: var(--text); }
+  section { margin-bottom: 52px; scroll-margin-top: 32px; }
+  h2.section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -.01em; }
+  h2.section-title .num { font-size: 11px; font-weight: 800; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; letter-spacing: .04em; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 24px 0 10px; }
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 14px; border-left: 3px solid; }
+  .callout-goal  { background: var(--accent-light); border-color: var(--accent); color: #1e40af; }
+  .callout-tip   { background: var(--yellow-light); border-color: var(--yellow); color: #92400e; }
+  .callout-quote { background: var(--surface-alt);  border-color: var(--border); color: var(--text-muted); font-style: italic; }
+  .cheatsheet { background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 24px 28px; font-family: "SF Mono","Fira Code","Cascadia Code",Menlo,monospace; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-x: auto; margin-top: 16px; }
+  .cheatsheet .label { color: #cba6f7; font-weight: 700; letter-spacing: .08em; }
+  .mindmap-wrap { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 12px; padding: 20px 16px 12px; margin: 20px 0 24px; }
+  .mindmap-wrap p.caption { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 10px; margin-bottom: 0; }
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; font-size: 14.5px; line-height: 1.55; }
+  .checklist li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 2px; background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .checklist li.checked .cb { background: var(--green); border-color: var(--green); }
+  .checklist li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .checklist li.checked .text { color: var(--text-muted); text-decoration: line-through; }
+  .phase-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
+  .phase-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; cursor: pointer; user-select: none; background: var(--surface-alt); }
+  .phase-header:hover { background: var(--border); }
+  .phase-label { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+  .phase-badge { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 2px 8px; border-radius: 20px; }
+  .ph1 { background: #dbeafe; color: #1d4ed8; } .ph2 { background: #fce7f3; color: #9d174d; }
+  .ph3 { background: #d1fae5; color: #065f46; } .ph4 { background: #fef3c7; color: #92400e; }
+  .phase-chevron { font-size: 12px; color: var(--text-muted); transition: transform .2s; }
+  .phase-card.open .phase-chevron { transform: rotate(180deg); }
+  .phase-body { display: none; padding: 16px 20px 20px; }
+  .phase-card.open .phase-body { display: block; }
+  .phase-goal { font-size: 12.5px; color: var(--text-muted); font-style: italic; margin-bottom: 12px; }
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: var(--surface-alt); padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.5; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+  .misconception { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .misconception .wrong { background: var(--red-light); padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; }
+  .misconception .right { padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; color: #065f46; background: var(--green-light); }
+  .misconception .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .quiz-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .quiz-q { padding: 14px 18px; font-size: 14.5px; font-weight: 600; cursor: pointer; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .quiz-q:hover { background: var(--surface-alt); }
+  .quiz-num { flex-shrink: 0; width: 24px; height: 24px; background: var(--accent); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; margin-top: 1px; }
+  .quiz-q .qtext { flex: 1; }
+  .quiz-toggle { font-size: 11px; color: var(--text-muted); flex-shrink: 0; margin-top: 3px; }
+  .quiz-hint { display: none; padding: 10px 18px 14px; font-size: 13px; color: #92400e; background: var(--yellow-light); border-top: 1px solid var(--border); }
+  .quiz-item.open .quiz-hint { display: block; }
+  .reading-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .reading-list li { display: flex; align-items: flex-start; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; font-size: 14px; }
+  .reading-list li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 1px; cursor: pointer; background: var(--surface); display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .reading-list li.checked .cb { background: var(--green); border-color: var(--green); }
+  .reading-list li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .reading-list li.checked .rtext { color: var(--text-muted); text-decoration: line-through; }
+  .notes-area { width: 100%; min-height: 160px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: inherit; font-size: 14px; color: var(--text); resize: vertical; line-height: 1.6; }
+  .notes-area:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .focus-list { list-style: none; display: flex; flex-direction: column; gap: 14px; }
+  .focus-list li { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14.5px; line-height: 1.6; }
+  .focus-list li strong { color: var(--accent); display: block; margin-bottom: 4px; }
+  .connections { display: flex; flex-direction: column; gap: 12px; }
+  .conn-card { display: flex; align-items: flex-start; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14px; }
+  .conn-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .conn-label { font-weight: 700; margin-bottom: 3px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .tradeoff-box { background: var(--surface-alt); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 14px 18px; font-size: 14px; font-style: italic; color: var(--text); margin-top: 14px; }
+  @media (max-width: 900px) { #toc { display: none; } main { margin-left: 0; padding: 24px 20px 60px; } }
+</style>
+</head>
+<body>
+
+<aside id="toc">
+  <div id="toc-header">
+    <div class="phase-tag">Phase B — Scalability</div>
+    <h2>5.2 Write-Through Caching</h2>
+  </div>
+  <nav>
+    <a href="#s0">🗺️ Topic Overview</a>
+    <a href="#s1">🎯 Goal</a>
+    <a href="#s2">✅ Mastery</a>
+    <a href="#s3">🗓️ Study Phases</a>
+    <a href="#s4">📋 Cheatsheet</a>
+    <a href="#s5">🧠 Core Definition</a>
+    <a href="#s6">📦 Core Concepts</a>
+    <a href="#s7">🔍 First Principles</a>
+    <a href="#s8">🗺️ Mental Models</a>
+    <a href="#s9">⚙️ How It Works</a>
+    <a href="#s10">🏭 Real-World Examples</a>
+    <a href="#s11">⚖️ Trade-offs</a>
+    <a href="#s12">🎯 Interview Application</a>
+    <a href="#s13">⚠️ Misconceptions</a>
+    <a href="#s14">🔗 Relationships</a>
+    <a href="#s15">🧪 Self-Check Quiz</a>
+    <a href="#s16">📚 Further Reading</a>
+    <a href="#s17">✍️ My Notes</a>
+  </nav>
+</aside>
+
+<main>
+<article>
+
+  <header class="doc-header">
+    <div class="meta">
+      <span class="tag tag-phase">⚡ Phase B — Scalability</span>
+      <span class="tag tag-topic">⚡ Topic 5 — Caching Systems</span>
+      <span class="tag tag-date">📅 2026-05-26</span>
+    </div>
+    <h1>5.2 Write-Through Caching</h1>
+  </header>
+
+  <!-- S0: TOPIC OVERVIEW -->
+  <section id="s0">
+    <h2 class="section-title"><span class="num">00</span> 🗺️ Topic Overview</h2>
+    <h3>What This Topic Is About</h3>
+    <p>Write-through caching is a write strategy where every data write is synchronously propagated to both the cache and the backing database before the client is acknowledged. It is the eager counterpart to cache-aside's lazy loading — while cache-aside populates the cache only on read misses, write-through ensures the cache is always in sync with the DB immediately after any write. The central tension here is consistency vs. write latency: you pay two I/Os per write in exchange for zero stale reads after writes.</p>
+
+    <h3>🎯 What to Focus On</h3>
+    <ul class="focus-list">
+      <li><strong>1. The write-through sequence and ACK timing</strong>The client waits until both the cache write AND the database write complete. Know this cold — it's the defining property that separates write-through from every other strategy.</li>
+      <li><strong>2. The consistency guarantee — and its exact scope</strong>Write-through guarantees freshness for keys that have been written through. It does NOT guarantee a fully warm cache — cold nodes and evicted keys still miss. Know what it does and does not promise.</li>
+      <li><strong>3. Write amplification as the key cost</strong>Every write becomes two writes. For write-heavy workloads this doubles your I/O burden. The decision rule is simple: write-through is for read-heavy, consistency-critical systems; avoid it for write-heavy ones.</li>
+      <li><strong>4. Failure atomicity — the partial write problem</strong>Cache write + DB write is not an atomic operation. If the DB write fails after the cache write succeeds, you have a stale cache entry. Know the mitigation: write DB first, invalidate cache on DB failure.</li>
+      <li><strong>5. Contrast with cache-aside and write-back</strong>Write-through sits between cache-aside (lazy, stale-prone) and write-back (deferred, durability risk). Be able to place all three on the consistency-performance spectrum and select the right one for a given workload.</li>
+    </ul>
+  </section>
+
+  <!-- S1: GOAL -->
+  <section id="s1">
+    <h2 class="section-title"><span class="num">01</span> 🎯 Goal of This Subtopic</h2>
+    <div class="callout callout-goal"><em>Why are you studying this? What should you be able to do after this session?</em></div>
+    <p>Be able to choose write-through caching for a given read/write workload, explain its consistency and performance implications precisely, and contrast it with cache-aside and write-back in a structured trade-off discussion. Specifically, you should be able to explain the write sequence, the latency cost, and the staleness guarantee — all without referring to notes.</p>
+  </section>
+
+  <!-- S2: MASTERY -->
+  <section id="s2">
+    <h2 class="section-title"><span class="num">02</span> ✅ What Mastery Looks Like</h2>
+    <div class="callout callout-quote">Concrete, testable proof that you own this concept — not just familiarity.</div>
+    <ul class="checklist" id="mastery-list">
+      <li><span class="cb"></span><span class="text">Can draw the write-through sequence (client → cache → DB) and explain exactly what happens if the DB write fails after the cache write succeeds</span></li>
+      <li><span class="cb"></span><span class="text">Can choose write-through over cache-aside or write-back for a specific scenario and justify with a concrete trade-off statement</span></li>
+      <li><span class="cb"></span><span class="text">Can explain the cold-start problem in write-through caches and propose a mitigation strategy</span></li>
+      <li><span class="cb"></span><span class="text">Can name a real production system that uses write-through and explain why it was chosen over cache-aside</span></li>
+      <li><span class="cb"></span><span class="text">Can state the write amplification cost and explain when it becomes a bottleneck</span></li>
+    </ul>
+    <div class="callout callout-tip" style="margin-top:20px;">
+      💡 <strong>Rule of thumb:</strong> If you can teach it to someone else and field their follow-up questions, you've mastered it.
+    </div>
+  </section>
+
+  <!-- S3: STUDY PHASES -->
+  <section id="s3">
+    <h2 class="section-title"><span class="num">03</span> 🗓️ Study Phases to Achieve Mastery</h2>
+    <div class="callout callout-quote">Work through each phase in order. Don't advance until you can honestly tick every item.</div>
+
+    <div class="phase-card open" id="ph1">
+      <div class="phase-header" onclick="togglePhase('ph1')">
+        <div class="phase-label"><span class="phase-badge ph1">Phase 1</span> Acquire 📖</div>
+        <span class="phase-chevron">▼</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Read deeply enough that you could explain the concept without the doc.</p>
+        <ul class="checklist">
+          <li><span class="cb"></span><span class="text"><strong>Designing Data-Intensive Applications</strong> (Kleppmann) — Ch. 5, caching and replication lag section</span></li>
+          <li><span class="cb"></span><span class="text"><strong>ByteByteGo "Top Caching Strategies"</strong> — Alex Xu, YouTube / ByteByteGo newsletter</span></li>
+          <li><span class="cb"></span><span class="text"><strong>AWS ElastiCache Caching Strategies</strong> — docs.aws.amazon.com/AmazonElastiCache/latest/red-ug/Strategies.html</span></li>
+          <li><span class="cb"></span><span class="text">Read through <strong>Sections 5–9</strong> (Core Definition → How It Works) carefully — don't skim</span></li>
+          <li><span class="cb"></span><span class="text">Re-read the <strong>Cheatsheet</strong> (Section 4) and try to recite it from memory after</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-card" id="ph2">
+      <div class="phase-header" onclick="togglePhase('ph2')">
+        <div class="phase-label"><span class="phase-badge ph2">Phase 2</span> Consolidate ✍️</div>
+        <span class="phase-chevron">▼</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Reproduce knowledge in your own words without looking.</p>
+        <ul class="checklist">
+          <li><span class="cb"></span><span class="text">Close the doc — write out the <strong>Core Definition</strong> from memory, then compare</span></li>
+          <li><span class="cb"></span><span class="text">Explain <strong>First Principles</strong> out loud without notes — what problem does this solve and why?</span></li>
+          <li><span class="cb"></span><span class="text">Reconstruct the <strong>write-through sequence</strong> step by step from memory (including failure cases)</span></li>
+          <li><span class="cb"></span><span class="text">Restate each <strong>Trade-off</strong> row in your own words — if you can't explain the cost, you don't own it yet</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-card" id="ph3">
+      <div class="phase-header" onclick="togglePhase('ph3')">
+        <div class="phase-label"><span class="phase-badge ph3">Phase 3</span> Apply 🔧</div>
+        <span class="phase-chevron">▼</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Connect to real systems and simulate interview scenarios.</p>
+        <ul class="checklist">
+          <li><span class="cb"></span><span class="text">Go through <strong>Real-World System Examples</strong> (Section 10) — verify each claim independently</span></li>
+          <li><span class="cb"></span><span class="text">Practice the <strong>Interview Application</strong> (Section 12) out loud — trigger phrases + trade-off statement</span></li>
+          <li><span class="cb"></span><span class="text">Work through <strong>Common Misconceptions</strong> (Section 13) — explain why each is wrong, not just that it is</span></li>
+          <li><span class="cb"></span><span class="text">Trace the <strong>Relationships to Other Concepts</strong> (Section 14) — can you explain each without looking?</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-card" id="ph4">
+      <div class="phase-header" onclick="togglePhase('ph4')">
+        <div class="phase-label"><span class="phase-badge ph4">Phase 4</span> Validate 🧪</div>
+        <span class="phase-chevron">▼</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Confirm you actually own it, not just recognize it.</p>
+        <ul class="checklist">
+          <li><span class="cb"></span><span class="text">Answer every <strong>Self-Check Quiz</strong> question (Section 15) out loud without notes</span></li>
+          <li><span class="cb"></span><span class="text">Recite the <strong>Cheatsheet</strong> (Section 4) from memory — if you can't, re-do Phase 2</span></li>
+          <li><span class="cb"></span><span class="text">Tick off items in <strong>What Mastery Looks Like</strong> (Section 2) — only check if you can demonstrate on demand</span></li>
+          <li><span class="cb"></span><span class="text">Teach this concept out loud to an imaginary interviewer for 2 minutes without hesitation</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- S4: CHEATSHEET -->
+  <section id="s4">
+    <h2 class="section-title"><span class="num">04</span> 📋 Cheatsheet</h2>
+    <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+
+    <div class="mindmap-wrap">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="-50 -10 1300 830" style="width:100%;height:auto;">
+        <defs>
+          <marker id="ab" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#3b5bdb"/></marker>
+          <marker id="ag" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#2f9e44"/></marker>
+          <marker id="ar" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#c92a2a"/></marker>
+          <marker id="at" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#0ca678"/></marker>
+          <marker id="ao" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#e67700"/></marker>
+        </defs>
+        <!-- bg -->
+        <rect x="-50" y="-10" width="1300" height="830" fill="white"/>
+        <!-- title -->
+        <text x="560" y="32" font-size="24" font-family="Arial,sans-serif" text-anchor="middle" font-weight="bold" fill="#1a1917">5.2 Write-Through Caching</text>
+        <!-- center-to-branch lines -->
+        <line x1="560" y1="390" x2="205" y2="175" stroke="#3b5bdb" stroke-width="2.5" marker-end="url(#ab)"/>
+        <line x1="560" y1="390" x2="915" y2="175" stroke="#2f9e44" stroke-width="2.5" marker-end="url(#ag)"/>
+        <line x1="560" y1="390" x2="975" y2="390" stroke="#c92a2a" stroke-width="2.5" marker-end="url(#ar)"/>
+        <line x1="560" y1="390" x2="560" y2="620" stroke="#0ca678" stroke-width="2.5" marker-end="url(#at)"/>
+        <line x1="560" y1="390" x2="145" y2="390" stroke="#e67700" stroke-width="2.5" marker-end="url(#ao)"/>
+        <!-- branch to leaf lines -->
+        <line x1="205" y1="175" x2="115" y2="90" stroke="#3b5bdb" stroke-width="1.5" marker-end="url(#ab)"/>
+        <line x1="205" y1="175" x2="320" y2="90" stroke="#3b5bdb" stroke-width="1.5" marker-end="url(#ab)"/>
+        <line x1="915" y1="175" x2="845" y2="90" stroke="#2f9e44" stroke-width="1.5" marker-end="url(#ag)"/>
+        <line x1="915" y1="175" x2="1045" y2="90" stroke="#2f9e44" stroke-width="1.5" marker-end="url(#ag)"/>
+        <line x1="975" y1="390" x2="1010" y2="265" stroke="#c92a2a" stroke-width="1.5" marker-end="url(#ar)"/>
+        <line x1="975" y1="390" x2="1010" y2="480" stroke="#c92a2a" stroke-width="1.5" marker-end="url(#ar)"/>
+        <line x1="560" y1="625" x2="395" y2="715" stroke="#0ca678" stroke-width="1.5" marker-end="url(#at)"/>
+        <line x1="560" y1="625" x2="620" y2="715" stroke="#0ca678" stroke-width="1.5" marker-end="url(#at)"/>
+        <line x1="145" y1="390" x2="112" y2="270" stroke="#e67700" stroke-width="1.5" marker-end="url(#ao)"/>
+        <line x1="145" y1="390" x2="112" y2="475" stroke="#e67700" stroke-width="1.5" marker-end="url(#ao)"/>
+        <!-- branch boxes -->
+        <rect x="80" y="140" width="250" height="70" rx="10" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+        <text x="205" y="168" font-size="16" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e" font-weight="bold">Write Path</text>
+        <text x="205" y="188" font-size="15" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">Mechanics</text>
+        <rect x="790" y="140" width="250" height="70" rx="10" fill="#b2f2bb" stroke="#2f9e44" stroke-width="2"/>
+        <text x="915" y="168" font-size="16" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e" font-weight="bold">Consistency</text>
+        <text x="915" y="188" font-size="15" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">Guarantee</text>
+        <rect x="845" y="355" width="260" height="70" rx="10" fill="#ffc9c9" stroke="#c92a2a" stroke-width="2"/>
+        <text x="975" y="383" font-size="16" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e" font-weight="bold">Costs &amp;</text>
+        <text x="975" y="403" font-size="15" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">Trade-offs</text>
+        <rect x="435" y="590" width="250" height="70" rx="10" fill="#c3fae8" stroke="#0ca678" stroke-width="2"/>
+        <text x="560" y="618" font-size="16" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e" font-weight="bold">When to Use</text>
+        <text x="560" y="638" font-size="15" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">/ Avoid</text>
+        <rect x="10" y="355" width="270" height="70" rx="10" fill="#ffd8a8" stroke="#e67700" stroke-width="2"/>
+        <text x="145" y="383" font-size="16" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e" font-weight="bold">Cold-Start</text>
+        <text x="145" y="403" font-size="15" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">Gotcha</text>
+        <!-- leaf boxes -->
+        <rect x="20" y="62" width="190" height="52" rx="8" fill="#eef2ff" stroke="#3b5bdb" stroke-width="1.5"/>
+        <text x="115" y="83" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">Cache + DB</text>
+        <text x="115" y="100" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">write (sync)</text>
+        <rect x="220" y="62" width="200" height="52" rx="8" fill="#eef2ff" stroke="#3b5bdb" stroke-width="1.5"/>
+        <text x="320" y="83" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">DB-first write</text>
+        <text x="320" y="100" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">is safer</text>
+        <rect x="745" y="62" width="200" height="52" rx="8" fill="#d3f9d8" stroke="#2f9e44" stroke-width="1.5"/>
+        <text x="845" y="83" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">No stale reads</text>
+        <text x="845" y="100" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">after writes</text>
+        <rect x="955" y="62" width="185" height="52" rx="8" fill="#d3f9d8" stroke="#2f9e44" stroke-width="1.5"/>
+        <text x="1047" y="83" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">Cache always</text>
+        <text x="1047" y="100" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">mirrors DB</text>
+        <rect x="915" y="238" width="195" height="52" rx="8" fill="#ffe0e0" stroke="#c92a2a" stroke-width="1.5"/>
+        <text x="1012" y="259" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">2x write latency</text>
+        <text x="1012" y="276" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">(serial I/O)</text>
+        <rect x="915" y="453" width="195" height="52" rx="8" fill="#ffe0e0" stroke="#c92a2a" stroke-width="1.5"/>
+        <text x="1012" y="474" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">Write amplification</text>
+        <text x="1012" y="491" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">(double I/O)</text>
+        <rect x="295" y="690" width="200" height="52" rx="8" fill="#e0fff6" stroke="#0ca678" stroke-width="1.5"/>
+        <text x="395" y="711" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">Read-heavy +</text>
+        <text x="395" y="728" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">consistency-critical</text>
+        <rect x="510" y="690" width="200" height="52" rx="8" fill="#e0fff6" stroke="#0ca678" stroke-width="1.5"/>
+        <text x="610" y="711" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">Avoid write-heavy</text>
+        <text x="610" y="728" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">workloads</text>
+        <rect x="15" y="244" width="195" height="52" rx="8" fill="#fff3e0" stroke="#e67700" stroke-width="1.5"/>
+        <text x="112" y="265" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">Writes-only</text>
+        <text x="112" y="282" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">fill the cache</text>
+        <rect x="15" y="449" width="195" height="52" rx="8" fill="#fff3e0" stroke="#e67700" stroke-width="1.5"/>
+        <text x="112" y="470" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">Pre-warm cache</text>
+        <text x="112" y="487" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">on cold deploy</text>
+        <!-- center ellipse (last) -->
+        <ellipse cx="560" cy="390" rx="120" ry="42" fill="#a5d8ff" stroke="#1971c2" stroke-width="3"/>
+        <text x="560" y="381" font-size="16" font-family="Arial,sans-serif" text-anchor="middle" fill="#1971c2" font-weight="bold">Write-Through</text>
+        <text x="560" y="401" font-size="16" font-family="Arial,sans-serif" text-anchor="middle" fill="#1971c2" font-weight="bold">Caching</text>
+      </svg>
+      <p class="caption">Write-Through Caching — radial concept map</p>
+    </div>
+
+    <div class="cheatsheet"><span class="label">ONE-LINER</span>
+  Write-through: every write goes to cache AND database synchronously, guaranteeing
+  the cache is never stale — at the cost of write latency.
+
+<span class="label">KEY PROPERTIES / RULES</span>
+  1. Writes are synchronous: both cache and DB must confirm before ACK to client
+  2. Cache is always consistent with DB — no stale reads after writes
+  3. Cache only populated on writes, not reads — cold-start leaves gaps
+  4. Write latency = cache write time + DB write time (two I/Os per write)
+  5. Read performance is excellent: cache hit rate high for recently written data
+
+<span class="label">DECISION RULE</span>
+  Use write-through when: read/write ratio is high AND consistency of reads is
+  critical (user profile, inventory counts, auth tokens).
+  Avoid write-through when: workload is write-heavy — double I/O dominates;
+  use write-back or skip caching writes entirely.
+
+<span class="label">NUMBERS / FORMULAS</span>
+  Write latency ≈ t_cache_write + t_db_write (serial)
+  Write cost: 1 cache write + 1 DB write — every single time, no exceptions
+  If t_cache=1ms, t_db=5ms → write-through adds 1ms (20%) overhead per write
+
+<span class="label">GOTCHA TO NEVER FORGET</span>
+  Write-through does NOT populate the cache on reads — cold nodes or data that
+  has never been written-through will still miss until a write occurs.</div>
+  </section>
+
+  <!-- S5: CORE DEFINITION -->
+  <section id="s5">
+    <h2 class="section-title"><span class="num">05</span> 🧠 Core Definition</h2>
+    <p>Write-through caching is a write strategy where every data write is synchronously written to both the cache and the backing database before the operation is acknowledged to the client, ensuring the cache is always in sync with the source of truth.</p>
+  </section>
+
+  <!-- S6: CORE CONCEPTS -->
+  <section id="s6">
+    <h2 class="section-title"><span class="num">06</span> 📦 Core Concepts</h2>
+
+    <h3>Synchronous Write-Through Path</h3>
+    <p>Every write request updates the cache first, then the database (or both in parallel), and the client receives acknowledgment only after both writes complete. This two-phase write is what gives write-through its consistency guarantee. The cost is latency: the client waits for two I/O operations instead of one.</p>
+
+    <h3>Cache Consistency Guarantee</h3>
+    <p>Because every write populates the cache with the latest value, any subsequent read will hit the cache and return fresh data. Unlike cache-aside (where the cache is populated lazily on read misses), write-through has no window of stale reads after a write. This is the defining property and the primary reason to choose it.</p>
+
+    <h3>Write Amplification</h3>
+    <p>Write-through doubles the number of write operations — every logical write becomes two physical writes. For write-heavy workloads (high write/read ratio), this amplification becomes a bottleneck. A system doing 100k writes/sec with write-through is pushing 200k write operations to two different storage tiers.</p>
+
+    <h3>Cold-Start / Cache Warming Gap</h3>
+    <p>Write-through only populates cache entries on writes. If you deploy a new cache node, restart the cache, or have data that was last written before the cache existed, those keys will be absent. Reads will hit the database until a write for that key occurs. For read-heavy workloads, this means cache hit rate starts at 0 and climbs only as writes happen — you often pair write-through with a cache pre-warming step on deployment.</p>
+
+    <h3>Failure Atomicity Problem</h3>
+    <p>Write-through creates a two-write sequence (cache → DB) that is not atomic. If the DB write fails after the cache write succeeds, the cache holds data that the DB does not — a consistency violation in reverse. Good implementations handle this by writing to the DB first and only updating the cache on DB success, then invalidating the cache key on any DB failure.</p>
+  </section>
+
+  <!-- S7: FIRST PRINCIPLES -->
+  <section id="s7">
+    <h2 class="section-title"><span class="num">07</span> 🔍 First Principles — Why Does This Exist?</h2>
+    <p>The root problem is <strong>cache inconsistency after writes</strong>. In a naive caching setup (cache-aside), you write to the database directly and the cache is only populated when a read misses. This means that immediately after a write, the cache may still hold the old value — any reader that hits the cache before the next miss+reload will see stale data. For systems like shopping carts, banking balances, and user auth state, stale reads are a correctness problem, not just a performance nuisance.</p>
+    <p>Write-through was the solution: make the cache an always-up-to-date mirror of the database by routing all writes through it. This trades write latency for read correctness. The pattern originates from CPU cache design — L1/L2 write-through caches existed for exactly the same reason: ensuring that memory-mapped reads always reflect the latest written value.</p>
+  </section>
+
+  <!-- S8: MENTAL MODELS -->
+  <section id="s8">
+    <h2 class="section-title"><span class="num">08</span> 🗺️ Mental Models</h2>
+
+    <h3>Model 1: The Synchronized Mirror</h3>
+    <p>Think of write-through as keeping a mirror perfectly synchronized with the original. Every time the original changes, the mirror is updated immediately — before anyone looks at it. The cost is that every update requires two actions instead of one. The benefit is that anyone consulting the mirror always sees the current state. The model breaks down when you ask "what if the mirror update fails?" — physical mirrors don't fail, but your write-through cache can, which is why the failure atomicity problem matters.</p>
+
+    <h3>Model 2: The Bank Teller and Ledger Book</h3>
+    <p>Imagine a bank teller (cache) keeping their own notes alongside the official ledger (database). In write-through, every transaction is recorded in both the teller's notes <em>and</em> the ledger before the customer leaves. The customer waits longer than if the teller just updated their own notes and deferred the ledger, but there's never a discrepancy between teller's notes and the official record. On failure: if the teller updates their notes but the ledger fails, the teller must erase their note — this is the rollback/invalidation pattern.</p>
+
+    <h3>Model 3: The Write Amplification Tax</h3>
+    <p>Every write-through operation charges a "tax" — one extra write to the cache on top of the database write. For read-heavy systems (95% reads), the tax is nearly invisible. For write-heavy systems (50%+ writes), the tax dominates: you're doubling your write I/O for marginal read benefit. This model lets you quickly eliminate write-through as a candidate for write-heavy workloads without reasoning through the full trade-off every time.</p>
+  </section>
+
+  <!-- S9: HOW IT WORKS -->
+  <section id="s9">
+    <h2 class="section-title"><span class="num">09</span> ⚙️ How It Works — Mechanics</h2>
+
+    <h3>Normal (Happy) Path</h3>
+    <ol style="padding-left:20px;line-height:2;">
+      <li>Client sends a write request (e.g., <code>SET user:123 → {name: "Gary"}</code>)</li>
+      <li>Application writes the value to the cache: <code>cache.set("user:123", data)</code></li>
+      <li>Immediately after, application writes the same value to the database</li>
+      <li>Only after <strong>both</strong> writes succeed does the app return success to the client</li>
+      <li>Subsequent reads for <code>user:123</code> hit the cache — no DB hit required</li>
+    </ol>
+
+    <h3>Write Order — Cache First vs. DB First</h3>
+    <p><strong>Cache first:</strong> Write cache → write DB. Risk: if DB write fails, cache holds a value the DB doesn't. Must invalidate cache key on DB failure.</p>
+    <p><strong>DB first:</strong> Write DB → write cache. Risk: if cache write fails after DB success, the next read misses cache and hits DB — acceptable degradation but not a correctness violation. <strong>DB-first is generally safer.</strong></p>
+
+    <h3>Failure Handling</h3>
+    <p>If the DB write fails: invalidate (delete) the cache key so subsequent reads go to the DB and get the pre-write state. Do NOT leave the cache holding the new value the DB rejected. If the cache write fails (DB-first approach): log the failure, proceed — the next read will simply hit DB and miss cache. Correctness is maintained.</p>
+
+    <h3>Key Formula</h3>
+    <p>Write latency = <code>t_cache_write + t_db_write</code> (serial) or <code>max(t_cache_write, t_db_write)</code> (parallel). For a 1ms cache write and 5ms DB write: serial write-through costs 6ms vs 5ms direct DB — a 20% overhead that scales linearly with write volume.</p>
+  </section>
+
+  <!-- S10: REAL-WORLD EXAMPLES -->
+  <section id="s10">
+    <h2 class="section-title"><span class="num">10</span> 🏭 Real-World System Examples</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>System</th><th>How Write-Through Applies</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><strong>CPU L1/L2 Caches</strong></td><td>Classic hardware write-through: every cache line write also propagates to main memory, keeping both in sync</td><td>Some CPUs switch to write-back under heavy write load — mode is configurable</td></tr>
+          <tr><td><strong>AWS ElastiCache (Redis)</strong></td><td>Application-level write-through: app writes to Redis and RDS atomically. ElastiCache itself has no built-in enforcement — the application code must implement it</td><td>Requires discipline; no native write-through at the Redis protocol level</td></tr>
+          <tr><td><strong>Hibernate 2nd-Level Cache</strong></td><td>EhCache in write-through mode updates the cache synchronously on every entity persist/merge</td><td>Toggleable per entity; most apps prefer read-through for performance</td></tr>
+          <tr><td><strong>Google Spanner</strong></td><td>Uses write-through for internal tablet caches to maintain linearizability guarantees across strongly consistent storage</td><td>Critical for Spanner's external consistency promise</td></tr>
+          <tr><td><strong>Financial Balance Caches</strong></td><td>Account balance caches are write-through: every debit/credit updates both cache and ledger DB before ACK to prevent stale balance reads</td><td>Stale balance = correctness violation, not just UX issue</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- S11: TRADE-OFFS -->
+  <section id="s11">
+    <h2 class="section-title"><span class="num">11</span> ⚖️ Trade-offs</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>✅ Benefit</th><th>❌ Cost / Limitation</th></tr></thead>
+        <tbody>
+          <tr><td class="benefit">Cache always consistent with DB — no stale reads after a write</td><td class="cost">Every write incurs two I/Os (cache + DB), increasing write latency</td></tr>
+          <tr><td class="benefit">High cache hit rate for recently written data</td><td class="cost">Cache is cold at startup — no reads populate it; must pair with warming strategy</td></tr>
+          <tr><td class="benefit">Simplifies read path: no stale-data invalidation logic required</td><td class="cost">Write amplification hurts throughput on write-heavy workloads</td></tr>
+          <tr><td class="benefit">Reduces cache invalidation complexity (no need to manually delete stale keys)</td><td class="cost">Not atomic — cache-DB consistency can break on partial failure; requires rollback logic</td></tr>
+          <tr><td class="benefit">Natural fit for read-heavy systems where writes are infrequent</td><td class="cost">If cache evicts an entry before it's ever read, the cache write was wasted I/O</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- S12: INTERVIEW APPLICATION -->
+  <section id="s12">
+    <h2 class="section-title"><span class="num">12</span> 🎯 Interview Application</h2>
+
+    <p><strong>When an interviewer asks / says:</strong></p>
+    <ul style="padding-left:20px;margin-bottom:16px;line-height:2;">
+      <li>"How do you keep your cache consistent with the database?"</li>
+      <li>"What happens to the cache when a user updates their profile?"</li>
+      <li>"Your system is read-heavy — how do you ensure reads always return fresh data?"</li>
+      <li>"Walk me through the caching strategy for this write operation."</li>
+    </ul>
+
+    <p><strong>What you say / do:</strong> In the deep-dive phase of your design, when discussing the cache layer, state: "For writes, I'd use a write-through strategy — every write propagates to both cache and DB synchronously before we ACK the client. This ensures the cache is always fresh without requiring a separate invalidation step. The trade-off is write latency, which is acceptable here given our read-heavy access pattern."</p>
+
+    <div class="tradeoff-box">
+      "If we choose write-through, we get a cache that's always in sync with the database — reads are always fresh. But we pay double write latency on every write operation. For this system, write-through is the right call because our workload is 90% reads and we can't afford stale reads on user profiles / inventory counts."
+    </div>
+  </section>
+
+  <!-- S13: MISCONCEPTIONS -->
+  <section id="s13">
+    <h2 class="section-title"><span class="num">13</span> ⚠️ Common Misconceptions &amp; Gotchas</h2>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><span>Write-through means the cache is always fully populated — if you write-through, you never have cache misses.</span></div>
+      <div class="right"><span class="icon">✅</span><span>Write-through only populates keys that have been written. New cache deployments, cache evictions, or data never written-through will still miss. Write-through only guarantees freshness for keys that <em>were</em> written through.</span></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><span>Write-through is always better than cache-aside because it's "more consistent."</span></div>
+      <div class="right"><span class="icon">✅</span><span>Write-through has double write latency and write amplification. For write-heavy workloads it's strictly worse than cache-aside. Consistency matters only if you have stale-read problems — many systems tolerate eventual consistency fine and don't need write-through.</span></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><span>Write-through is atomic — cache and DB are always consistent.</span></div>
+      <div class="right"><span class="icon">✅</span><span>There are two writes, not one atomic operation. If the DB write fails after the cache write succeeds, you have a consistency violation. Good implementations write DB first and invalidate the cache on failure. True atomicity requires distributed transactions — expensive.</span></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><span>Write-through and read-through are the same strategy.</span></div>
+      <div class="right"><span class="icon">✅</span><span>Write-through is about the write path — ensuring the cache is updated on every write. Read-through is about the read path — the cache itself fetches from the DB on a miss. They are complementary, not synonymous, and can be combined.</span></div>
+    </div>
+  </section>
+
+  <!-- S14: RELATIONSHIPS -->
+  <section id="s14">
+    <h2 class="section-title"><span class="num">14</span> 🔗 Relationships to Other Concepts</h2>
+    <div class="connections">
+      <div class="conn-card">
+        <span class="conn-icon">⬆️</span>
+        <div>
+          <div class="conn-label">Builds on</div>
+          <strong>5.1 Cache-aside (Lazy Loading)</strong> — Write-through exists as the "eager write" alternative to the lazy read-populate pattern. You need to understand cache-aside to appreciate what write-through is trading away.
+        </div>
+      </div>
+      <div class="conn-card">
+        <span class="conn-icon">⬇️</span>
+        <div>
+          <div class="conn-label">Enables</div>
+          <strong>5.5 Cache Consistency &amp; Invalidation</strong> — Write-through is one of three strategies for maintaining consistency; studying it sets up the full comparison in 5.5. It also enables the discussion in 5.6 (cache stampede) since write-through reduces stampedes by keeping the cache warm after writes.
+        </div>
+      </div>
+      <div class="conn-card">
+        <span class="conn-icon">⚡</span>
+        <div>
+          <div class="conn-label">Tension with</div>
+          <strong>5.3 Write-back (Write-behind) Caching</strong> — Write-back is the opposite trade-off: defer the DB write to reduce write latency at the cost of durability risk. Write-through and write-back are in direct tension: pick one based on whether latency or consistency is more important.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- S15: QUIZ -->
+  <section id="s15">
+    <h2 class="section-title"><span class="num">15</span> 🧪 Self-Check Quiz</h2>
+    <div class="callout callout-quote">Can you answer these without looking? If not, you haven't internalized it yet.</div>
+
+    <div class="quiz-item" id="q1">
+      <div class="quiz-q" onclick="toggleQuiz('q1')">
+        <span class="quiz-num">1</span>
+        <span class="qtext">Describe the write-through sequence step by step. At what point is the client acknowledged?</span>
+        <span class="quiz-toggle">▼ hint</span>
+      </div>
+      <div class="quiz-hint">💡 Think through the two-write path before answering — if you hesitate on the ACK timing, revisit Section 9 (How It Works).</div>
+    </div>
+
+    <div class="quiz-item" id="q2">
+      <div class="quiz-q" onclick="toggleQuiz('q2')">
+        <span class="quiz-num">2</span>
+        <span class="qtext">Your system stores user shopping cart data. Reads are 20x more frequent than writes. A product team says stale cart reads cause user complaints. Would you use write-through, cache-aside, or write-back? Justify your choice.</span>
+        <span class="quiz-toggle">▼ hint</span>
+      </div>
+      <div class="quiz-hint">💡 Apply the decision rule from Section 4 — high read ratio + stale-read constraint = strong write-through signal.</div>
+    </div>
+
+    <div class="quiz-item" id="q3">
+      <div class="quiz-q" onclick="toggleQuiz('q3')">
+        <span class="quiz-num">3</span>
+        <span class="qtext">What is the write latency cost of write-through compared to a direct DB write? Under what workload does this cost become a real bottleneck?</span>
+        <span class="quiz-toggle">▼ hint</span>
+      </div>
+      <div class="quiz-hint">💡 Think in terms of write amplification and write/read ratio. Revisit Section 6 (Write Amplification concept) if unclear.</div>
+    </div>
+
+    <div class="quiz-item" id="q4">
+      <div class="quiz-q" onclick="toggleQuiz('q4')">
+        <span class="quiz-num">4</span>
+        <span class="qtext">Name a real production system that uses write-through and explain why write-through was chosen over cache-aside in that context.</span>
+        <span class="quiz-toggle">▼ hint</span>
+      </div>
+      <div class="quiz-hint">💡 Use examples from Section 10. Bonus: explain the specific consistency requirement that drives the choice (e.g., financial correctness, linearizability).</div>
+    </div>
+
+    <div class="quiz-item" id="q5">
+      <div class="quiz-q" onclick="toggleQuiz('q5')">
+        <span class="quiz-num">5</span>
+        <span class="qtext">You deploy write-through caching on Monday. On Tuesday you add 10 new cache nodes. What happens to the cache hit rate on those new nodes, and what is the fix?</span>
+        <span class="quiz-toggle">▼ hint</span>
+      </div>
+      <div class="quiz-hint">💡 This tests the cold-start problem — revisit Section 6 (Cold-Start / Cache Warming Gap) if you're unsure. New nodes = zero populated keys until writes occur.</div>
+    </div>
+  </section>
+
+  <!-- S16: FURTHER READING -->
+  <section id="s16">
+    <h2 class="section-title"><span class="num">16</span> 📚 Further Reading</h2>
+    <ul class="reading-list">
+      <li><span class="cb" onclick="toggleRead(this)"></span><span class="rtext"><strong>Designing Data-Intensive Applications</strong> — Martin Kleppmann, Ch. 5 (Replication) — covers cache consistency in the context of replication lag and write propagation</span></li>
+      <li><span class="cb" onclick="toggleRead(this)"></span><span class="rtext"><strong>ByteByteGo: "Top Caching Strategies"</strong> — Alex Xu (YouTube / newsletter) — visual walkthrough of cache-aside vs. write-through vs. write-back with decision heuristics</span></li>
+      <li><span class="cb" onclick="toggleRead(this)"></span><span class="rtext"><strong>AWS ElastiCache Developer Guide: Caching Strategies</strong> — docs.aws.amazon.com/AmazonElastiCache/latest/red-ug/Strategies.html — practical write-through patterns with Redis examples</span></li>
+      <li><span class="cb" onclick="toggleRead(this)"></span><span class="rtext"><strong>"Scaling Memcache at Facebook"</strong> — USENIX NSDI 2013 — discusses cache consistency strategies at social-network scale, including write-through vs. invalidation</span></li>
+      <li><span class="cb" onclick="toggleRead(this)"></span><span class="rtext"><strong>Redis documentation: Pipelining and atomicity</strong> — redis.io/docs/manual/pipelining/ — relevant for minimizing write-through latency overhead in Redis implementations</span></li>
+    </ul>
+  </section>
+
+  <!-- S17: MY NOTES -->
+  <section id="s17">
+    <h2 class="section-title"><span class="num">17</span> ✍️ My Notes</h2>
+    <div class="callout callout-quote">Personal observations, things that confused me, analogies that helped.</div>
+    <textarea class="notes-area" id="personal-notes" placeholder="Your notes here..."></textarea>
+  </section>
+
+</article>
+</main>
+
+<script>
+// TOC active state
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('#toc nav a');
+window.addEventListener('scroll', () => {
+  let current = '';
+  sections.forEach(s => { if (window.scrollY >= s.offsetTop - 60) current = s.id; });
+  navLinks.forEach(a => { a.classList.toggle('active', a.getAttribute('href') === '#' + current); });
+}, { passive: true });
+
+// Checklist toggles
+document.querySelectorAll('.checklist .cb').forEach(cb => {
+  cb.addEventListener('click', () => cb.parentElement.classList.toggle('checked'));
+});
+
+// Phase cards
+function togglePhase(id) {
+  document.getElementById(id).classList.toggle('open');
+}
+
+// Quiz hints
+function toggleQuiz(id) {
+  const item = document.getElementById(id);
+  item.classList.toggle('open');
+  item.querySelector('.quiz-toggle').textContent = item.classList.contains('open') ? '▲ hide' : '▼ hint';
+}
+
+// Reading list checkboxes
+function toggleRead(cb) {
+  cb.parentElement.classList.toggle('checked');
+}
+
+// Persist notes in localStorage
+const notesKey = 'notes_5_2_write_through';
+const notesEl = document.getElementById('personal-notes');
+notesEl.value = localStorage.getItem(notesKey) || '';
+notesEl.addEventListener('input', () => localStorage.setItem(notesKey, notesEl.value));
+</script>
+</body>
+</html>
