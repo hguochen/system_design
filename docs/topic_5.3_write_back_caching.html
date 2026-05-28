@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.3 Write-Back (Write-Behind) Caching</title>
+<style>
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface-alt: #f3f2ef;
+    --border: #e5e3de; --text: #1a1917; --text-muted: #6b6861;
+    --accent: #2563eb; --accent-light: #dbeafe;
+    --green: #16a34a; --green-light: #dcfce7;
+    --red: #dc2626; --red-light: #fee2e2;
+    --yellow: #d97706; --yellow-light: #fef3c7;
+    --purple: #7c3aed; --purple-light: #ede9fe;
+    --code-bg: #1e1e2e; --code-text: #cdd6f4;
+    --sidebar-w: 240px; --content-max: 780px;
+    font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; }
+  #toc { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0 48px; z-index: 100; }
+  #toc-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  #toc-header .phase-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-bottom: 6px; }
+  #toc-header h2 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  #toc nav a { display: block; padding: 5px 16px 5px 20px; font-size: 12.5px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+  main { margin-left: var(--sidebar-w); padding: 48px 48px 96px; max-width: calc(var(--sidebar-w) + var(--content-max) + 96px); width: 100%; }
+  article { max-width: var(--content-max); }
+  .doc-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 2px solid var(--border); }
+  .doc-header .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+  .tag-phase { background: var(--accent-light); color: var(--accent); }
+  .tag-topic { background: var(--purple-light); color: var(--purple); }
+  .tag-date  { background: var(--surface-alt);  color: var(--text-muted); }
+  .doc-header h1 { font-size: 30px; font-weight: 800; line-height: 1.25; letter-spacing: -.02em; color: var(--text); }
+  section { margin-bottom: 52px; scroll-margin-top: 32px; }
+  h2.section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -.01em; }
+  h2.section-title .num { font-size: 11px; font-weight: 800; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; letter-spacing: .04em; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 24px 0 10px; }
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 14px; border-left: 3px solid; }
+  .callout-goal  { background: var(--accent-light); border-color: var(--accent); color: #1e40af; }
+  .callout-tip   { background: var(--yellow-light); border-color: var(--yellow); color: #92400e; }
+  .callout-quote { background: var(--surface-alt);  border-color: var(--border); color: var(--text-muted); font-style: italic; }
+  .cheatsheet { background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 24px 28px; font-family: "SF Mono","Fira Code","Cascadia Code",Menlo,monospace; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-x: auto; margin-top: 16px; }
+  .cheatsheet .label { color: #cba6f7; font-weight: 700; letter-spacing: .08em; display: block; margin-top: 18px; margin-bottom: 4px; border-bottom: 1px solid #313244; padding-bottom: 3px; }
+  .cheatsheet .label:first-child { margin-top: 0; }
+  .mindmap-wrap { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 12px; padding: 20px 16px 12px; margin: 20px 0 24px; }
+  .mindmap-wrap p.caption { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 10px; margin-bottom: 0; }
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; font-size: 14.5px; line-height: 1.55; }
+  .checklist li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 2px; background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .checklist li.checked .cb { background: var(--green); border-color: var(--green); }
+  .checklist li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .checklist li.checked .text { color: var(--text-muted); text-decoration: line-through; }
+  .phase-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
+  .phase-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; cursor: pointer; user-select: none; background: var(--surface-alt); }
+  .phase-header:hover { background: var(--border); }
+  .phase-label { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+  .phase-badge { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 2px 8px; border-radius: 20px; }
+  .ph1 { background: #dbeafe; color: #1d4ed8; } .ph2 { background: #fce7f3; color: #9d174d; }
+  .ph3 { background: #d1fae5; color: #065f46; } .ph4 { background: #fef3c7; color: #92400e; }
+  .phase-chevron { font-size: 12px; color: var(--text-muted); transition: transform .2s; }
+  .phase-card.open .phase-chevron { transform: rotate(180deg); }
+  .phase-body { display: none; padding: 16px 20px 20px; }
+  .phase-card.open .phase-body { display: block; }
+  .phase-goal { font-size: 12.5px; color: var(--text-muted); font-style: italic; margin-bottom: 12px; }
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: var(--surface-alt); padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.5; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+  .misconception { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .misconception .wrong { background: var(--red-light); padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; }
+  .misconception .right { padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; color: #065f46; background: var(--green-light); }
+  .misconception .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .quiz-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .quiz-q { padding: 14px 18px; font-size: 14.5px; font-weight: 600; cursor: pointer; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .quiz-q:hover { background: var(--surface-alt); }
+  .quiz-num { flex-shrink: 0; width: 24px; height: 24px; background: var(--accent); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; margin-top: 1px; }
+  .quiz-q .qtext { flex: 1; }
+  .quiz-toggle { font-size: 11px; color: var(--text-muted); flex-shrink: 0; margin-top: 3px; }
+  .quiz-hint { display: none; padding: 10px 18px 14px; font-size: 13px; color: #92400e; background: var(--yellow-light); border-top: 1px solid var(--border); }
+  .quiz-item.open .quiz-hint { display: block; }
+  .reading-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .reading-list li { display: flex; align-items: flex-start; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; font-size: 14px; }
+  .reading-list li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 1px; cursor: pointer; background: var(--surface); display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .reading-list li.checked .cb { background: var(--green); border-color: var(--green); }
+  .reading-list li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .reading-list li.checked .rtext { color: var(--text-muted); text-decoration: line-through; }
+  .notes-area { width: 100%; min-height: 160px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: inherit; font-size: 14px; color: var(--text); resize: vertical; line-height: 1.6; }
+  .notes-area:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .focus-list { list-style: none; display: flex; flex-direction: column; gap: 14px; }
+  .focus-list li { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14.5px; line-height: 1.6; }
+  .focus-list li strong { color: var(--accent); display: block; margin-bottom: 4px; }
+  .connections { display: flex; flex-direction: column; gap: 12px; }
+  .conn-card { display: flex; align-items: flex-start; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14px; }
+  .conn-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .conn-label { font-weight: 700; margin-bottom: 3px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .tradeoff-box { background: var(--surface-alt); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 14px 18px; font-size: 14px; font-style: italic; color: var(--text); margin-top: 14px; }
+  @media (max-width: 900px) { #toc { display: none; } main { margin-left: 0; padding: 24px 20px 60px; } }
+</style>
+</head>
+<body>
+
+<aside id="toc">
+  <div id="toc-header">
+    <div class="phase-tag">Phase B — Scalability</div>
+    <h2>5.3 Write-Back Caching</h2>
+  </div>
+  <nav>
+    <a href="#s0">🗺️ Topic Overview</a>
+    <a href="#s1">🎯 Goal</a>
+    <a href="#s2">✅ Mastery</a>
+    <a href="#s3">🗓️ Study Phases</a>
+    <a href="#s4">📋 Cheatsheet</a>
+    <a href="#s5">🧠 Core Definition</a>
+    <a href="#s6">📦 Core Concepts</a>
+    <a href="#s7">🔍 First Principles</a>
+    <a href="#s8">🗺️ Mental Models</a>
+    <a href="#s9">⚙️ How It Works</a>
+    <a href="#s10">🏭 Real-World Examples</a>
+    <a href="#s11">⚖️ Trade-offs</a>
+    <a href="#s12">🎯 Interview Application</a>
+    <a href="#s13">⚠️ Misconceptions</a>
+    <a href="#s14">🔗 Relationships</a>
+    <a href="#s15">🧪 Self-Check Quiz</a>
+    <a href="#s16">📚 Further Reading</a>
+    <a href="#s17">✍️ My Notes</a>
+  </nav>
+</aside>
+
+<main>
+<article>
+
+  <header class="doc-header">
+    <div class="meta">
+      <span class="tag tag-phase">⚡ Phase B — Scalability</span>
+      <span class="tag tag-topic">⚡ Topic 5 — Caching Systems</span>
+      <span class="tag tag-date">📅 2026-05-28</span>
+    </div>
+    <h1>5.3 Write-Back (Write-Behind) Caching</h1>
+  </header>
+
+  <!-- S0: TOPIC OVERVIEW -->
+  <section id="s0">
+    <h2 class="section-title"><span class="num">00</span> 🗺️ Topic Overview</h2>
+    <h3>What This Topic Is About</h3>
+    <p>Write-back (also called write-behind) caching is the most performance-aggressive write strategy: the client is ACKed as soon as the cache write completes, and the database write is deferred to an asynchronous flush. The central tension is <strong>write latency vs. durability</strong> — you eliminate the database from the write critical path and gain coalescing benefits, but data in the dirty buffer is permanently lost if the cache node fails before flushing. Mastering this means knowing exactly when that trade is acceptable, and how production systems mitigate the durability gap.</p>
+
+    <h3>🎯 What to Focus On</h3>
+    <ul class="focus-list">
+      <li><strong>1. The deferred write contract — and its durability gap</strong>The client gets an ACK the moment the cache write completes. The database does not see this write immediately. Any data in the dirty buffer is at risk until flushed. Know this cold — it is the defining property.</li>
+      <li><strong>2. Dirty buffer management</strong>The cache tracks which keys are dirty (written but not yet flushed). Know how flush is triggered (time, count, eviction), and what must happen when a dirty entry is evicted — silent data loss is a common implementation bug.</li>
+      <li><strong>3. Write coalescing — the performance multiplier</strong>Multiple writes to the same key within a flush window become a single DB write. For high-frequency writes (counters, scores, session state), this can reduce DB write load by orders of magnitude.</li>
+      <li><strong>4. When write-back is justified vs. dangerous</strong>Write-back is correct for analytics counters, game scores, and session state. It is wrong for financial transactions, inventory, and anything where a lost flush window means real-world harm.</li>
+      <li><strong>5. Durability mitigations</strong>WAL (Write-Ahead Log), cache replication, and periodic snapshots all reduce the durability gap without eliminating the core performance benefit. Know at least two.</li>
+    </ul>
+  </section>
+
+  <!-- S1: GOAL -->
+  <section id="s1">
+    <h2 class="section-title"><span class="num">01</span> 🎯 Goal of This Subtopic</h2>
+    <div class="callout callout-goal"><em>Why are you studying this? What should you be able to do after this session?</em></div>
+    <p>Be able to choose write-back caching for a given workload, explain the deferred-flush mechanism and its durability implications precisely, and contrast it with write-through in a structured trade-off discussion. Specifically: explain what a dirty buffer is, when data loss occurs, and how production systems mitigate it — all without referring to notes.</p>
+  </section>
+
+  <!-- S2: MASTERY -->
+  <section id="s2">
+    <h2 class="section-title"><span class="num">02</span> ✅ What Mastery Looks Like</h2>
+    <div class="callout callout-quote">Concrete, testable proof that you own this concept — not just familiarity.</div>
+    <ul class="checklist" id="mastery-list">
+      <li><span class="cb"></span><span class="text">Can explain the write-back sequence (client → cache ACK → async DB flush) and identify exactly when data loss occurs</span></li>
+      <li><span class="cb"></span><span class="text">Can describe dirty buffer management: what "dirty" means, how flush is triggered, and what happens to a dirty evicted entry</span></li>
+      <li><span class="cb"></span><span class="text">Can choose write-back over write-through or cache-aside for a given scenario and justify with a concrete trade-off statement</span></li>
+      <li><span class="cb"></span><span class="text">Can name two production systems that use write-back semantics and explain why durability risk is acceptable there</span></li>
+      <li><span class="cb"></span><span class="text">Can propose a durability mitigation strategy for a write-back cache (WAL, replication, periodic snapshotting)</span></li>
+    </ul>
+    <div class="callout callout-tip" style="margin-top:20px;">
+      💡 <strong>Rule of thumb:</strong> If you can teach it to someone else and field their follow-up questions, you've mastered it.
+    </div>
+  </section>
+
+  <!-- S3: STUDY PHASES -->
+  <section id="s3">
+    <h2 class="section-title"><span class="num">03</span> 🗓️ Study Phases to Achieve Mastery</h2>
+    <div class="callout callout-quote">Work through each phase in order. Don't advance until you can honestly tick every item.</div>
+
+    <div class="phase-card open" id="ph1">
+      <div class="phase-header" onclick="togglePhase('ph1')">
+        <div class="phase-label"><span class="phase-badge ph1">Phase 1</span> Acquire 📖</div>
+        <span class="phase-chevron">▼</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Read deeply enough that you could explain the concept without the doc.</p>
+        <ul class="checklist">
+          <li><span class="cb"></span><span class="text"><strong>Designing Data-Intensive Applications</strong> (Kleppmann) — Ch. 5, buffered writes and replication lag section</span></li>
+          <li><span class="cb"></span><span class="text"><strong>ByteByteGo "Top Caching Strategies"</strong> — Alex Xu, YouTube / ByteByteGo newsletter</span></li>
+          <li><span class="cb"></span><span class="text"><strong>AWS ElastiCache Caching Strategies</strong> — docs.aws.amazon.com/AmazonElastiCache/latest/red-ug/Strategies.html</span></li>
+          <li><span class="cb"></span><span class="text">Read through <strong>Sections 5–9</strong> (Core Definition → How It Works) carefully — don't skim</span></li>
+          <li><span class="cb"></span><span class="text">Re-read the <strong>Cheatsheet</strong> (Section 4) and try to recite it from memory after</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-card" id="ph2">
+      <div class="phase-header" onclick="togglePhase('ph2')">
+        <div class="phase-label"><span class="phase-badge ph2">Phase 2</span> Consolidate ✍️</div>
+        <span class="phase-chevron">▼</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Reproduce knowledge in your own words without looking.</p>
+        <ul class="checklist">
+          <li><span class="cb"></span><span class="text">Close the doc — write out the <strong>Core Definition</strong> from memory, then compare</span></li>
+          <li><span class="cb"></span><span class="text">Explain <strong>First Principles</strong> out loud without notes — what problem does this solve and why?</span></li>
+          <li><span class="cb"></span><span class="text">Reconstruct the <strong>write-back flush sequence</strong> step by step from memory (including failure cases)</span></li>
+          <li><span class="cb"></span><span class="text">Restate each <strong>Trade-off</strong> row in your own words — if you can't explain the cost, you don't own it yet</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-card" id="ph3">
+      <div class="phase-header" onclick="togglePhase('ph3')">
+        <div class="phase-label"><span class="phase-badge ph3">Phase 3</span> Apply 🔧</div>
+        <span class="phase-chevron">▼</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Connect to real systems and simulate interview scenarios.</p>
+        <ul class="checklist">
+          <li><span class="cb"></span><span class="text">Go through <strong>Real-World System Examples</strong> (Section 10) — verify each claim independently</span></li>
+          <li><span class="cb"></span><span class="text">Practice the <strong>Interview Application</strong> (Section 12) out loud — trigger phrases + trade-off statement</span></li>
+          <li><span class="cb"></span><span class="text">Work through <strong>Common Misconceptions</strong> (Section 13) — explain why each is wrong, not just that it is</span></li>
+          <li><span class="cb"></span><span class="text">Trace the <strong>Relationships to Other Concepts</strong> (Section 14) — can you explain each without looking?</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-card" id="ph4">
+      <div class="phase-header" onclick="togglePhase('ph4')">
+        <div class="phase-label"><span class="phase-badge ph4">Phase 4</span> Validate 🧪</div>
+        <span class="phase-chevron">▼</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Confirm you actually own it, not just recognize it.</p>
+        <ul class="checklist">
+          <li><span class="cb"></span><span class="text">Answer every <strong>Self-Check Quiz</strong> question (Section 15) out loud without notes</span></li>
+          <li><span class="cb"></span><span class="text">Recite the <strong>Cheatsheet</strong> (Section 4) from memory — if you can't, re-do Phase 2</span></li>
+          <li><span class="cb"></span><span class="text">Tick off items in <strong>What Mastery Looks Like</strong> (Section 2) — only check if you can demonstrate on demand</span></li>
+          <li><span class="cb"></span><span class="text">Teach this concept out loud to an imaginary interviewer for 2 minutes without hesitation</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- S4: CHEATSHEET -->
+  <section id="s4">
+    <h2 class="section-title"><span class="num">04</span> 📋 Cheatsheet</h2>
+    <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+
+    <div class="mindmap-wrap">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="-50 -10 1300 830" style="width:100%;height:auto;">
+        <defs>
+          <marker id="ab" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#3b5bdb"/></marker>
+          <marker id="ag" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#2f9e44"/></marker>
+          <marker id="ar" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#c92a2a"/></marker>
+          <marker id="at" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#0ca678"/></marker>
+          <marker id="ao" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#e67700"/></marker>
+          <marker id="ap" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#7c3aed"/></marker>
+        </defs>
+        <!-- background -->
+        <rect x="-50" y="-10" width="1300" height="830" fill="white"/>
+        <!-- title -->
+        <text x="560" y="32" font-size="22" font-family="Arial,sans-serif" text-anchor="middle" font-weight="bold" fill="#1a1917">5.3 Write-Back (Write-Behind) Caching</text>
+        <!-- center to branch lines -->
+        <line x1="560" y1="400" x2="200" y2="185" stroke="#3b5bdb" stroke-width="2.5" marker-end="url(#ab)"/>
+        <line x1="560" y1="400" x2="920" y2="185" stroke="#2f9e44" stroke-width="2.5" marker-end="url(#ag)"/>
+        <line x1="560" y1="400" x2="980" y2="400" stroke="#c92a2a" stroke-width="2.5" marker-end="url(#ar)"/>
+        <line x1="560" y1="400" x2="560" y2="630" stroke="#0ca678" stroke-width="2.5" marker-end="url(#at)"/>
+        <line x1="560" y1="400" x2="140" y2="400" stroke="#e67700" stroke-width="2.5" marker-end="url(#ao)"/>
+        <line x1="560" y1="400" x2="350" y2="630" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#ap)"/>
+        <!-- branch to leaf lines -->
+        <line x1="200" y1="185" x2="100" y2="95" stroke="#3b5bdb" stroke-width="1.5" marker-end="url(#ab)"/>
+        <line x1="200" y1="185" x2="315" y2="95" stroke="#3b5bdb" stroke-width="1.5" marker-end="url(#ab)"/>
+        <line x1="920" y1="185" x2="845" y2="95" stroke="#2f9e44" stroke-width="1.5" marker-end="url(#ag)"/>
+        <line x1="920" y1="185" x2="1050" y2="95" stroke="#2f9e44" stroke-width="1.5" marker-end="url(#ag)"/>
+        <line x1="980" y1="400" x2="1010" y2="270" stroke="#c92a2a" stroke-width="1.5" marker-end="url(#ar)"/>
+        <line x1="980" y1="400" x2="1010" y2="490" stroke="#c92a2a" stroke-width="1.5" marker-end="url(#ar)"/>
+        <line x1="560" y1="635" x2="490" y2="725" stroke="#0ca678" stroke-width="1.5" marker-end="url(#at)"/>
+        <line x1="560" y1="635" x2="660" y2="725" stroke="#0ca678" stroke-width="1.5" marker-end="url(#at)"/>
+        <line x1="140" y1="400" x2="100" y2="275" stroke="#e67700" stroke-width="1.5" marker-end="url(#ao)"/>
+        <line x1="140" y1="400" x2="100" y2="490" stroke="#e67700" stroke-width="1.5" marker-end="url(#ao)"/>
+        <line x1="350" y1="635" x2="215" y2="725" stroke="#7c3aed" stroke-width="1.5" marker-end="url(#ap)"/>
+        <!-- branch boxes -->
+        <rect x="75" y="150" width="250" height="70" rx="10" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+        <text x="200" y="178" font-size="16" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e" font-weight="bold">Write Path</text>
+        <text x="200" y="198" font-size="15" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">Mechanics</text>
+        <rect x="795" y="150" width="250" height="70" rx="10" fill="#b2f2bb" stroke="#2f9e44" stroke-width="2"/>
+        <text x="920" y="178" font-size="16" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e" font-weight="bold">Write</text>
+        <text x="920" y="198" font-size="15" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">Coalescing</text>
+        <rect x="850" y="365" width="260" height="70" rx="10" fill="#ffc9c9" stroke="#c92a2a" stroke-width="2"/>
+        <text x="980" y="393" font-size="16" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e" font-weight="bold">Durability</text>
+        <text x="980" y="413" font-size="15" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">Risk</text>
+        <rect x="435" y="600" width="250" height="70" rx="10" fill="#c3fae8" stroke="#0ca678" stroke-width="2"/>
+        <text x="560" y="628" font-size="16" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e" font-weight="bold">When to</text>
+        <text x="560" y="648" font-size="15" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">Use / Avoid</text>
+        <rect x="10" y="365" width="260" height="70" rx="10" fill="#ffd8a8" stroke="#e67700" stroke-width="2"/>
+        <text x="140" y="393" font-size="16" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e" font-weight="bold">Dirty Buffer</text>
+        <text x="140" y="413" font-size="15" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">Management</text>
+        <rect x="225" y="600" width="250" height="70" rx="10" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+        <text x="350" y="628" font-size="16" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e" font-weight="bold">Durability</text>
+        <text x="350" y="648" font-size="15" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">Mitigations</text>
+        <!-- leaf boxes -->
+        <rect x="15" y="65" width="185" height="54" rx="8" fill="#eef2ff" stroke="#3b5bdb" stroke-width="1.5"/>
+        <text x="107" y="87" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">Cache write</text>
+        <text x="107" y="104" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">→ ACK client</text>
+        <rect x="220" y="65" width="190" height="54" rx="8" fill="#eef2ff" stroke="#3b5bdb" stroke-width="1.5"/>
+        <text x="315" y="87" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">Async DB flush</text>
+        <text x="315" y="104" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">in background</text>
+        <rect x="750" y="65" width="195" height="54" rx="8" fill="#d3f9d8" stroke="#2f9e44" stroke-width="1.5"/>
+        <text x="847" y="87" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">N writes → 1</text>
+        <text x="847" y="104" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">DB write</text>
+        <rect x="960" y="65" width="190" height="54" rx="8" fill="#d3f9d8" stroke="#2f9e44" stroke-width="1.5"/>
+        <text x="1055" y="87" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">10–100x DB</text>
+        <text x="1055" y="104" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">write reduction</text>
+        <rect x="918" y="243" width="192" height="54" rx="8" fill="#ffe0e0" stroke="#c92a2a" stroke-width="1.5"/>
+        <text x="1014" y="265" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">Dirty buffer lost</text>
+        <text x="1014" y="282" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">on node crash</text>
+        <rect x="918" y="463" width="192" height="54" rx="8" fill="#ffe0e0" stroke="#c92a2a" stroke-width="1.5"/>
+        <text x="1014" y="485" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">DB stale during</text>
+        <text x="1014" y="502" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">flush window</text>
+        <rect x="395" y="700" width="195" height="54" rx="8" fill="#e0fff6" stroke="#0ca678" stroke-width="1.5"/>
+        <text x="492" y="722" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">Write-heavy,</text>
+        <text x="492" y="739" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">loss tolerable</text>
+        <rect x="600" y="700" width="190" height="54" rx="8" fill="#e0fff6" stroke="#0ca678" stroke-width="1.5"/>
+        <text x="695" y="722" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">Avoid for fin.</text>
+        <text x="695" y="739" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">/ inventory</text>
+        <rect x="12" y="248" width="188" height="54" rx="8" fill="#fff3e0" stroke="#e67700" stroke-width="1.5"/>
+        <text x="106" y="270" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">Flush: time /</text>
+        <text x="106" y="287" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">count / evict</text>
+        <rect x="12" y="463" width="188" height="54" rx="8" fill="#fff3e0" stroke="#e67700" stroke-width="1.5"/>
+        <text x="106" y="485" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">Dirty eviction</text>
+        <text x="106" y="502" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">= must flush first</text>
+        <rect x="105" y="700" width="210" height="54" rx="8" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.5"/>
+        <text x="210" y="722" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">WAL / replication</text>
+        <text x="210" y="739" font-size="13" font-family="Arial,sans-serif" text-anchor="middle" fill="#1e1e1e">/ snapshots</text>
+        <!-- center ellipse (last) -->
+        <ellipse cx="560" cy="400" rx="125" ry="45" fill="#a5d8ff" stroke="#1971c2" stroke-width="3"/>
+        <text x="560" y="391" font-size="15" font-family="Arial,sans-serif" text-anchor="middle" fill="#1971c2" font-weight="bold">Write-Back</text>
+        <text x="560" y="410" font-size="15" font-family="Arial,sans-serif" text-anchor="middle" fill="#1971c2" font-weight="bold">(Write-Behind)</text>
+      </svg>
+      <p class="caption">Write-Back (Write-Behind) Caching — radial concept map</p>
+    </div>
+
+    <div class="cheatsheet"><span class="label">§ 1  WHY IT EXISTS</span>
+  Write-through makes DB the write bottleneck — every ACK waits for
+  cache + DB I/O. Write-back removes DB from the critical path:
+  buffer in cache, flush async.
+
+<span class="label">§ 2  WHAT IT IS</span>
+  Write to cache → ACK client → flush dirty entries to DB async.
+  Cache is source of truth; DB is stale until flushed.
+
+<span class="label">§ 3  THE 3 CORE CONCEPTS</span>
+  1. DIRTY BUFFER — unflushed entries. Flush on: time / count /
+     eviction. Evict dirty without flush = silent data loss.
+  2. WRITE COALESCING — N writes/key in flush window = 1 DB write.
+     500 writes/s + 1s flush = 1 DB write/key/s.
+  3. DURABILITY GAP — dirty buffer lost on crash. Size = flush
+     interval. Mitigate: WAL, replication, snapshots.
+
+<span class="label">§ 4  USE / AVOID</span>
+  USE:   write-heavy + eventual persistence OK
+         (counters, leaderboards, session state)
+  AVOID: every write must be immediately durable
+         (financial, inventory, billing)
+
+<span class="label">§ 5  INTERVIEW TRIGGERS</span>
+  → "DB is a write bottleneck"
+  → "Field updated hundreds of times per second"
+  → "Design a leaderboard / counter / session store"
+
+<span class="label">§ 6  FTAC</span>
+  F  "Tension: write latency vs. durability. At 500 writes/sec,
+     write-through saturates the DB."
+  T  "Write-through: consistent but DB on critical path.
+     Write-back: sub-ms + 100–500x DB write reduction,
+     but dirty buffer lost on crash."
+  A  "Assuming ≤1s data loss is tolerable — users expect
+     eventual, not immediate, persistence."
+  C  "Write-back, 1s flush. Cost: node crash = up to 1s of writes
+     lost. Add WAL if that's unacceptable."
+
+<span class="label">§ 7  NUMBERS &amp; GOTCHA</span>
+  ~1ms write (cache only) vs ~6ms (write-through)
+  Coalescing: 500 writes/s + 1s flush = 1 DB write/key/s
+  GOTCHA: evict dirty entry without flush = silent data loss</div>
+  </section>
+
+  <!-- S5: CORE DEFINITION -->
+  <section id="s5">
+    <h2 class="section-title"><span class="num">05</span> 🧠 Core Definition</h2>
+    <p>Write-back caching writes data to the cache and immediately acknowledges the client, then asynchronously flushes dirty cache entries to the backing database at a later time — decoupling write latency from database I/O at the cost of a durability gap during the flush window.</p>
+  </section>
+
+  <!-- S6: CORE CONCEPTS -->
+  <section id="s6">
+    <h2 class="section-title"><span class="num">06</span> 📦 Core Concepts</h2>
+
+    <h3>Deferred Write Path</h3>
+    <p>The client writes to the cache and receives an ACK without waiting for the database. The database write is queued and handled by a background flush process. This makes write latency as fast as a cache write (sub-millisecond for Redis), completely decoupling the client-facing write path from the far slower database I/O.</p>
+
+    <h3>Dirty Buffer</h3>
+    <p>A dirty entry is a cache key whose in-cache value has not yet been persisted to the database. The cache maintains a dirty set or dirty flag per key. When a dirty entry is evicted before flushing, the write is silently lost — correct implementations must flush dirty entries synchronously before evicting them.</p>
+
+    <h3>Flush Trigger Mechanisms</h3>
+    <p>Write-back caches flush dirty entries based on one or more triggers: time-based (flush every N seconds), count-based (flush when dirty count exceeds a threshold), eviction-triggered (flush before evicting a dirty entry), or application-triggered (explicit flush call). Most production implementations combine time-based and count-based for predictable behavior.</p>
+
+    <h3>Write Coalescing</h3>
+    <p>Multiple writes to the same key within a flush window become a single DB write — only the latest value is persisted. For a key written 1000 times per second with a 1-second flush interval, write-back generates exactly 1 DB write instead of 1000. This is the core performance multiplier for write-heavy workloads like counters, scores, and session state.</p>
+
+    <h3>Durability Gap</h3>
+    <p>The period between a cache write and its corresponding DB flush is the durability gap. Any data written during this window is at risk if the cache node fails. The size of the gap is set by the flush interval — shorter intervals reduce risk but partially erode the performance benefit by increasing DB write frequency.</p>
+  </section>
+
+  <!-- S7: FIRST PRINCIPLES -->
+  <section id="s7">
+    <h2 class="section-title"><span class="num">07</span> 🔍 First Principles — Why Does This Exist?</h2>
+    <p>The root problem: databases are slow relative to caches, and forcing every write to touch the database imposes unnecessary latency on write-heavy workloads. Write-through solves the stale-read problem but creates a new one: every write waits for two I/O operations, and the database becomes the bottleneck for write throughput.</p>
+    <p>For systems that are update-heavy — social media like counters, game scores, analytics event aggregators, session state — the database simply cannot absorb the write rate at acceptable latency without write-back's coalescing buffer. Write-back was invented to break this coupling: let the fast cache absorb writes at full speed, batch them, and flush to the database at a rate the DB can handle.</p>
+    <p>The underlying insight is that for many workloads, the database does not need to see every write immediately — it just needs to see the latest state eventually. Write-back trades a durability guarantee for performance headroom, and for many high-throughput systems, that trade is not just acceptable but necessary.</p>
+  </section>
+
+  <!-- S8: MENTAL MODELS -->
+  <section id="s8">
+    <h2 class="section-title"><span class="num">08</span> 🗺️ Mental Models</h2>
+
+    <h3>Model 1: The Outbox Buffer</h3>
+    <p>Think of write-back like an email outbox. You write an email and it goes to your outbox immediately — you can move on without waiting for it to send. The email client flushes the outbox in the background. If your laptop crashes before it sends, the email is gone. The outbox is the dirty buffer; "sent" is the DB flush; the crash is the durability gap in action.</p>
+    <p><em>Where it breaks down:</em> Email clients typically retry on reconnect. Write-back caches may not recover dirty data on crash without explicit WAL or replication. Don't carry the analogy too far on recovery semantics.</p>
+
+    <h3>Model 2: CPU L1/L2 Cache</h3>
+    <p>Hardware CPU caches use write-back by default. When the CPU writes to a cache line, the value is held in L1/L2 and not immediately written to main memory. The dirty cache line is flushed to RAM on eviction or coherence events. Modern CPUs accept this risk because the performance gain is enormous. This is exactly the same trade-off — write-back is what makes CPU caches viable at all.</p>
+    <p><em>Where it breaks down:</em> CPU caches have hardware-level coherency protocols that don't map to distributed systems. The analogy explains the concept, not the implementation.</p>
+
+    <h3>Model 3: The Batching Multiplier</h3>
+    <p>Write-back isn't just deferred writes — it's a write multiplier in reverse. Write-through writes 1 DB record per cache write. Write-back writes 1 DB record per N cache writes (where N = writes coalesced in the flush window). For counters updated 1000x/second with a 1-second flush interval, write-back reduces DB write load by 1000x. Frame it this way in interviews when justifying write-back for high-frequency writes.</p>
+  </section>
+
+  <!-- S9: HOW IT WORKS -->
+  <section id="s9">
+    <h2 class="section-title"><span class="num">09</span> ⚙️ How It Works — Mechanics</h2>
+
+    <h3>Normal Write Path</h3>
+    <p>1. Client sends a write to the application. 2. Application writes to cache (Redis, etc.) — cache ACKs immediately. 3. Application ACKs the client — write is "done" from the client's perspective. 4. Cache marks the entry dirty. 5. Background flush process picks up dirty entries on timer or threshold trigger. 6. Dirty entries written to DB in batch (often sorted for sequential I/O efficiency). 7. On successful DB write, dirty flag cleared.</p>
+
+    <h3>Read Path (During Flush Window)</h3>
+    <p>Reads are served from cache. If the key is dirty (not yet flushed), the cache still returns the correct latest value — cache is the source of truth. The database may be stale, but reads go to cache, not DB. This is correct behavior as long as all reads and writes route through the same cache.</p>
+
+    <h3>Eviction of Dirty Entries</h3>
+    <p>If the cache runs out of space and must evict a dirty entry, the eviction handler must flush that entry to DB before eviction. Failing to do this causes silent data loss. This is a critical implementation detail — naive LRU without dirty-check handling silently drops writes. Correct write-back implementations must check dirty status and flush synchronously on dirty eviction.</p>
+
+    <h3>Flush Failure Handling</h3>
+    <p>If the DB is unavailable during a scheduled flush, the dirty buffer continues to grow. The cache must implement: retry with exponential backoff, dirty buffer size caps (reject or block new writes if buffer is full), and alerting. If the DB is down longer than memory can absorb, the cache must degrade gracefully — typically by blocking new writes or surfacing an error.</p>
+
+    <h3>Durability Enhancement — WAL</h3>
+    <p>High-stakes write-back implementations log dirty writes to a Write-Ahead Log (WAL) on durable storage before ACKing the client. On cache restart, the WAL is replayed to reconstruct dirty state. This recovers most of the durability of write-through while preserving most of the latency benefit — Cassandra's commit log + memtable is the canonical production example of this pattern.</p>
+  </section>
+
+  <!-- S10: REAL-WORLD EXAMPLES -->
+  <section id="s10">
+    <h2 class="section-title"><span class="num">10</span> 🏭 Real-World System Examples</h2>
+    <div class="table-wrap">
+      <table>
+        <tr><th>System</th><th>How This Concept Applies</th><th>Notes</th></tr>
+        <tr>
+          <td><strong>CPU L1/L2 Cache</strong></td>
+          <td>Hardware default write policy — dirty cache lines flushed to RAM on eviction or coherence events, not on every write</td>
+          <td>Foundational example; write-back is why CPU caches are practical at all</td>
+        </tr>
+        <tr>
+          <td><strong>Cassandra memtable</strong></td>
+          <td>Writes go to in-memory memtable first; flushed to SSTables asynchronously when full or on interval</td>
+          <td>Commit log (WAL) provides durability; memtable is write-back buffer. Classic production example.</td>
+        </tr>
+        <tr>
+          <td><strong>Linux page cache</strong></td>
+          <td>OS write cache absorbs writes; dirty pages flushed to disk by writeback daemon on timer or memory pressure</td>
+          <td><code>vm.dirty_ratio</code> controls max dirty buffer; <code>sync()</code> forces immediate flush</td>
+        </tr>
+        <tr>
+          <td><strong>MySQL InnoDB buffer pool</strong></td>
+          <td>Write pages buffered in InnoDB buffer; flushed to disk by background checkpoint thread</td>
+          <td><code>innodb_flush_log_at_trx_commit=2</code> is write-back semantics; =1 is write-through</td>
+        </tr>
+        <tr>
+          <td><strong>Redis with write-behind plugin</strong></td>
+          <td>Application writes to Redis; background worker reads dirty keys and flushes to PostgreSQL/MySQL asynchronously</td>
+          <td>Commonly used for high-throughput app layers where DB write latency is unacceptable</td>
+        </tr>
+      </table>
+    </div>
+  </section>
+
+  <!-- S11: TRADE-OFFS -->
+  <section id="s11">
+    <h2 class="section-title"><span class="num">11</span> ⚖️ Trade-offs</h2>
+    <div class="table-wrap">
+      <table>
+        <tr><th>✅ Benefit</th><th>❌ Cost / Limitation</th></tr>
+        <tr>
+          <td><span class="benefit">Lowest write latency</span> — DB removed from write critical path entirely</td>
+          <td><span class="cost">Durability gap</span> — data in dirty buffer permanently lost on cache node failure</td>
+        </tr>
+        <tr>
+          <td><span class="benefit">Write coalescing</span> — N writes to same key = 1 DB write; massive DB write reduction</td>
+          <td><span class="cost">DB is stale during flush window</span> — reads bypassing cache see old data</td>
+        </tr>
+        <tr>
+          <td><span class="benefit">DB write throughput reduced</span> — absorbs bursty write traffic without DB bottlenecking</td>
+          <td><span class="cost">Complex implementation</span> — dirty tracking, flush ordering, eviction safety, flush failure handling</td>
+        </tr>
+        <tr>
+          <td><span class="benefit">Read performance unaffected</span> — cache still serves reads with correct latest data</td>
+          <td><span class="cost">Flush backpressure risk</span> — if DB slows, dirty buffer grows unboundedly without size cap</td>
+        </tr>
+      </table>
+    </div>
+  </section>
+
+  <!-- S12: INTERVIEW APPLICATION -->
+  <section id="s12">
+    <h2 class="section-title"><span class="num">12</span> 🎯 Interview Application</h2>
+
+    <p><strong>When an interviewer asks / says:</strong></p>
+    <ul style="margin-left:18px; margin-bottom:16px; font-size:14.5px; display:flex; flex-direction:column; gap:6px;">
+      <li>"The service has very high write throughput — how do you handle that?"</li>
+      <li>"Users are updating this counter/field hundreds of times per second"</li>
+      <li>"We need low write latency but the database is becoming a bottleneck"</li>
+      <li>"How would you design caching for a leaderboard / analytics counter / session store?"</li>
+    </ul>
+
+    <p><strong>What you say / do:</strong></p>
+    <p style="margin-bottom:16px;">In the deep dive phase, after identifying a write-heavy bottleneck, introduce write-back as a way to decouple write latency from database I/O. Immediately follow with the durability trade-off — this shows you know the cost, not just the pattern.</p>
+
+    <p><strong>The trade-off statement (memorize this):</strong></p>
+    <div class="tradeoff-box">
+      "If we choose write-back, we get sub-millisecond write latency and write coalescing that dramatically reduces DB load, but we pay with a durability gap — dirty writes are lost on cache failure. For this system [e.g., like counts, view counters, leaderboard scores], that trade is acceptable because eventual consistency is sufficient and we can add a WAL if we need stronger guarantees."
+    </div>
+  </section>
+
+  <!-- S13: MISCONCEPTIONS -->
+  <section id="s13">
+    <h2 class="section-title"><span class="num">13</span> ⚠️ Common Misconceptions &amp; Gotchas</h2>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><span>Write-back means writes are eventually consistent — DB reads will be fine after a short delay.</span></div>
+      <div class="right"><span class="icon">✅</span><span>During the flush window, the DB is stale. Any read bypassing the cache (a replica, direct DB query, another service) sees old data. Write-back only works correctly when all reads route through the same cache holding dirty state.</span></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><span>Write-back is just write-through with a delay — the data is safe in the cache.</span></div>
+      <div class="right"><span class="icon">✅</span><span>Cache memory is volatile. A node crash, OOM kill, or hardware failure permanently loses all dirty data that hasn't been flushed. "In the cache" is not the same as "durable."</span></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><span>You can use write-back with standard LRU eviction without any special handling.</span></div>
+      <div class="right"><span class="icon">✅</span><span>LRU eviction of a dirty entry without flushing it causes silent data loss. Correct write-back implementations must check dirty status before eviction and flush synchronously if the entry is dirty.</span></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><span>"Write-back" and "write-behind" are different caching strategies.</span></div>
+      <div class="right"><span class="icon">✅</span><span>They are the same strategy with different names. "Write-behind" emphasizes the buffering aspect; "write-back" emphasizes the return-from-cache acknowledgment. Use them interchangeably.</span></div>
+    </div>
+  </section>
+
+  <!-- S14: RELATIONSHIPS -->
+  <section id="s14">
+    <h2 class="section-title"><span class="num">14</span> 🔗 Relationships to Other Concepts</h2>
+    <div class="connections">
+      <div class="conn-card">
+        <span class="conn-icon">⬆️</span>
+        <div>
+          <div class="conn-label">Builds On</div>
+          <strong>5.1 Cache-aside &amp; 5.2 Write-through</strong> — write-back is the third vertex of the write strategy triangle; you need all three to make the contrast argument in an interview
+        </div>
+      </div>
+      <div class="conn-card">
+        <span class="conn-icon">🔓</span>
+        <div>
+          <div class="conn-label">Enables</div>
+          <strong>5.6 Cache Stampede / 5.7 Hot Key Problem</strong> — write-back with coalescing is a key hot-key mitigation for write-heavy keys; also connects to thundering herd behavior on flush burst after recovery
+        </div>
+      </div>
+      <div class="conn-card">
+        <span class="conn-icon">⚡</span>
+        <div>
+          <div class="conn-label">Tension With</div>
+          <strong>17.1 Linearizability</strong> — write-back is fundamentally incompatible with linearizability because the DB is stale during the flush window; it lives in the eventual consistency tier of the consistency spectrum
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- S15: QUIZ -->
+  <section id="s15">
+    <h2 class="section-title"><span class="num">15</span> 🧪 Self-Check Quiz</h2>
+    <div class="callout callout-quote">Answer these without looking. If you hesitate, revisit the section referenced in the hint.</div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">1</span>
+        <span class="qtext">What is write-back caching, and at what exact point is the client ACKed?</span>
+        <span class="quiz-toggle">Show hint ▼</span>
+      </div>
+      <div class="quiz-hint">💡 Think through your answer before expanding — if you hesitate, revisit Section 5 (Core Definition).</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">2</span>
+        <span class="qtext">A leaderboard updates user scores 500 times/second. Write-through is causing DB bottleneck. Would you switch to write-back? What's the key condition that must hold?</span>
+        <span class="quiz-toggle">Show hint ▼</span>
+      </div>
+      <div class="quiz-hint">💡 Think through your answer before expanding — if you hesitate, revisit Section 12 (Interview Application).</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">3</span>
+        <span class="qtext">What is a dirty buffer and what happens if a dirty cache entry is evicted without being flushed first?</span>
+        <span class="quiz-toggle">Show hint ▼</span>
+      </div>
+      <div class="quiz-hint">💡 Think through your answer before expanding — if you hesitate, revisit Section 6 (Dirty Buffer concept).</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">4</span>
+        <span class="qtext">Name a real production system that uses write-back semantics and explain exactly why it does so — not just "performance."</span>
+        <span class="quiz-toggle">Show hint ▼</span>
+      </div>
+      <div class="quiz-hint">💡 Think through your answer before expanding — if you hesitate, revisit Section 10 (Real-World Examples).</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">5</span>
+        <span class="qtext">Your write-back cache cluster crashes before the flush. What happens, and what are two specific mitigations you could have implemented?</span>
+        <span class="quiz-toggle">Show hint ▼</span>
+      </div>
+      <div class="quiz-hint">💡 Think through your answer before expanding — if you hesitate, revisit Section 9 (WAL section) and Section 11 (Trade-offs).</div>
+    </div>
+  </section>
+
+  <!-- S16: FURTHER READING -->
+  <section id="s16">
+    <h2 class="section-title"><span class="num">16</span> 📚 Further Reading</h2>
+    <ul class="reading-list">
+      <li><span class="cb"></span><span class="rtext"><strong>Designing Data-Intensive Applications</strong> (Kleppmann) — Ch. 5, buffered writes and replication lag</span></li>
+      <li><span class="cb"></span><span class="rtext"><strong>ByteByteGo "Top Caching Strategies"</strong> — Alex Xu, YouTube / ByteByteGo newsletter</span></li>
+      <li><span class="cb"></span><span class="rtext"><strong>AWS ElastiCache Caching Strategies</strong> — docs.aws.amazon.com/AmazonElastiCache/latest/red-ug/Strategies.html</span></li>
+      <li><span class="cb"></span><span class="rtext"><strong>Cassandra write path</strong> — cassandra.apache.org/doc/latest (memtable + commit log)</span></li>
+      <li><span class="cb"></span><span class="rtext"><strong>Linux kernel writeback documentation</strong> — kernel.org/doc/html/latest/admin-guide/sysctl/vm.html (dirty_ratio, dirty_expire_centisecs)</span></li>
+    </ul>
+  </section>
+
+  <!-- S17: MY NOTES -->
+  <section id="s17">
+    <h2 class="section-title"><span class="num">17</span> ✍️ My Notes</h2>
+    <div class="callout callout-quote">Personal observations, things that confused me, analogies that helped.</div>
+    <textarea class="notes-area" placeholder="Add your own notes here..."></textarea>
+  </section>
+
+</article>
+</main>
+
+<script>
+// TOC active link on scroll
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('#toc nav a');
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(l => l.classList.remove('active'));
+      const active = document.querySelector(`#toc nav a[href="#${e.target.id}"]`);
+      if (active) active.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -75% 0px' });
+sections.forEach(s => observer.observe(s));
+
+// Checklist toggle
+document.querySelectorAll('.checklist .cb').forEach(cb => {
+  cb.addEventListener('click', () => cb.parentElement.classList.toggle('checked'));
+});
+document.querySelectorAll('.reading-list .cb').forEach(cb => {
+  cb.addEventListener('click', () => cb.parentElement.classList.toggle('checked'));
+});
+
+// Phase card expand/collapse
+function togglePhase(id) {
+  document.getElementById(id).classList.toggle('open');
+}
+
+// Quiz hint reveal
+function toggleQuiz(el) {
+  el.closest('.quiz-item').classList.toggle('open');
+  const toggle = el.querySelector('.quiz-toggle');
+  toggle.textContent = el.closest('.quiz-item').classList.contains('open') ? 'Hide hint ▲' : 'Show hint ▼';
+}
+
+// Persist notes to localStorage
+const notesArea = document.querySelector('.notes-area');
+const NOTES_KEY = 'notes_5_3_write_back';
+notesArea.value = localStorage.getItem(NOTES_KEY) || '';
+notesArea.addEventListener('input', () => localStorage.setItem(NOTES_KEY, notesArea.value));
+</script>
+</body>
+</html>

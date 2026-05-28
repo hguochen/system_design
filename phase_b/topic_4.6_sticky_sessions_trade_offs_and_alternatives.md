@@ -321,3 +321,30 @@ Proactively flag sticky sessions as a smell: "If this service stores session sta
 
 > *Personal observations, things that confused me, analogies that helped.*
 
+ONE-LINER
+  Sticky sessions route a client to the same server every time — a band-aid
+  over server-side state that caps horizontal scalability.
+
+KEY PROPERTIES / RULES
+  1. Implemented via cookie-based affinity (LB inserts Set-Cookie)
+     or IP-hash affinity (source IP deterministically maps to a node).
+  2. Breaks even load distribution — "hot" users cluster on the same node.
+  3. Node failure drops ALL sessions pinned to that node — no redundancy.
+  4. New servers don't absorb existing sticky traffic — no re-balancing.
+  5. The correct fix is stateless redesign, not better stickiness.
+
+DECISION RULE
+  Use sticky sessions when: you cannot refactor server-side state in the
+  short term (legacy migration, COTS software, WebSocket transport layer).
+  Avoid sticky sessions when: designing a new system or scaling beyond a
+  few nodes — externalize state to Redis or use JWTs instead.
+
+NUMBERS / FORMULAS
+  Cookie TTL = session timeout (e.g., 30 min); keep short to limit drift.
+  IP-hash: hash(src_IP) % num_backends — recomputes on every scaling event.
+
+GOTCHA TO NEVER FORGET
+  IP-hash collapses under NAT — thousands of corporate users share one IP,
+  all routing to one server. Cookie-based affinity is generally preferred.
+
+  
