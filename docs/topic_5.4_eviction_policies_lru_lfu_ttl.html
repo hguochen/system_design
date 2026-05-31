@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.4 Eviction Policies — LRU, LFU, TTL</title>
+<style>
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface-alt: #f3f2ef;
+    --border: #e5e3de; --text: #1a1917; --text-muted: #6b6861;
+    --accent: #2563eb; --accent-light: #dbeafe;
+    --green: #16a34a; --green-light: #dcfce7;
+    --red: #dc2626; --red-light: #fee2e2;
+    --yellow: #d97706; --yellow-light: #fef3c7;
+    --purple: #7c3aed; --purple-light: #ede9fe;
+    --code-bg: #1e1e2e; --code-text: #cdd6f4;
+    --sidebar-w: 240px; --content-max: 780px;
+    font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; }
+  #toc { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0 48px; z-index: 100; }
+  #toc-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  #toc-header .phase-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-bottom: 6px; }
+  #toc-header h2 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  #toc nav a { display: block; padding: 5px 16px 5px 20px; font-size: 12.5px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+  main { margin-left: var(--sidebar-w); padding: 48px 48px 96px; max-width: calc(var(--sidebar-w) + var(--content-max) + 96px); width: 100%; }
+  article { max-width: var(--content-max); }
+  .doc-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 2px solid var(--border); }
+  .doc-header .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+  .tag-phase { background: var(--accent-light); color: var(--accent); }
+  .tag-topic { background: var(--purple-light); color: var(--purple); }
+  .tag-date  { background: var(--surface-alt);  color: var(--text-muted); }
+  .doc-header h1 { font-size: 30px; font-weight: 800; line-height: 1.25; letter-spacing: -.02em; color: var(--text); }
+  section { margin-bottom: 52px; scroll-margin-top: 32px; }
+  h2.section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -.01em; }
+  h2.section-title .num { font-size: 11px; font-weight: 800; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; letter-spacing: .04em; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 24px 0 10px; }
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 14px; border-left: 3px solid; }
+  .callout-goal  { background: var(--accent-light); border-color: var(--accent); color: #1e40af; }
+  .callout-tip   { background: var(--yellow-light); border-color: var(--yellow); color: #92400e; }
+  .callout-quote { background: var(--surface-alt);  border-color: var(--border); color: var(--text-muted); font-style: italic; }
+  .cheatsheet { background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 24px 28px; font-family: "SF Mono","Fira Code","Cascadia Code",Menlo,monospace; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-x: auto; margin-top: 16px; }
+  .cheatsheet .label { color: #cba6f7; font-weight: 700; letter-spacing: .08em; display: block; margin-top: 18px; margin-bottom: 4px; border-bottom: 1px solid #313244; padding-bottom: 3px; }
+  .cheatsheet .label:first-child { margin-top: 0; }
+  .mindmap-wrap { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 12px; padding: 20px 16px 12px; margin: 20px 0 24px; overflow-x: auto; }
+  .mindmap-wrap p.caption { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 10px; margin-bottom: 0; }
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; font-size: 14.5px; line-height: 1.55; }
+  .checklist li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 2px; background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .checklist li.checked .cb { background: var(--green); border-color: var(--green); }
+  .checklist li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .checklist li.checked .text { color: var(--text-muted); text-decoration: line-through; }
+  .phase-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
+  .phase-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; cursor: pointer; user-select: none; background: var(--surface-alt); }
+  .phase-header:hover { background: var(--border); }
+  .phase-label { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+  .phase-badge { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 2px 8px; border-radius: 20px; }
+  .ph1 { background: #dbeafe; color: #1d4ed8; } .ph2 { background: #fce7f3; color: #9d174d; }
+  .ph3 { background: #d1fae5; color: #065f46; } .ph4 { background: #fef3c7; color: #92400e; }
+  .phase-chevron { font-size: 12px; color: var(--text-muted); transition: transform .2s; }
+  .phase-card.open .phase-chevron { transform: rotate(180deg); }
+  .phase-body { display: none; padding: 16px 20px 20px; }
+  .phase-card.open .phase-body { display: block; }
+  .phase-goal { font-size: 12.5px; color: var(--text-muted); font-style: italic; margin-bottom: 12px; }
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: var(--surface-alt); padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.5; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+  .misconception { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .misconception .wrong { background: var(--red-light); padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; }
+  .misconception .right { padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; color: #065f46; background: var(--green-light); }
+  .misconception .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .quiz-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .quiz-q { padding: 14px 18px; font-size: 14.5px; font-weight: 600; cursor: pointer; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .quiz-q:hover { background: var(--surface-alt); }
+  .quiz-num { flex-shrink: 0; width: 24px; height: 24px; background: var(--accent); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; margin-top: 1px; }
+  .quiz-q .qtext { flex: 1; }
+  .quiz-toggle { font-size: 11px; color: var(--text-muted); flex-shrink: 0; margin-top: 3px; }
+  .quiz-hint { display: none; padding: 10px 18px 14px; font-size: 13px; color: #92400e; background: var(--yellow-light); border-top: 1px solid var(--border); }
+  .quiz-item.open .quiz-hint { display: block; }
+  .reading-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .reading-list li { display: flex; align-items: flex-start; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; font-size: 14px; }
+  .reading-list li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 1px; cursor: pointer; background: var(--surface); display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .reading-list li.checked .cb { background: var(--green); border-color: var(--green); }
+  .reading-list li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .reading-list li.checked .rtext { color: var(--text-muted); text-decoration: line-through; }
+  .notes-area { width: 100%; min-height: 160px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: inherit; font-size: 14px; color: var(--text); resize: vertical; line-height: 1.6; }
+  .notes-area:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .focus-list { list-style: none; display: flex; flex-direction: column; gap: 14px; }
+  .focus-list li { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14.5px; line-height: 1.6; }
+  .focus-list li strong { color: var(--accent); display: block; margin-bottom: 4px; }
+  .connections { display: flex; flex-direction: column; gap: 12px; }
+  .conn-card { display: flex; align-items: flex-start; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14px; }
+  .conn-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .conn-label { font-weight: 700; margin-bottom: 3px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .tradeoff-box { background: var(--surface-alt); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 14px 18px; font-size: 14px; font-style: italic; color: var(--text); margin-top: 14px; }
+  @media (max-width: 900px) { #toc { display: none; } main { margin-left: 0; padding: 24px 20px 60px; } }
+</style>
+</head>
+<body>
+
+<aside id="toc">
+  <div id="toc-header">
+    <div class="phase-tag">Phase B — Scalability</div>
+    <h2>5.4 Eviction Policies — LRU, LFU, TTL</h2>
+  </div>
+  <nav>
+    <a href="#s0">🗺️ Topic Overview</a>
+    <a href="#s1">🎯 Goal</a>
+    <a href="#s2">✅ Mastery</a>
+    <a href="#s3">🗓️ Study Phases</a>
+    <a href="#s4">📋 Cheatsheet</a>
+    <a href="#s5">🧠 Core Definition</a>
+    <a href="#s6">📦 Core Concepts</a>
+    <a href="#s7">🔍 First Principles</a>
+    <a href="#s8">🗺️ Mental Models</a>
+    <a href="#s9">⚙️ How It Works</a>
+    <a href="#s10">🏭 Real-World Examples</a>
+    <a href="#s11">⚖️ Trade-offs</a>
+    <a href="#s12">🎯 Interview Application</a>
+    <a href="#s13">⚠️ Misconceptions</a>
+    <a href="#s14">🔗 Relationships</a>
+    <a href="#s15">🧪 Self-Check Quiz</a>
+    <a href="#s16">📚 Further Reading</a>
+    <a href="#s17">✍️ My Notes</a>
+  </nav>
+</aside>
+
+<main>
+<article>
+
+  <header class="doc-header">
+    <div class="meta">
+      <span class="tag tag-phase">⚡ Phase B — Scalability</span>
+      <span class="tag tag-topic">⚡ Topic 5 — Caching Systems</span>
+      <span class="tag tag-date">📅 2026-05-28</span>
+    </div>
+    <h1>5.4 Eviction Policies — LRU, LFU, TTL</h1>
+  </header>
+
+  <!-- S0: TOPIC OVERVIEW -->
+  <section id="s0">
+    <h2 class="section-title"><span class="num">00</span> 🗺️ Topic Overview</h2>
+    <h3>What This Topic Is About</h3>
+    <p>Cache memory is finite. When a cache fills up, it must decide which entries to remove to make room for new ones — this decision is governed by an <strong>eviction policy</strong>. The policy you choose directly affects cache hit rate, latency, and correctness. The central tension is <strong>memory utilization vs. hit rate vs. data freshness</strong>: no single policy wins in all workloads, and a wrong choice can mean your cache underperforms a naively larger one.</p>
+
+    <h3>🎯 What to Focus On</h3>
+    <ul class="focus-list">
+      <li><strong>1. What each policy optimizes for</strong>LRU optimizes for recency, LFU optimizes for frequency, TTL optimizes for freshness. Each assumes a different access pattern. Matching the policy to the workload is the key skill.</li>
+      <li><strong>2. Data structures behind LRU and LFU</strong>LRU uses a doubly linked list + hashmap for O(1) get/put. LFU uses a frequency-bucketed doubly linked list structure for O(1). These come up in coding interviews too — know them cold.</li>
+      <li><strong>3. When LFU beats LRU</strong>In Zipfian (frequency-skewed) workloads — top songs, viral posts, CDN objects — LFU dramatically outperforms LRU. Candidates who only know LRU get exposed here.</li>
+      <li><strong>4. TTL is not the same kind of policy</strong>TTL is a freshness/consistency mechanism, not a memory-pressure algorithm. Production systems combine TTL (for data validity) with LRU or LFU (for memory management) — they serve different purposes.</li>
+      <li><strong>5. Cache pollution — LRU's silent killer</strong>A sequential scan evicts all hot data from an LRU cache. Know the failure mode and the mitigations: LFU, 2Q, or LRU-K. This is a common deep-dive probe in interviews.</li>
+    </ul>
+  </section>
+
+  <!-- S1: GOAL -->
+  <section id="s1">
+    <h2 class="section-title"><span class="num">01</span> 🎯 Goal of This Subtopic</h2>
+    <div class="callout callout-goal"><em>Why are you studying this? What should you be able to do after this session?</em></div>
+    <p>Be able to choose the right eviction policy for a given access pattern and justify the decision in an interview. Be able to explain the O(1) LRU and LFU implementation mechanics, describe how TTL interacts with memory-based policies, and identify when cache pollution from scan-heavy workloads is a concern — all without referring to notes.</p>
+  </section>
+
+  <!-- S2: MASTERY -->
+  <section id="s2">
+    <h2 class="section-title"><span class="num">02</span> ✅ What Mastery Looks Like</h2>
+    <div class="callout callout-quote">Concrete, testable proof that you own this concept — not just familiarity.</div>
+    <ul class="checklist" id="mastery-list">
+      <li><span class="cb"></span><span class="text">Can explain LRU, LFU, and TTL eviction mechanics without notes and describe when each is the right choice</span></li>
+      <li><span class="cb"></span><span class="text">Can describe the O(1) LRU implementation using a doubly linked list + hashmap</span></li>
+      <li><span class="cb"></span><span class="text">Can explain why LFU outperforms LRU in frequency-skewed workloads and give a concrete example</span></li>
+      <li><span class="cb"></span><span class="text">Can identify the cache pollution problem and propose a mitigation (2Q, LRU-K, or LFU)</span></li>
+      <li><span class="cb"></span><span class="text">Can explain how TTL and LRU/LFU interact in a combined eviction strategy</span></li>
+    </ul>
+    <br>
+    <div class="callout callout-tip">💡 <strong>Rule of thumb:</strong> If you can teach it to someone else and field their follow-up questions, you've mastered it.</div>
+  </section>
+
+  <!-- S3: STUDY PHASES -->
+  <section id="s3">
+    <h2 class="section-title"><span class="num">03</span> 🗓️ Study Phases to Achieve Mastery</h2>
+    <div class="callout callout-quote">Work through each phase in order. Don't advance until you can honestly tick every item.</div>
+
+    <div class="phase-card open" id="ph1">
+      <div class="phase-header" onclick="togglePhase('ph1')">
+        <div class="phase-label"><span class="phase-badge ph1">Phase 1</span> Acquire 📖</div>
+        <span class="phase-chevron">▼</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Read deeply enough that you could explain the concept without the doc.</p>
+        <ul class="checklist">
+          <li><span class="cb"></span><span class="text">Read <strong>Redis Eviction Policies</strong> — https://redis.io/docs/manual/eviction/ (all 8 policies explained)</span></li>
+          <li><span class="cb"></span><span class="text">Read <strong>ByteByteGo System Design Interview Vol 1, Chapter 6</strong> — Key-Value Store design (covers cache eviction)</span></li>
+          <li><span class="cb"></span><span class="text">Read <strong>LFU O(1) Algorithm paper</strong> — Shah et al. (2010): http://dhruvbird.com/lfu.pdf</span></li>
+          <li><span class="cb"></span><span class="text">Read through <strong>Sections 5–9</strong> (Core Definition → How It Works) carefully — don't skim</span></li>
+          <li><span class="cb"></span><span class="text">Re-read the <strong>Cheatsheet</strong> (Section 4) and try to recite it from memory after</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-card" id="ph2">
+      <div class="phase-header" onclick="togglePhase('ph2')">
+        <div class="phase-label"><span class="phase-badge ph2">Phase 2</span> Consolidate ✍️</div>
+        <span class="phase-chevron">▼</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Verify you can reproduce the knowledge in your own words without looking.</p>
+        <ul class="checklist">
+          <li><span class="cb"></span><span class="text">Close the doc — write out the Core Definition from memory, then compare</span></li>
+          <li><span class="cb"></span><span class="text">Explain First Principles out loud without notes — what problem does this solve and why?</span></li>
+          <li><span class="cb"></span><span class="text">Reconstruct the LRU and LFU mechanics step by step from memory</span></li>
+          <li><span class="cb"></span><span class="text">Restate each Trade-off row in your own words — if you can't explain the cost, you don't own it yet</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-card" id="ph3">
+      <div class="phase-header" onclick="togglePhase('ph3')">
+        <div class="phase-label"><span class="phase-badge ph3">Phase 3</span> Apply 🔧</div>
+        <span class="phase-chevron">▼</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Connect to real systems and simulate interview scenarios.</p>
+        <ul class="checklist">
+          <li><span class="cb"></span><span class="text">Go through Real-World System Examples (Section 10) — verify each claim independently and add anything missed to My Notes</span></li>
+          <li><span class="cb"></span><span class="text">Practice the Interview Application (Section 12) out loud — say the trigger phrases and your response as if in a live interview</span></li>
+          <li><span class="cb"></span><span class="text">Work through Common Misconceptions (Section 13) — for each, explain <em>why</em> the misconception is wrong, not just that it is</span></li>
+          <li><span class="cb"></span><span class="text">Trace the Relationships to Other Concepts (Section 14) — can you explain each connection without looking?</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-card" id="ph4">
+      <div class="phase-header" onclick="togglePhase('ph4')">
+        <div class="phase-label"><span class="phase-badge ph4">Phase 4</span> Validate 🧪</div>
+        <span class="phase-chevron">▼</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Confirm you actually own it, not just recognize it.</p>
+        <ul class="checklist">
+          <li><span class="cb"></span><span class="text">Answer every Self-Check Quiz question (Section 15) out loud without looking at your notes</span></li>
+          <li><span class="cb"></span><span class="text">Recite the Cheatsheet (Section 4) from memory — if you can't, re-do Phase 2</span></li>
+          <li><span class="cb"></span><span class="text">Tick off items in What Mastery Looks Like (Section 2) — only check a box if you can demonstrate it on demand</span></li>
+          <li><span class="cb"></span><span class="text">Teach this concept out loud to an imaginary interviewer for 2 minutes without hesitation or notes</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- S4: CHEATSHEET -->
+  <section id="s4">
+    <h2 class="section-title"><span class="num">04</span> 📋 Cheatsheet</h2>
+    <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+
+    <!-- Inline SVG Mindmap -->
+    <div class="mindmap-wrap">
+      <svg viewBox="0 0 1100 700" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;min-width:600px;">
+        <defs>
+          <marker id="arr" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+            <path d="M1,1 L7,4 L1,7 Z" fill="#9ca3af"/>
+          </marker>
+        </defs>
+        <!-- Center -->
+        <ellipse cx="550" cy="350" rx="110" ry="46" fill="#a5d8ff" stroke="#1971c2" stroke-width="2"/>
+        <text x="550" y="344" text-anchor="middle" font-size="14" font-weight="700" fill="#1971c2">Eviction Policies</text>
+        <text x="550" y="362" text-anchor="middle" font-size="12" fill="#1971c2">LRU · LFU · TTL</text>
+
+        <!-- Branch: LRU -->
+        <line x1="448" y1="318" x2="290" y2="210" stroke="#9ca3af" stroke-width="1.5" marker-end="url(#arr)"/>
+        <rect x="165" y="175" width="140" height="52" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+        <text x="235" y="197" text-anchor="middle" font-size="13" font-weight="700" fill="#3b5bdb">LRU</text>
+        <text x="235" y="214" text-anchor="middle" font-size="11" fill="#3b5bdb">Least Recently Used</text>
+        <!-- LRU children -->
+        <line x1="170" y1="182" x2="100" y2="130" stroke="#9ca3af" stroke-width="1"/>
+        <rect x="20" y="105" width="145" height="40" rx="6" fill="#edf2ff" stroke="#3b5bdb" stroke-width="1"/>
+        <text x="93" y="122" text-anchor="middle" font-size="12" fill="#3b5bdb">Doubly LL + HashMap</text>
+        <text x="93" y="136" text-anchor="middle" font-size="11" fill="#4c6ef5">O(1) get &amp; put</text>
+        <line x1="170" y1="210" x2="80" y2="245" stroke="#9ca3af" stroke-width="1"/>
+        <rect x="10" y="230" width="140" height="38" rx="6" fill="#edf2ff" stroke="#3b5bdb" stroke-width="1"/>
+        <text x="80" y="247" text-anchor="middle" font-size="12" fill="#3b5bdb">Recency-biased</text>
+        <text x="80" y="261" text-anchor="middle" font-size="11" fill="#4c6ef5">Recent = likely reused</text>
+        <line x1="200" y1="227" x2="130" y2="290" stroke="#9ca3af" stroke-width="1"/>
+        <rect x="20" y="278" width="155" height="38" rx="6" fill="#ffc9c9" stroke="#c92a2a" stroke-width="1"/>
+        <text x="98" y="295" text-anchor="middle" font-size="12" fill="#c92a2a">⚠ Scan Pollution</text>
+        <text x="98" y="309" text-anchor="middle" font-size="11" fill="#c92a2a">Seq. scan evicts hot data</text>
+
+        <!-- Branch: LFU -->
+        <line x1="448" y1="375" x2="295" y2="490" stroke="#9ca3af" stroke-width="1.5" marker-end="url(#arr)"/>
+        <rect x="165" y="465" width="140" height="52" rx="8" fill="#ffd8a8" stroke="#e67700" stroke-width="1.5"/>
+        <text x="235" y="487" text-anchor="middle" font-size="13" font-weight="700" fill="#e67700">LFU</text>
+        <text x="235" y="504" text-anchor="middle" font-size="11" fill="#e67700">Least Frequently Used</text>
+        <!-- LFU children -->
+        <line x1="175" y1="475" x2="95" y2="420" stroke="#9ca3af" stroke-width="1"/>
+        <rect x="10" y="400" width="150" height="38" rx="6" fill="#fff3e0" stroke="#e67700" stroke-width="1"/>
+        <text x="85" y="418" text-anchor="middle" font-size="12" fill="#e67700">Freq. bucket LL</text>
+        <text x="85" y="432" text-anchor="middle" font-size="11" fill="#e67700">O(1) via min-freq ptr</text>
+        <line x1="175" y1="517" x2="90" y2="565" stroke="#9ca3af" stroke-width="1"/>
+        <rect x="10" y="550" width="155" height="38" rx="6" fill="#b2f2bb" stroke="#2f9e44" stroke-width="1"/>
+        <text x="88" y="567" text-anchor="middle" font-size="12" fill="#2f9e44">✓ Scan-resistant</text>
+        <text x="88" y="581" text-anchor="middle" font-size="11" fill="#2f9e44">Scans stay in freq=1</text>
+        <line x1="210" y1="517" x2="155" y2="570" stroke="#9ca3af" stroke-width="1"/>
+        <rect x="80" y="558" width="155" height="38" rx="6" fill="#ffd8a8" stroke="#e67700" stroke-width="1"/>
+        <text x="158" y="575" text-anchor="middle" font-size="12" fill="#e67700">Decay counter</text>
+        <text x="158" y="589" text-anchor="middle" font-size="11" fill="#e67700">Prevents stale popularity</text>
+
+        <!-- Branch: TTL -->
+        <line x1="652" y1="318" x2="805" y2="210" stroke="#9ca3af" stroke-width="1.5" marker-end="url(#arr)"/>
+        <rect x="795" y="175" width="140" height="52" rx="8" fill="#c3fae8" stroke="#0ca678" stroke-width="1.5"/>
+        <text x="865" y="197" text-anchor="middle" font-size="13" font-weight="700" fill="#0ca678">TTL</text>
+        <text x="865" y="214" text-anchor="middle" font-size="11" fill="#0ca678">Time To Live</text>
+        <!-- TTL children -->
+        <line x1="930" y1="185" x2="990" y2="130" stroke="#9ca3af" stroke-width="1"/>
+        <rect x="940" y="105" width="155" height="40" rx="6" fill="#d3f9d8" stroke="#0ca678" stroke-width="1"/>
+        <text x="1018" y="122" text-anchor="middle" font-size="12" fill="#0ca678">Freshness guarantee</text>
+        <text x="1018" y="136" text-anchor="middle" font-size="11" fill="#0ca678">Max-age contract</text>
+        <line x1="930" y1="210" x2="1005" y2="245" stroke="#9ca3af" stroke-width="1"/>
+        <rect x="945" y="230" width="155" height="38" rx="6" fill="#ffc9c9" stroke="#c92a2a" stroke-width="1"/>
+        <text x="1023" y="247" text-anchor="middle" font-size="12" fill="#c92a2a">⚠ Stampede risk</text>
+        <text x="1023" y="261" text-anchor="middle" font-size="11" fill="#c92a2a">Short TTL → mass expiry</text>
+
+        <!-- Branch: Real Systems -->
+        <line x1="652" y1="375" x2="808" y2="490" stroke="#9ca3af" stroke-width="1.5" marker-end="url(#arr)"/>
+        <rect x="795" y="465" width="160" height="52" rx="8" fill="#b2f2bb" stroke="#2f9e44" stroke-width="1.5"/>
+        <text x="875" y="490" text-anchor="middle" font-size="13" font-weight="700" fill="#2f9e44">Real Systems</text>
+        <text x="875" y="507" text-anchor="middle" font-size="11" fill="#2f9e44">Redis · Memcached · MySQL</text>
+        <!-- Real systems children -->
+        <line x1="875" y1="517" x2="875" y2="555" stroke="#9ca3af" stroke-width="1"/>
+        <rect x="800" y="553" width="155" height="38" rx="6" fill="#d3f9d8" stroke="#2f9e44" stroke-width="1"/>
+        <text x="878" y="570" text-anchor="middle" font-size="12" fill="#2f9e44">Redis: 8 policies</text>
+        <text x="878" y="584" text-anchor="middle" font-size="11" fill="#2f9e44">allkeys-lru/lfu/random</text>
+
+        <!-- Branch: Decision Rule -->
+        <line x1="590" y1="304" x2="680" y2="155" stroke="#9ca3af" stroke-width="1.5" marker-end="url(#arr)"/>
+        <rect x="610" y="108" width="185" height="60" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+        <text x="703" y="133" text-anchor="middle" font-size="13" font-weight="700" fill="#3b5bdb">Decision Rule</text>
+        <text x="703" y="150" text-anchor="middle" font-size="11" fill="#3b5bdb">Recency→LRU · Freq→LFU</text>
+        <text x="703" y="163" text-anchor="middle" font-size="11" fill="#3b5bdb">Freshness→TTL</text>
+
+        <!-- Branch: Gotcha -->
+        <line x1="550" y1="396" x2="550" y2="520" stroke="#9ca3af" stroke-width="1.5" marker-end="url(#arr)"/>
+        <rect x="450" y="520" width="200" height="52" rx="8" fill="#ffc9c9" stroke="#c92a2a" stroke-width="1.5"/>
+        <text x="550" y="543" text-anchor="middle" font-size="13" font-weight="700" fill="#c92a2a">⚠ Gotcha</text>
+        <text x="550" y="560" text-anchor="middle" font-size="11" fill="#c92a2a">LRU ≠ scan-safe</text>
+        <text x="550" y="574" text-anchor="middle" font-size="11" fill="#c92a2a">Use LFU or 2Q if scans present</text>
+      </svg>
+      <p class="caption">5.4 Eviction Policies — Mindmap</p>
+    </div>
+
+    <div class="cheatsheet"><span class="label">§ 1  WHY IT EXISTS</span>
+  Cache memory is finite. Without a policy you either reject new entries
+  (OOM errors) or evict randomly (unpredictable hit rate, may kill hot data).
+  Eviction policies maximize hit rate by formalizing temporal / frequency
+  locality into deterministic algorithms.
+
+<span class="label">§ 2  WHAT EACH POLICY IS</span>
+  LRU  — evict the entry accessed furthest back in time.
+         O(1) via doubly linked list (access order) + hashmap (key lookup).
+  LFU  — evict the entry with the lowest access count.
+         O(1) via frequency-bucket doubly linked list + min-freq pointer.
+  TTL  — evict entries whose age exceeds a configured threshold.
+         Freshness mechanism — orthogonal to memory pressure.
+
+<span class="label">§ 3  THE 3 KEY DISTINCTIONS</span>
+  1. LRU vs LFU: LRU = recency, LFU = frequency.
+     LFU wins for Zipfian workloads (top 5% of keys = 80% of traffic).
+     LFU is scan-resistant; scan entries stay at freq=1 and evict first.
+  2. TTL ≠ eviction policy: TTL answers "is this valid?",
+     LRU/LFU answers "which to remove when full?" — combine both.
+  3. Cache pollution: sequential scan → LRU evicts entire hot dataset.
+     Fix: LFU, 2Q (probationary + protected queue), or LRU-K.
+
+<span class="label">§ 4  USE / AVOID</span>
+  LRU:  recency-biased workloads (general-purpose, session stores)
+  LFU:  Zipfian / freq-skewed (music, CDN, social media feeds)
+  TTL:  data with known validity window (auth tokens, API responses)
+  AVOID LRU when: batch jobs or full table scans share the data path.
+
+<span class="label">§ 5  INTERVIEW TRIGGERS</span>
+  → "How does your cache decide what to evict when full?"
+  → "The hot dataset keeps getting evicted under load"
+  → "5% of items account for 80% of reads" (→ LFU)
+  → "How do you prevent stale data?" (→ TTL)
+
+<span class="label">§ 6  FTAC</span>
+  F  "Tension: hit rate vs. workload pattern. LRU is O(1) and simple,
+     but a single sequential scan evicts the entire hot dataset."
+  T  "LRU: simple, works for recency workloads, scan-vulnerable.
+     LFU: higher hit rate for Zipfian traffic, scan-resistant,
+     more complex + needs counter decay to avoid stale popularity."
+  A  "Assuming this is a read-heavy social feed — top ~1% of posts
+     get ~80% of traffic — Zipfian distribution holds."
+  C  "LFU with Redis allkeys-lfu. Cost: slightly more complex config,
+     need to tune lfu-decay-time. TTL per key for freshness."
+
+<span class="label">§ 7  NUMBERS &amp; GOTCHA</span>
+  Redis default: noeviction (throws OOM at capacity — must configure!)
+  Redis LRU: approximate — samples 5 keys, evicts least recent among sample
+  Redis LFU: logarithmic counter 0–255, lfu-decay-time controls staleness
+  GOTCHA: LRU is NOT scan-resistant — one full table scan evicts all hot data</div>
+  </section>
+
+  <!-- S5: CORE DEFINITION -->
+  <section id="s5">
+    <h2 class="section-title"><span class="num">05</span> 🧠 Core Definition</h2>
+    <div class="callout callout-quote">What is it, in one sentence?</div>
+    <p>An <strong>eviction policy</strong> is the algorithm a cache uses to decide which entry to remove when it reaches capacity. The three dominant policies are <strong>LRU</strong> (evict the least recently accessed entry), <strong>LFU</strong> (evict the least frequently accessed entry), and <strong>TTL</strong> (evict entries whose age exceeds a configured threshold — a freshness mechanism rather than a pure memory-pressure algorithm).</p>
+  </section>
+
+  <!-- S6: CORE CONCEPTS -->
+  <section id="s6">
+    <h2 class="section-title"><span class="num">06</span> 📦 Core Concepts</h2>
+    <div class="callout callout-quote">The essential building blocks — terms and ideas you must have solid before going deeper.</div>
+
+    <h3>LRU — Least Recently Used</h3>
+    <p>LRU maintains an implicit temporal ordering: the entry accessed furthest back in time is the first eviction candidate. It assumes temporal locality — recently used data is likely to be used again soon. Implemented in O(1) for both get and put using a <strong>doubly linked list</strong> (to maintain access order) combined with a <strong>hashmap</strong> (for O(1) key lookup). On every access, the node moves to the head; eviction removes the tail.</p>
+
+    <h3>LFU — Least Frequently Used</h3>
+    <p>LFU tracks access count per entry and evicts the entry with the lowest count, assuming frequency locality — popular items stay popular. LFU outperforms LRU in Zipfian (frequency-skewed) workloads, e.g., top songs, viral posts, CDN content. The naive implementation uses a min-heap (O(log n)), but an <strong>O(1) implementation</strong> exists using a doubly linked list of frequency buckets plus a min-frequency pointer.</p>
+
+    <h3>TTL — Time To Live</h3>
+    <p>TTL is a time-based expiry mechanism: each entry is stamped with a creation time and invalidated once elapsed time exceeds the configured TTL. TTL is primarily about <strong>data freshness and consistency</strong> — it prevents stale data from being served even if the cache isn't full. Most systems combine TTL with LRU or LFU: TTL answers "is this data still valid?", while LRU/LFU answers "which entry to remove when full?"</p>
+
+    <h3>Cache Pollution</h3>
+    <p>Cache pollution occurs when a workload (sequential scan, batch job) reads a large volume of one-time-use data, evicting hot, frequently reused entries from an LRU cache. LRU has no knowledge of access frequency, so it faithfully evicts the "least recently used" entries — which happen to be your hot dataset. Solutions: LFU (immune to scans — cold scan entries never accrue frequency), 2Q (probationary queue for new entries, protected LRU queue for those accessed twice), or LRU-K (evict based on K-th most recent access).</p>
+
+    <h3>Approximate vs. Exact Eviction</h3>
+    <p>Exact LRU and LFU require maintaining precise access metadata, which has memory and CPU overhead. Production systems use <strong>approximate implementations</strong>: Redis LRU randomly samples a configurable number of keys (default 5) and evicts the least recent among the sample. Redis LFU uses a logarithmic counter (0–255) with a configurable decay factor to approximate historical frequency without unbounded counter growth. These approximations are fast and sufficiently accurate at scale.</p>
+  </section>
+
+  <!-- S7: FIRST PRINCIPLES -->
+  <section id="s7">
+    <h2 class="section-title"><span class="num">07</span> 🔍 First Principles — Why Does This Exist?</h2>
+    <div class="callout callout-quote">What fundamental problem does this concept solve? Why was it invented?</div>
+    <p>Cache memory is finite — typically orders of magnitude smaller than the dataset it serves. As new entries arrive, old ones must be discarded. Without a policy, you're forced to either reject new entries (<em>no-eviction</em>, which throws OOM errors at capacity) or remove entries randomly (<em>random eviction</em>, which has unpredictable hit rates and can evict the hottest entry in the dataset). Both are terrible at scale.</p>
+    <p>The core insight is that <strong>not all cached entries are equally valuable</strong>. Entries recently accessed are likely to be accessed again (temporal locality). Entries accessed many times are likely to remain popular (frequency locality). Entries older than a known validity window are likely wrong or stale. Eviction policies formalize these intuitions into deterministic algorithms that maximize hit rate for a given cache size.</p>
+    <p>The stakes are high: a cache with an 80% hit rate vs. a 95% hit rate can mean the difference between 5× and 20× reduction in database load — from the same hardware budget. Poor eviction policy is often the silent cause of unexpectedly high cache miss rates in production systems that look correctly configured on the surface.</p>
+  </section>
+
+  <!-- S8: MENTAL MODELS -->
+  <section id="s8">
+    <h2 class="section-title"><span class="num">08</span> 🗺️ Mental Models</h2>
+    <div class="callout callout-quote">Intuition frames that help you reason about this concept fast — especially under interview pressure.</div>
+
+    <h3>Model 1: The Bookshelf</h3>
+    <p>Imagine a physical bookshelf with limited space. LRU means: when you need to add a new book, remove the one you picked up least recently. LFU means: remove the one you've opened the fewest times total. TTL means: any book older than 6 months gets removed regardless of access. The failure mode of LRU is obvious here — if you do one big research project reading 50 rarely-used books sequentially, all your favorite frequently-read books get pushed off the shelf. LFU would protect them because they have high access counts.</p>
+    <p><em>Where this breaks down:</em> The bookshelf model doesn't capture the counter-decay issue in LFU — in real systems, a book that was very popular 2 years ago but hasn't been touched since will have an artificially high count and won't be evicted. Redis LFU's decay mechanism is the fix.</p>
+
+    <h3>Model 2: The Frequency Leaderboard</h3>
+    <p>Think of LFU as a leaderboard ranked by access count. New entries start at count=1, at the bottom. Every access moves an entry up one rung. Eviction always removes from the bottom rung. The insight: a scan workload reads 10,000 keys once each — they all land at count=1 and get evicted first, never disturbing high-frequency entries. The weakness: entries that were popular a long time ago but are now cold maintain high counts and resist eviction. The decay factor in Redis LFU gradually reduces counts for stale entries, allowing formerly-popular but now-cold entries to become eviction candidates.</p>
+
+    <h3>Model 3: TTL as a Freshness Contract</h3>
+    <p>TTL is best understood as a <strong>contract between the cache and the data source</strong>: "I guarantee that this cached value is no more than X seconds out of date." This makes it fundamentally different from LRU/LFU — those optimize memory utilization; TTL optimizes data correctness. The practical failure modes are: stale reads when TTL is too long, and high miss rates plus cache stampedes when TTL is too short. The right TTL is tied to how fast the underlying data changes, not to memory pressure. Combining TTL with LRU gives you both freshness and memory efficiency — they're orthogonal concerns.</p>
+  </section>
+
+  <!-- S9: HOW IT WORKS -->
+  <section id="s9">
+    <h2 class="section-title"><span class="num">09</span> ⚙️ How It Works — Mechanics</h2>
+    <div class="callout callout-quote">Step-by-step explanation of the internal mechanism.</div>
+
+    <h3>LRU — O(1) Implementation</h3>
+    <p>Two data structures: a <strong>doubly linked list</strong> (head = most recently used, tail = least recently used) and a <strong>hashmap</strong> mapping keys to their list nodes.</p>
+    <p><strong>GET(key):</strong> Look up the node via hashmap. If found (hit), move the node to the head of the list. Return value. O(1). <strong>PUT(key, value):</strong> If key exists, update value and move to head. If not: create node, insert at head. If at capacity, remove the tail node and delete from hashmap. O(1). Eviction target: always the tail node.</p>
+
+    <h3>LFU — O(1) Implementation</h3>
+    <p>Three structures: a <code>key→value</code> map, a <code>key→frequency</code> map, and a <code>frequency→[ordered keys]</code> doubly linked list map. Also track <code>minFrequency</code>.</p>
+    <p><strong>GET(key):</strong> Look up value. Increment key's frequency. Move key from frequency bucket F to F+1. If bucket F is now empty and F == minFrequency, increment minFrequency. O(1). <strong>PUT(key, value):</strong> If at capacity, evict the LRU entry from the minFrequency bucket (each frequency bucket is itself recency-ordered, so the tail of the minFrequency bucket is the eviction candidate). Insert new key at frequency 1. Set minFrequency = 1. O(1).</p>
+
+    <h3>TTL — Lazy + Active Expiry</h3>
+    <p>Each cache entry stores a timestamp (creation or last-write time). On access, the cache checks <code>now − timestamp &gt; TTL</code> — if true, the entry is a <strong>miss</strong> even if the key exists (<em>lazy expiry</em>). Most caches also run a background sweep (<em>active expiry</em>) periodically to reclaim memory from expired entries without waiting for access. The TTL duration is configured per-key or globally. Sliding TTL (reset on access) vs. absolute TTL (never reset) are two variants — sliding is appropriate for sessions, absolute for data with fixed validity windows.</p>
+
+    <h3>TTL + LRU Combined (Redis allkeys-lru)</h3>
+    <p>When memory pressure exists, Redis uses LRU to select the eviction candidate from all keys including unexpired ones. When an entry's TTL expires, it becomes a miss regardless of LRU position. The two mechanisms are independent: LRU responds to memory pressure; TTL responds to data age. If both fire on the same key simultaneously, the TTL expiry takes effect first (the key is logically gone); the LRU bookkeeping is then irrelevant for that key.</p>
+
+    <h3>2Q — Scan-Resistant LRU Variant</h3>
+    <p>2Q maintains two queues: a small FIFO <em>probationary queue</em> for new entries (first access), and a larger LRU <em>protected queue</em> for entries accessed more than once. New entries enter the probationary queue. If accessed again before eviction, they graduate to the protected LRU queue. If evicted from the probationary queue without a second access (typical for scan entries), they never pollute the protected queue. This dramatically reduces cache pollution from sequential scans without the full complexity of LFU.</p>
+  </section>
+
+  <!-- S10: REAL-WORLD EXAMPLES -->
+  <section id="s10">
+    <h2 class="section-title"><span class="num">10</span> 🏭 Real-World System Examples</h2>
+    <div class="callout callout-quote">Where does this appear in production systems you know?</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>System</th><th>How This Concept Applies</th><th>Notes</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Redis</strong></td>
+            <td>Supports 8 eviction policies: noeviction, allkeys-lru, volatile-lru, allkeys-lfu, volatile-lfu, allkeys-random, volatile-random, volatile-ttl</td>
+            <td>allkeys-lru is the most common default; allkeys-lfu preferred for Zipfian workloads (CDN, media). noeviction is the default — will throw OOM at capacity if not configured</td>
+          </tr>
+          <tr>
+            <td><strong>Memcached</strong></td>
+            <td>Uses LRU within each memory slab; TTL expiry per key at write time</td>
+            <td>Each memory slab class has its own LRU list; eviction is slab-local, not global across the cache. Large and small objects don't compete for eviction slots</td>
+          </tr>
+          <tr>
+            <td><strong>CPU L1/L2/L3 Caches</strong></td>
+            <td>Hardware uses pseudo-LRU (PLRU) or set-associative LRU approximations</td>
+            <td>Exact LRU is too expensive to implement in hardware. PLRU uses a tree of bits to approximate LRU ordering within each cache set</td>
+          </tr>
+          <tr>
+            <td><strong>Varnish (HTTP Cache)</strong></td>
+            <td>LRU for memory management; TTL derived from Cache-Control response headers</td>
+            <td>TTL here maps directly to HTTP cache freshness semantics (max-age, s-maxage). LRU handles memory pressure when the working set exceeds available RAM</td>
+          </tr>
+          <tr>
+            <td><strong>CDN Edge Nodes (Cloudflare, Fastly)</strong></td>
+            <td>LRU for object eviction at the edge; TTL from origin Cache-Control headers</td>
+            <td>LFU-like policies are used for large media objects to prevent popular content from being evicted. Edge TTL can differ from origin TTL via cache rule overrides</td>
+          </tr>
+          <tr>
+            <td><strong>MySQL InnoDB Buffer Pool</strong></td>
+            <td>Modified LRU with midpoint insertion (new pages enter at 3/8 from tail, not head)</td>
+            <td>Specifically scan-resistant by design — full table scan pages enter the "old" sublist and are evicted before "young" hot pages. Direct response to the cache pollution problem</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- S11: TRADE-OFFS -->
+  <section id="s11">
+    <h2 class="section-title"><span class="num">11</span> ⚖️ Trade-offs</h2>
+    <div class="callout callout-quote">Every design decision has a cost. What are you giving up?</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>✅ Benefit</th><th>❌ Cost / Limitation</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="benefit">LRU: Simple O(1) implementation; works well for most recency-biased workloads</span></td>
+            <td><span class="cost">Vulnerable to cache pollution from sequential scans; one full table scan can evict the entire hot dataset</span></td>
+          </tr>
+          <tr>
+            <td><span class="benefit">LFU: Higher hit rate for Zipfian (frequency-skewed) workloads; scan-resistant by design</span></td>
+            <td><span class="cost">More complex O(1) implementation; frequency counters can be "stale" — old-popular entries block eviction of newer popular ones without decay</span></td>
+          </tr>
+          <tr>
+            <td><span class="benefit">TTL: Guarantees data freshness; prevents serving stale data past a known validity window</span></td>
+            <td><span class="cost">Does not respond to memory pressure; short TTL → high miss rate and cache stampede risk; long TTL → stale data risk</span></td>
+          </tr>
+          <tr>
+            <td><span class="benefit">Approximate LRU (Redis): Low overhead; scales to millions of keys without per-key linked list traversal</span></td>
+            <td><span class="cost">Not exact; under adversarial or highly skewed workloads, approximation error may reduce hit rate vs. exact LRU</span></td>
+          </tr>
+          <tr>
+            <td><span class="benefit">LFU with decay (Redis): Adapts to changing access patterns over time; avoids stale-popularity problem</span></td>
+            <td><span class="cost">Decay rate tuning is non-trivial: too fast → behaves like LRU; too slow → long tail of stale-popular entries occupies cache permanently</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- S12: INTERVIEW APPLICATION -->
+  <section id="s12">
+    <h2 class="section-title"><span class="num">12</span> 🎯 Interview Application</h2>
+    <div class="callout callout-quote">How do you use this concept in a design interview? What triggers it?</div>
+
+    <p><strong>When an interviewer asks / says:</strong></p>
+    <ul style="margin-left:20px;margin-bottom:16px;font-size:14.5px;line-height:1.8;">
+      <li>"How does your cache decide what to evict when it's full?"</li>
+      <li>"Your cache is only N GB — how do you make sure the hottest data stays cached?"</li>
+      <li>"How do you prevent stale data from being served?"</li>
+      <li>"You're designing a distributed cache for a social media feed — what's your eviction strategy?"</li>
+    </ul>
+
+    <p><strong>What you say / do:</strong></p>
+    <p>In the cache design or deep dive section, proactively state your eviction policy choice and justify it with the access pattern. For social/media systems with Zipfian distributions, call out LFU. For session/auth caches with known expiry windows, call out TTL. For general-purpose caches, default to LRU but note the scan pollution risk if any batch processing touches the same data path.</p>
+
+    <div class="tradeoff-box">
+      "If we choose LRU, we get a simple O(1) implementation that handles recency-biased workloads well, but we risk cache pollution if our pipeline includes batch or scan jobs. For this system — a read-heavy social feed — LFU is the right call because the top 1% of content accounts for ~80% of reads, and LFU will protect those hot entries even under scan traffic."
+    </div>
+  </section>
+
+  <!-- S13: MISCONCEPTIONS -->
+  <section id="s13">
+    <h2 class="section-title"><span class="num">13</span> ⚠️ Common Misconceptions &amp; Gotchas</h2>
+    <div class="callout callout-quote">What do candidates get wrong? What nuance is the interviewer probing for?</div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> LRU is always good enough — it's what everyone uses in production.</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> LRU is the most common default but fails badly for frequency-skewed workloads. Redis itself recommends LFU for CDN key caching, heavily Zipfian content systems, and any workload where a small number of keys account for the majority of accesses. The right policy depends on the access distribution.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> TTL is an eviction policy like LRU or LFU — pick one of the three.</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> TTL is a freshness/consistency mechanism, not a memory management algorithm. It answers "should this entry be considered valid?", not "which entry to remove when full?" Most production caches combine TTL (for freshness) with LRU or LFU (for memory pressure) — they serve orthogonal purposes and are used together, not as alternatives.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> LFU permanently retains formerly popular items because they have high counts.</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Without a decay mechanism, yes — this is the "historical frequency pollution" problem. But Redis LFU uses a logarithmic counter with configurable decay (lfu-decay-time) that gradually reduces counter values for entries that haven't been accessed recently, allowing stale-but-formerly-popular entries to eventually become eligible for eviction.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> Eviction only matters when the cache is completely full.</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Eviction policy affects hit rate continuously, not just at capacity. A well-chosen policy maintains a higher hit rate at the same cache size, equivalent to getting more throughput headroom from the same hardware budget. The policy determines the steady-state composition of the cache, not just what happens during overflow.</div></div>
+    </div>
+  </section>
+
+  <!-- S14: RELATIONSHIPS -->
+  <section id="s14">
+    <h2 class="section-title"><span class="num">14</span> 🔗 Relationships to Other Concepts</h2>
+    <div class="callout callout-quote">How does this connect to adjacent subtopics in this topic or across the roadmap?</div>
+    <div class="connections">
+      <div class="conn-card">
+        <div class="conn-icon">⬆️</div>
+        <div>
+          <div class="conn-label">Builds On</div>
+          5.1 Cache-aside, 5.2 Write-through, 5.3 Write-back — eviction policy is only relevant once you know <em>what data is in the cache</em>; caching strategies determine how data gets there. You need to understand what's being cached before you can reason about what should be evicted.
+        </div>
+      </div>
+      <div class="conn-card">
+        <div class="conn-icon">➡️</div>
+        <div>
+          <div class="conn-label">Enables</div>
+          5.5 Cache consistency and invalidation — TTL-based expiry is one of the primary invalidation mechanisms; understanding its interaction with LRU/LFU is prerequisite for designing invalidation strategies. Also enables 5.8 Multi-level caching — each cache tier needs its own eviction policy tuned to its tier's access pattern.
+        </div>
+      </div>
+      <div class="conn-card">
+        <div class="conn-icon">⚡</div>
+        <div>
+          <div class="conn-label">Tension With</div>
+          5.6 Cache stampede — short TTLs (chosen for freshness) increase the risk of simultaneous cache misses on expiry; the choice of TTL directly impacts stampede probability. Also tensions with 5.7 Hot key problem — LFU's ability to protect high-frequency keys is directly relevant to mitigating hot key eviction under memory pressure.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- S15: SELF-CHECK QUIZ -->
+  <section id="s15">
+    <h2 class="section-title"><span class="num">15</span> 🧪 Self-Check Quiz</h2>
+    <div class="callout callout-quote">Can you answer these without looking? If not, you haven't internalized it yet.</div>
+
+    <div class="quiz-item" onclick="toggleQuiz(this)">
+      <div class="quiz-q"><span class="quiz-num">1</span><span class="qtext">What data structures are used to implement an O(1) LRU cache, and why are both necessary?</span><span class="quiz-toggle">▼ hint</span></div>
+      <div class="quiz-hint">💡 Think through your answer before expanding — if you hesitate, revisit Section 6 (LRU concept) and Section 9 (Mechanics).</div>
+    </div>
+
+    <div class="quiz-item" onclick="toggleQuiz(this)">
+      <div class="quiz-q"><span class="quiz-num">2</span><span class="qtext">You're designing a cache for a music streaming service where 5% of songs account for 80% of plays. Should you use LRU or LFU? Why?</span><span class="quiz-toggle">▼ hint</span></div>
+      <div class="quiz-hint">💡 Think through the access distribution before answering — if you're unsure, revisit Section 6 (LFU concept) and Section 8 (Frequency Leaderboard mental model).</div>
+    </div>
+
+    <div class="quiz-item" onclick="toggleQuiz(this)">
+      <div class="quiz-q"><span class="quiz-num">3</span><span class="qtext">What is cache pollution, and what specific workload pattern causes it in an LRU cache?</span><span class="quiz-toggle">▼ hint</span></div>
+      <div class="quiz-hint">💡 Think through the mechanics of how LRU tracks access order — if you can't explain the failure mode, revisit Section 6 (Cache Pollution) and Section 9.</div>
+    </div>
+
+    <div class="quiz-item" onclick="toggleQuiz(this)">
+      <div class="quiz-q"><span class="quiz-num">4</span><span class="qtext">A Redis instance is configured with allkeys-lru and maxmemory 4GB. A key has a TTL of 60s and was accessed 10 seconds ago. Under what conditions will it be evicted before its TTL expires?</span><span class="quiz-toggle">▼ hint</span></div>
+      <div class="quiz-hint">💡 Think through how TTL and LRU interact — if you're unsure, revisit Section 9 (TTL + LRU Combined).</div>
+    </div>
+
+    <div class="quiz-item" onclick="toggleQuiz(this)">
+      <div class="quiz-q"><span class="quiz-num">5</span><span class="qtext">What happens to an LFU cache entry that was extremely popular 6 months ago but hasn't been accessed since? What mechanism prevents it from permanently occupying cache space?</span><span class="quiz-toggle">▼ hint</span></div>
+      <div class="quiz-hint">💡 Think through the counter-decay mechanism — if you hesitate, revisit Section 9 and Section 13 (Misconception 3).</div>
+    </div>
+  </section>
+
+  <!-- S16: FURTHER READING -->
+  <section id="s16">
+    <h2 class="section-title"><span class="num">16</span> 📚 Further Reading</h2>
+    <div class="callout callout-quote">Optional: links, chapters, or resources for deeper understanding.</div>
+    <ul class="reading-list" id="reading-list">
+      <li><span class="cb"></span><div class="rtext"><strong>Redis Eviction Policies</strong> — official documentation with all 8 policy options explained: <a href="https://redis.io/docs/manual/eviction/" target="_blank">https://redis.io/docs/manual/eviction/</a></div></li>
+      <li><span class="cb"></span><div class="rtext"><strong>Designing Data-Intensive Applications (DDIA)</strong> — Martin Kleppmann, Chapter 5 — replication and caching foundations</div></li>
+      <li><span class="cb"></span><div class="rtext"><strong>ByteByteGo System Design Interview Vol 1</strong> — Chapter 6: Design a Key-Value Store (covers cache eviction in system design context)</div></li>
+      <li><span class="cb"></span><div class="rtext"><strong>LFU O(1) Algorithm</strong> — "An O(1) algorithm for implementing the LFU cache eviction scheme" by Shah et al. (2010): <a href="http://dhruvbird.com/lfu.pdf" target="_blank">http://dhruvbird.com/lfu.pdf</a></div></li>
+      <li><span class="cb"></span><div class="rtext"><strong>MySQL InnoDB Buffer Pool</strong> — scan-resistant LRU design: <a href="https://dev.mysql.com/doc/refman/8.0/en/innodb-buffer-pool.html" target="_blank">MySQL docs</a></div></li>
+    </ul>
+  </section>
+
+  <!-- S17: MY NOTES -->
+  <section id="s17">
+    <h2 class="section-title"><span class="num">17</span> ✍️ My Notes</h2>
+    <div class="callout callout-quote">Personal observations, things that confused me, analogies that helped.</div>
+    <textarea class="notes-area" id="notes-area" placeholder="Free-form space for your own annotations. Add examples that clicked, diagrams you sketched, or interview stories you connected to this concept."></textarea>
+  </section>
+
+</article>
+</main>
+
+<script>
+  // TOC active state
+  const sections = document.querySelectorAll('section[id]');
+  const navLinks = document.querySelectorAll('#toc nav a');
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        navLinks.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + e.target.id));
+      }
+    });
+  }, { rootMargin: '-20% 0px -75% 0px' });
+  sections.forEach(s => observer.observe(s));
+
+  // Checklist toggle
+  document.querySelectorAll('.checklist .cb').forEach(cb => {
+    cb.addEventListener('click', () => { cb.closest('li').classList.toggle('checked'); saveState(); });
+  });
+
+  // Reading list toggle
+  document.querySelectorAll('.reading-list .cb').forEach(cb => {
+    cb.addEventListener('click', () => { cb.closest('li').classList.toggle('checked'); saveState(); });
+  });
+
+  // Phase card toggle
+  function togglePhase(id) {
+    document.getElementById(id).classList.toggle('open');
+  }
+
+  // Quiz toggle
+  function toggleQuiz(el) {
+    el.classList.toggle('open');
+    const toggle = el.querySelector('.quiz-toggle');
+    toggle.textContent = el.classList.contains('open') ? '▲ hide' : '▼ hint';
+  }
+
+  // Persistence
+  const KEY = 'sd-5.4-eviction';
+  function saveState() {
+    const data = {
+      mastery: [...document.querySelectorAll('#mastery-list li')].map(li => li.classList.contains('checked')),
+      reading: [...document.querySelectorAll('#reading-list li')].map(li => li.classList.contains('checked')),
+      phases: ['ph1','ph2','ph3','ph4'].map(id => document.getElementById(id).classList.contains('open')),
+      notes: document.getElementById('notes-area').value
+    };
+    try { localStorage.setItem(KEY, JSON.stringify(data)); } catch(e) {}
+  }
+  function loadState() {
+    let data;
+    try { data = JSON.parse(localStorage.getItem(KEY)); } catch(e) {}
+    if (!data) return;
+    const ml = document.querySelectorAll('#mastery-list li');
+    (data.mastery||[]).forEach((v,i) => { if(v && ml[i]) ml[i].classList.add('checked'); });
+    const rl = document.querySelectorAll('#reading-list li');
+    (data.reading||[]).forEach((v,i) => { if(v && rl[i]) rl[i].classList.add('checked'); });
+    ['ph1','ph2','ph3','ph4'].forEach((id,i) => {
+      if (data.phases && data.phases[i] === false) document.getElementById(id).classList.remove('open');
+      else if (data.phases && data.phases[i] === true) document.getElementById(id).classList.add('open');
+    });
+    if (data.notes) document.getElementById('notes-area').value = data.notes;
+  }
+  document.getElementById('notes-area').addEventListener('input', saveState);
+  loadState();
+</script>
+</body>
+</html>

@@ -1,0 +1,358 @@
+# 5.4 Eviction Policies — LRU, LFU, TTL
+
+> **Topic:** Topic 5 — Caching Systems
+> **Phase:** B — Scalability Branch
+> **Date studied:** 2026-05-28
+
+---
+
+## 0. 🗺️ Topic Overview
+
+### What This Topic Is About
+
+Cache memory is finite. When a cache fills up, it must decide which entries to evict to make room for new ones — this decision is governed by an **eviction policy**. The policy you choose directly affects cache hit rate, latency, and correctness. Getting it wrong can mean evicting hot data, retaining cold data, and underperforming a naively larger cache.
+
+### 🎯 What to Focus On
+
+**1. Understand what each policy optimizes for.** LRU optimizes for recency, LFU optimizes for frequency, TTL optimizes for freshness. Each assumes a different access pattern; the wrong choice can tank hit rate.
+
+**2. Know the data structures behind each policy.** LRU is implemented via a doubly linked list + hashmap. LFU is harder — it requires a frequency map and a min-heap or doubly bucketed list. These come up in coding interviews too.
+
+**3. Know when LFU beats LRU.** In frequency-skewed workloads (e.g., CDN, top-N content), LFU dramatically outperforms LRU. Candidates who only know LRU get caught here.
+
+**4. TTL is not an eviction policy in the algorithmic sense** — it's an expiry mechanism. In practice, systems combine TTL with LRU/LFU. Know how they interact.
+
+**5. The hot key / scan resistance problem.** A large sequential scan (e.g., full table scan, batch job) can evict all hot data from an LRU cache — this is called cache pollution. Know how to detect and mitigate it.
+
+---
+
+## 1. 🎯 Goal of This Subtopic
+
+> *Why are you studying this? What should you be able to do after this session?*
+
+Be able to choose the right eviction policy for a given access pattern and justify the decision in an interview. Be able to explain the implementation mechanics of LRU and LFU at a data structure level, describe how TTL interacts with memory-based policies, and identify when cache pollution from scan-heavy workloads is a concern.
+
+---
+
+## 2. ✅ What Mastery Looks Like
+
+> *Concrete, testable proof that you own this concept — not just familiarity.*
+
+- [ ] Can explain LRU, LFU, and TTL eviction mechanics without notes and describe when each is the right choice
+- [ ] Can describe the O(1) LRU implementation using a doubly linked list + hashmap
+- [ ] Can explain why LFU outperforms LRU in frequency-skewed workloads and give a concrete example
+- [ ] Can identify the cache pollution problem and propose a mitigation (2Q, LRU-K, key exclusion)
+- [ ] Can explain how TTL and LRU/LFU interact in a combined eviction strategy
+
+> 💡 **Rule of thumb:** If you can teach it to someone else and field their follow-up questions, you've mastered it.
+
+---
+
+## 3. 🗓️ Study Phases to Achieve Mastery
+
+> *A progressive plan from first exposure to interview-ready.*
+
+### Phase 1 — Acquire 📖 💪💪
+*Goal: Read deeply enough that you could explain the concept without the doc.*
+
+- [ ] Read **DDIA Chapter 5** (replication and caching foundations) and **Redis documentation on eviction policies** (https://redis.io/docs/manual/eviction/)
+- [ ] Read **ByteByteGo System Design Interview Vol 1, Chapter 6** (designing a cache)
+- [ ] Read through **Sections 5–9** carefully — don't skim
+- [ ] Re-read the **Cheatsheet** (Section 4) and try to recite it from memory after
+
+### Phase 2 — Consolidate ✍️ 💪💪💪
+*Goal: Verify you can reproduce the knowledge in your own words without looking.*
+
+- [ ] Close the doc — write out the **Core Definition** from memory, then compare
+- [ ] Explain **First Principles** out loud without notes — what problem does this solve and why?
+- [ ] Reconstruct the **How It Works** mechanics step by step from memory
+- [ ] Restate each **Trade-off** row in your own words — if you can't explain the cost, you don't own it yet
+
+### Phase 3 — Apply 🔧 💪💪💪💪
+*Goal: Connect to real systems and simulate interview scenarios.*
+
+- [ ] Go through **Real-World System Examples** (Section 10) — verify each claim independently and add anything missed to **My Notes**
+- [ ] Practice the **Interview Application** (Section 12) out loud — say the trigger phrases and your response as if in a live interview
+- [ ] Work through **Common Misconceptions** (Section 13) — for each, make sure you can explain *why* the misconception is wrong
+- [ ] Trace the **Relationships to Other Concepts** (Section 14) — can you explain each connection without looking?
+
+### Phase 4 — Validate 🧪 💪💪💪💪💪
+*Goal: Confirm you actually own it, not just recognize it.*
+
+- [ ] Answer every **Self-Check Quiz** question (Section 15) out loud without looking at your notes
+- [ ] Recite the **Cheatsheet** (Section 4) from memory — if you can't, re-do Phase 2
+- [ ] Tick off items in **What Mastery Looks Like** (Section 2) — only check a box if you can demonstrate it on demand
+- [ ] Teach this concept out loud to an imaginary interviewer for 2 minutes without hesitation or notes
+
+---
+
+## 4. 📋 Cheatsheet
+
+> *Everything you need to recall this concept in 30 seconds — for quick review before an interview.*
+
+![5.4 Eviction Policies — LRU, LFU, TTL — Mindmap](../assets/images/topic_5.4_eviction_policies_lru_lfu_ttl_mindmap.png)
+
+```
+§ 1  WHY IT EXISTS
+  Cache memory is finite. Without a policy you either reject new entries
+  (OOM errors) or evict randomly (unpredictable hit rate, may kill hot data).
+  Eviction policies maximize hit rate by formalizing temporal / frequency
+  locality into deterministic algorithms.
+
+§ 2  WHAT EACH POLICY IS
+  LRU  — evict the entry accessed furthest back in time.
+         O(1) via doubly linked list (access order) + hashmap (key lookup).
+  LFU  — evict the entry with the lowest access count.
+         O(1) via frequency-bucket doubly linked list + min-freq pointer.
+  TTL  — evict entries whose age exceeds a configured threshold.
+         Freshness mechanism — orthogonal to memory pressure.
+
+§ 3  THE 3 KEY DISTINCTIONS
+  1. LRU vs LFU: LRU = recency, LFU = frequency.
+     LFU wins for Zipfian workloads (top 5% of keys = 80% of traffic).
+     LFU is scan-resistant; scan entries stay at freq=1 and evict first.
+  2. TTL != eviction policy: TTL answers "is this valid?",
+     LRU/LFU answers "which to remove when full?" — combine both.
+  3. Cache pollution: sequential scan -> LRU evicts entire hot dataset.
+     Fix: LFU, 2Q (probationary + protected queue), or LRU-K.
+
+§ 4  USE / AVOID
+  LRU:  recency-biased workloads (general-purpose, session stores)
+  LFU:  Zipfian / freq-skewed (music, CDN, social media feeds)
+  TTL:  data with known validity window (auth tokens, API responses)
+  AVOID LRU when: batch jobs or full table scans share the data path.
+
+§ 5  INTERVIEW TRIGGERS
+  -> "How does your cache decide what to evict when full?"
+  -> "The hot dataset keeps getting evicted under load"
+  -> "5% of items account for 80% of reads" (-> LFU)
+  -> "How do you prevent stale data?" (-> TTL)
+
+§ 6  FTAC
+  F  "Tension: hit rate vs. workload pattern. LRU is O(1) and simple,
+     but a single sequential scan evicts the entire hot dataset."
+  T  "LRU: simple, works for recency workloads, scan-vulnerable.
+     LFU: higher hit rate for Zipfian traffic, scan-resistant,
+     more complex + needs counter decay to avoid stale popularity."
+  A  "Assuming this is a read-heavy social feed — top ~1% of posts
+     get ~80% of traffic — Zipfian distribution holds."
+  C  "LFU with Redis allkeys-lfu. Cost: slightly more complex config,
+     need to tune lfu-decay-time. TTL per key for freshness."
+
+§ 7  NUMBERS & GOTCHA
+  Redis default: noeviction (throws OOM at capacity — must configure!)
+  Redis LRU: approximate — samples 5 keys, evicts least recent among sample
+  Redis LFU: logarithmic counter 0-255, lfu-decay-time controls staleness
+  GOTCHA: LRU is NOT scan-resistant — one full table scan evicts all hot data
+```
+
+---
+
+## 5. 🧠 Core Definition
+
+> *What is it, in one sentence?*
+
+An **eviction policy** is the algorithm a cache uses to decide which entry to remove when it reaches capacity. The three dominant policies are **LRU** (evict the least recently accessed entry), **LFU** (evict the least frequently accessed entry), and **TTL** (evict entries whose age exceeds a configured threshold).
+
+---
+
+## 6. 📦 Core Concepts
+
+> *The essential building blocks of this subtopic.*
+
+### LRU — Least Recently Used
+LRU maintains an implicit temporal ordering: the entry that was accessed furthest back in time is the first candidate for eviction. It assumes that recently used data is likely to be used again soon (temporal locality). Implemented in O(1) for both get and put using a **doubly linked list** (to maintain access order) combined with a **hashmap** (for O(1) key lookup); on every access, the node is moved to the head of the list, and eviction removes from the tail.
+
+### LFU — Least Frequently Used
+LFU tracks how many times each entry has been accessed and evicts the entry with the lowest count. It assumes that frequently accessed data will remain popular (frequency locality). LFU outperforms LRU in workloads where a small set of items receives the majority of traffic (Zipfian distribution — e.g., top songs, viral posts). The naive implementation uses a min-heap (O(log n) updates), but an O(1) implementation exists using a doubly linked list of frequency buckets.
+
+### TTL — Time To Live
+TTL is a time-based expiry mechanism: each cache entry is stamped with a creation or last-update time, and it is invalidated once the elapsed time exceeds the configured TTL value. TTL is primarily about **data freshness and consistency** rather than memory pressure — it ensures that stale data is not served even if the cache is not full. Most systems combine TTL with a memory-based policy: an entry can be evicted by either being too old (TTL) or being displaced by a newer entry (LRU/LFU).
+
+### Cache Pollution
+Cache pollution occurs when a workload (typically a sequential scan or batch job) reads a large volume of one-time-use data, filling the cache and evicting hot, frequently reused entries. This is a known failure mode of pure LRU. Solutions include: LFU (immune to scans because cold scan entries never accrue frequency), 2Q (two-queue: probationary queue for new entries, protected queue for those accessed twice), and LRU-K (evict based on K-th most recent access rather than most recent).
+
+### Approximate vs. Exact Eviction
+Exact LRU and LFU require maintaining precise access metadata, which has memory and CPU overhead proportional to cache size. Production systems often use **approximate** implementations: Redis LRU randomly samples a configurable number of keys and evicts the least recent among the sample — this is fast and good enough at scale. Redis LFU uses a logarithmic counter per key with a decay factor to approximate historical frequency without unbounded counter growth.
+
+---
+
+## 7. 🔍 First Principles — Why Does This Exist?
+
+> *What fundamental problem does this concept solve?*
+
+Cache memory is finite — typically orders of magnitude smaller than the dataset it serves. As new entries arrive, old ones must be discarded. Without a policy, you're forced to either reject new entries (no-eviction) or remove entries randomly. Both are terrible: no-eviction errors at capacity; random eviction has unpredictable hit rates and can evict the hottest entry in the dataset.
+
+The core insight is that not all cached entries are equally valuable. Entries that have been recently accessed are more likely to be accessed again soon (temporal locality). Entries that have been accessed many times are likely to remain popular (frequency locality). Entries older than a known data validity window are likely wrong. Eviction policies formalize these intuitions into deterministic algorithms that maximize hit rate for a given cache size.
+
+The stakes are high: a cache that is 80% hit rate vs. 95% hit rate can mean the difference between 10x and 20x reduction in database load. Poor eviction policy choice is often the silent cause of unexpectedly high cache miss rates in production.
+
+---
+
+## 8. 🗺️ Mental Models
+
+> *Intuition frames that help you reason about this concept fast.*
+
+### Model 1: The Bookshelf
+Imagine a physical bookshelf with limited space. LRU means: when you need to add a new book, remove the one you picked up least recently. LFU means: remove the one you've opened the fewest times. TTL means: any book older than 6 months gets removed regardless of access. The failure mode of LRU is obvious here — if you do one big research project reading 50 rarely-used books sequentially, all your favorite frequently-read books get pushed off the shelf.
+
+### Model 2: The Frequency Ladder
+Think of LFU as a leaderboard ranked by access count. New entries start at count=1, at the bottom. Every access moves an entry up one rung. Eviction always removes from the bottom rung. The weakness: entries that were popular a long time ago but are now cold will have a high count and won't be evicted — this is the "cache pollution of the past" problem. The decay factor in Redis LFU addresses this by gradually reducing counts for entries that aren't accessed, allowing stale-but-formerly-popular entries to become eligible for eviction.
+
+### Model 3: TTL as a Freshness Contract
+TTL is best understood as a **contract between the cache and the data source**: "I guarantee that this cached value is no more than X seconds out of date." This makes it distinct from LRU/LFU — those optimize memory utilization; TTL optimizes data correctness. The practical failure mode is stale reads when the TTL is too long, and high miss rates / cache stampedes when the TTL is too short. The right TTL is tied to how fast the underlying data changes, not to memory pressure.
+
+---
+
+## 9. ⚙️ How It Works — Mechanics
+
+> *Step-by-step explanation of the internal mechanism.*
+
+**LRU Mechanics (O(1) implementation)**
+
+The standard O(1) LRU cache uses two data structures: a **doubly linked list** where the head represents most recently used and the tail represents least recently used, and a **hashmap** mapping keys to their corresponding list nodes.
+
+- `GET(key)`: Look up the node via hashmap. If found (hit), move the node to the head of the list (most recently used). Return value. O(1).
+- `PUT(key, value)`: If key exists, update value and move node to head. If not: create node, insert at head. If cache is at capacity, remove the tail node (LRU entry) and delete from hashmap. O(1).
+
+Eviction target: always the tail node.
+
+**LFU Mechanics (O(1) implementation)**
+
+An O(1) LFU uses three structures: a `key→value` map, a `key→frequency` map, and a `frequency→[keys]` doubly linked list map, plus a pointer to the current minimum frequency.
+
+- `GET(key)`: Look up value. Increment key's frequency. Move key from frequency bucket F to bucket F+1. If bucket F is now empty and F == minFrequency, increment minFrequency. O(1).
+- `PUT(key, value)`: If at capacity, evict the LRU entry from the minFrequency bucket (each frequency bucket is itself a recency-ordered list, so the tail of the minFrequency bucket is the eviction candidate). Insert new key at frequency 1. Set minFrequency = 1. O(1).
+
+**TTL Mechanics**
+
+Each cache entry stores a timestamp (creation time or last-write time) alongside the value. On access, the cache checks `now - timestamp > TTL` — if true, the entry is a miss even if the key exists (lazy expiry). Most caches also run a background sweep (active expiry) periodically to reclaim memory from expired entries without waiting for them to be accessed. The TTL duration is configured per-key or globally; some systems support sliding TTL (reset on access) vs. absolute TTL (never reset).
+
+**TTL + LRU Combined (Redis allkeys-lru)**
+
+When memory pressure exists, Redis uses LRU to select the eviction candidate from all keys (including unexpired ones). When an entry's TTL expires, it becomes a miss regardless of LRU position. The two mechanisms are independent: LRU responds to memory pressure; TTL responds to data age.
+
+**Cache Pollution and 2Q**
+
+The 2Q algorithm maintains two queues: a small FIFO probationary queue for new entries, and a larger LRU queue for entries accessed more than once. New entries enter the probationary queue. If accessed again before being evicted, they graduate to the protected LRU queue. If evicted from the probationary queue without a second access (e.g., a scan entry), they never pollute the LRU queue. This halves the impact of scan workloads on hot data.
+
+---
+
+## 10. 🏭 Real-World System Examples
+
+> *Where does this appear in production systems?*
+
+| System | How This Concept Applies | Notes |
+|--------|--------------------------|-------|
+| **Redis** | Supports 8 eviction policies: noeviction, allkeys-lru, volatile-lru, allkeys-lfu, volatile-lfu, allkeys-random, volatile-random, volatile-ttl | allkeys-lru is the most common production choice; allkeys-lfu preferred for frequency-skewed workloads (e.g., CDN key caching) |
+| **Memcached** | Uses LRU by default; supports per-slab LRU with TTL expiry | Each memory slab has its own LRU list; eviction is slab-local, not global |
+| **CPU L1/L2/L3 Caches** | Hardware uses pseudo-LRU (PLRU) or set-associative LRU approximations | Exact LRU is too expensive in hardware; approximate variants are used |
+| **Varnish (HTTP cache)** | Uses a combination of TTL (from Cache-Control headers) and LRU for memory management | TTL here maps directly to HTTP cache freshness semantics |
+| **CDN edge nodes (Cloudflare, Fastly)** | LRU for object eviction; TTL derived from origin Cache-Control headers | Cache-Control: max-age sets the TTL; LFU-like policies are used for large media files |
+| **MySQL InnoDB Buffer Pool** | Modified LRU with a midpoint insertion strategy (new pages enter at 3/8 from the tail, not the head) | Specifically designed to be scan-resistant — prevents full table scans from evicting hot index pages |
+
+---
+
+## 11. ⚖️ Trade-offs
+
+> *Every design decision has a cost.*
+
+| ✅ Benefit | ❌ Cost / Limitation |
+|-----------|---------------------|
+| **LRU** — simple O(1) implementation, works well for most recency-biased workloads | Vulnerable to cache pollution from scan workloads; one sequential scan can evict the entire hot dataset |
+| **LFU** — higher hit rate for frequency-skewed (Zipfian) workloads; scan-resistant | More complex to implement O(1); frequency counters can be "stale" — old-popular entries block eviction of newer popular ones |
+| **TTL** — guarantees data freshness; prevents serving stale data past a known validity window | Does not respond to memory pressure; short TTL → high miss rate and potential cache stampede; long TTL → stale data risk |
+| **Approximate LRU (Redis)** — low overhead, scales to millions of keys | Not exact; under adversarial or highly skewed workloads, approximation error may reduce hit rate compared to exact LRU |
+| **LFU with decay (Redis)** — avoids "stale popularity" problem; adapts to changing access patterns over time | Decay rate tuning is non-trivial; too fast decay → behaves like LRU; too slow → long tail of old-popular entries stays in cache |
+
+---
+
+## 12. 🎯 Interview Application
+
+> *How do you use this concept in a design interview?*
+
+**When an interviewer asks / says:**
+- "How does your cache decide what to evict when it's full?"
+- "Your cache is only N GB — how do you make sure the hottest data stays in cache?"
+- "How do you prevent stale data from being served?"
+- "You're designing a distributed cache for a social media feed — what's your eviction strategy?"
+
+**What you say / do:**
+In the cache design or deep dive section, proactively state your eviction policy choice and justify it with the access pattern. For social/media systems with Zipfian access distributions, call out LFU. For session/auth caches with known expiry windows, call out TTL. For general-purpose caches, default to LRU and note the scan pollution risk if batch processing is present.
+
+**The trade-off statement (memorize this pattern):**
+> "If we choose LRU, we get a simple O(1) implementation that handles recency-biased workloads well, but we risk cache pollution if our pipeline includes batch or scan jobs. For this system — a read-heavy social feed — LFU is the right call because the top 1% of content accounts for ~80% of reads, and LFU will protect those hot entries even under scan traffic."
+
+---
+
+## 13. ⚠️ Common Misconceptions & Gotchas
+
+> *What do candidates get wrong?*
+
+- ❌ **Misconception:** LRU is always good enough — it's what everyone uses in production.
+  ✅ **Reality:** LRU is the most common default but fails badly for frequency-skewed workloads. Redis itself recommends LFU for use cases like CDN key caching, session management at scale, or any workload where a small number of keys account for the majority of accesses.
+
+- ❌ **Misconception:** TTL is an eviction policy like LRU or LFU.
+  ✅ **Reality:** TTL is a freshness/consistency mechanism, not a memory management algorithm. It answers "should this entry be considered valid?" not "which entry to remove when full?" Most production caches combine TTL (for freshness) with LRU or LFU (for memory pressure).
+
+- ❌ **Misconception:** LFU retains the most recently popular items forever.
+  ✅ **Reality:** Without a decay mechanism, LFU suffers from "historical frequency pollution" — an entry that was hot a week ago but is now cold will have a high counter and block eviction of newer hot entries. Redis LFU uses a logarithmic counter with configurable decay (lfu-decay-time) to reduce counter values for entries that haven't been accessed recently.
+
+- ❌ **Misconception:** Eviction only matters when the cache is full.
+  ✅ **Reality:** Eviction policy affects hit rate continuously, not just at capacity. A well-chosen policy maintains a higher hit rate at the same cache size, which is equivalent to getting more throughput headroom from the same hardware budget.
+
+---
+
+## 14. 🔗 Relationships to Other Concepts
+
+> *How does this connect to adjacent subtopics?*
+
+- **Builds on:** 5.1 Cache-aside, 5.2 Write-through, 5.3 Write-back — eviction policy is only relevant once you know *what data is in the cache*; caching strategies determine how data gets there.
+- **Enables:** 5.5 Cache consistency and invalidation — TTL-based expiry is one of the primary invalidation mechanisms; understanding its interaction with LRU/LFU is prerequisite for designing invalidation strategies.
+- **Tension with:** 5.6 Cache stampede — short TTLs (chosen for freshness) increase the risk of simultaneous cache misses on expiry; the choice of TTL directly impacts stampede probability.
+- **Also relates to:** 5.7 Hot key problem — LFU's scan resistance and ability to protect high-frequency keys is directly relevant to mitigating hot key concentration; local caching strategies at the application layer also pair with LFU to protect against hot key eviction.
+
+---
+
+## 15. 🧪 Self-Check Quiz
+
+> *Can you answer these without looking?*
+
+1. What data structures are used to implement an O(1) LRU cache, and why are both necessary?
+
+   > 💡 *Think through your answer before expanding — if you hesitate, revisit Section 6 (Core Concepts) and Section 9 (Mechanics).*
+
+2. You're designing a cache for a music streaming service where 5% of songs account for 80% of plays. Should you use LRU or LFU? Why?
+
+   > 💡 *Think through the access distribution before answering — if you're unsure, revisit Section 6 (LFU concept) and Section 8 (Frequency Ladder mental model).*
+
+3. What is cache pollution, and what specific workload pattern causes it in an LRU cache?
+
+   > 💡 *Think through the mechanics of how LRU tracks access order — if you can't explain the failure mode, revisit Section 6 (Cache Pollution) and Section 9.*
+
+4. A Redis instance is configured with allkeys-lru and maxmemory 4GB. A key has a TTL of 60s and was accessed 10 seconds ago. Under what conditions will it be evicted before its TTL expires?
+
+   > 💡 *Think through how TTL and LRU interact — if you're unsure, revisit Section 9 (TTL + LRU Combined).*
+
+5. What happens to an LFU cache entry that was extremely popular 6 months ago but hasn't been accessed since? What mechanism prevents it from permanently occupying cache space?
+
+   > 💡 *Think through the counter-decay mechanism — if you hesitate, revisit Section 9 and Section 13 (Misconception 3).*
+
+---
+
+## 16. 📚 Further Reading
+
+> *Resources for deeper understanding.*
+
+- [ ] **Redis Eviction Policies** — official documentation with all 8 policy options explained: https://redis.io/docs/manual/eviction/
+- [ ] **Designing Data-Intensive Applications (DDIA)** — Martin Kleppmann, Chapter 5 (replication and caching foundations)
+- [ ] **ByteByteGo System Design Interview Vol 1** — Chapter 6: Design a Key-Value Store (covers cache eviction in the context of system design)
+- [ ] **LFU O(1) Algorithm** — "An O(1) algorithm for implementing the LFU cache eviction scheme" by Shah et al. (2010): http://dhruvbird.com/lfu.pdf
+- [ ] **MySQL InnoDB Buffer Pool** — scan-resistant LRU design: https://dev.mysql.com/doc/refman/8.0/en/innodb-buffer-pool.html
+
+---
+
+## 17. ✍️ My Notes
+
+> *Personal observations, things that confused me, analogies that helped.*
+
