@@ -423,3 +423,49 @@ Cassandra is horizontally scaled by design because it is masterless and it is pa
 > *Personal observations, things that confused me, analogies that helped.*
 
 ![horizontal_vs_vertical_notes](../assets/images/IMG_5385.jpeg)
+
+What's vertical scaling?
+Vertical scaling buys a bigger box.
+
+What's horizontal scaling?
+Horizontal scaling buys more boxes
+
+What's the limits of vertical scaling?
+- single point of failure
+- hardware ceiling
+- price goes superlinear as we approach hardware ceiling
+
+What's the limits of horizontal scaling?
+- coordination overhead between boxes
+- consistency requirements
+- network failures
+
+What does Amdahl's law say?
+Amdahl's law says that the theorectical speedup of adding N nodes to a distributed system is essentially bounded by the serial fraction of the application
+
+Speedup(N) = 1 / (S + (1-S)/N)
+  S = serial fraction of the application
+
+Example: S = 0.2 (20% serial, 80% parallelizable)
+  Add 4 nodes:  1 / (0.2 + 0.8/4)  = 1 / 0.4  = 2.5x speedup
+  Add ∞ nodes:  1 / 0.2             = 5x max   (ceiling, forever)
+
+Implication: if your critical path has 20% serial work,
+no amount of horizontal scaling gets you past 5x throughput.
+
+Vertical ceiling on cloud (2026): ~448 vCPU, ~24 TB RAM,
+    ~100 Gbps NIC on the largest instance types (e.g. AWS u7i, x2gd).
+
+3 Conditions for horizontal scaling
+- Statelessness
+- Idempotency
+- No shared mutable state on critical path
+
+Scaling Decision framework:
+1. Scale vertically first — simpler, no code changes, buys time
+2. Switch to horizontal when:
+   - Approaching hardware ceiling
+   - Need fault tolerance (SPOF is unacceptable)
+   - Workload satisfies the 3 conditions (stateless, idempotent, no shared mutable state)
+3. Some components stay vertical permanently:
+   - Leader nodes, coordinators, anything with global state

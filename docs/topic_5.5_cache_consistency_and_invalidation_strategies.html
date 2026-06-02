@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.5 Cache Consistency and Invalidation Strategies</title>
+<style>
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface-alt: #f3f2ef;
+    --border: #e5e3de; --text: #1a1917; --text-muted: #6b6861;
+    --accent: #2563eb; --accent-light: #dbeafe;
+    --green: #16a34a; --green-light: #dcfce7;
+    --red: #dc2626; --red-light: #fee2e2;
+    --yellow: #d97706; --yellow-light: #fef3c7;
+    --purple: #7c3aed; --purple-light: #ede9fe;
+    --code-bg: #1e1e2e; --code-text: #cdd6f4;
+    --sidebar-w: 240px; --content-max: 780px;
+    font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; }
+  #toc { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0 48px; z-index: 100; }
+  #toc-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  #toc-header .phase-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-bottom: 6px; }
+  #toc-header h2 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  #toc nav a { display: block; padding: 5px 16px 5px 20px; font-size: 12.5px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+  main { margin-left: var(--sidebar-w); padding: 48px 48px 96px; max-width: calc(var(--sidebar-w) + var(--content-max) + 96px); width: 100%; }
+  article { max-width: var(--content-max); }
+  .doc-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 2px solid var(--border); }
+  .doc-header .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+  .tag-phase { background: var(--accent-light); color: var(--accent); }
+  .tag-topic { background: var(--purple-light); color: var(--purple); }
+  .tag-date  { background: var(--surface-alt);  color: var(--text-muted); }
+  .doc-header h1 { font-size: 30px; font-weight: 800; line-height: 1.25; letter-spacing: -.02em; color: var(--text); }
+  section { margin-bottom: 52px; scroll-margin-top: 32px; }
+  h2.section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -.01em; }
+  h2.section-title .num { font-size: 11px; font-weight: 800; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; letter-spacing: .04em; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 24px 0 10px; }
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+  code { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-family: "SF Mono","Fira Code",Menlo,monospace; font-size: 12.5px; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 14px; border-left: 3px solid; }
+  .callout-goal  { background: var(--accent-light); border-color: var(--accent); color: #1e40af; }
+  .callout-tip   { background: var(--yellow-light); border-color: var(--yellow); color: #92400e; }
+  .callout-quote { background: var(--surface-alt);  border-color: var(--border); color: var(--text-muted); font-style: italic; }
+  .cheatsheet { background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 24px 28px; font-family: "SF Mono","Fira Code","Cascadia Code",Menlo,monospace; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-x: auto; margin-top: 16px; }
+  .cheatsheet .label { color: #cba6f7; font-weight: 700; letter-spacing: .08em; display: block; margin-top: 18px; margin-bottom: 4px; border-bottom: 1px solid #313244; padding-bottom: 3px; }
+  .cheatsheet .label:first-child { margin-top: 0; }
+  .mindmap-wrap { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 12px; padding: 20px 16px 12px; margin: 20px 0 24px; overflow-x: auto; }
+  .mindmap-wrap p.caption { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 10px; margin-bottom: 0; }
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; font-size: 14.5px; line-height: 1.55; }
+  .checklist li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 2px; background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .checklist li.checked .cb { background: var(--green); border-color: var(--green); }
+  .checklist li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .checklist li.checked .text { color: var(--text-muted); text-decoration: line-through; }
+  .phase-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
+  .phase-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; cursor: pointer; user-select: none; background: var(--surface-alt); }
+  .phase-header:hover { background: var(--border); }
+  .phase-label { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+  .phase-badge { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 2px 8px; border-radius: 20px; }
+  .ph1 { background: #dbeafe; color: #1d4ed8; } .ph2 { background: #fce7f3; color: #9d174d; }
+  .ph3 { background: #d1fae5; color: #065f46; } .ph4 { background: #fef3c7; color: #92400e; }
+  .phase-chevron { font-size: 12px; color: var(--text-muted); transition: transform .2s; }
+  .phase-card.open .phase-chevron { transform: rotate(180deg); }
+  .phase-body { display: none; padding: 16px 20px 20px; }
+  .phase-card.open .phase-body { display: block; }
+  .phase-goal { font-size: 12.5px; color: var(--text-muted); font-style: italic; margin-bottom: 12px; }
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: var(--surface-alt); padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.5; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+  .misconception { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .misconception .wrong { background: var(--red-light); padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; }
+  .misconception .right { padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; color: #065f46; background: var(--green-light); }
+  .misconception .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .quiz-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .quiz-q { padding: 14px 18px; font-size: 14.5px; font-weight: 600; cursor: pointer; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .quiz-q:hover { background: var(--surface-alt); }
+  .quiz-num { flex-shrink: 0; width: 24px; height: 24px; background: var(--accent); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; margin-top: 1px; }
+  .quiz-q .qtext { flex: 1; }
+  .quiz-toggle { font-size: 11px; color: var(--text-muted); flex-shrink: 0; margin-top: 3px; }
+  .quiz-hint { display: none; padding: 10px 18px 14px; font-size: 13px; color: #92400e; background: var(--yellow-light); border-top: 1px solid var(--border); }
+  .quiz-item.open .quiz-hint { display: block; }
+  .reading-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .reading-list li { display: flex; align-items: flex-start; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; font-size: 14px; }
+  .reading-list li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 1px; cursor: pointer; background: var(--surface); display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .reading-list li.checked .cb { background: var(--green); border-color: var(--green); }
+  .reading-list li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .reading-list li.checked .rtext { color: var(--text-muted); text-decoration: line-through; }
+  .notes-area { width: 100%; min-height: 160px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: inherit; font-size: 14px; color: var(--text); resize: vertical; line-height: 1.6; }
+  .notes-area:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .focus-list { list-style: none; display: flex; flex-direction: column; gap: 14px; }
+  .focus-list li { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14.5px; line-height: 1.6; }
+  .focus-list li strong { color: var(--accent); display: block; margin-bottom: 4px; }
+  .connections { display: flex; flex-direction: column; gap: 12px; }
+  .conn-card { display: flex; align-items: flex-start; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14px; }
+  .conn-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .conn-label { font-weight: 700; margin-bottom: 3px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .tradeoff-box { background: var(--surface-alt); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 14px 18px; font-size: 14px; font-style: italic; color: var(--text); margin-top: 14px; }
+  @media (max-width: 900px) { #toc { display: none; } main { margin-left: 0; padding: 24px 20px 60px; } }
+</style>
+</head>
+<body>
+
+<aside id="toc">
+  <div id="toc-header">
+    <div class="phase-tag">Phase B — Scalability</div>
+    <h2>5.5 Cache Consistency &amp; Invalidation</h2>
+  </div>
+  <nav>
+    <a href="#s0">🗺️ Topic Overview</a>
+    <a href="#s1">🎯 Goal</a>
+    <a href="#s2">✅ Mastery</a>
+    <a href="#s3">🗓️ Study Phases</a>
+    <a href="#s4">📋 Cheatsheet</a>
+    <a href="#s5">🧠 Core Definition</a>
+    <a href="#s6">📦 Core Concepts</a>
+    <a href="#s7">🔍 First Principles</a>
+    <a href="#s8">🗺️ Mental Models</a>
+    <a href="#s9">⚙️ How It Works</a>
+    <a href="#s10">🏭 Real-World Examples</a>
+    <a href="#s11">⚖️ Trade-offs</a>
+    <a href="#s12">🎯 Interview Application</a>
+    <a href="#s13">⚠️ Misconceptions</a>
+    <a href="#s14">🔗 Relationships</a>
+    <a href="#s15">🧪 Self-Check Quiz</a>
+    <a href="#s16">📚 Further Reading</a>
+    <a href="#s17">✍️ My Notes</a>
+  </nav>
+</aside>
+
+<main>
+<article>
+
+  <header class="doc-header">
+    <div class="meta">
+      <span class="tag tag-phase">⚡ Phase B — Scalability</span>
+      <span class="tag tag-topic">⚡ Topic 5 — Caching Systems</span>
+      <span class="tag tag-date">📅 2026-06-01</span>
+    </div>
+    <h1>5.5 Cache Consistency and Invalidation Strategies</h1>
+  </header>
+
+  <!-- S0: TOPIC OVERVIEW -->
+  <section id="s0">
+    <h2 class="section-title"><span class="num">00</span> 🗺️ Topic Overview</h2>
+    <h3>What This Topic Is About</h3>
+    <p>Cache consistency is the problem of keeping a cache synchronized with the source of truth (usually a database) when data changes. The central tension is <strong>freshness vs. simplicity</strong>: the more strictly you enforce consistency, the more complex your invalidation logic becomes and the lower your effective cache hit rate. Mastering this subtopic means knowing which invalidation strategy fits which write pattern, and understanding the race conditions that make "just delete the key on write" harder than it sounds.</p>
+
+    <h3>🎯 What to Focus On</h3>
+    <ul class="focus-list">
+      <li><strong>1. The four invalidation approaches and when each applies</strong>TTL-based expiry, write-invalidation (delete on write), write-through (update on write), and CDC-based propagation are not interchangeable. Each has a different consistency window, infrastructure requirement, and failure mode. Know the trade-off matrix cold.</li>
+      <li><strong>2. The cache-aside race condition</strong>The classic delete-on-write pattern has a subtle race: a read and a write can interleave so that a stale value ends up cached. This is the most common "gotcha" interviewers probe for. Know the ABA sequence of events and the mitigation (TTL safety net, version tags, or Lua atomic scripts).</li>
+      <li><strong>3. TTL is the floor, not the ceiling</strong>TTL bounds your worst-case staleness window. It is not a substitute for proactive invalidation. Production systems use TTL + explicit invalidation together — TTL is the safety net; invalidation is the fast path.</li>
+      <li><strong>4. Surrogate keys / tag-based invalidation for CDN</strong>CDN edge caches use HTTP purge APIs and surrogate key tags. Know how tag-based invalidation lets you invalidate thousands of edges with a single API call keyed by content tag, not by URL.</li>
+      <li><strong>5. Consistency models for caches</strong>Caches provide strong consistency (write-through), bounded staleness (TTL), or eventual consistency (lazy expiry). Matching the model to the business requirement is the skill — financial data needs strong or short TTL; social media likes can tolerate 30-second staleness.</li>
+    </ul>
+  </section>
+
+  <!-- S1: GOAL -->
+  <section id="s1">
+    <h2 class="section-title"><span class="num">01</span> 🎯 Goal of This Subtopic</h2>
+    <div class="callout callout-goal"><em>Why are you studying this? What should you be able to do after this session?</em></div>
+    <p>Be able to choose and design the correct cache invalidation strategy for a given write pattern and consistency requirement. Be able to explain the cache-aside race condition, propose mitigations, and describe how TTL and explicit invalidation complement each other — without notes and under interview pressure.</p>
+  </section>
+
+  <!-- S2: MASTERY -->
+  <section id="s2">
+    <h2 class="section-title"><span class="num">02</span> ✅ What Mastery Looks Like</h2>
+    <div class="callout callout-quote">Concrete, testable proof that you own this concept — not just familiarity.</div>
+    <ul class="checklist" id="mastery-list">
+      <li><span class="cb"></span><span class="text">Can explain TTL, write-invalidation, write-through, and CDC strategies and select the right one for a given use case</span></li>
+      <li><span class="cb"></span><span class="text">Can walk through the cache-aside ABA race condition step by step and propose at least two mitigations</span></li>
+      <li><span class="cb"></span><span class="text">Can explain why TTL alone is insufficient and how explicit invalidation and TTL work as complements</span></li>
+      <li><span class="cb"></span><span class="text">Can describe tag-based (surrogate key) CDN invalidation and explain when it's needed over URL-based purge</span></li>
+      <li><span class="cb"></span><span class="text">Can classify a system's cache consistency requirement (strong, bounded staleness, eventual) and map it to an appropriate strategy</span></li>
+    </ul>
+    <br>
+    <div class="callout callout-tip">💡 <strong>Rule of thumb:</strong> If you can teach it to someone else and field their follow-up questions, you've mastered it.</div>
+  </section>
+
+  <!-- S3: STUDY PHASES -->
+  <section id="s3">
+    <h2 class="section-title"><span class="num">03</span> 🗓️ Study Phases to Achieve Mastery</h2>
+    <div class="callout callout-quote">Work through each phase in order. Don't advance until you can honestly tick every item.</div>
+
+    <div class="phase-card open" id="ph1">
+      <div class="phase-header" onclick="togglePhase('ph1')">
+        <div class="phase-label"><span class="phase-badge ph1">Phase 1</span> Acquire 📖</div>
+        <span class="phase-chevron">▼</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Read deeply enough that you could explain the concept without the doc.</p>
+        <ul class="checklist">
+          <li><span class="cb"></span><span class="text">Read <strong>DDIA</strong> — Martin Kleppmann, Chapter 5 (Replication) for consistency background underpinning cache consistency</span></li>
+          <li><span class="cb"></span><span class="text">Read <strong>"Scaling Memcache at Facebook"</strong> — Nishtala et al. (2013): <a href="https://www.usenix.org/system/files/conference/nsdi13/nsdi13-final170_update.pdf" target="_blank">NSDI 2013</a> — Section 3 (lease mechanism for invalidation race)</span></li>
+          <li><span class="cb"></span><span class="text">Read <strong>AWS ElastiCache Caching Best Practices</strong> — <a href="https://aws.amazon.com/caching/best-practices/" target="_blank">https://aws.amazon.com/caching/best-practices/</a></span></li>
+          <li><span class="cb"></span><span class="text">Read through <strong>Sections 5–9</strong> (Core Definition → How It Works) carefully — don't skim</span></li>
+          <li><span class="cb"></span><span class="text">Re-read the <strong>Cheatsheet</strong> (Section 4) and try to recite it from memory after</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-card" id="ph2">
+      <div class="phase-header" onclick="togglePhase('ph2')">
+        <div class="phase-label"><span class="phase-badge ph2">Phase 2</span> Consolidate ✍️</div>
+        <span class="phase-chevron">▼</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Verify you can reproduce the knowledge in your own words without looking.</p>
+        <ul class="checklist">
+          <li><span class="cb"></span><span class="text">Close the doc — write out the Core Definition from memory, then compare</span></li>
+          <li><span class="cb"></span><span class="text">Explain First Principles out loud without notes — what problem does this solve and why?</span></li>
+          <li><span class="cb"></span><span class="text">Reconstruct the write-invalidation ABA race condition sequence from memory — draw the interleaving on paper</span></li>
+          <li><span class="cb"></span><span class="text">Restate each Trade-off row in your own words — if you can't explain the cost, you don't own it yet</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-card" id="ph3">
+      <div class="phase-header" onclick="togglePhase('ph3')">
+        <div class="phase-label"><span class="phase-badge ph3">Phase 3</span> Apply 🔧</div>
+        <span class="phase-chevron">▼</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Connect to real systems and simulate interview scenarios.</p>
+        <ul class="checklist">
+          <li><span class="cb"></span><span class="text">Go through Real-World System Examples (Section 10) — verify each claim independently and add anything missed to My Notes</span></li>
+          <li><span class="cb"></span><span class="text">Practice the Interview Application (Section 12) out loud — say the trigger phrases and your response as if in a live interview</span></li>
+          <li><span class="cb"></span><span class="text">Work through Common Misconceptions (Section 13) — for each, explain <em>why</em> the misconception is wrong, not just that it is</span></li>
+          <li><span class="cb"></span><span class="text">Trace the Relationships to Other Concepts (Section 14) — can you explain each connection without looking?</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase-card" id="ph4">
+      <div class="phase-header" onclick="togglePhase('ph4')">
+        <div class="phase-label"><span class="phase-badge ph4">Phase 4</span> Validate 🧪</div>
+        <span class="phase-chevron">▼</span>
+      </div>
+      <div class="phase-body">
+        <p class="phase-goal">Goal: Confirm you actually own it, not just recognize it.</p>
+        <ul class="checklist">
+          <li><span class="cb"></span><span class="text">Answer every Self-Check Quiz question (Section 15) out loud without looking at your notes</span></li>
+          <li><span class="cb"></span><span class="text">Recite the Cheatsheet (Section 4) from memory — if you can't, re-do Phase 2</span></li>
+          <li><span class="cb"></span><span class="text">Tick off items in What Mastery Looks Like (Section 2) — only check a box if you can demonstrate it on demand</span></li>
+          <li><span class="cb"></span><span class="text">Teach this concept out loud to an imaginary interviewer for 2 minutes without hesitation or notes</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- S4: CHEATSHEET -->
+  <section id="s4">
+    <h2 class="section-title"><span class="num">04</span> 📋 Cheatsheet</h2>
+    <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+
+    <!-- Inline SVG Mindmap -->
+    <div class="mindmap-wrap">
+      <svg viewBox="0 0 1200 780" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;min-width:600px;">
+        <defs>
+          <marker id="arr" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+            <path d="M1,1 L7,4 L1,7 Z" fill="#9ca3af"/>
+          </marker>
+        </defs>
+        <rect width="1200" height="780" fill="#f3f2ef" rx="8"/>
+
+        <!-- Center -->
+        <ellipse cx="600" cy="390" rx="115" ry="48" fill="#a5d8ff" stroke="#1971c2" stroke-width="2.5"/>
+        <text x="600" y="384" text-anchor="middle" font-size="15" font-weight="700" fill="#1971c2">Cache</text>
+        <text x="600" y="402" text-anchor="middle" font-size="15" font-weight="700" fill="#1971c2">Invalidation</text>
+
+        <!-- Branch 1: TTL (top-left) -->
+        <line x1="510" y1="365" x2="325" y2="196" stroke="#9ca3af" stroke-width="1.5" marker-end="url(#arr)"/>
+        <rect x="175" y="140" width="155" height="52" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+        <text x="252" y="162" text-anchor="middle" font-size="13" font-weight="700" fill="#3b5bdb">TTL-Based</text>
+        <text x="252" y="179" text-anchor="middle" font-size="13" font-weight="700" fill="#3b5bdb">Expiry</text>
+        <line x1="252" y1="140" x2="180" y2="90" stroke="#9ca3af" stroke-width="1.0"/>
+        <rect x="35" y="60" width="180" height="42" rx="6" fill="#edf2ff" stroke="#3b5bdb" stroke-width="1"/>
+        <text x="125" y="78" text-anchor="middle" font-size="11" fill="#3b5bdb">Bounded staleness window</text>
+        <text x="125" y="94" text-anchor="middle" font-size="11" fill="#3b5bdb">Simple, zero coordination</text>
+        <line x1="252" y1="192" x2="175" y2="255" stroke="#9ca3af" stroke-width="1.0"/>
+        <rect x="20" y="238" width="210" height="38" rx="6" fill="#ffc9c9" stroke="#c92a2a" stroke-width="1"/>
+        <text x="125" y="255" text-anchor="middle" font-size="11" fill="#c92a2a">⚠ Mass expiry → stampede</text>
+        <text x="125" y="269" text-anchor="middle" font-size="11" fill="#c92a2a">Short TTL → high miss rate</text>
+
+        <!-- Branch 2: Write-Invalidation (left) -->
+        <line x1="485" y1="390" x2="325" y2="390" stroke="#9ca3af" stroke-width="1.5" marker-end="url(#arr)"/>
+        <rect x="155" y="358" width="175" height="56" rx="8" fill="#ffd8a8" stroke="#e67700" stroke-width="1.5"/>
+        <text x="242" y="378" text-anchor="middle" font-size="12" font-weight="700" fill="#e67700">Write-Invalidation</text>
+        <text x="242" y="396" text-anchor="middle" font-size="12" font-weight="700" fill="#e67700">Delete on Write</text>
+        <line x1="165" y1="380" x2="100" y2="310" stroke="#9ca3af" stroke-width="1.0"/>
+        <rect x="10" y="285" width="210" height="38" rx="6" fill="#fff3e0" stroke="#e67700" stroke-width="1"/>
+        <text x="115" y="302" text-anchor="middle" font-size="11" fill="#e67700">App deletes key after DB write</text>
+        <text x="115" y="316" text-anchor="middle" font-size="11" fill="#e67700">Next read → miss → refresh</text>
+        <line x1="155" y1="400" x2="68" y2="455" stroke="#9ca3af" stroke-width="1.0"/>
+        <rect x="5" y="440" width="215" height="38" rx="6" fill="#ffc9c9" stroke="#c92a2a" stroke-width="1"/>
+        <text x="113" y="457" text-anchor="middle" font-size="11" fill="#c92a2a">⚠ ABA race: stale repopulation</text>
+        <text x="113" y="471" text-anchor="middle" font-size="11" fill="#c92a2a">Read races concurrent write</text>
+        <line x1="155" y1="414" x2="60" y2="520" stroke="#9ca3af" stroke-width="1.0"/>
+        <rect x="5" y="505" width="210" height="38" rx="6" fill="#b2f2bb" stroke="#2f9e44" stroke-width="1"/>
+        <text x="110" y="522" text-anchor="middle" font-size="11" fill="#2f9e44">✓ Fix: TTL + version tag</text>
+        <text x="110" y="536" text-anchor="middle" font-size="11" fill="#2f9e44">or lease token (Facebook)</text>
+
+        <!-- Branch 3: Write-Through (top-right) -->
+        <line x1="690" y1="365" x2="875" y2="196" stroke="#9ca3af" stroke-width="1.5" marker-end="url(#arr)"/>
+        <rect x="870" y="140" width="155" height="52" rx="8" fill="#c3fae8" stroke="#0ca678" stroke-width="1.5"/>
+        <text x="947" y="162" text-anchor="middle" font-size="13" font-weight="700" fill="#0ca678">Write-Through</text>
+        <text x="947" y="179" text-anchor="middle" font-size="13" font-weight="700" fill="#0ca678">Caching</text>
+        <line x1="1020" y1="150" x2="1075" y2="90" stroke="#9ca3af" stroke-width="1.0"/>
+        <rect x="985" y="60" width="205" height="42" rx="6" fill="#d3f9d8" stroke="#0ca678" stroke-width="1"/>
+        <text x="1087" y="78" text-anchor="middle" font-size="11" fill="#0ca678">Strong consistency</text>
+        <text x="1087" y="94" text-anchor="middle" font-size="11" fill="#0ca678">Cache always current</text>
+        <line x1="1020" y1="182" x2="1080" y2="255" stroke="#9ca3af" stroke-width="1.0"/>
+        <rect x="975" y="238" width="215" height="38" rx="6" fill="#ffc9c9" stroke="#c92a2a" stroke-width="1"/>
+        <text x="1082" y="255" text-anchor="middle" font-size="11" fill="#c92a2a">⚠ Cache pollution + write cost</text>
+        <text x="1082" y="269" text-anchor="middle" font-size="11" fill="#c92a2a">Cache fail = DB-cache drift</text>
+
+        <!-- Branch 4: CDC (right) -->
+        <line x1="715" y1="390" x2="875" y2="390" stroke="#9ca3af" stroke-width="1.5" marker-end="url(#arr)"/>
+        <rect x="875" y="358" width="155" height="56" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+        <text x="952" y="378" text-anchor="middle" font-size="12" font-weight="700" fill="#3b5bdb">CDC-Based</text>
+        <text x="952" y="396" text-anchor="middle" font-size="12" font-weight="700" fill="#3b5bdb">Invalidation</text>
+        <line x1="1030" y1="375" x2="1085" y2="310" stroke="#9ca3af" stroke-width="1.0"/>
+        <rect x="985" y="285" width="210" height="38" rx="6" fill="#edf2ff" stroke="#3b5bdb" stroke-width="1"/>
+        <text x="1090" y="302" text-anchor="middle" font-size="11" fill="#3b5bdb">DB log → Kafka → cache</text>
+        <text x="1090" y="316" text-anchor="middle" font-size="11" fill="#3b5bdb">Decoupled from app writes</text>
+        <line x1="1030" y1="410" x2="1085" y2="460" stroke="#9ca3af" stroke-width="1.0"/>
+        <rect x="985" y="443" width="210" height="38" rx="6" fill="#b2f2bb" stroke="#2f9e44" stroke-width="1"/>
+        <text x="1090" y="460" text-anchor="middle" font-size="11" fill="#2f9e44">✓ Reliable, ordered, fan-out</text>
+        <text x="1090" y="474" text-anchor="middle" font-size="11" fill="#2f9e44">Multi-cache invalidation</text>
+        <line x1="875" y1="414" x2="990" y2="520" stroke="#9ca3af" stroke-width="1.0"/>
+        <rect x="975" y="505" width="210" height="38" rx="6" fill="#ffc9c9" stroke="#c92a2a" stroke-width="1"/>
+        <text x="1080" y="522" text-anchor="middle" font-size="11" fill="#c92a2a">⚠ Extra infra (Debezium+Kafka)</text>
+        <text x="1080" y="536" text-anchor="middle" font-size="11" fill="#c92a2a">50–500ms propagation lag</text>
+
+        <!-- Branch 5: Surrogate Keys (bottom-right) -->
+        <line x1="670" y1="430" x2="845" y2="595" stroke="#9ca3af" stroke-width="1.5" marker-end="url(#arr)"/>
+        <rect x="820" y="570" width="175" height="56" rx="8" fill="#b2f2bb" stroke="#2f9e44" stroke-width="1.5"/>
+        <text x="907" y="590" text-anchor="middle" font-size="12" font-weight="700" fill="#2f9e44">Surrogate Key</text>
+        <text x="907" y="608" text-anchor="middle" font-size="12" font-weight="700" fill="#2f9e44">CDN Tag Purge</text>
+        <line x1="907" y1="626" x2="907" y2="680" stroke="#9ca3af" stroke-width="1.0"/>
+        <rect x="760" y="678" width="295" height="38" rx="6" fill="#d3f9d8" stroke="#2f9e44" stroke-width="1"/>
+        <text x="907" y="695" text-anchor="middle" font-size="11" fill="#2f9e44">Tag at origin → bulk edge purge</text>
+        <text x="907" y="709" text-anchor="middle" font-size="11" fill="#2f9e44">O(1) API call invalidates all tagged URLs</text>
+
+        <!-- Branch 6: Stale-While-Revalidate (bottom) -->
+        <line x1="600" y1="438" x2="600" y2="570" stroke="#9ca3af" stroke-width="1.5" marker-end="url(#arr)"/>
+        <rect x="490" y="568" width="220" height="52" rx="8" fill="#ffd8a8" stroke="#e67700" stroke-width="1.5"/>
+        <text x="600" y="589" text-anchor="middle" font-size="12" font-weight="700" fill="#e67700">Stale-While-Revalidate</text>
+        <text x="600" y="607" text-anchor="middle" font-size="11" fill="#e67700">Serve stale + async refresh</text>
+        <line x1="600" y1="620" x2="600" y2="678" stroke="#9ca3af" stroke-width="1.0"/>
+        <rect x="450" y="676" width="300" height="38" rx="6" fill="#fff3e0" stroke="#e67700" stroke-width="1"/>
+        <text x="600" y="693" text-anchor="middle" font-size="11" fill="#e67700">Low latency, eventual freshness</text>
+        <text x="600" y="707" text-anchor="middle" font-size="11" fill="#e67700">Not for financial/critical data</text>
+
+        <!-- Branch 7: Decision Rule (bottom-left) -->
+        <line x1="530" y1="430" x2="360" y2="595" stroke="#9ca3af" stroke-width="1.5" marker-end="url(#arr)"/>
+        <rect x="200" y="570" width="205" height="52" rx="8" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.5"/>
+        <text x="302" y="590" text-anchor="middle" font-size="12" font-weight="700" fill="#7c3aed">Consistency Dial</text>
+        <text x="302" y="608" text-anchor="middle" font-size="11" fill="#7c3aed">Match strategy to SLA</text>
+        <line x1="302" y1="622" x2="302" y2="678" stroke="#9ca3af" stroke-width="1.0"/>
+        <rect x="100" y="676" width="405" height="50" rx="6" fill="#ede9fe" stroke="#7c3aed" stroke-width="1"/>
+        <text x="302" y="697" text-anchor="middle" font-size="11" fill="#7c3aed">Strong → Write-Through</text>
+        <text x="302" y="712" text-anchor="middle" font-size="11" fill="#7c3aed">Bounded → TTL + DEL   Eventual → TTL only</text>
+      </svg>
+      <p class="caption">5.5 Cache Consistency and Invalidation Strategies — Mindmap</p>
+    </div>
+
+    <div class="cheatsheet"><span class="label">§ 1  ONE-LINER</span>
+  Cache invalidation is removing or updating stale cache entries when the
+  underlying data changes — it is the hardest part of caching at scale.
+  Phil Karlton: "There are only two hard things in computer science:
+  cache invalidation and naming things."
+
+<span class="label">§ 2  FOUR STRATEGIES</span>
+  TTL              — stamp each entry with max age. Bounded staleness.
+                     Simple, no coordination, non-zero window.
+  Write-Inval      — delete cache key on DB write. Fast, race-condition risk.
+                     ABA race: read races between write+delete → stale write back.
+  Write-Through    — update cache AND DB on every write. Strong consistency.
+                     Higher write latency; cache pollution from unread keys.
+  CDC              — DB transaction log → Kafka → cache delete/update.
+                     Decoupled, reliable, ordered. Extra infra + 50-500ms lag.
+
+<span class="label">§ 3  THE ABA RACE CONDITION</span>
+  Thread A: miss → read DB → about to write V1 to cache
+  Thread B: write V2 to DB → delete cache key
+  Thread A: writes V1 to cache (STALE — delete already happened!)
+  Result: cache holds V1, DB holds V2. Race window = μs to ms.
+  Fix 1: TTL as safety net (stale expires quickly)
+  Fix 2: version tag — only cache-write if version >= current
+  Fix 3: Facebook lease — on miss, cache issues token; write revokes token
+
+<span class="label">§ 4  DECISION RULE</span>
+  Financial / inventory     → Write-Through (strong consistency)
+  Product pages             → TTL + Write-Invalidation (bounded staleness ~30s)
+  Social counts / likes     → TTL-only (eventual, 5–60s window fine)
+  High write throughput     → CDC (decoupled, reliable fan-out)
+  CDN / edge cached content → Surrogate key + purge API
+
+<span class="label">§ 5  CDN / SURROGATE KEYS</span>
+  Tag responses: "Surrogate-Key: article:123 author:456"
+  On update: PURGE article:123 → all tagged URLs evicted at all PoPs
+  Cloudflare Cache Tags: ~150ms global propagation
+  Varnish: BAN + grace period (stale-while-revalidate built-in)
+
+<span class="label">§ 6  GOTCHA TO NEVER FORGET</span>
+  Delete-on-write is NOT atomic. Always add TTL as safety net.
+  Write-through cache write failure leaves DB ahead of cache — handle it.</div>
+  </section>
+
+  <!-- S5: CORE DEFINITION -->
+  <section id="s5">
+    <h2 class="section-title"><span class="num">05</span> 🧠 Core Definition</h2>
+    <div class="callout callout-quote">What is it, in one sentence?</div>
+    <p><strong>Cache invalidation</strong> is the set of strategies for removing or updating cached entries when the underlying data changes, with the goal of preventing stale reads while maintaining cache effectiveness. The core challenge is that caches are optimistic read accelerators while writes are the enemy of that optimism — every write to the source of truth creates a window where the cache may hold incorrect data.</p>
+  </section>
+
+  <!-- S6: CORE CONCEPTS -->
+  <section id="s6">
+    <h2 class="section-title"><span class="num">06</span> 📦 Core Concepts</h2>
+    <div class="callout callout-quote">The essential building blocks — terms and ideas you must have solid before going deeper.</div>
+
+    <h3>TTL-Based Expiry</h3>
+    <p>TTL (Time To Live) stamps each cache entry with a maximum age. Once elapsed, the entry is treated as a miss — the next read fetches fresh data from the database and re-populates the cache. TTL is the simplest invalidation mechanism: it requires zero coordination between the writer and the cache, and it bounds the worst-case staleness to the TTL duration. The costs: stale data may be served during the TTL window, and when many entries expire simultaneously you risk a cache stampede. TTL is the foundation — every serious caching setup uses TTL as a safety net regardless of which other strategy is also in place.</p>
+
+    <h3>Write-Invalidation (Delete on Write)</h3>
+    <p>When a write occurs to the database, the application also deletes the corresponding cache key. The next read for that key misses, fetches fresh data from the database, and populates a new cache entry. This is the most common pattern with cache-aside and is conceptually simple. The danger is the <strong>ABA race condition</strong>: if a concurrent read fetches old data from the DB just before the write completes, and then writes that old value to the cache just after the invalidation delete, the cache is repopulated with stale data. TTL is essential as a safety net to bound this race window.</p>
+
+    <h3>Write-Through</h3>
+    <p>Write-through keeps the cache and database synchronized by updating both on every write. A write to the database is immediately followed by an update (not just a delete) of the corresponding cache entry. This eliminates the stale window at the cost of increased write latency and cache pollution — you're caching data that may never be read again. Write-through is most appropriate when read frequency is very high, the working set is well-defined, and strong consistency is required.</p>
+
+    <h3>CDC (Change Data Capture) Invalidation</h3>
+    <p>CDC reads the database's transaction log (PostgreSQL WAL, MySQL binlog) via a connector like Debezium, publishes change events to a message queue (Kafka), and a cache invalidation consumer deletes or updates the affected cache keys. This fully decouples the application write path from cache management — the application doesn't need to know a cache exists. CDC provides reliable, ordered invalidation with a slight lag (50–500ms typically). It enables fan-out: one DB change can propagate to multiple independent cache layers. The trade-off is additional infrastructure and operational complexity.</p>
+
+    <h3>Surrogate Key / Tag-Based Invalidation</h3>
+    <p>Used primarily in CDN and HTTP reverse proxy caches (Varnish, Fastly, Cloudflare). When a response is generated, the origin adds a header tagging it with logical content identifiers: <code>Surrogate-Key: article:123 author:456</code>. CDN edge nodes index each cached URL against its tags. When that content changes, the origin sends one API call: <code>PURGE article:123</code>. The CDN finds all cached responses bearing that tag across all edge nodes globally and evicts them. This scales to thousands of edge invalidations from a single event without URL enumeration.</p>
+
+    <h3>Stale-While-Revalidate</h3>
+    <p>A hybrid pattern where the cache serves the existing stale entry immediately while triggering an asynchronous background refresh to fetch and store the current value. The client gets sub-millisecond response (stale data), and the cache self-heals without a blocking cache miss. This is the semantics of HTTP <code>Cache-Control: stale-while-revalidate</code> and is used in CDN edges and application-level caches. It is appropriate for content where slight staleness is tolerable; unacceptable for inventory counts, financial balances, or anything requiring strong consistency.</p>
+  </section>
+
+  <!-- S7: FIRST PRINCIPLES -->
+  <section id="s7">
+    <h2 class="section-title"><span class="num">07</span> 🔍 First Principles — Why Does This Exist?</h2>
+    <div class="callout callout-quote">What fundamental problem does this concept solve? Why was it invented?</div>
+    <p>Caches exist because reads vastly outnumber writes in most systems, and the database is a bottleneck for reads. The entire value proposition of a cache is to serve reads from fast memory without hitting the database. But this only works if the cached data is correct — which requires the cache to be notified or to expire whenever the database changes.</p>
+    <p>The fundamental tension: <strong>the write path and the read path are decoupled by design</strong>, but consistency requires they be coordinated. There is no free lunch: the more strictly you enforce consistency, the more coordination overhead you add to the write path, the lower your cache efficiency, and the harder your system is to operate at scale.</p>
+    <p>Before TTL and explicit invalidation were formalized, early systems either served stale data indefinitely (cache never invalidated) or bypassed the cache on every write (defeating its purpose). Facebook's 2013 memcache paper is a landmark case study — at millions of operations per second, even the simple "delete on write" approach required a lease mechanism to prevent the race condition from causing correctness violations at scale. The progression from TTL → write-invalidation → CDC reflects the industry's increasing write throughput over time.</p>
+  </section>
+
+  <!-- S8: MENTAL MODELS -->
+  <section id="s8">
+    <h2 class="section-title"><span class="num">08</span> 🗺️ Mental Models</h2>
+    <div class="callout callout-quote">Intuition frames that help you reason about this concept fast — especially under interview pressure.</div>
+
+    <h3>Model 1: The Newspaper Delivery</h3>
+    <p>Think of the cache as a stack of yesterday's newspapers. TTL is like setting a policy: "throw out any paper older than 24 hours." Write-invalidation is like having the delivery person knock and remove the old paper the moment a new edition is printed. Write-through means the presses hand-deliver an updated copy to your door with every new edition. CDC is a notification dispatch: the presses send a signal to central dispatch, which tells all delivery people to replace their papers.</p>
+    <p><em>Where this breaks down:</em> The newspaper analogy doesn't capture the race condition — the delivery person can knock right as you're reading the old paper, and if there's a delay, you might put the old paper back after they removed it. This is exactly the ABA race.</p>
+
+    <h3>Model 2: The ABA Race as a Timeline</h3>
+    <p>Draw a timeline with two threads. Thread A (Reader): [miss → read DB: gets V1 → …pause…→ write V1 to cache]. Thread B (Writer): [write V2 to DB → delete cache key]. The race happens when B's delete lands <em>between</em> A's DB read and A's cache write. A doesn't know V2 was written — it merrily writes V1 back to cache after the key was already cleaned up. The TTL safety net catches this: V1 will expire within TTL seconds even if it's written incorrectly.</p>
+
+    <h3>Model 3: The Consistency Dial</h3>
+    <p>Imagine a dial with three positions: <strong>Strong</strong> (write-through — always consistent, highest write cost), <strong>Bounded Staleness</strong> (TTL + write-invalidation — small consistency window, medium cost), and <strong>Eventual</strong> (TTL-only — widest window, lowest cost). The correct setting is determined by business requirement, not technical preference: financial transactions → Strong, product listings → Bounded Staleness (~30s), social engagement counts → Eventual (60s is fine). Most systems run different cache layers at different dial settings for different data types — you rarely pick one setting for everything.</p>
+  </section>
+
+  <!-- S9: HOW IT WORKS -->
+  <section id="s9">
+    <h2 class="section-title"><span class="num">09</span> ⚙️ How It Works — Mechanics</h2>
+    <div class="callout callout-quote">Step-by-step explanation of the internal mechanism.</div>
+
+    <h3>TTL Expiry — Lazy + Active</h3>
+    <p>Each entry is written with a creation timestamp and a TTL (seconds). On read, the cache computes <code>now - created_at</code>. If it exceeds TTL, the entry is a <em>miss</em> even though the key exists in memory (lazy expiry). A background sweep thread periodically scans for expired keys and frees their memory (active expiry). Both mechanisms run in parallel: lazy expiry ensures correctness on access; active expiry prevents unbounded memory growth from expired keys never re-read.</p>
+
+    <h3>Write-Invalidation — Normal Flow and Race</h3>
+    <p><strong>Happy path:</strong> App writes to DB → app calls <code>cache.delete(key)</code> → next cache read misses → DB read → cache repopulated with V2.</p>
+    <p><strong>ABA race sequence:</strong></p>
+    <ol style="margin-left:20px;margin-bottom:14px;font-size:14px;line-height:2;">
+      <li>Thread A: cache miss → reads from DB → gets value V1</li>
+      <li>Thread B: writes V2 to DB → calls <code>cache.delete(key)</code></li>
+      <li>Thread A: writes V1 to cache (stale — after B's delete!)</li>
+      <li>Cache now holds V1, DB holds V2</li>
+    </ol>
+    <p><strong>Mitigations:</strong> Short TTL as expiry safety net; version/timestamp check before cache write (reject if cached version is newer); Facebook lease tokens (cache issues a read lease on miss; a concurrent write revokes the lease, preventing the stale write-back); Redis Lua scripts for atomic check-then-set.</p>
+
+    <h3>Write-Through — Mechanics and Failure Modes</h3>
+    <p>App writes to DB and cache in sequence (or within a transaction wrapper). Cache is always up-to-date after the write path completes. Failure mode: if cache write fails after DB write succeeds, DB is ahead of cache. The safe response is to delete the cache key (forcing the next read to re-fetch fresh data) rather than leaving the stale entry. Belt-and-suspenders: always add a TTL even to write-through entries — if a cache write failure goes undetected, TTL bounds the staleness window.</p>
+
+    <h3>CDC Pipeline — Mechanics</h3>
+    <ol style="margin-left:20px;margin-bottom:14px;font-size:14px;line-height:2;">
+      <li>App writes to DB (no cache knowledge required in app code)</li>
+      <li>DB appends write to transaction log (WAL / binlog)</li>
+      <li>CDC connector (Debezium) reads the log, publishes change event to Kafka topic</li>
+      <li>Cache invalidation consumer group reads from Kafka</li>
+      <li>Consumer calls <code>cache.delete(key)</code> or <code>cache.set(key, new_value)</code></li>
+    </ol>
+    <p>The consistency window = steps 1→5 latency, typically 50–500ms. Multiple consumers on the same Kafka topic enable fan-out: one DB write can invalidate Redis, the CDN, and an application-level cache simultaneously. Kafka's consumer group model ensures exactly-once processing per partition.</p>
+
+    <h3>Surrogate Key CDN Invalidation — Mechanics</h3>
+    <p>On response generation, the origin adds: <code>Surrogate-Key: article:123 author:456 tag:news</code>. The CDN edge stores a mapping of each cached URL to all its tags. On a content update event, origin sends: <code>PURGE article:123</code>. CDN finds all cached URLs tagged with <code>article:123</code> across all edge PoPs and evicts them. Global propagation time: ~150ms on Cloudflare, ~200ms on Fastly. This makes tag-based invalidation O(1) from the origin's perspective regardless of how many URLs share the tag — critical for CMS systems where one template change invalidates thousands of pages.</p>
+  </section>
+
+  <!-- S10: REAL-WORLD EXAMPLES -->
+  <section id="s10">
+    <h2 class="section-title"><span class="num">10</span> 🏭 Real-World System Examples</h2>
+    <div class="callout callout-quote">Where does this appear in production systems you know?</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>System</th><th>How This Concept Applies</th><th>Notes</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Facebook Memcache (TAO)</strong></td>
+            <td>Write-invalidation at massive scale with lease mechanism: on cache miss, cache issues a read lease; concurrent writes revoke the lease, preventing stale write-back</td>
+            <td>The lease system is their direct solution to the ABA race condition at Facebook scale. Described in the NSDI 2013 paper — one of the most important caching engineering papers</td>
+          </tr>
+          <tr>
+            <td><strong>Redis</strong></td>
+            <td>TTL via <code>EXPIRE</code>/<code>SETEX</code>; explicit <code>DEL</code> on write; Keyspace Notifications enable subscribers to react to key expiry/deletion events for downstream cache fan-out</td>
+            <td>Redis 6+ <code>WAIT</code> command forces replica acknowledgment before returning — enables bounded-staleness guarantees across replica caches. Redis Cluster handles invalidation per shard</td>
+          </tr>
+          <tr>
+            <td><strong>Varnish (HTTP reverse proxy)</strong></td>
+            <td>BAN (regex-based batch invalidation), PURGE (URL-based hard invalidation), and grace period (stale-while-revalidate natively built in)</td>
+            <td>Grace mode serves stale responses for a configurable window after TTL expiry while background revalidation occurs — the OG stale-while-revalidate implementation</td>
+          </tr>
+          <tr>
+            <td><strong>Cloudflare / Fastly CDN</strong></td>
+            <td>Cache purge API by URL or Cache-Tag (surrogate key); <code>Cache-Control: stale-while-revalidate</code> honored at edge; ~150ms global tag-based purge propagation</td>
+            <td>Cache Tags allow bulk invalidation of all edges globally in one API call. Essential for CMS-driven sites with shared layout templates or shared content blocks</td>
+          </tr>
+          <tr>
+            <td><strong>DynamoDB Accelerator (DAX)</strong></td>
+            <td>Write-through by default — all DynamoDB writes pass through DAX, keeping the DAX item cache consistent with the underlying table</td>
+            <td>For strongly consistent reads, DAX bypasses the cache entirely and reads direct from DynamoDB. Item cache TTL configurable (default 5 minutes); query cache TTL separate</td>
+          </tr>
+          <tr>
+            <td><strong>Netflix EVCache</strong></td>
+            <td>Zone-aware Memcached cluster with Kafka-based replication bus for cross-AZ cache write propagation and invalidation fan-out</td>
+            <td>Invalidation messages published to Kafka → consumed by EVCache clients in all AZs to ensure all zones evict stale keys. Demonstrates CDC-style fan-out at application cache layer</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- S11: TRADE-OFFS -->
+  <section id="s11">
+    <h2 class="section-title"><span class="num">11</span> ⚖️ Trade-offs</h2>
+    <div class="callout callout-quote">Every design decision has a cost. What are you giving up?</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>✅ Benefit</th><th>❌ Cost / Limitation</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="benefit">TTL: Zero coordination on write path; simple to implement; works with any caching strategy</span></td>
+            <td><span class="cost">Stale data served during TTL window; short TTL → high miss rate + stampede risk; not a substitute for explicit invalidation</span></td>
+          </tr>
+          <tr>
+            <td><span class="benefit">Write-invalidation: Fast path to freshness on write; easy to implement; works with cache-aside</span></td>
+            <td><span class="cost">ABA race condition allows stale data back into cache; app must coordinate cache + DB writes; brittle under high concurrency without additional guards</span></td>
+          </tr>
+          <tr>
+            <td><span class="benefit">Write-through: Strong consistency — cache and DB always in sync after write completes</span></td>
+            <td><span class="cost">Higher write latency (two writes per operation); cache pollution from unread keys; cache write failure leaves system in inconsistent state</span></td>
+          </tr>
+          <tr>
+            <td><span class="benefit">CDC: Decoupled from app; reliable, ordered, replay-able; enables multi-cache fan-out with one event</span></td>
+            <td><span class="cost">Extra infrastructure (Debezium, Kafka, consumer service); 50–500ms propagation lag; significant operational complexity vs. simpler patterns</span></td>
+          </tr>
+          <tr>
+            <td><span class="benefit">Surrogate keys: O(1) bulk CDN invalidation regardless of URL count; works at global edge scale</span></td>
+            <td><span class="cost">CDN-vendor-specific; requires origin to tag responses at generation time; 100–500ms propagation latency; no help for application-layer in-process caches</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- S12: INTERVIEW APPLICATION -->
+  <section id="s12">
+    <h2 class="section-title"><span class="num">12</span> 🎯 Interview Application</h2>
+    <div class="callout callout-quote">How do you use this concept in a design interview? What triggers it?</div>
+
+    <p><strong>When an interviewer asks / says:</strong></p>
+    <ul style="margin-left:20px;margin-bottom:16px;font-size:14.5px;line-height:1.8;">
+      <li>"How do you keep the cache consistent when data changes?"</li>
+      <li>"What happens if a user updates their profile but sees the old data for several minutes?"</li>
+      <li>"Your system has high write throughput — how do you invalidate the cache?"</li>
+      <li>"Design a caching layer for a product page that must show accurate inventory counts"</li>
+    </ul>
+
+    <p><strong>What you say / do:</strong></p>
+    <p>In the cache design or deep dive section, proactively state your invalidation strategy and tie it explicitly to the consistency requirement. Always call out the write-invalidation ABA race condition to show depth — it signals to interviewers that you know the real complexity. Then propose the mitigation (TTL + version tag, or CDC for high-write systems). Classify the business requirement first (strong / bounded / eventual) before recommending a strategy.</p>
+
+    <div class="tradeoff-box">
+      "If we choose write-invalidation, we get fast consistency with low infrastructure overhead, but we pay the risk of the ABA race condition: a concurrent read can repopulate the cache with stale data after the delete. For this system, write-invalidation with a 30-second TTL safety net is the right call because write frequency is low and bounded staleness is acceptable. If we needed sub-second consistency — for example, inventory counts during a flash sale — I'd layer in explicit key deletion triggered by the inventory service, or switch to write-through for that specific data type."
+    </div>
+  </section>
+
+  <!-- S13: MISCONCEPTIONS -->
+  <section id="s13">
+    <h2 class="section-title"><span class="num">13</span> ⚠️ Common Misconceptions &amp; Gotchas</h2>
+    <div class="callout callout-quote">What do candidates get wrong? What nuance is the interviewer probing for?</div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> Just delete the cache key on write — that handles consistency.</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Delete-on-write has the ABA race condition: a concurrent read can fetch stale data and write it back to cache <em>after</em> the delete has already fired. Without a TTL or version check as a safety net, this stale value persists indefinitely. The mitigation is short TTL + version checks, or Facebook's lease mechanism at scale.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> Write-through provides perfect consistency — the cache is always correct.</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Write-through has its own failure mode: the DB write succeeds but the cache update fails, leaving the cache behind the DB. The correct response is to delete the cache key on cache-write failure (forcing re-fetch on next read). Write-through also pollutes the cache with cold keys — data written but never read — wasting cache capacity. TTL is still necessary even with write-through.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> TTL-based invalidation is too slow/weak — serious systems don't rely on it.</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> TTL is a foundational mechanism present in every major production cache. The right TTL is workload-dependent: 1 second for hot inventory, 5 minutes for product descriptions, 24 hours for static assets. TTL is not weak — it's precise, predictable, and always necessary as a safety net even when explicit invalidation is also in place.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> CDC-based invalidation is only for massive companies with huge engineering teams.</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Debezium + Kafka is operationally accessible and is the right choice whenever the write path should not be coupled to cache management, write throughput is high, or multiple cache layers need coordinated invalidation. CDC is appropriate at mid-scale — not just at Facebook/Netflix scale. The managed CDC tools have lowered the barrier significantly.</div></div>
+    </div>
+  </section>
+
+  <!-- S14: RELATIONSHIPS -->
+  <section id="s14">
+    <h2 class="section-title"><span class="num">14</span> 🔗 Relationships to Other Concepts</h2>
+    <div class="callout callout-quote">How does this connect to adjacent subtopics in this topic or across the roadmap?</div>
+    <div class="connections">
+      <div class="conn-card">
+        <div class="conn-icon">⬆️</div>
+        <div>
+          <div class="conn-label">Builds On</div>
+          5.1 Cache-aside (lazy loading) — write-invalidation is the write-side complement to cache-aside; the race condition arises specifically from the cache-aside pattern's separation of read and write paths. 5.4 Eviction Policies — TTL is simultaneously a freshness mechanism (cache consistency) and an eviction trigger; understanding both roles requires knowing 5.4 first.
+        </div>
+      </div>
+      <div class="conn-card">
+        <div class="conn-icon">➡️</div>
+        <div>
+          <div class="conn-label">Enables</div>
+          5.6 Cache stampede and thundering herd — the primary causes of cache stampede are mass TTL expiry and the miss spike following a bulk invalidation event. Understanding how invalidation works is prerequisite to understanding stampede prevention strategies (probabilistic expiry, mutex locks, background refresh).
+        </div>
+      </div>
+      <div class="conn-card">
+        <div class="conn-icon">⚡</div>
+        <div>
+          <div class="conn-label">Tension With</div>
+          5.3 Write-back (write-behind) caching — write-back delays DB writes for performance, making the cache the temporary source of truth. This is in fundamental tension with write-invalidation strategies that assume the DB is always the source of truth. You cannot use write-back and write-invalidation together coherently for the same data.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- S15: SELF-CHECK QUIZ -->
+  <section id="s15">
+    <h2 class="section-title"><span class="num">15</span> 🧪 Self-Check Quiz</h2>
+    <div class="callout callout-quote">Can you answer these without looking? If not, you haven't internalized it yet.</div>
+
+    <div class="quiz-item" onclick="toggleQuiz(this)">
+      <div class="quiz-q"><span class="quiz-num">1</span><span class="qtext">Walk through the write-invalidation ABA race condition step by step. What exact interleaving of events leads to stale data in the cache, and what are two concrete mitigations?</span><span class="quiz-toggle">▼ hint</span></div>
+      <div class="quiz-hint">💡 Think through your answer before expanding — if you hesitate, revisit Section 9 (Write-Invalidation Mechanics).</div>
+    </div>
+
+    <div class="quiz-item" onclick="toggleQuiz(this)">
+      <div class="quiz-q"><span class="quiz-num">2</span><span class="qtext">A product page cache has a 5-minute TTL. Inventory drops to zero after a flash sale starts. Users are seeing "in stock" for up to 5 minutes. How do you fix this without dropping the TTL for all product cache entries?</span><span class="quiz-toggle">▼ hint</span></div>
+      <div class="quiz-hint">💡 Think through which strategy targets a specific key on a specific write event — if you hesitate, revisit Section 6 (Write-Invalidation) and Section 9.</div>
+    </div>
+
+    <div class="quiz-item" onclick="toggleQuiz(this)">
+      <div class="quiz-q"><span class="quiz-num">3</span><span class="qtext">What does CDC-based cache invalidation buy you that write-invalidation does not? What does it cost, and when is the trade-off worth it?</span><span class="quiz-toggle">▼ hint</span></div>
+      <div class="quiz-hint">💡 Think through coupling, reliability, fan-out, and infrastructure — if you hesitate, revisit Section 6 (CDC) and Section 11 (Trade-offs).</div>
+    </div>
+
+    <div class="quiz-item" onclick="toggleQuiz(this)">
+      <div class="quiz-q"><span class="quiz-num">4</span><span class="qtext">How do surrogate keys / cache tags enable CDN bulk invalidation? How does it work mechanically at the edge, and why is it important for CMS-driven websites?</span><span class="quiz-toggle">▼ hint</span></div>
+      <div class="quiz-hint">💡 Think through how tags are assigned, stored, and purged — if you hesitate, revisit Section 6 (Surrogate Keys) and Section 9 (Surrogate Key Mechanics).</div>
+    </div>
+
+    <div class="quiz-item" onclick="toggleQuiz(this)">
+      <div class="quiz-q"><span class="quiz-num">5</span><span class="qtext">You're designing a write-through cache and the cache update fails after the DB write succeeds. What is the system state, what should you do immediately, and how does TTL help here?</span><span class="quiz-toggle">▼ hint</span></div>
+      <div class="quiz-hint">💡 Think through the failure mode of write-through — if you hesitate, revisit Section 9 (Write-Through Mechanics) and Section 13 (Misconception 2).</div>
+    </div>
+  </section>
+
+  <!-- S16: FURTHER READING -->
+  <section id="s16">
+    <h2 class="section-title"><span class="num">16</span> 📚 Further Reading</h2>
+    <div class="callout callout-quote">Optional: links, chapters, or resources for deeper understanding.</div>
+    <ul class="reading-list" id="reading-list">
+      <li><span class="cb"></span><div class="rtext"><strong>Designing Data-Intensive Applications (DDIA)</strong> — Martin Kleppmann, Chapter 5 (Replication) — consistency models and propagation lag underpinning cache consistency reasoning</div></li>
+      <li><span class="cb"></span><div class="rtext"><strong>"Scaling Memcache at Facebook"</strong> — Nishtala et al. (NSDI 2013) — the definitive case study on write-invalidation at scale and the lease mechanism: <a href="https://www.usenix.org/system/files/conference/nsdi13/nsdi13-final170_update.pdf" target="_blank">https://www.usenix.org/system/files/conference/nsdi13/nsdi13-final170_update.pdf</a></div></li>
+      <li><span class="cb"></span><div class="rtext"><strong>AWS ElastiCache Caching Best Practices</strong> — lazy loading vs. write-through trade-off analysis: <a href="https://aws.amazon.com/caching/best-practices/" target="_blank">https://aws.amazon.com/caching/best-practices/</a></div></li>
+      <li><span class="cb"></span><div class="rtext"><strong>Cloudflare Cache Tags Documentation</strong> — surrogate key invalidation implementation: <a href="https://developers.cloudflare.com/cache/how-to/purge-cache/" target="_blank">https://developers.cloudflare.com/cache/how-to/purge-cache/</a></div></li>
+      <li><span class="cb"></span><div class="rtext"><strong>Debezium CDC Documentation</strong> — architecture and patterns for DB change capture feeding cache invalidation pipelines: <a href="https://debezium.io/documentation/" target="_blank">https://debezium.io/documentation/</a></div></li>
+    </ul>
+  </section>
+
+  <!-- S17: MY NOTES -->
+  <section id="s17">
+    <h2 class="section-title"><span class="num">17</span> ✍️ My Notes</h2>
+    <div class="callout callout-quote">Personal observations, things that confused me, analogies that helped.</div>
+    <textarea class="notes-area" id="notes-area" placeholder="Free-form space for your own annotations. Add examples that clicked, diagrams you sketched, or interview stories you connected to this concept."></textarea>
+  </section>
+
+</article>
+</main>
+
+<script>
+  // TOC active state
+  const sections = document.querySelectorAll('section[id]');
+  const navLinks = document.querySelectorAll('#toc nav a');
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        navLinks.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + e.target.id));
+      }
+    });
+  }, { rootMargin: '-20% 0px -75% 0px' });
+  sections.forEach(s => observer.observe(s));
+
+  // Checklist toggle
+  document.querySelectorAll('.checklist .cb').forEach(cb => {
+    cb.addEventListener('click', () => { cb.closest('li').classList.toggle('checked'); saveState(); });
+  });
+
+  // Reading list toggle
+  document.querySelectorAll('.reading-list .cb').forEach(cb => {
+    cb.addEventListener('click', () => { cb.closest('li').classList.toggle('checked'); saveState(); });
+  });
+
+  // Phase card toggle
+  function togglePhase(id) {
+    document.getElementById(id).classList.toggle('open');
+  }
+
+  // Quiz toggle
+  function toggleQuiz(el) {
+    el.classList.toggle('open');
+    const toggle = el.querySelector('.quiz-toggle');
+    toggle.textContent = el.classList.contains('open') ? '▲ hide' : '▼ hint';
+  }
+
+  // Persistence
+  const KEY = 'sd-5.5-cache-consistency';
+  function saveState() {
+    const data = {
+      mastery: [...document.querySelectorAll('#mastery-list li')].map(li => li.classList.contains('checked')),
+      reading: [...document.querySelectorAll('#reading-list li')].map(li => li.classList.contains('checked')),
+      phases: ['ph1','ph2','ph3','ph4'].map(id => document.getElementById(id).classList.contains('open')),
+      notes: document.getElementById('notes-area').value
+    };
+    try { localStorage.setItem(KEY, JSON.stringify(data)); } catch(e) {}
+  }
+  function loadState() {
+    let data;
+    try { data = JSON.parse(localStorage.getItem(KEY)); } catch(e) {}
+    if (!data) return;
+    const ml = document.querySelectorAll('#mastery-list li');
+    (data.mastery||[]).forEach((v,i) => { if(v && ml[i]) ml[i].classList.add('checked'); });
+    const rl = document.querySelectorAll('#reading-list li');
+    (data.reading||[]).forEach((v,i) => { if(v && rl[i]) rl[i].classList.add('checked'); });
+    ['ph1','ph2','ph3','ph4'].forEach((id,i) => {
+      if (data.phases && data.phases[i] === false) document.getElementById(id).classList.remove('open');
+      else if (data.phases && data.phases[i] === true) document.getElementById(id).classList.add('open');
+    });
+    if (data.notes) document.getElementById('notes-area').value = data.notes;
+  }
+  document.getElementById('notes-area').addEventListener('input', saveState);
+  loadState();
+</script>
+</body>
+</html>

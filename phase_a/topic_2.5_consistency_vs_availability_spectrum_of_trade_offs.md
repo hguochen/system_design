@@ -144,7 +144,7 @@ The practical implication: you can get away without synchronized clocks and glob
 Analogy: You deposit $100 at New York at 9:00am. London and Tokyo replicate asynchronously — at 9:05am, both Tokyo and London are still showing the old balance. That's fine under sequential consistency. But here's the key: when your deposit finally arrives, it arrives at London AND Tokyo in the same position in their transaction history. If Tokyo's ledger shows: [deposit $200, deposit $100], London's ledger must show the exact same order: [deposit $200, deposit $100] — never [deposit $100, deposit $200]. All branches agree on the same history, just potentially a delayed one.
 
 ### Causal Consistency
-**Causal** is even weaker than Sequential: It only enforces ordering for operations that are **casually related** - meaning one operation could have influenced the other. If Alice writes X=1 and then Bob reads X=1 and then writes Y=2 (so Y=2 is caused by seeing X=1), then any node that shows Bob's write Y=2 must also show Alice's write X=1. Cause must precede effect. But two concurrent, unrelated writes — say Alice updates her username and Carol updates her bio at the same moment with no dependency between them — can be seen in any order on different replicas. That's fine, because neither caused the other.
+**Causal** is even weaker than Sequential: It only enforces ordering for operations that are **causally related** - meaning one operation could have influenced the other. If Alice writes X=1 and then Bob reads X=1 and then writes Y=2 (so Y=2 is caused by seeing X=1), then any node that shows Bob's write Y=2 must also show Alice's write X=1. Cause must precede effect. But two concurrent, unrelated writes — say Alice updates her username and Carol updates her bio at the same moment with no dependency between them — can be seen in any order on different replicas. That's fine, because neither caused the other.
 
 Under causal consistency, if two operations are causally related (one could have been influenced by the other), all nodes must observe them in the same cause-before-effect order. For concurrent, unrelated operations, different nodes are free to apply them in different orders — both orderings are valid because neither write caused the other. The cost is much lower than linearizability: you only need to track causal dependencies (via vector clocks or logical timestamps), not coordinate globally on every operation. Useful for chat/social systems where reply-ordering matters but global ordering doesn't.
 
@@ -395,3 +395,38 @@ This is also why the cost is unavoidable with physics — you cannot optimize yo
 ## 17. ✍️ My Notes
 
 > *Personal observations, things that confused me, analogies that helped.*
+
+What are the 6 consistency levels?
+(strict -> loose)
+Linearizable > Sequential > Causal > Read-Your-Writes > Monotonic Read > Eventual
+
+A stronger consistency means a higher latency, vice versa.
+
+Use strong consistency when we depend on a single source of truth. Use eventually consistency when some stale data is acceptable.
+
+Quorum tunability:
+R + W > N → strong consistency.
+R + W ≤ N → eventual consistency, lower latency.
+
+N = total replicas
+W = nodes that must confirm a write
+R = nodes that must respond to a read
+
+Example: N=3, W=2, R=2 → R+W=4 > 3 → strong consistency
+  (read set and write set always overlap by at least 1 node,
+   guaranteeing you hit a node with the latest write)
+
+N=3, W=1, R=1 → R+W=2 ≤ 3 → eventual consistency, max throughput
+
+3 Scenarios where eventual consistency is the correct choice
+1. Social media likes/view counts
+   Why: slight staleness (±seconds) causes no harm; strong 
+   consistency would require global coordination on every like
+
+2. Product catalog / search index
+   Why: a product showing slightly stale price for seconds is 
+   acceptable; low latency reads are critical at scale
+
+3. DNS propagation
+   Why: updates take minutes to propagate globally by design; 
+   availability of name resolution >> perfect consistency

@@ -341,3 +341,33 @@ That's a real constraint — 10x write volume changes the economics of quorum-ba
 
 > *Personal observations, things that confused me, analogies that helped.*
 
+The FTAC flow in practice:
+
+Step 1 — Name the Forces. When a design decision arises, pause and identify the competing pressures. There are always at least two — usually three. Common force pairs: read latency vs. write throughput, consistency vs. availability, storage cost vs. query flexibility, operational simplicity vs. scalability. Say them aloud: "The tension here is between X and Y." This alone signals mature engineering thinking.
+
+Step 2 — State the Trade-off Space. Describe what each option gives you and costs you — briefly. "If we go with approach A, we get [benefit] but sacrifice [cost]. If we go with approach B, we get [benefit] but sacrifice [cost]." Keep this to one sentence per option. The goal is to demonstrate that you understand the design space, not to enumerate every possible technology.
+
+Step 3 — State Your Assumption. This is the pivot. Choose one assumption about the system's requirements or priorities that makes one option clearly better than the other. "Assuming this is a read-heavy system with 10:1 read/write ratio and sub-100ms p99 latency requirements..." The assumption should come from the requirements you clarified at the start of the interview or from a reasonable inference about the system type.
+
+Step 4 — Commit and Name the Cost. Make a clear choice and immediately follow it with its cost. "I'll go with [X]. The trade-off is that we accept [cost] — [specific implication for the system]." Do not hedge. Do not say "or we could also do Y." You can acknowledge that Y is revisitable if requirements change, but land on a single choice.
+
+Example
+Forces
+Between a relational database and document store, there are two main tensions here:
+
+1. horizontal vs vertical scalability
+2. schema flexibility vs query expressiveness
+
+Tradeoff
+
+For the first tension, if we choose horizontal scalability, we basically have no cap on ability to scale we pay with the additional coordination costs and consistency costs. If we choose vertical scalability, we get a much simpler system architecture, and we will probably have a faster go-to-market response time, but in this case we will reach a hardware ceiling. In addition, we have a single point of failure. On the other hand, if we choose a flexible schema, which is what MongoDB is characterized as, we basically are able to add additional features on demand. The downside is we will need to maintain different versions of the schema and factor in reconciliations between previous versions of the schema. If we favor query expressiveness, then a relational database will be a good choice because that allows us to craft targeted SQL queries that will give us exactly what we want and we get more targeted search. The downside is that this query comes at a cost of latency. We will have higher latency the more complicated the queries are.
+
+Assumption
+
+Assuming the feed is really heavy we have a 10 to 1 ratio. The polls are fetched by user ID and timestamp with no complex joins. The data model will evolve as we add reactions, stories, and polls. I'll go with MongoDB. The cause is we lose a seed transition guarantee across documents 
+
+Choice + Cost
+
+I will go with MongoDB as our database store. The cause is that we now get horizontal scalability, but we pay for it with extra coordination overhead, and that complicates the systems. And the reason we are choosing MongoDB is that we expect to add new features to our service over time, and that will translate to adding new columns and adding new constraints to our database fields. In this case, MongoDB has a more relaxed field adding a column, and this will better serve our needs.
+I'll revisit my choice if above assumptions change.
+

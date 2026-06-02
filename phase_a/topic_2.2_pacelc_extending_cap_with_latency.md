@@ -496,3 +496,38 @@ W + R > N: 3 + 3 = 6 > 5. This guarantees — not probabilistically, but by the 
 - [x] Tick off every item in **Section 2** (What Mastery Looks Like) — only check a box if you can demonstrate it on demand right now, not "I think I could"
 - [x] Teach PACELC out loud to an imaginary interviewer for 2 minutes without hesitation — cover: what it is, why CAP was insufficient, the Else branch mechanics, and one real system classification with justification
 
+## 18. ✍️ My Notes
+
+What does PACELC stands for?
+During a network Partition, choose between Availability and Consistency, Else(during normal operation), choose between Latency and Consistency.
+
+What are the different system type classifications?
+During network partition
+PA - System is always available, might return stale data
+PC - System always returns latest write, might be unavailable and fail to give a response
+
+Outside network partition
+EL - Prioritize low latency over consistency, might return stale data
+EC - Prioritize system correctness, tradeoff for higher latency
+
+How are PACELC and CAP related?
+CAP only tells you what to do during a partition - a rare event. PACELC extends it by addressing the latency-consistency tradeoff that exists during normal operation. This is more practically useful because most design decisions happen outside of failure scenarios
+
+EL system characteristics:
+- Replicates writes asynchronously → low write latency
+- Reads may return stale data until replication completes
+- Suits any workload (read OR write heavy) where eventual 
+  consistency is acceptable
+- Examples: social media feeds, product catalogs, analytics 
+  dashboards — anywhere stale data for seconds/minutes is tolerable
+
+EC system characteristics:
+- Synchronous replication — write acknowledged only after all 
+  replicas confirm → guarantees no stale reads, costs latency
+- Use cases: financial transactions, inventory, medical records — 
+  anywhere stale data causes real harm
+
+Example System types
+CassandraDB - PA/EL
+DynamoDB - PA/EL
+HBase - PC/EC

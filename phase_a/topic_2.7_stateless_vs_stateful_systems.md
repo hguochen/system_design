@@ -561,3 +561,63 @@ Public content site → JWT (stateless)
 
 > *Personal observations, things that confused me, analogies that helped.*
 
+A stateful service means the service holds request-path state in its own memory or local disk.
+A stateless service means the services does not have any local states with respect to a request
+
+The 4 kinds of states are:
+- session state
+- application state
+- persistent state
+- connection state
+
+Keep the service STATEFUL when:
+- hot memory is the whole point
+- long lived connections or sessions are critical to application needs
+
+Make the service STATELESS when:
+- traffic demands increased load capacity
+- workload has no long live context beyond a request/response
+- need elastic deployment
+- need HA
+
+Scaling implication of stateless:
+  Any node can serve any request → load balancer distributes freely
+  → horizontal scaling works cleanly (2.6's 3 conditions are met)
+
+Scaling implication of stateful:
+  Requests must route to the specific node holding state
+  → requires sticky sessions (L7 LB pins client to node)
+  → sticky sessions break free distribution: if that node dies,
+    session is lost; load can't rebalance freely
+  → horizontal scaling is constrained or impossible
+
+How to externalize each state type:
+  Session state     → Redis / Memcached (fast, TTL-based)
+  Application state → Redis / external cache
+  Persistent state  → Database (Postgres, DynamoDB)
+  Connection state  → API Gateway / load balancer handles it;
+                      or accept statefulness (WebSockets stay pinned)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

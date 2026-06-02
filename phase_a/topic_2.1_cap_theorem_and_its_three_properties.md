@@ -537,3 +537,28 @@ The system continues to operate despite an arbitrary number of messages being dr
 - [ ] Tick off each item in **What Mastery Looks Like** — only check if you can demonstrate it on demand right now
 - [ ] Do a 2-minute verbal explanation of CAP as if the interviewer just asked "walk me through how you think about consistency vs. availability trade-offs"
 
+## 18. ✍️ My Notes
+
+What does CAP stands for?
+Consistency
+- When a client makes a request to a distributed system, Consistency means every read receives the most recent write, or an error.
+
+Availability
+- When a client makes a request to a distributed system, nodes must always return a valid response that is not failure or exception.
+
+Partition Tolerance
+- The ability of a system to continue operating during a network partition. A network partition is unavoidable, when one occurs, we must choose: do we maintain Consistency or Availability?
+
+Why does CAP exist?
+CAP is the fundamental theorem which states that in an unavoidable network partition, our system has to make a choice between Consistency and Availability. If we choose consistency, we can guarantee data is always accurate, but the trade-off is that we are unable to always give a response. If we choose availability, we guarantee that a client request will always receive a response, but the trade-off is that the data might be stale. 
+
+Name an production example of a CP system.
+Google Spanner is considered a CP system. In a CP system, if a node can't guarantee it has the latest data (due to a partition), it returns an error rather than risk serving stale data.
+
+Name an production example of a AP system.
+Cassandra is an AP system by default. During a network partition, 
+it will always return a response even if that data is stale. However, 
+Cassandra offers tunable consistency — with QUORUM or ALL consistency 
+levels, it can behave closer to CP at the cost of availability. 
+This tunability is what makes it suitable for both high-write 
+workloads (AP mode) and stricter read consistency use cases.

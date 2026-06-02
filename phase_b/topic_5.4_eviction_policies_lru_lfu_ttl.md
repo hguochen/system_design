@@ -321,22 +321,104 @@ In the cache design or deep dive section, proactively state your eviction policy
 1. What data structures are used to implement an O(1) LRU cache, and why are both necessary?
 
    > 💡 *Think through your answer before expanding — if you hesitate, revisit Section 6 (Core Concepts) and Section 9 (Mechanics).*
+A doubly linked list and a hash map. This is used to move the most recent access data into the top of the list and thereby pushing the less recently used data to the tail of the list. When the cache is full, we will first remove the tail data sets. The hash map has a key-value star where the key is the accessing key and the value will be the reference to the pointer in the doubly linked list. We will need O1 access for any of the keys, so that's the reason for using the hashmap. 
+
+Two data structures: a doubly linked list and a hashmap.
+
+Doubly linked list: maintains access order. Head = most recently used,
+tail = least recently used. On every access, move the node to the head.
+On eviction, remove the tail. O(1) for both operations because we have
+direct node references.
+
+Hashmap: maps key → node pointer in the linked list. Provides O(1)
+lookup so we can find any key instantly without traversing the list.
+
+Why both are necessary: the linked list alone gives O(1) eviction but
+O(n) lookup. The hashmap alone gives O(1) lookup but no ordering.
+Together they give O(1) for get, put, and eviction.
 
 2. You're designing a cache for a music streaming service where 5% of songs account for 80% of plays. Should you use LRU or LFU? Why?
 
    > 💡 *Think through the access distribution before answering — if you're unsure, revisit Section 6 (LFU concept) and Section 8 (Frequency Ladder mental model).*
+We should use an LFU cache. The forces in contention for choosing this cache are basically the tension between:
+- the memory capacity
+- the hit rate for the cache
+- the data freshness
+The assumption for the music streaming service is that we have a small working set of hot data that is contributing to the majority of the plays. We need to make sure this small working set of data is sitting in cache in order to guarantee a high cache rate. So this also gives the natural assumption that, because they have a small subset and are being accessed repeatedly, they naturally have a high frequency for this small subset of data. By choosing an LRU cache, we can  guarantee that the small working set can sit inside our cache to maintain a high hit rate. The trade-off of using an LFU cache is that, because now we measure the relevancy of cached data via frequency and not via recency, some of the lower-frequency but more recently used data set (or, in this case, the songs) will not be in the cache. That will incur a DBE, and that's what we hit. For our usage pattern here, which is high-frequency small working dataset, using an LFU cache is the right call because we want to maintain the highest hit rate possible with a fixed memory capacity. By using frequency as the metric for caching, we can guarantee that those small working sets will be inside the cache, and this is not possible with an LRU cache. In addition, we will also need to introduce a TTL expiry for every single cache entry to serve as a guarantee that data within this window is considered fresh. Once they are no longer fresh, they need to have a way to be evicted from the cache. 
+
+LFU. This is a Zipfian workload — 5% of songs = 80% of plays.
+
+LFU is correct because:
+- Small hot working set with high repeat access = high frequency counts
+- LFU protects high-frequency entries from eviction by design
+- LRU would fail here: a hot song not played in the last N minutes
+  gets evicted even if it's the most-played song overall
+
+Trade-off: lower-frequency but recently played songs may be evicted.
+Acceptable — they contribute minimally to total traffic.
+
+Also combine with TTL for data freshness (song metadata validity window).
 
 3. What is cache pollution, and what specific workload pattern causes it in an LRU cache?
 
    > 💡 *Think through the mechanics of how LRU tracks access order — if you can't explain the failure mode, revisit Section 6 (Cache Pollution) and Section 9.*
+Cache pollution more often happens in an LRU cache. It is the situation where we have an entirely different access pattern hitting our otherwise live traffic cache access pattern. One such example would be: let's say we have a batch job that runs at midnight to do a full export of data. This batch job will pull all of the data, by definition of what was working inside the cache, and then they all get put into the cache as the most recently accessed data. The problem is this data is only accessed once and not touched again. When the cache is full, our system will actually flush the least recently used data, which incidentally is the hot working set per the live traffic source. We are thereby reducing our cache rate by using a different access pattern to flush out our intended live traffic access pattern data. 
+
+Cache pollution: a workload reads a large volume of one-time-use data,
+flooding the cache and evicting the hot working set.
+
+Root cause: LRU has no knowledge of frequency. It treats a key accessed
+once during a batch scan identically to a key accessed 10,000 times by
+live traffic — recency is all it sees.
+
+Specific pattern: sequential scan or batch export job. Each key is
+accessed exactly once, moved to the LRU head, and pushes hot live-traffic
+keys toward the tail. When the cache fills, the hot working set gets
+evicted first.
+
+Fixes: LFU (scan entries stay at freq=1, evict first), 2Q (probationary
+queue for first-access entries), LRU-K (requires K accesses before
+competing with established entries).
 
 4. A Redis instance is configured with allkeys-lru and maxmemory 4GB. A key has a TTL of 60s and was accessed 10 seconds ago. Under what conditions will it be evicted before its TTL expires?
 
    > 💡 *Think through how TTL and LRU interact — if you're unsure, revisit Section 9 (TTL + LRU Combined).*
+It's possible that this key can be evicted before it expires if we have a high traffic load and our cache has hit full memory capacity of 4 GB. That warrants the least recently used data to be removed from the cache. That means that data that is served 10 seconds or more ago is now considered least recently used, and by the LRU eviction mechanism, we are removing the data even though it's within the TTL window. 
+
+
+The key will be evicted before TTL expiry if memory pressure forces
+eviction and this key is selected as the LRU candidate.
+
+Mechanics: Redis allkeys-lru samples N keys (default 5) and evicts the
+least recently accessed among the sample. If this key (accessed 10s ago)
+is selected in a sample where it is the least recent, it gets evicted —
+regardless of its remaining TTL.
+
+TTL and LRU are independent: TTL answers "is this data still valid?",
+LRU answers "which entry to remove under memory pressure?" Memory
+pressure can trigger LRU eviction before TTL expiry.
+
+The higher the memory pressure and the larger the key space, the more
+likely a recently accessed key gets caught in an unlucky sample.
 
 5. What happens to an LFU cache entry that was extremely popular 6 months ago but hasn't been accessed since? What mechanism prevents it from permanently occupying cache space?
 
    > 💡 *Think through the counter-decay mechanism — if you hesitate, revisit Section 9 and Section 13 (Misconception 3).*
+So, an extremely popular cache entry six months ago will, by definition, have a high frequency count in the RFU cache, but since then it has not received any counts. In the default approach, they will sit in the cache forever because of virtue of having high frequency counts. What we need is to introduce a decay mechanism where their frequency count for working data sets gets reduced over time so that eventually, without enough excess frequency, they will now be subjected to the mean frequency threshold and thereby get removed in the subsequent cycle of the cache eviction operation. 
+
+Without decay: the entry retains its high frequency count permanently
+and is never evicted — this is the stale popularity problem. It blocks
+eviction of newer, currently popular entries.
+
+The fix: counter decay. Redis LFU uses a logarithmic counter (0–255)
+with a configurable lfu-decay-time. The counter is decremented
+periodically for entries that haven't been accessed. Over time, a
+formerly-popular but now-idle entry's count drops toward the minimum
+frequency level, making it eligible for eviction.
+
+The decay rate is tunable:
+- Too fast → behaves like LRU (recency dominates)
+- Too slow → stale popular entries linger too long
 
 ---
 
@@ -356,3 +438,60 @@ In the cache design or deep dive section, proactively state your eviction policy
 
 > *Personal observations, things that confused me, analogies that helped.*
 
+What's a eviction policy?
+Eviction policy is an algorithm the cache uses to decide which entry to remove when it reaches capacity. 
+
+What's in tension for caches in general?
+A cache, in general, has a constant tension between the memory capacity versus the hit rate and the index freshness. The idea for cache is to, within the bounds of a fixed memory capacity, attain the highest hit rates for cached data while guaranteeing that the data is fresh within a pre-configured window. 
+
+How many eviction policies are there? 
+Types of eviction policies:
+1. The LRU, which is to remove the least recently used entry.
+2. The LFU, which removes the least frequently accessed entry.
+3. TTL, which evicts an entry based on when a data reaches the threshold timestamp.
+
+When do we use LRU eviction mechanism? 
+Our new eviction mechanism is the default eviction policy for most caches. This mechanism basically lines data by their recency of usage. The most recently used data will be cached in the cache, and the least recently accessed data will be removed from the cache when the memory is full. One example of using an LRU mechanism is if the user accesses data via a single session. It is likely that he will access data that is more recently accessed. Our LRU cache can effectively cache the most recently accessed data with the intent that it will be accessed again within the window. When the session window expires, then we can go about removing all of the recently accessed cache data in that window. 
+
+When do we avoid LRU eviction mechanism?
+We need to avoid using our U-Cache eviction mechanism if our cache eviction pattern is not based on data recency. For example, if we have a social media app where the SS pattern is based on the number of reads on a post and high-frequency posts get the most views, we will need to cache the high-frequency post data to effectively read and reduce our traffic workload. 
+
+When do we use the LFU eviction mechanism? 
+LFU eviction mechanism is suitable for systems with access patterns where a small number of working set data contributes to the majority of our traffic. For example, a social media application, a small working set of hot posts, will contribute to the majority of the traffic because most people will read the hot posts. 
+
+When do we avoid LFU eviction mechanism?
+We want to avoid using an LFU cache if the access pattern is more smoothed out and we do not have any single small subset of working sets that contribute to the majority of the use cases. For example, if we have a profile system in which it is equally likely for any profile to be accessed, then using an LFU cache will not guarantee that our cache has the highest hit rate. 
+
+Name an issue with LRU Cache and how to mitigate it.
+One issue with our U-Cache is that if we are running batch jobs or sequential scans for a wide spectrum of data where they're only, by definition, accessed once. This job itself will flush out all of the hot working sets in the cache and thereby reduce the hit rate of your cache drastically. Here is how we can have a two-cue approach for our U-Cache, in which the first queue is a probationary queue. And the second queue is our intended queue for live traffic. New entries will come in through and sit in the probationary queue as they are assessed. Once they are assessed more than once, then they will graduate to move to the secondary queue. In this case, the batch scan will put a lot of entries into the probationary queue. When they are not being assessed again, they do not get promoted to the secondary queue, and then over time we will first go about removing entries from the probationary queue. 
+
+Name an issue with LFU Cache and how to mitigate it.
+LFU cache has a stale popularity problem. Where previously popular walking sets have accrued a high number of frequency and they sit in the frequency table without ever being evicted from the cache, even when they are no longer being accessed. We want to introduce a natural decay to frequency datasets such that they will over time reduce their frequency counts. Eventually, over a longer period of time, when they do not get access, they will drop to the minimum frequency or the least queue and eventually get removed from the cache. 
+
+Give an actual interview answer for choosing LRU cache.
+Let's say we have a system that is a profile-based system where each person's profile is accessed an equal number of times in a day.
+The forces in contention here will be:
+- to have memory capacity
+- the cache hit rate
+- the index freshness of the data
+If we choose an LRU-based system, we are basically able to keep the most recently accessed data in the cache and maintain a higher hit rate as opposed to an LRU cache. It is because the working set pattern is equally likely among the different data sets. The data sets do not differentiate themselves via frequency, but more via how recently they are being accessed. The The trade-off of using an LRU cache means that if we are running a different access pattern (for example, a batch load that loads all of the data for export operations), then they will all have been moved into cache via the recency pattern and thereby definitionally flushed out of the actual live traffic hot working sets. The way to deal with this will be to introduce a tool queue with probationary cues to make sure that we separate the data that's only accessed once via the batch access pattern versus the live traffic (that is, the actual hot working data).
+The assumption we are making here is that our traffic, the working set data, do not differentiate themselves via the frequency of access, but more so on how recently they are being accessed. 
+Using LRU cache here is the right call because we do not care about frequency, and no small amount of working sets contributes to any significant majority of the traffic. The traffic distribution is actually quite even. We care more about how recent that data is, and the likelihood of it being accessed is higher because of temporal locality. Point out that using an LRU cache only satisfies the memory management aspect of the cache. We will also need to guarantee the index freshness of the data, and for that we will use a TTL timestamp to check that data is fresh within a certain timestamp window. If it goes beyond that timestamp, the data is considered stale and should not be served. 
+
+Give a actual interview answer for choosing LFU cache
+We have a system that is a social media application in which there are a small number of celebrities having posts that are viewed by a lot of people. This, by definition, creates a small working set contributing to the majority of our traffic. 
+The forces in contention here are to balance the memory capacity with the cache hit rate and the index freshness of the data. 
+If we use an LFU cache, we are basically ensuring that the most frequently accessed working set sits inside the cache, and they will effectively reduce the amount of traffic that hits our database. The trade-off is that, because now we are making the access pattern via frequency, some of the data which has lower frequency but is more recently used might not sit in the cache and thereby experience a cache miss. Assumption here is that the majority of the traffic is contributed by a small working set of hot data, which are, by definition, the highest frequency data. By storing this higher frequency, we are able to, to the biggest extent, the largest and the highest cache hit rate. So, using an LFU cache here is the right call because we are now able to store the working set that actually matters and that contributes to the highest load to the system. We make them cheap to serve and have a low latency. In addition, we avoid having a disk I/O hit for these working sets. 
+
+How is LRU implemented?
+O(1) access time complexity. Uses a doubly linked list where recently used data is moved to head of list, least recently accessed data sits in tail of the list and gets removed when cache is full. A hashmap where key is the acess key and value is the reference to data pointer in the linked list. 
+
+How is LFU implemented?
+O(1) access time complexity. 3 Hashmaps:
+1. hashmap 1: key value store of the actual accessing key and the corresponding data value
+2. hashmap 2: key frequency store of the actual accessing key and the frequency count of the data being accessed so far
+3. hashmap 3: frequency key with ordered list value of data that's being accessed
+a minFrequency variable that points to the least frequency data list to be evicted from cache
+
+How does TTL lazy vs active expiry work?
+TTL lazy expiry basically checks whether the current timestamp is beyond the expiry timestamp. If it is, it will remove the timestamp and serve a cache miss, even though the data is, at the point in time, still sitting in cache. At active expiry, we run a regular job that scans our cache and removes expired TTL data from the cache. We will need to use both approaches in our cache in order to safely and reliably evict data from our cache. 

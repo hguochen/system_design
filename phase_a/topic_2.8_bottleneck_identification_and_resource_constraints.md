@@ -425,3 +425,50 @@ data supply rate to the GPU, not the GPU itself.
 ## 17. ✍️ My Notes
 
 > *Personal observations, things that confused me, analogies that helped.*
+
+A system is defined by the slowest resource. In order for a more performant system, we need to identify the relive the constraint to unlock next level of scaling.
+
+The 4 resources performance bottlenecks are:
+- CPU compute
+- Memory
+- Disk I/O
+- Network
+
+CPU bottleneck is when compute resources are inadequate. Use CPU profiling when
+- latency is high
+- disk I/O wait is low
+- threads are exhausted
+
+CPU → scale horizontally | optimize algorithm complexity | 
+       async/non-blocking I/O | cache computed results
+
+Memory bottleneck is when server runs out of fast memory to use. Check memory when:
+- GC pauses
+- OOMs
+- cache eviction spikes
+
+Memory → add RAM | tune GC (heap sizing, GC algorithm) | 
+          reduce object size | offload hot data to Redis
+
+Disk I/O bottlenecks when input/output cannot handle increase traffic and puts requests on hold. Check disk I/O when:
+- iowait is high
+- latency is spike
+- queues grow
+
+Disk I/O → upgrade HDD → SSD → NVMe | add read cache layer |
+            async writes | read replicas for DB reads |
+            partition data to spread I/O
+
+Network bottlnecks when latency spikes but we don't see compute pressure. Check network when:
+- inter service latency spikes
+- no compute pressure
+
+Network → co-locate services (same DC/AZ) | CDN for static assets |
+           compress payloads | connection pooling |
+           reduce chattiness (batch calls, GraphQL)
+
+NUMBERS TO REMEMBER
+  CPU: L1 cache hit ~1ns | L3 cache hit ~10ns | RAM ~100ns | Disk HDD ~10ms | NVMe ~0.1ms
+  Disk IOPS: HDD ~100-200 | SATA SSD ~50K | NVMe SSD ~500K
+  Network: intra-DC RTT ~0.1-0.5ms | cross-region RTT ~50-150ms
+  Bandwidth: 1 Gbps NIC = ~125 MB/s; 10 Gbps NIC = ~1.25 GB/s

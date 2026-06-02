@@ -426,3 +426,26 @@ the original producer. Every layer in the chain must participate.
 ## 17. ✍️ My Notes
 
 > *Personal observations, things that confused me, analogies that helped.*
+
+Backpressure is the mechanism when an overloaded system signals to its upstream producer to slow down or stop sending data
+
+Without backpressure:
+  Arrival rate λ exceeds service rate μ
+  → queue grows unboundedly (Little's Law: L = λW, W→∞)
+  → OOM → system crash
+  
+Backpressure enforces the λ ≤ μ steady-state condition
+from Little's Law. It's what keeps the system stable.
+
+Use blocking when: data loss is unacceptable (financial transactions, orders)
+Use dropping when: data is lossy by nature (metrics, telemetry, UI events)
+Use buffering when: traffic is bursty but average rate ≤ consumer throughput
+Use rate limiting when: you control the producer and can throttle at source
+
+Blocking   → TCP flow control; reactive streams (Project Reactor)
+Dropping   → metrics/telemetry pipeline; UDP packet loss; 
+              load shedder dropping lowest-priority requests
+Buffering  → Kafka absorbing write bursts; ring buffer in 
+              logging pipeline; message queue (SQS, RabbitMQ)
+Rate limit → API gateway token bucket; Nginx rate limiting;
+              client-side exponential backoff

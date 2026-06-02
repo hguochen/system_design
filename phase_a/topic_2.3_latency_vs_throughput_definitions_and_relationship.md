@@ -317,3 +317,34 @@ Adding servers increases concurrency, which helps when p99 is high because reque
 ## 17. ✍️ My Notes
 
 > *Personal observations, things that confused me, analogies that helped.*
+
+What is Latency?
+Latency is the time elapsed between a request being sent and a response being received.
+
+What is throughput?
+Throughput is the measure of how many operations are completed within a time window
+
+How are latency and throughput related?
+They are related via Little's Law:
+
+What's the tension between latency and throughput?
+- Increasing throughput often requires batching -> raises per-request latency
+- Minimizing latency means processing immediately -> sacrifices throughput
+- You chosoe a point on the curve based on workload:
+  - Interactive(user-facing): optimize latency, accept lower throughput
+  - Batch / pipeline: optimize throughput, accept higher latency
+- Example: Kafka linger.ms — 0ms = low latency, low throughput; 
+  50ms = higher latency, higher throughput
+
+Little's Law: L = λ × W
+  L = average number of requests in the system (concurrency / queue depth)
+  λ = throughput (requests per second)
+  W = average latency (seconds)
+
+which states that the theoretical maximum throughput of a system is number of concurrent requests divided by average latency of each request.
+
+When to optimize for latency?
+Prioritize latency when the request is synchronous, where user is waiting for a response
+
+When to optimize for throughput?
+Prioritize throughput in the absence of synchronous wait by users. For eg, a batch request.

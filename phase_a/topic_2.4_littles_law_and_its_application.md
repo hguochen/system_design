@@ -321,3 +321,21 @@ P50 describes the median request, but slow tail requests hold connections open l
 
 > *Personal observations, things that confused me, analogies that helped.*
 
+When to use little's law?
+- sizing thread pools
+- sizing connection pools
+- sizing worker counts
+
+Little's Law only applies for system in steady state, where the arrival rate does not exceed the service rate (λ ≤ μ, where μ is the maximum throughput)
+
+L = λ × W   → "How many concurrent requests will I have?"
+              Given: 500 RPS arrival, 40ms avg latency
+              L = 500 × 0.04 = 20 concurrent requests in system
+
+λ = L / W   → "What's my max throughput?"
+              Given: 100 thread pool, 50ms avg latency
+              λ = 100 / 0.05 = 2000 RPS max throughput
+
+W = L / λ   → "What's my avg latency under load?"
+              Given: 50 concurrent requests, 1000 RPS
+              W = 50 / 1000 = 0.05s = 50ms
