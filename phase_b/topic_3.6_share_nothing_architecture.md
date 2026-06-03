@@ -319,3 +319,26 @@ What breaks first is connection pool exhaustion and I/O saturation on the Postgr
 
 > *Personal observations, things that confused me, analogies that helped.*
 
+Share-nothing is an architecture in which app servers do not share any memory, disk or in-process states with their peers. As such, they are able to scale up/down based on traffic demand. All coordination flows through an external store.
+
+Because any node can handle any request, load balancers can route requests freely to any node.
+
+Use when: elastic horizaontal scaling and fault-tolerant stateless request handling are needed
+
+Avoid when: sub-ms shared memory access is required(in memory grids)
+
+Cost of share-nothing:
+  - External store (Redis, DB) becomes the new bottleneck + SPOF
+  - Every stateful operation = network hop to external store
+  - External store must itself be HA (Sentinel/Cluster) — 
+    you've moved the statefulness problem, not eliminated it
+  - Coordination latency adds to p99 on every request
+
+This is why Redis HA (3.3) and idempotency keys (3.5) 
+exist — they're the operational cost of share-nothing.
+
+Examples:
+  - Stateless API servers (any web framework behind a LB)
+  - AWS Lambda / serverless functions (share nothing by design)
+  - Containerized microservices (each pod is ephemeral, stateless)
+  - Kafka consumers in a consumer group (partitions, not shared state)

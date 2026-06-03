@@ -440,3 +440,34 @@ can always contain it.
 
 > *Personal observations, things that confused me, analogies that helped.*
 
+Stateless: no session in instance memory, all context in request or external store
+Stateful: server holds client data in memory across requests
+
+Make stateless when scaling horizontally.
+
+A Share nothing architecture is when each node is fully independent(does not share disk, memory, or connections)
+
+There's a approaches to externalize data store:
+1. Store JWT with client requests. JWT contains all session state required for processing client requests
+2. Store session state in a HA data store like Redis. Everytime a node needs to process a request, it fetches context state from Redis
+
+JWT:
++ Truly stateless — server does zero lookups, token is self-contained
++ Horizontally scalable by default — any node validates the signature
+- Cannot be invalidated before expiry — if a token is stolen or a 
+  user logs out, the token remains valid until it expires
+- Mitigation: short TTL (15min) + refresh tokens, or add a 
+  blocklist in Redis (but now you've reintroduced state)
+
+JWT when:
+  - Stateless is the hard requirement
+  - Short-lived sessions acceptable (15-60min TTL)
+  - Instant revocation is not required
+
+Redis session store when:
+  - Need instant session revocation (logout, security events)
+  - Sessions are long-lived
+  - Willing to operate external state store
+  
+Pattern: JWT for access tokens (short TTL) + Redis for 
+refresh token revocation is the common hybrid

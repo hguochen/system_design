@@ -400,3 +400,37 @@ and incorrectly conclude no one is handling it.
 
 > *Personal observations, things that confused me, analogies that helped.*
 
+Idempotency means applying the same operation multiple times produces the same result as applying it once. Side effects from the first call are fine — repeated calls must not compound them.
+
+Idempotent:   GET, PUT, DELETE, HEAD, OPTIONS
+Non-idempotent: POST, PATCH*
+
+PUT vs POST:
+  PUT   → sets resource to exact state ("PUT /users/123 {name: Gary}")
+          → calling twice = same final state = idempotent
+  POST  → creates new resource each call ("POST /users")
+          → calling twice = two users created = not idempotent
+
+*PATCH is idempotent only if it sets absolute values
+  ("set name to Gary" = idempotent)
+  not if it applies relative changes
+  ("increment counter by 1" = not idempotent)
+
+Client side is responsible for generating the idempotent key and sends this key to server as part of the request.
+Server will read the idempotent key and checks for any such key in a Redis storage. If key exists, do not perform any operation, return the cached prior response. If key missing, perform the operation as if first time receiving such request
+
+When is idempotency needed?
+- When a request is not idempotent, we need an idempotency key to ensure server does not execute the same operation twice due to network issues or packet losses. This is needed for critical operations like creating payment transactions or sending notifications
+
+Two simultaneous identical requests both check Redis, both find the key missing, both execute — classic TOCTOU problem. This is the standard follow-up:
+Problem: check-then-act is not atomic
+  Request A: checks Redis → key missing
+  Request B: checks Redis → key missing  (before A writes)
+  Both execute → duplicate payment
+
+Fix: Redis SET NX (set if not exists) — atomic check-and-set
+  SET idempotency:{key} {response} NX EX {ttl}
+  Only one request wins the SET NX → other gets back existing value
+
+Typical TTL: 24h–7 days depending on operation criticality
+After expiry: same key treated as new request

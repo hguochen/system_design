@@ -456,3 +456,39 @@ Key justification for the interviewer:
 ## 17. ✍️ My Notes
 
 > *Personal observations, things that confused me, analogies that helped.*
+
+What's JWT?
+JSON web token is a cryptographically signed token that encodes user context data. Server will decode the token and verify the JWT s ignature without a DB lookup. This is a lightweight approach to make app server compute stateless without requiring a server-side session data store.
+
+Structure: Header.Payload.Signature — all base64url-encoded, dot-separated.
+     Payload is NOT encrypted — anyone can decode it. Never store secrets in it.
+
+Signature = HMAC-SHA256(base64url(header) + "." + base64url(payload), secret)
+     for HS256, or RSA/ECDSA signature for RS256/ES256.
+
+When to use JWT?
+- Stateless microservice to service auth, 
+- when we do not need instant revocation of client sessions
+
+Mitigation
+- if we need client revocation authority while maintaining the use of JWT, we can add refresh token to external Redis data store on server side. Then the revocation will be at max 1x TTL window before revocation happens.
+
+Typical access token TTL: 5–15 minutes
+Typical refresh token TTL: 7–30 days
+Typical JWT size: 200–400 bytes (grows with claims)
+HS256 secret key minimum: 256 bits (32 bytes)
+
+HS256 (symmetric):
+  - Same secret signs AND verifies
+  - All services must share the secret
+  - Secret exposure = all services compromised
+  - Use when: single service or tightly coupled monolith
+
+RS256 / ES256 (asymmetric):
+  - Private key signs (only auth service holds it)
+  - Public key verifies (any service can verify without 
+    knowing the signing secret)
+  - Services fetch public key from JWKS endpoint
+  - Use when: microservices, third-party token consumers
+
+Rule: HS256 for single-service, RS256/ES256 for microservices

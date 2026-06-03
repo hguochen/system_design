@@ -355,3 +355,40 @@ What's wrong: HttpOnly provides zero CSRF protection. Browsers automatically att
 
 > *Personal observations, things that confused me, analogies that helped.*
 
+Session management comes in 2 flavors:
+1. server side sessions. state data lives in server, horizontal scaling requires a shared session store like Redis
+  pros: server controls revocation of session, can revoke session instantly
+  cons: increases latency with additional network hop 
+2. client side token. Server issues a auth token and client attaches the token to every request.
+  pros: server node can validate and authenticate the token itself, no external service calls needed
+  cons: cannot instantly revoke user session, only util TTL expires
+
+When to use JWT?
+- stateless horizontal scaling required
+- server has no revocation needs or sensitive revocation time window
+
+When to use Redis?
+- when service needs instant revocation of client access
+- when client need to optimize for request size, cannot tolerate JWT token overhead
+
+Where the token lives is a real interview question with security tradeoffs:
+httpOnly Cookie:
+  + Protected from XSS (JS cannot read it)
+  - Vulnerable to CSRF (browser auto-attaches to requests)
+  - Mitigation: SameSite=Strict or CSRF token
+
+Authorization Header (Bearer token):
+  + Immune to CSRF (JS must explicitly attach it)
+  - Requires JS access → vulnerable to XSS if token in localStorage
+  - Mitigation: store in memory only (lost on page refresh)
+
+Rule: httpOnly cookie for web apps, Authorization header for 
+mobile/API clients
+
+When neither JWT nor a shared Redis store is viable:
+Sticky sessions (L7 LB session affinity):
+  + No external store needed
+  + No token overhead
+  - Breaks free horizontal scaling (specific node dependency)
+  - Node failure = session loss
+  - Use only as last resort or during migration to stateless

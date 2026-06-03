@@ -437,3 +437,48 @@ scaling lever. The correct model: scale all tiers together.
 
 > *Personal observations, things that confused me, analogies that helped.*
 
+Stateless tiers scale horizontally because no coordination is needed among peer nodes and they do no share state.
+
+Metric-driven scaling: CPU 60-70%, RPS, P99 latency, or queue depth crosses threshold
+     → add instances; falls below → drain and terminate.
+
+Connection draining (deregistration delay ~30s) lets in-flight requests finish before
+     removing an instance — skipping it drops live traffic mid-response.
+
+Cooldown periods (60-300s) prevent scale-flapping — don't re-evaluate the metric until
+     the prior scale action has had time to stabilize.
+
+
+When to use horizontal scaling?
+- traffic is unpredictable
+- need more than 1 machine capacity
+- 0 downtime between deploy
+- architecturally avoid SPOF
+
+By contrast, this makes downstream stateful tier the bottleneck, we need to make stateful tiers HA and avoid SPOF as well.
+
+Scale-out CPU target:   60-70%  (not 80%+ — leave headroom for startup lag)
+Deregistration delay:   30-60s  (match to P99 request duration + buffer)
+Min instances for HA:   >= 2 across 2 AZs
+Cooldown period:        60-300s (depends on instance start time)
+Warm pool benefit:      cold-start 2-5 min → promote in ~30s
+
+Reactive scaling:
+  Metric crosses threshold → trigger scale-out
+  Problem: 2-5 min lag (instance start + health check)
+  → first users during a spike hit degraded service
+
+Predictive / scheduled scaling:
+  Pre-scale before the spike arrives based on known patterns
+  Examples:
+    - Scheduled: "scale to 50 instances at 08:00 every weekday"
+    - ML-based: AWS auto-scaling predictive mode learns traffic patterns
+  Use when: traffic patterns are known (market open, product launch,
+             Super Bowl ad, daily morning rush)
+
+Rule: predictive for known spikes, reactive for unknown spikes.
+      Use both together — predictive sets the floor, reactive handles surprises.
+
+Readiness probe: instance only enters rotation after passing
+  health check (e.g. HTTP 200 on /health) — prevents traffic
+  hitting instances mid-startup

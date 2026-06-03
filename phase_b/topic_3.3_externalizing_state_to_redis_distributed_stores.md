@@ -357,4 +357,38 @@ The general rule: never rely on TTL expiry alone for security-sensitive session 
 
 > *Personal observations, things that confused me, analogies that helped.*
 
-[Free-form space for your own annotations. Add examples that clicked, diagrams you sketched, or interview stories you connected to this concept.]
+Why externalize session state to external store?
+Enable stateless horizontal scaling for compute servers. App servers cannot hold contextual data in memory between requests.
+
+Why choose Redis?
+- sub-ms latency
+- native TTL per key
+- rich data types
+
+Redis read/write latency  → <1 ms (local network)
+Max Redis single-node RAM → ~100–200 GB practical limit
+Session TTL (web app)     → 15–30 min idle, 24 hr absolute max
+Redis Sentinel quorum     → 3 Sentinel nodes minimum for reliable failover
+
+Redis Sentinel:
+  - HA for a single dataset (primary + replicas)
+  - Automatic failover when primary dies
+  - Use when: dataset fits one node, just need failover
+
+Redis Cluster:
+  - Horizontal sharding across 16,384 hash slots + HA
+  - Use when: dataset exceeds single-node RAM (~100-200GB)
+  - Minimum 3 primary nodes (+ replicas)
+
+Rule: Sentinel for HA, Cluster for scale + HA
+
+What happens when Redis goes down in a standard follow up?
+Redis outage impact:
+  - All session lookups fail → users get logged out
+  - Thundering herd: all requests hit auth service simultaneously
+
+Mitigations:
+  - Redis Sentinel/Cluster for HA (reduces outage probability)
+  - Circuit breaker: fail open (degrade gracefully) vs fail closed
+  - Fallback: short-lived signed cookie as emergency bypass
+  - Pre-warm replica before promoting to primary
