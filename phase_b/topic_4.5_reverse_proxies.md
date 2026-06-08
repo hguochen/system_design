@@ -430,3 +430,20 @@ TRADE-OFFS
   Backend hiding     → extra hop, ~1-5ms latency
   Response caching   → cache invalidation complexity, stale data risk
   Centralized rules  → one bug/misconfiguration hits every service
+
+  Forward proxy:
+  Sits in front of CLIENTS — acts on behalf of clients
+  → hides client identity from servers
+  → clients know about the proxy; servers see proxy's IP
+  Examples: corporate internet proxy, VPN, Squid
+  Use cases: content filtering, anonymity, caching for egress
+
+Reverse proxy:
+  Sits in front of SERVERS — acts on behalf of servers
+  → hides server topology from clients
+  → clients know about the proxy; backends are invisible
+  Examples: Nginx, HAProxy, Cloudflare, AWS ALB
+  Use cases: TLS termination, auth, rate limiting, caching
+
+One-line distinction:
+  Forward = hides the client. Reverse = hides the server.

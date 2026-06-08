@@ -399,3 +399,96 @@ When a client sends a request to an L4 load balancer, the L4 load balancer will 
 
 L7 Routing mechanism
 When a client sends a request to an L7 load balancer, the L7 load balancer will use it's own TLS certificate and terminate the TLS encryption. It will decrypt the payload and read the contents of the HTTP request. You can read things like the HTTP header, the URL path, the cookies, and request body in this HTTP request. Once it has parsed the contents of the request, it can now route the request to specific backends that serve such types of requests. In this case, depending on the demands, it will also do a re-origination of the TLS certificates and send it encrypted to the backend. 
+
+---
+Cold Recall
+
+L4 LB operates at network layer in the OSI model. It routes traffic via IP address and port. L4 operates on TCP/UDP. cannot inspect payloads. protocol agnostic.
+L7 LB operates at application layer in the OSI model. It routes traffic by reading the HTTP header, request body to determine which service nodes to forward request to. operates on HTTP/HTTPS. Reads headers, URL, cookies.
+
+When to use L4 LB?
+- when end to end encryption is needed and no decrypting is allowed to happen in transit
+
+When to use L7 LB?
+- when we need to route traffic based on types of HTTP request. In such case, a L7 LB terminates the TLS encryption, reads the HTTP request to determine which service nodes to forward to.
+
+How does TLS termination change the security model?
+
+Without TLS termination: client encrypts → travels encrypted 
+through network → backend server decrypts and reads.
+
+With L7 TLS termination: LB decrypts the request, reads headers/
+cookies/payload to make routing decisions, then forwards to backend.
+Backend traffic is now plaintext.
+
+Why terminate at LB:
+  - Offloads crypto CPU from backend servers
+  - Enables L7 routing (must read headers/cookies)
+  - Centralized certificate management
+
+Mitigations:
+  Option 1 — VPC / private subnet: backend servers in a private 
+    network unreachable from the internet. Plaintext is acceptable 
+    within a trusted boundary.
+  
+  Option 2 — mTLS (mutual TLS): LB re-encrypts traffic to backend 
+    using its own cert. Both LB and backend authenticate each other.
+    Servers see LB as their client. End-to-end encrypted.
+  
+  Option 3 — TLS passthrough (L4): LB forwards encrypted bytes 
+    without decrypting. No L7 routing possible. Use when E2E 
+    encryption is a hard requirement.
+
+WHen is L4 LB the only viable option?
+- when the request uses non-HTTP protocols
+- TLS passthrough is enabled. which doesn't allow TLS termination at any point before the end server receives it
+- when we want maximum throughput and cannot tolerate any latency overhead along the transfer.
+- Gaming/UDP traffic where latency sensitivity is high. Any packet reads, TLS termination along the way increases latency and that's unacceptable
+
+AWS ALB is a L7 LB that routes by path, host header and request body. it terminates TLS at LB level.
+Nginx can operate both as a L4 & L7 LB. As an L4, it allows passthrough. As an L7, it terminates TLS and reads the request contents
+
+L4 LB 
+Pros:
+- only sees IP address and port. no parsing of contents
+- can enforce TLS passthrough, which guarantees end-to-end encryption
+- contributes to low latency system requirements
+
+Cons:
+- in a corporate NAT setup, thousands of requests from different users could be routed to public network space via a single IP address
+- L4 routing via IP address will overload the single server with heavy request workload
+
+L7 LB
+Pros:
+- reads HTTP/HTTPS packet contents and therefore able to route requests intelligently
+- can perform deep health check to app servers to check for server/downstream failures
+- allows retries
+
+Cons:
+- TLS termination at L7 LB breaks data end-to-end encryption model
+- increases latency by introducing an additional network hop and compute operations to terminate TLS, parse HTTP/HTTPS headers
+
+
+Round Robin:        requests distributed sequentially across nodes
+                    simple, assumes uniform request cost
+Weighted RR:        nodes get proportional share based on capacity
+                    use when servers have different specs
+Least Connections:  route to node with fewest active connections
+                    best for variable-duration requests (e.g. streaming)
+IP Hash:            hash(client_IP) → always routes same client to same node
+                    poor man's session affinity without sticky session config
+                    breaks if node count changes (consistent hashing fixes this)
+
+Rule: Round Robin for stateless uniform workloads, 
+      Least Connections for variable-duration, 
+      IP Hash only if sticky sessions unavailable
+
+L4 health check: TCP connection check — can the server accept a socket?
+  → passes even if app is crashed but OS is up
+
+L7 health check: HTTP GET /health → expects 200
+  → validates app-level liveness (DB connected, dependencies up)
+  → catches app failures that L4 misses
+
+Active:  LB probes servers on interval (standard)
+Passive: LB observes real traffic — marks node unhealthy after N failures

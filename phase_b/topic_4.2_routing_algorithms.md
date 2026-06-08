@@ -394,3 +394,73 @@ If the system requires session affinity, meaning each client has to reach the sa
 IP hash N-change problem
 The IP hash change problem is when we create and add new nodes to our backends, and now we have to remap the hashing of our prior requests to include a new node. This makes it that (n - 1) number of reroutes is needed, so that's the majority of the reroutes. To resolve the problem, we need to use a consistent hashing algorithm to make sure there is only one out of n remaps needed. 
 
+--
+
+Cold Recall
+
+what are the 4 major routing algorithms? What's the measurement for each? What's the failure mode for each? What's the edge case for each?
+Round Robin
+- Evenly distributes traffic among all nodes
+- does not facter into current workload of nodes or workload complexity
+- failure mode: may continue to send traffic to busy nodes even when they are saturated
+
+Weighted Round Robin
+- Distributes traffic based on capacity of nodes. More capable nodes gets more traffic than less capable nodes
+- Snapshots the capability of nodes at startup and routes traffic based on this snapshotted capability
+- failure mode: stale weights after scaling events; no dynamic adaptation to live load
+
+Least connections
+- Distributes traffic based on node having the least number of active connections
+- However, each LB only has visibility of it's own connection counts, it has no visibility of global aggregate connection counts of the nodes
+- Each node could see a node having the least connection and assign traffic to that node, thereby saturating the node
+
+IP Hash
+- hash of IP address against the number of nodes to determine which node to forward the request to
+- when adding new nodes, all assigned nodes must be reassigned. at max of N - 1 node reassignment happens. Needs consistent hashing
+Modular hashing (hash % N):
+  Adding 1 node → ~(N/(N+1)) of ALL keys remapped
+  i.e. almost every assignment changes
+
+Consistent hashing:
+  Adding 1 node → only ~1/N keys remapped
+  Only the new node's neighbors on the ring are affected
+
+This is why IP Hash requires consistent hashing — without it,
+any topology change invalidates nearly all session assignments.
+
+- failure mode: corporate NAT routes thousands of users through a single IP
+- failure mode 2: mobile IP changes -> silent session break 
+
+What metrics do we consider when selecting routing algorithms?
+- requestion duration variance
+- backend heterogeneity
+- affinity requirements 
+
+In what situations do we choose each algorithm?
+Round Robin
+- simpliest design
+- chosen when requests have similar duration variance
+- backend server capacities are homogeneous
+- no server affinity requirements
+
+Weighted Robin
+- chosen when requests have similar duration variance
+- backend server capacities are heterogeneous
+- no server affinity requirements
+
+Least Connection
+- chosen when requests have vastly different duration variance
+- no server affinity requirements
+
+IP Hash
+- needs to satisfy server affinity requirements
+- there's network level requirement for requests from same client to always map to same server for continuity 
+
+
+Why is least connections inaccurate in a multi-LB cluster? What alternatives are there?
+in a distributed LB cluster, each node only knows its own connection counts, not the global view. "Least" is always approximate across nodes.
+Instead of using least connections algorithm. We can use power-of-two choices algorithm where we randomly pick 2 nodes and assign traffic to the lesser connection of the 2. this solves the distributed blind spot problem that plagues pure least-connections.
+
+Explain the two failure conditions of IP hash(NAT and IP change). Why is it a last resort?
+- corporate NAT have thousands of users making requests through same IP address, saturating the assigned server
+- mobile IP change breaks session continuity silently

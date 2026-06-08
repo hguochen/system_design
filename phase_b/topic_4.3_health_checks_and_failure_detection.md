@@ -449,3 +449,52 @@ We need to make sure that when configuring these few parameters, it fits within 
 Never evict more than X% of the pool simultaneously. This is the fix for cascading eviction.
 
 Rise threshold gates re-entry; slow-start ramps traffic weight gradually to prevent re-crash.
+
+-- 
+
+Cold Recall
+
+Active Health Check
+Active Health Check is when the load balancer actively probes our nodes with a health check. The aim of the health check is to quickly detect failing nodes and bring the failing node out of traffic. There are two kinds of Active Health Check:
+1. A TCP-based connection check to check that the connection is successful
+2. A health-based HTTP check, which checks that the service can actually listen and process a request
+
+Passive Health Check
+A passive health check does not probe the service nodes. It passively monitors the actual live requests given to the service node, and when we start to see consecutive failures and errors given by the service node, that's when the passive check will signal to the load balancer that a node is unhealthy. 
+
+Typically, there are four parameters we should use to configure an active health check:
+1. Interval Count - interval seconds between each probe
+3. Timeouts - timeout window before declaring a probe as failed
+4. Rising threshold - N consecutive successes before bringing a node into LB pool
+5. Falling threshold - M consecutive failures before taking a node out of LB pool
+
+A single fail check could be caused by a short network blip. If we were to take the node out of our node balancer because of a single failure, we risk having a false positive. Subsequently, when we bring it back, we are creating a flappy condition, and that flappy condition increases the load distributed to the rest of the active nodes. 
+Threshold based eviction means we need n number of failures before we declare the node has failed and take it out of the LB pool. 
+
+Typical active health check setup
+- interval 5s
+- timeout - 2s
+- rising threshold - 2
+- falling threshold - 2
+
+When to use Active health check and when to use passive health check?
+For a virtual distributed system, we should always use both the active health check and the passive health check together. The reason is that for a passive health check, it currently monitors live traffic for failures, but this requires a sufficient number of traffic always to detect the failure in time. When we use the active health check, it takes out the uncertainty of traffic load to detect failures and is always subject to a maximum failure window before we can take a node out of the LB pool. Therefore, having both checks in place creates a more efficient mechanism to remove nodes out of the LB pool. 
+
+Here we have an interval probe of 5 seconds. timeout of 2seconds and a fall threshold of 3. That means that we will need three consecutive failures where each failure takes Seven seconds to register as a failure. In total, our system will lapse about 21 seconds before the node balancer can take a node out of the LB pool. During these 21 seconds, the traffic served to the node will always be failing. 
+
+Shallow ping check is when we use a TCP check to check just that the connection is successful, or an HTTP health check to check that the node is actually listening to requests. A deep ping check happens at the HTTP level, where the health check not only checks that the HTTP port is listening and serving requests, but also that the underlying downstream services and our persistent data stores are actively working. 
+
+The downside of deep check is that it may check that the downstream services and the data stores are all working, but it cannot check that the actual live traffic is working as intended. The idea here is that health checks in general are just a check mechanism that our services are running, but it does not actually completely mean that the application is able to serve real requests successfully. To ensure that the application is indeed serving requests successfully, we would need to do passive health checks to make sure that the real traffic itself is serving successful responses. 
+
+Deep health check cascade:
+  DB becomes slow (not down) → health check times out
+  → node removed from pool
+  → remaining nodes absorb more traffic
+  → their DB connections also slow → their health checks timeout
+  → more nodes removed → full cascade
+
+Mitigation:
+  - Set deep health check timeout > expected DB p99 latency
+  - Use shallow check for pool membership, passive check for 
+    real traffic quality — don't let a slow dependency 
+    trigger mass node eviction

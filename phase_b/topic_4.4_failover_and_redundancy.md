@@ -439,3 +439,44 @@ DNS TTL means 30–300s of lag after failover triggers. Floating IP is near-inst
 If we have two load balancers, they need to either receive traffic via anycast or they need to be subjected to the same floating IP address. Without either of which, they will still be deemed a single point of failure. 
 
 VRRP only works L2-adjacent (same subnet). Cross-region requires DNS-based cutover.
+
+---
+
+Cold Recall
+
+Active Active failover
+And active-active load balancer means both load balancers are running in full sync and they are both serving traffic, and they both share the same IP address via anycast. During failure, the surviving node will absorb the traffic for the failing node, and that means that all of the load balancers in the active-active configuration need to be configured with n-1 load capacity. Active-active LB approach fits stateless services where any nodes can serve any request. 
+Because both active and active load balancers are serving traffic, they have the highest availability. However, this comes at increased resource cost because we are running redundant load balancers in full sync.  
+
+
+Active Passive failover
+An active-passive load balancer means that one load balancer is in active mode and serving traffic, while the other load balancer is in passive mode and awaiting active failures before it takes over. Typically, this happens when the active load balancer will be sending periodic (let's say, one-second) pings to the passive to indicate that it's healthy. If the passive load balancer fails to receive three consecutive checks within three seconds, it will understand that the load balancer has failed and therefore takes over the VIP. It is able to do this because both the active LB and the passive LB share the same floating IP address via VRRP. 
+The status of the passive will also vary and it varies between hot, warm, and cold load balancer states. A hot passive load balancer is running in full sync with the active load balancer and is ready to take over the active load balancer within a few seconds. A warm passive load balancer is also running, but it syncs with the active load balancer partially, so it is able to complete a failover process in a few minutes. A passive load balancer that is called is not running and is in a stand-by state. When it needs to perform the failover, it takes tens of minutes to successfully take over. 
+Whether we should have a hot, warm, or cold passive load balancer is determined by two metrics:
+- Recovery time objective
+- Recovery point objective
+
+The recovery time objective indicates how many seconds we need to complete the failover to passive, and the recovery point objective indicates how many seconds of data loss we can tolerate. 
+For example, let's say if we have a recovery time objective of 10 seconds and a recovery point objective of 0 seconds, then we need a hot passive load balancer so that it fits both criteria for this objective and can complete the failover within the specified constraints.
+We can tolerate some data loss. Say the recovery point objective is maybe 10 seconds. It means that we can afford to lose up to 10 seconds of data. Then we can have a warm passive load balancer on standby. 
+
+Active Active
+- anycast to handle IP
+- DNS round robin to route traffic
+
+An active-active LB setup on one node fails. Our system will immediately be able to detect and route all the traffic to the surviving node, and the surviving node will now be able to handle all of the traffic. 
+
+Active Passive
+- floating IP via VRRP
+
+For an active-passive LB setup, the active load balancer will constantly ping the passive load balancer to give health assurances. When, let's say, three seconds have not received an assurance by the passive LB, it will assume that the active LB has failed and take over the floating IP address via VRRP. 
+
+Active-Active: split-brain is the inherent risk
+  → both nodes authoritative → partition → divergence
+  → mitigate with anycast (network routes, not application)
+    and stateless design (no shared mutable state to diverge)
+
+Active-Passive: false promotion is the risk (a weaker form)
+  → passive promotes on transient blip → both briefly hold VIP
+  → mitigate with VRRP threshold tuning + fencing
+  → active-passive chosen BECAUSE it limits who can be authoritative
