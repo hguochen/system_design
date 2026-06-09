@@ -366,9 +366,10 @@ The problem with Writing to the database is slow compared to writing to cache. I
 
 What is write back caching mechanism
 Write back caching mechanism: the application receives the request from the client and writes to cache upon successful writes. The application immediately responds to the client with an acknowledgement and then asynchronously flushes Cache the entry data into the database. The time between data sitting in cache and not sitting in the database is what we call a flush window, and it's considered a durability gap where data is not persisted to a durable data store. 
+Read path is identical to cache-aside — check cache first; on miss, fall through to DB.
 
 Use / Avoid
-We should use a write-back mechanism if the data is not essential and demands strong consistency. For example, the data like counters or leaderboard states do not need to always reflect the latest data states. So we can use the write-back mechanism to have the trade-off between data having a durability gap versus the low latency that the write-back mechanism gives us. If the application is characterized by a write-heavy load, we can also use a writeback mechanism. One way this can work is through write coalescing, where n number of writes is essentially coalesced into one single DB write within a flash window. 
+We should use a write-back mechanism if the data is not essential and if the data does not demand strong consistency.. For example, the data like counters or leaderboard states do not need to always reflect the latest data states. So we can use the write-back mechanism to have the trade-off between data having a durability gap versus the low latency that the write-back mechanism gives us. If the application is characterized by a write-heavy load, we can also use a writeback mechanism. One way this can work is through write coalescing, where n number of writes is essentially coalesced into one single DB write within a flush window. 
 
 We should avoid using write-back cache mechanism if the nature of the data demands strong consistency, such as financial data, transaction data, billing data, and so on. This kind of data tolerates no data loss And demand correctness at scale. As such, we cannot afford the risk of having a durability gap between the cache and the database for such data. 
 
@@ -377,7 +378,7 @@ Interview template
      write-through saturates the DB."
   T  "Write-through: consistent but DB on critical path.
      Write-back: sub-ms + 100–500x DB write reduction,
-     but dirty buffer lost on crash."
+     but dirty buffer lost on crash." 
   A  "Assuming ≤1s data loss is tolerable — users expect
      eventual, not immediate, persistence."
   C  "Write-back, 1s flush. Cost: node crash = up to 1s of writes
@@ -385,4 +386,4 @@ Interview template
 
 A write to cache typically takes about 1ms. while a write to DB takes about 5ms.
 
-Issues that can arise out of a write back mechanism are cache failure/restart For the entries are returned to the database. To mitigate this approach, we can introduce a write-ahead log that independently sits outside of the cache. If the cache fails or restarts and recovers later, it can pick up the write-ahead log and maintain reference to the dirty cache. This prevents data loss during the crash failure window. The other failure is when the database is unavailable during a sync flush event beyond a flush window. In this case, we will need to try an exponential backoff approach to try to flush previous data again. In addition, we also need to make sure the cache is not evicting a dirty entry before it is returned to the database. In such a case, for every cache eviction of a dirty entry, we need to synchronously update the dirty entry into the database. 
+Issues that can arise out of a write back mechanism are cache failure/restart before entries are flushed to the database. To mitigate this approach, we can introduce a write-ahead log that independently sits outside of the cache. If the cache fails or restarts and recovers later, it can pick up the write-ahead log and maintain reference to the dirty cache. This prevents data loss during the crash failure window. The other failure is when the database is unavailable during a sync flush event beyond a flush window. In this case, we will need to try an exponential backoff approach to try to flush previous data again. In addition, we also need to make sure the cache is not evicting a dirty entry before it is returned to the database. In such a case, for every cache eviction of a dirty entry, we need to synchronously update the dirty entry into the database. A dirty entry is a cache entry that has been written but not yet flushed to DB.

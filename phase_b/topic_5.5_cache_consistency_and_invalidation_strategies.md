@@ -319,21 +319,139 @@ In the deep dive or trade-off section, proactively state your invalidation strat
 
    > 💡 *Think through your answer before expanding — if you hesitate, revisit Section 9 (Write-Invalidation Mechanics).*
 
+The ABA race condition in write-invalidation:
+
+1. Thread A: cache miss → reads v1 from DB
+2. Thread B: writes v2 to DB → deletes cache key
+3. Thread A: writes v1 to cache  ← stale value now cached
+
+Root cause: the read path (miss → DB read → cache write) is not atomic.
+Thread A's cache write happens AFTER Thread B's delete, so the delete is
+undone — the cache now holds v1 while the DB holds v2.
+
+The cache will serve stale data until TTL expires.
+
+Mitigations:
+  (1) Short TTL as safety net — bounds the staleness window
+  (2) Version/timestamp check before cache write — Thread A checks if
+      the DB value it read is still current before writing to cache;
+      if v2 already exists, it aborts the cache write
+  (3) Facebook lease tokens — cache issues a token on miss; token is
+      invalidated on write; Thread A's write is rejected if token is stale
+
 2. A product page cache has a 5-minute TTL. Inventory drops to zero after a flash sale starts. Users are seeing "in stock" for up to 5 minutes. How do you fix this without dropping the TTL for all product cache entries?
 
    > 💡 *Think through which invalidation strategy targets specific keys on specific write events — if you hesitate, revisit Section 6 (Write-Invalidation) and Section 9.*
+
+Fix: apply write-invalidation (delete-on-write) targeted at the inventory key.
+
+When the flash sale write fires:
+  1. Write inventory = 0 to DB
+  2. Delete cache key: product:{id}:inventory
+
+Next read misses → fetches from DB → gets inventory = 0 → re-caches.
+
+Why not lower global TTL?
+  Lowering TTL for all product entries increases DB read load across
+  the entire catalog — wasteful when only inventory keys change at
+  flash-sale time.
+
+Why not write-through?
+  Write-through updates the cache value on write (DB write + cache write
+  in sequence). It works here too, but delete-on-write is simpler and
+  avoids the dual-write failure mode. Either is defensible; write-through
+  adds the risk that a cache write failure leaves stale data if you forget
+  to delete on failure.
+
+Decision rule for this case:
+  TTL = safety net (already in place)
+  Write-invalidation on inventory write = fast path for correctness
+  Result: bounded staleness collapses to near-zero for inventory keys
+  without touching the rest of the product cache.
 
 3. What does CDC-based cache invalidation buy you that write-invalidation does not? What does it cost?
 
    > 💡 *Think through coupling, reliability, and infrastructure — if you hesitate, revisit Section 6 (CDC) and Section 11 (Trade-offs).*
 
+What CDC buys you over write-invalidation:
+
+1. Decoupling — the application writes to DB only; cache invalidation is
+   handled downstream by the CDC consumer. No cache logic in application code.
+
+2. Reliability / at-least-once delivery — the WAL/binlog is durable.
+   If the cache consumer is down, events queue in Kafka and are replayed
+   when it recovers. Write-invalidation is fire-and-forget: if the delete
+   call fails, the stale entry stays until TTL expires. CDC doesn't lose
+   invalidation events.
+
+3. Fan-out from a single event — one DB write produces one log event;
+   multiple cache layers, search indexes, or downstream consumers can all
+   subscribe and invalidate independently. Write-invalidation requires the
+   application to explicitly call each consumer.
+
+What CDC costs you:
+
+1. Staleness window — 50–500ms lag between DB write and cache invalidation
+   (WAL read → Debezium → Kafka → consumer). Write-invalidation is
+   synchronous; CDC is not.
+
+2. Operational complexity — requires Debezium, Kafka, and a consumer
+   service. That's three additional systems to deploy, monitor, and operate.
+   Write-invalidation needs none of this.
+
+3. Ordering guarantees — out-of-order Kafka consumption can cause a later
+   invalidation event to be processed before an earlier one, leaving stale
+   data in cache. Requires careful partition key design.
+
+Decision rule:
+  Use CDC when write volume is high and you need reliable, decoupled
+  invalidation at scale. Use write-invalidation when simplicity matters
+  and synchronous deletion is acceptable.
+
 4. Name a real production system that uses surrogate key / tag-based invalidation and explain how it works.
 
    > 💡 *Think through CDN caching semantics — if you hesitate, revisit Section 6 (Surrogate Keys) and Section 10 (Real-World Examples).*
 
+Cloudflare Cache-Tag / Fastly Surrogate-Key:
+
+How it works:
+  1. Origin adds response header: Cache-Tag: product:123 category:shoes
+  2. CDN indexes every cached URL against its tags
+  3. On product update: origin calls purge API with tag product:123
+  4. CDN finds all cached URLs bearing that tag across all edge nodes
+     globally and evicts them — one API call, O(1) from origin's perspective
+
+Real-world case:
+  A CMS template used across 10,000 product URLs shares tag template:nav.
+  When the nav is updated, one purge call evicts all 10,000 URLs.
+  Without tags, you'd have to enumerate and purge each URL individually.
+
+Numbers: ~150ms global propagation for tag-based purge (Cloudflare/Fastly).
+
 5. You're designing a write-through cache and the cache update fails after the DB write succeeds. What is the state of the system, and what should you do?
 
    > 💡 *Think through the failure mode of write-through — if you hesitate, revisit Section 9 (Write-Through Mechanics) and Section 13 (Misconception 2).*
+
+State of the system after cache write failure:
+  DB = v2 (new value, committed)
+  Cache = v1 (old value, stale)
+  → Cache is now serving stale data
+
+Correct recovery action: DELETE the cache key.
+
+Why delete, not retry the cache write?
+  Retrying the write risks a partial-write window where some readers
+  get v1 and others get v2 depending on timing. Deleting forces the
+  next read to re-fetch from DB and re-populate with the correct value.
+
+Why not leave it?
+  The cache now permanently serves stale data until TTL expires.
+  For write-through use cases (strong consistency required), that
+  violates the consistency guarantee the strategy was chosen to provide.
+
+TTL as belt-and-suspenders:
+  Even after deleting, set a short TTL on re-population so any future
+  failure mode has a bounded recovery window.
 
 ---
 

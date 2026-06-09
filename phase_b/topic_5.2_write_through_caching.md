@@ -382,14 +382,16 @@ The write-through strategy only guarantees that after successful writes, we will
 
 The two problems with write-through caching strategy are:
 1. Latency
-For every logical write, we are effectively doubling the amount of physical writes. This increases the latency due to double writes. In order to use this strategy, we must be willing to accept the trade-off of a higher latency. 
+For every logical write, we are effectively doubling the amount of physical writes. This increases the latency due to double writes.  this is called write amplification. In order to use this strategy, we must be willing to accept the trade-off of a higher latency. 
 2. Data write atomicity
-Because the right to database and the right to cache are not atomic, either of these rights can fail. In the case where our right to database fails, the data is not persistent. The right to DB, if it's successful, must now evict the successful right so that, in the next read, the cache will not have the data that is not persistent and will hit the database to fetch the old data. And if we have a cache write fail where the DB run succeeds, it will make the cache useless on next read because we will incur a DB read to fetch the data. In this case, consistency is still guaranteed. 
+Because the write to database and the write to cache are not atomic, either of these writes can fail. In the case where our write to database fails, the data is not persistent. The write to DB, if it's successful, must now evict the successful write so that, in the next read, the cache will not have the data that is not persistent and will hit the database to fetch the old data. And if we have a cache write fail where the DB run succeeds, it will make the cache useless on next read because we will incur a DB read to fetch the data. In this case, consistency is still guaranteed. 
 
 To avoid consistency problems, we should try to write to DB first and, upon success, write to cache. 
 
 How to remediate write through atomicity?
 
-1. We try to write to cache with an idempotency key, so on subsequent writes we just need to check the idempotency key to prevent double writing. 
-2. So if a write to cache fails, we log it and write the event to Kafka queue, and subsequently we have workers to process the queue and try to write the data to cache again. This will mean that we will have a brief window of stale data. 
+1. So if a write to cache fails, we log it and write the event to Kafka queue, and subsequently we have workers to process the queue and try to write the data to cache again. This will mean that we will have a brief window of stale data. 
+2. Use an idempotency key on retries so that if the Kafka worker re-processes the failed cache write, it doesn't double-apply.
 3. You can use a two-phase commit to run atomically, where neither commits until both are ready to commit the change. This will eliminate the failure window entirely, but increases the latency and complexity cost. 
+
+In practice, most caches (Redis, Memcached) don't support XA transactions, so true 2PC with cache + DB is rarely implemented. Kafka retry is the pragmatic alternative.
