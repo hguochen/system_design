@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.6 Cache Stampede and Thundering Herd</title>
+<style>
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface-alt: #f3f2ef;
+    --border: #e5e3de; --text: #1a1917; --text-muted: #6b6861;
+    --accent: #2563eb; --accent-light: #dbeafe;
+    --green: #16a34a; --green-light: #dcfce7;
+    --red: #dc2626; --red-light: #fee2e2;
+    --yellow: #d97706; --yellow-light: #fef3c7;
+    --purple: #7c3aed; --purple-light: #ede9fe;
+    --orange: #ea580c; --orange-light: #ffedd5;
+    --code-bg: #1e1e2e; --code-text: #cdd6f4;
+    --sidebar-w: 240px; --content-max: 820px;
+    font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; }
+  #toc { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0 48px; z-index: 100; }
+  #toc-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  #toc-header .phase-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-bottom: 6px; }
+  #toc-header h2 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  #toc nav a { display: block; padding: 5px 16px 5px 20px; font-size: 12.5px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+  main { margin-left: var(--sidebar-w); padding: 48px 48px 96px; max-width: calc(var(--sidebar-w) + var(--content-max) + 96px); width: 100%; }
+  article { max-width: var(--content-max); }
+  .doc-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 2px solid var(--border); }
+  .doc-header .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+  .tag-phase { background: var(--accent-light); color: var(--accent); }
+  .tag-topic { background: var(--purple-light); color: var(--purple); }
+  .tag-date  { background: var(--surface-alt);  color: var(--text-muted); }
+  .doc-header h1 { font-size: 30px; font-weight: 800; line-height: 1.25; letter-spacing: -.02em; color: var(--text); }
+  section { margin-bottom: 52px; scroll-margin-top: 32px; }
+  h2.section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -.01em; }
+  h2.section-title .num { font-size: 11px; font-weight: 800; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; letter-spacing: .04em; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 24px 0 10px; }
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+  code { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-family: "SF Mono","Fira Code",Menlo,monospace; font-size: 12.5px; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 14px; border-left: 3px solid; }
+  .callout-goal  { background: var(--accent-light); border-color: var(--accent); color: #1e40af; }
+  .callout-tip   { background: var(--yellow-light); border-color: var(--yellow); color: #92400e; }
+  .callout-warn  { background: var(--red-light); border-color: var(--red); color: #7f1d1d; }
+  .callout-quote { background: var(--surface-alt);  border-color: var(--border); color: var(--text-muted); font-style: italic; }
+  .cheatsheet { background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 24px 28px; font-family: "SF Mono","Fira Code","Cascadia Code",Menlo,monospace; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-x: auto; margin-top: 16px; }
+  .cheatsheet .label { color: #cba6f7; font-weight: 700; letter-spacing: .08em; display: block; margin-top: 18px; margin-bottom: 4px; border-bottom: 1px solid #313244; padding-bottom: 3px; }
+  .cheatsheet .label:first-child { margin-top: 0; }
+  .diagram-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 16px 14px; margin: 20px 0 28px; overflow-x: auto; }
+  .diagram-wrap .diagram-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); margin-bottom: 12px; }
+  .diagram-wrap p.caption { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 10px; margin-bottom: 0; font-style: italic; }
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; font-size: 14.5px; line-height: 1.55; }
+  .checklist li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 2px; background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .checklist li.checked .cb { background: var(--green); border-color: var(--green); }
+  .checklist li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .checklist li.checked .text { color: var(--text-muted); text-decoration: line-through; }
+  .phase-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
+  .phase-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; cursor: pointer; user-select: none; background: var(--surface-alt); }
+  .phase-header:hover { background: var(--border); }
+  .phase-label { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+  .phase-badge { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 2px 8px; border-radius: 20px; }
+  .ph1 { background: #dbeafe; color: #1d4ed8; } .ph2 { background: #fce7f3; color: #9d174d; }
+  .ph3 { background: #d1fae5; color: #065f46; } .ph4 { background: #fef3c7; color: #92400e; }
+  .phase-chevron { font-size: 12px; color: var(--text-muted); transition: transform .2s; }
+  .phase-card.open .phase-chevron { transform: rotate(180deg); }
+  .phase-body { display: none; padding: 16px 20px 20px; }
+  .phase-card.open .phase-body { display: block; }
+  .phase-goal { font-size: 12.5px; color: var(--text-muted); font-style: italic; margin-bottom: 12px; }
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: var(--surface-alt); padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.5; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+  .misconception { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .misconception .wrong { background: var(--red-light); padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; }
+  .misconception .right { padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; color: #065f46; background: var(--green-light); }
+  .misconception .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .quiz-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .quiz-q { padding: 14px 18px; font-size: 14.5px; font-weight: 600; cursor: pointer; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .quiz-q:hover { background: var(--surface-alt); }
+  .quiz-num { flex-shrink: 0; width: 24px; height: 24px; background: var(--accent); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; margin-top: 1px; }
+  .quiz-q .qtext { flex: 1; }
+  .quiz-toggle { font-size: 11px; color: var(--text-muted); flex-shrink: 0; margin-top: 3px; }
+  .quiz-hint { display: none; padding: 10px 18px 14px; font-size: 13px; color: #92400e; background: var(--yellow-light); border-top: 1px solid var(--border); }
+  .quiz-item.open .quiz-hint { display: block; }
+  .reading-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .reading-list li { display: flex; align-items: flex-start; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; font-size: 14px; }
+  .reading-list li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 1px; cursor: pointer; background: var(--surface); display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .reading-list li.checked .cb { background: var(--green); border-color: var(--green); }
+  .reading-list li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .reading-list li.checked .rtext { color: var(--text-muted); text-decoration: line-through; }
+  .notes-area { width: 100%; min-height: 160px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: inherit; font-size: 14px; color: var(--text); resize: vertical; line-height: 1.6; }
+  .notes-area:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .focus-list { list-style: none; display: flex; flex-direction: column; gap: 14px; }
+  .focus-list li { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14.5px; line-height: 1.6; }
+  .focus-list li strong { color: var(--accent); display: block; margin-bottom: 4px; }
+  .connections { display: flex; flex-direction: column; gap: 12px; }
+  .conn-card { display: flex; align-items: flex-start; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14px; }
+  .conn-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .conn-label { font-weight: 700; margin-bottom: 3px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .tradeoff-box { background: var(--surface-alt); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 14px 18px; font-size: 14px; font-style: italic; color: var(--text); margin-top: 14px; }
+  .mitigation-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+  .mitigation-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; font-size: 14px; }
+  .mitigation-card h4 { font-size: 13px; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .mitigation-card .badge { font-size: 10px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; }
+  .badge-green { background: var(--green-light); color: var(--green); }
+  .badge-yellow { background: var(--yellow-light); color: var(--yellow); }
+  .badge-red { background: var(--red-light); color: var(--red); }
+  .badge-blue { background: var(--accent-light); color: var(--accent); }
+  @media (max-width: 900px) { #toc { display: none; } main { margin-left: 0; padding: 24px 20px 60px; } .mitigation-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<aside id="toc">
+  <div id="toc-header">
+    <div class="phase-tag">Phase B — Scalability</div>
+    <h2>5.6 Cache Stampede &amp; Thundering Herd</h2>
+  </div>
+  <nav>
+    <a href="#s0">🗺️ Topic Overview</a>
+    <a href="#s1">🎯 Goal</a>
+    <a href="#s2">✅ Mastery</a>
+    <a href="#s3">🗓️ Study Phases</a>
+    <a href="#s4">📋 Cheatsheet</a>
+    <a href="#s5">🧠 Core Definition</a>
+    <a href="#s6">📦 Core Concepts</a>
+    <a href="#s7">🔍 First Principles</a>
+    <a href="#s8">🗺️ Mental Models</a>
+    <a href="#s9">⚙️ How It Works</a>
+    <a href="#s10">🏭 Real-World Examples</a>
+    <a href="#s11">⚖️ Trade-offs</a>
+    <a href="#s12">🎯 Interview Application</a>
+    <a href="#s13">⚠️ Misconceptions</a>
+    <a href="#s14">🔗 Relationships</a>
+    <a href="#s15">🧪 Self-Check Quiz</a>
+    <a href="#s16">📚 Further Reading</a>
+    <a href="#s17">✍️ My Notes</a>
+  </nav>
+</aside>
+
+<main>
+<article>
+
+<!-- HEADER -->
+<div class="doc-header">
+  <div class="meta">
+    <span class="tag tag-phase">⚡ Phase B — Scalability</span>
+    <span class="tag tag-topic">⚡ Topic 5 — Caching Systems</span>
+    <span class="tag tag-date">📅 2026-06-09</span>
+  </div>
+  <h1>5.6 Cache Stampede &amp; Thundering Herd</h1>
+</div>
+
+<!-- SECTION 0 -->
+<section id="s0">
+  <h2 class="section-title"><span class="num">00</span> 🗺️ Topic Overview</h2>
+  <p>Cache stampede (also called thundering herd or dogpile effect) is a failure mode where a popular cached item expires and many concurrent requests simultaneously miss the cache, all stampeding to the origin database at once. The resulting spike in DB load can overwhelm the origin, cause cascading failures, and produce worse performance than having no cache at all.</p>
+
+  <!-- DIAGRAM 1: The Stampede Sequence -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">📊 The Stampede Event — Timeline</div>
+    <svg viewBox="0 0 780 220" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:780px;display:block;margin:0 auto;">
+      <defs>
+        <marker id="arr" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#64748b"/>
+        </marker>
+        <marker id="arr-red" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#dc2626"/>
+        </marker>
+        <marker id="arr-green" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#16a34a"/>
+        </marker>
+      </defs>
+      <!-- Timeline axis -->
+      <line x1="40" y1="60" x2="740" y2="60" stroke="#94a3b8" stroke-width="2" marker-end="url(#arr)"/>
+      <text x="745" y="64" font-size="11" fill="#64748b">time</text>
+      <!-- Phase labels -->
+      <text x="70" y="30" font-size="11" font-weight="700" fill="#16a34a" text-anchor="middle">Cache HIT zone</text>
+      <text x="390" y="30" font-size="11" font-weight="700" fill="#dc2626" text-anchor="middle">STAMPEDE window</text>
+      <text x="640" y="30" font-size="11" font-weight="700" fill="#2563eb" text-anchor="middle">Cache repopulated</text>
+      <!-- TTL expiry line -->
+      <line x1="220" y1="40" x2="220" y2="170" stroke="#dc2626" stroke-width="2" stroke-dasharray="5,3"/>
+      <text x="223" y="37" font-size="10" fill="#dc2626" font-weight="700">TTL expires</text>
+      <!-- Repopulate line -->
+      <line x1="540" y1="40" x2="540" y2="170" stroke="#2563eb" stroke-width="2" stroke-dasharray="5,3"/>
+      <text x="543" y="37" font-size="10" fill="#2563eb" font-weight="700">Cache warm again</text>
+      <!-- Hit zone shading -->
+      <rect x="40" y="62" width="180" height="30" fill="#dcfce7" rx="0"/>
+      <!-- Stampede shading -->
+      <rect x="220" y="62" width="320" height="30" fill="#fee2e2" rx="0"/>
+      <!-- Recovery zone -->
+      <rect x="540" y="62" width="190" height="30" fill="#dbeafe" rx="0"/>
+      <!-- Request arrows (cache hits) -->
+      <g fill="none" stroke="#16a34a" stroke-width="1.5" marker-end="url(#arr-green)">
+        <line x1="60" y1="110" x2="60" y2="95"/>
+        <line x1="90" y1="110" x2="90" y2="95"/>
+        <line x1="120" y1="110" x2="120" y2="95"/>
+        <line x1="150" y1="110" x2="150" y2="95"/>
+        <line x1="180" y1="110" x2="180" y2="95"/>
+      </g>
+      <text x="120" y="125" font-size="10" fill="#16a34a" text-anchor="middle">Requests → Cache ✓</text>
+      <!-- Stampede arrows (all go to DB) -->
+      <g fill="none" stroke="#dc2626" stroke-width="1.5" marker-end="url(#arr-red)">
+        <line x1="245" y1="150" x2="245" y2="95"/>
+        <line x1="270" y1="150" x2="270" y2="95"/>
+        <line x1="295" y1="150" x2="295" y2="95"/>
+        <line x1="320" y1="150" x2="320" y2="95"/>
+        <line x1="345" y1="150" x2="345" y2="95"/>
+        <line x1="370" y1="150" x2="370" y2="95"/>
+        <line x1="395" y1="150" x2="395" y2="95"/>
+        <line x1="420" y1="150" x2="420" y2="95"/>
+        <line x1="445" y1="150" x2="445" y2="95"/>
+        <line x1="470" y1="150" x2="470" y2="95"/>
+        <line x1="495" y1="150" x2="495" y2="95"/>
+        <line x1="520" y1="150" x2="520" y2="95"/>
+      </g>
+      <text x="383" y="168" font-size="10" fill="#dc2626" text-anchor="middle" font-weight="700">All requests → DB simultaneously 💥</text>
+      <!-- DB box -->
+      <rect x="330" y="178" width="110" height="30" rx="6" fill="#fee2e2" stroke="#dc2626" stroke-width="2"/>
+      <text x="385" y="198" font-size="12" font-weight="700" fill="#dc2626" text-anchor="middle">💥 DB overloaded</text>
+    </svg>
+    <p class="caption">Without mitigation: TTL expiry creates a synchronized spike — all concurrent requests miss the cache and hammer the DB simultaneously.</p>
+  </div>
+
+  <ul class="focus-list">
+    <li><strong>1. Root cause mechanics</strong> — TTL expiration of a hot key is a synchronized event that every concurrent request observes simultaneously. This synchrony is the enemy.</li>
+    <li><strong>2. The five mitigations and their trade-offs</strong> — Probabilistic expiry, mutex/locking, background refresh, stale-while-revalidate, and TTL jitter each solve a different slice. Know when each applies.</li>
+    <li><strong>3. Request coalescing vs. probabilistic refresh</strong> — The two most interview-relevant mitigations. Be able to implement both conceptually and compare their consistency guarantees.</li>
+    <li><strong>4. Thundering herd on cold-start</strong> — Also occurs when a cache server restarts empty. Know this variant and its mitigation (pre-warming).</li>
+    <li><strong>5. Interaction with retry logic</strong> — Naive retries under load amplify thundering herd. Exponential backoff with jitter is the complement.</li>
+  </ul>
+</section>
+
+<!-- SECTION 1 -->
+<section id="s1">
+  <h2 class="section-title"><span class="num">01</span> 🎯 Goal</h2>
+  <div class="callout callout-goal">
+    Be able to identify when cache stampede is occurring or likely in a system design, explain the exact mechanism, and propose one or more concrete mitigations matched to the system's consistency requirements and scale. Be able to compare mitigations on staleness tolerance, implementation complexity, and failure isolation.
+  </div>
+</section>
+
+<!-- SECTION 2 -->
+<section id="s2">
+  <h2 class="section-title"><span class="num">02</span> ✅ What Mastery Looks Like</h2>
+  <ul class="checklist" id="mastery-list">
+    <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Can explain the exact sequence of events that turns a single cache miss into a stampede, including the role of TTL and concurrent request volume</span></li>
+    <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Can describe the XFetch / probabilistic early expiration algorithm and explain why it prevents stampedes without requiring coordination</span></li>
+    <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Can design a mutex-based cache refresh pattern using Redis SETNX and explain what happens to waiting clients when the lock holder fails</span></li>
+    <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Can explain stale-while-revalidate semantics and identify use cases where serving stale data is acceptable vs. unacceptable</span></li>
+    <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Can explain why TTL jitter reduces stampede probability and calculate how much variance is needed at a given request rate</span></li>
+    <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Can identify the cold-start variant of thundering herd and propose a mitigation</span></li>
+  </ul>
+  <div class="callout callout-tip" style="margin-top:16px">💡 <strong>Rule of thumb:</strong> If you can teach it and field follow-up questions, you've mastered it.</div>
+</section>
+
+<!-- SECTION 3 -->
+<section id="s3">
+  <h2 class="section-title"><span class="num">03</span> 🗓️ Study Phases</h2>
+  <div class="phase-card open">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <span class="phase-label"><span class="phase-badge ph1">Phase 1</span> Acquire 📖</span>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Read deeply enough to explain without the doc.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Read <strong>"Scaling Memcache at Facebook"</strong> — Nishtala et al., NSDI 2013</span></li>
+        <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Read <strong>"XFetch: Optimal Probabilistic Cache Stampede Prevention"</strong> — Vattani et al. (2015)</span></li>
+        <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Read <strong>Sections 5–9</strong> (Core Definition → How It Works) carefully</span></li>
+        <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Re-read the <strong>Cheatsheet</strong> and recite from memory after</span></li>
+      </ul>
+    </div>
+  </div>
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <span class="phase-label"><span class="phase-badge ph2">Phase 2</span> Consolidate ✍️</span>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Reproduce in your own words without looking.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Close the doc — write the Core Definition from memory, then compare</span></li>
+        <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Explain First Principles out loud — what specifically causes the stampede?</span></li>
+        <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Reconstruct How It Works mechanics for each mitigation from memory</span></li>
+        <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Restate each Trade-off row in your own words — cost column must be specific</span></li>
+      </ul>
+    </div>
+  </div>
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <span class="phase-label"><span class="phase-badge ph3">Phase 3</span> Apply 🔧</span>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Connect to real systems and simulate interview scenarios.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Verify each Real-World System Example independently and add notes</span></li>
+        <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Practice Interview Application out loud — say trigger phrases and responses as in a live interview</span></li>
+        <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Work through Common Misconceptions — explain <em>why</em> each is wrong</span></li>
+        <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Trace Relationships to Other Concepts without looking</span></li>
+      </ul>
+    </div>
+  </div>
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <span class="phase-label"><span class="phase-badge ph4">Phase 4</span> Validate 🧪</span>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Confirm you actually own it, not just recognize it.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Answer every Self-Check Quiz question out loud without notes</span></li>
+        <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Recite the Cheatsheet from memory — if you can't, re-do Phase 2</span></li>
+        <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Tick off mastery checklist — only if you can demonstrate on demand</span></li>
+        <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Teach this concept for 2 minutes to an imaginary interviewer without hesitation</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 4 -->
+<section id="s4">
+  <h2 class="section-title"><span class="num">04</span> 📋 Cheatsheet</h2>
+  <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+
+  <!-- MINDMAP DIAGRAM -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">🧠 Concept Mindmap — Cache Stampede &amp; Thundering Herd</div>
+    <svg viewBox="0 0 820 500" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:820px;display:block;margin:0 auto;">
+      <!-- Central node -->
+      <ellipse cx="410" cy="250" rx="100" ry="42" fill="#a5d8ff" stroke="#1971c2" stroke-width="2.5"/>
+      <text x="410" y="245" font-size="13" font-weight="800" fill="#1971c2" text-anchor="middle">Cache Stampede</text>
+      <text x="410" y="261" font-size="11" fill="#1971c2" text-anchor="middle">Thundering Herd</text>
+
+      <!-- Branch 1: Root Cause (top-left) -->
+      <line x1="325" y1="224" x2="210" y2="140" stroke="#3b5bdb" stroke-width="2"/>
+      <rect x="120" y="108" width="170" height="52" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="205" y="130" font-size="12" font-weight="700" fill="#3b5bdb" text-anchor="middle">Root Cause</text>
+      <text x="205" y="147" font-size="11" fill="#3b5bdb" text-anchor="middle">Hot key TTL expires</text>
+      <!-- Root cause leaves -->
+      <line x1="120" y1="134" x2="70" y2="100" stroke="#3b5bdb" stroke-width="1.2"/>
+      <rect x="10" y="82" width="125" height="36" rx="6" fill="#edf2ff" stroke="#3b5bdb" stroke-width="1"/>
+      <text x="72" y="98" font-size="10" fill="#3b5bdb" text-anchor="middle">Synchronized expiry</text>
+      <text x="72" y="111" font-size="10" fill="#3b5bdb" text-anchor="middle">= N concurrent misses</text>
+
+      <line x1="120" y1="146" x2="55" y2="168" stroke="#3b5bdb" stroke-width="1.2"/>
+      <rect x="0" y="152" width="120" height="36" rx="6" fill="#edf2ff" stroke="#3b5bdb" stroke-width="1"/>
+      <text x="60" y="168" font-size="10" fill="#3b5bdb" text-anchor="middle">Cold restart /</text>
+      <text x="60" y="181" font-size="10" fill="#3b5bdb" text-anchor="middle">Batch load expiry</text>
+
+      <!-- Branch 2: Mitigations (top-right) -->
+      <line x1="495" y1="224" x2="590" y2="140" stroke="#e67700" stroke-width="2"/>
+      <rect x="540" y="108" width="180" height="52" rx="8" fill="#ffd8a8" stroke="#e67700" stroke-width="1.5"/>
+      <text x="630" y="130" font-size="12" font-weight="700" fill="#e67700" text-anchor="middle">Mitigations</text>
+      <text x="630" y="147" font-size="11" fill="#e67700" text-anchor="middle">5 strategies</text>
+      <!-- Mitigation leaves -->
+      <line x1="720" y1="130" x2="770" y2="90" stroke="#e67700" stroke-width="1.2"/>
+      <rect x="680" y="66" width="130" height="40" rx="6" fill="#fff3e0" stroke="#e67700" stroke-width="1"/>
+      <text x="745" y="83" font-size="10" fill="#e67700" text-anchor="middle">XFetch probabilistic</text>
+      <text x="745" y="96" font-size="10" fill="#e67700" text-anchor="middle">early expiry</text>
+
+      <line x1="720" y1="148" x2="770" y2="168" stroke="#e67700" stroke-width="1.2"/>
+      <rect x="680" y="152" width="130" height="40" rx="6" fill="#fff3e0" stroke="#e67700" stroke-width="1"/>
+      <text x="745" y="169" font-size="10" fill="#e67700" text-anchor="middle">Mutex / SETNX lock</text>
+      <text x="745" y="182" font-size="10" fill="#e67700" text-anchor="middle">request coalescing</text>
+
+      <!-- Branch 3: Trade-offs (bottom-right) -->
+      <line x1="495" y1="276" x2="590" y2="355" stroke="#c92a2a" stroke-width="2"/>
+      <rect x="530" y="338" width="200" height="52" rx="8" fill="#ffc9c9" stroke="#c92a2a" stroke-width="1.5"/>
+      <text x="630" y="360" font-size="12" font-weight="700" fill="#c92a2a" text-anchor="middle">Trade-offs</text>
+      <text x="630" y="377" font-size="11" fill="#c92a2a" text-anchor="middle">Staleness vs. complexity</text>
+      <!-- Tradeoff leaves -->
+      <line x1="730" y1="360" x2="778" y2="335" stroke="#c92a2a" stroke-width="1.2"/>
+      <rect x="680" y="316" width="130" height="36" rx="6" fill="#fff1f1" stroke="#c92a2a" stroke-width="1"/>
+      <text x="745" y="331" font-size="10" fill="#c92a2a" text-anchor="middle">Stale-while-revalidate</text>
+      <text x="745" y="344" font-size="10" fill="#c92a2a" text-anchor="middle">= staleness risk</text>
+
+      <line x1="730" y1="380" x2="778" y2="405" stroke="#c92a2a" stroke-width="1.2"/>
+      <rect x="678" y="390" width="132" height="36" rx="6" fill="#fff1f1" stroke="#c92a2a" stroke-width="1"/>
+      <text x="744" y="405" font-size="10" fill="#c92a2a" text-anchor="middle">Lock TTL required —</text>
+      <text x="744" y="418" font-size="10" fill="#c92a2a" text-anchor="middle">crash = deadlock</text>
+
+      <!-- Branch 4: Jitter & Warmup (bottom-left) -->
+      <line x1="325" y1="276" x2="205" y2="355" stroke="#0ca678" stroke-width="2"/>
+      <rect x="90" y="338" width="200" height="52" rx="8" fill="#c3fae8" stroke="#0ca678" stroke-width="1.5"/>
+      <text x="190" y="360" font-size="12" font-weight="700" fill="#0ca678" text-anchor="middle">Prevention</text>
+      <text x="190" y="377" font-size="11" fill="#0ca678" text-anchor="middle">TTL jitter + pre-warm</text>
+      <!-- Prevention leaves -->
+      <line x1="90" y1="356" x2="42" y2="330" stroke="#0ca678" stroke-width="1.2"/>
+      <rect x="0" y="312" width="120" height="36" rx="6" fill="#e6fcf5" stroke="#0ca678" stroke-width="1"/>
+      <text x="60" y="327" font-size="10" fill="#0ca678" text-anchor="middle">TTL = base ±</text>
+      <text x="60" y="340" font-size="10" fill="#0ca678" text-anchor="middle">random(10–20%)</text>
+
+      <line x1="90" y1="376" x2="40" y2="400" stroke="#0ca678" stroke-width="1.2"/>
+      <rect x="0" y="385" width="120" height="36" rx="6" fill="#e6fcf5" stroke="#0ca678" stroke-width="1"/>
+      <text x="60" y="400" font-size="10" fill="#0ca678" text-anchor="middle">Replay hot keys</text>
+      <text x="60" y="413" font-size="10" fill="#0ca678" text-anchor="middle">on cache restart</text>
+
+      <!-- Branch 5: Real Systems (bottom center) -->
+      <line x1="410" y1="292" x2="410" y2="380" stroke="#2f9e44" stroke-width="2"/>
+      <rect x="320" y="380" width="180" height="42" rx="8" fill="#b2f2bb" stroke="#2f9e44" stroke-width="1.5"/>
+      <text x="410" y="398" font-size="12" font-weight="700" fill="#2f9e44" text-anchor="middle">Real Systems</text>
+      <text x="410" y="413" font-size="11" fill="#2f9e44" text-anchor="middle">Facebook, Cloudflare, Varnish</text>
+
+      <!-- XFetch formula callout -->
+      <rect x="310" y="440" width="200" height="42" rx="8" fill="#f8f9fa" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4,3"/>
+      <text x="410" y="458" font-size="10" fill="#495057" text-anchor="middle" font-style="italic">XFetch: P = exp(−δ / β × ttl_remaining)</text>
+      <text x="410" y="473" font-size="10" fill="#495057" text-anchor="middle">δ = recompute time, β = tuning param</text>
+    </svg>
+    <p class="caption">Radial mindmap: root cause → mitigations → trade-offs → prevention strategies → real systems</p>
+  </div>
+
+  <div class="cheatsheet">
+<span class="label">§ 1  WHY IT EXISTS</span>Caches absorb load by serving repeated reads from memory. When a hot key
+expires, all requests that were being absorbed by the cache are now
+in-flight simultaneously — they all miss and all hit the DB at once.
+The DB, sized only for residual traffic, collapses under a spike it was
+never designed to handle. The more successful your cache, the worse
+the stampede when it expires — because the DB has been load-starved.
+
+<span class="label">§ 2  WHAT EACH MITIGATION IS</span>XFetch      — probabilistic early refresh per request as TTL → 0.
+               P = exp(−δ / β × ttl_remaining). No coordination needed.
+Mutex/SETNX — 1st miss acquires a Redis lock; others wait or get stale.
+               Guarantees at-most-one DB fetch per key per window.
+Stale-while — serve stale now, async background refresh (RFC 5861).
+revalidate    CDN/Nginx/Varnish native. Zero added client latency.
+TTL jitter  — ttl = base_ttl ± random(10–20%). Spreads batch expiry.
+               Zero read-path overhead.
+BG refresh  — proactive warming: monitor TTL, refresh before expiry.
+               Read path never misses for known-hot keys.
+
+<span class="label">§ 3  THE 3 KEY DISTINCTIONS</span>1. Stampede vs hot key: stampede is a transient spike triggered by
+   a synchronized miss event; hot key is sustained overload. Not the
+   same fix — both may co-exist on the same key.
+2. TTL jitter only fixes batch expiry. A single viral key still
+   stampedes regardless of jitter — need XFetch or mutex for that.
+3. Mutex REQUIRES a lock TTL (EX param). Crashed lock holder with no
+   TTL = permanent deadlock on that key. No exceptions.
+
+<span class="label">§ 4  USE / AVOID</span>XFetch:     reads are high-volume, some staleness tolerable, no lock infra.
+Mutex:      at-most-one DB fetch required (inventory, pricing, auth).
+Stale-while-revalidate: CDN or reverse proxy already in path.
+TTL jitter: batch-loaded key sets (startup, bulk import).
+BG refresh: predictable hot keys only — misses unexpected viral content.
+AVOID mutex without lock TTL — one crash = permanent key deadlock.
+
+<span class="label">§ 5  INTERVIEW TRIGGERS</span>-> "What happens when your cache expires for a popular item?"
+-> "How do you handle celebrity posts or viral content in the cache?"
+-> "Your cache just restarted — walk me through what happens to traffic."
+-> "How do you prevent your DB being overwhelmed if the cache fails?"
+
+<span class="label">§ 6  FTAC</span>F  "Tension: cache expiry is a synchronized event — all concurrent
+   requests see a miss at the same instant, converting a single expiry
+   into N simultaneous DB queries."
+T  "XFetch: zero coordination, slight staleness increase.
+   Mutex: freshest data, but lock holder crash can deadlock the key.
+   Stale-while-revalidate: best for CDN layer, not for strongly
+   consistent reads like inventory or balances."
+A  "Assuming this is a read-heavy content system (social feed, catalog)
+   tolerating a few seconds of staleness — Zipfian hot key distribution."
+C  "XFetch with β=1.0. Cost: occasional extra DB fetch before expiry.
+   Also add TTL jitter on batch loads. No mutex needed at this scale."
+
+<span class="label">§ 7  NUMBERS & GOTCHA</span>Amplification: N = R req/s × recompute_time_seconds
+  (10k req/s × 50ms = 500 simultaneous DB queries from 1 expiry)
+XFetch: P = exp(−δ / β × ttl_remaining); δ = recompute ms, β = 1.0
+Jitter range: ±10–20% of base TTL
+Lock TTL: max(recompute_time) × 2 as safety margin
+GOTCHA: mutex without EX param → crashed lock holder → permanent
+deadlock on that key for all future refreshes. Always SETNX + EX atomically.
+  </div>
+</section>
+
+<!-- SECTION 5 -->
+<section id="s5">
+  <h2 class="section-title"><span class="num">05</span> 🧠 Core Definition</h2>
+  <p>Cache stampede (thundering herd) is a failure mode where the simultaneous expiration or absence of a cached value causes a large number of concurrent requests to bypass the cache and hit the origin system at once, producing a load spike that can cascade into a system-wide outage. The problem is not the individual cache miss — it is the concurrent amplification of that miss across all in-flight requests.</p>
+</section>
+
+<!-- SECTION 6 -->
+<section id="s6">
+  <h2 class="section-title"><span class="num">06</span> 📦 Core Concepts</h2>
+
+  <h3>Cache Miss Amplification</h3>
+  <p>A single logical cache miss becomes many physical DB queries when request concurrency is high. For a key receiving 10,000 req/s with a 50ms recompute window, up to 500 requests can arrive between the first miss and the repopulated cache. Each sees an empty cache and fires an independent DB query — 500 simultaneous origin fetches for one expired key.</p>
+
+  <h3>Thundering Herd vs. Hot Key Problem</h3>
+  <p>Related but distinct. A hot key problem is <em>sustained</em> overload on a single DB key due to high read volume. A thundering herd is a <em>transient spike</em> triggered by a synchronized miss event (TTL expiry, server restart, deployment). Hot key mitigation (replication, local caching) helps; stampede prevention helps — but they are not the same fix.</p>
+
+  <h3>Probabilistic Early Expiration (XFetch)</h3>
+  <p>Before TTL reaches zero, each request independently computes a probability of refreshing early based on how close to expiry the key is and how expensive the recompute is. The probability increases exponentially as TTL approaches zero. No coordination needed — randomness distributes refreshes across time, preventing synchronized expiry.</p>
+
+  <h3>Mutex-Based Refresh (Request Coalescing)</h3>
+  <p>When a cache miss is detected, the first request acquires a distributed lock (<code>SETNX lock_key "1" EX &lt;ttl&gt;</code>) and fetches from DB. All other concurrent misses either wait and re-check, or are served stale data. Guarantees at-most-one DB fetch per key per refresh window. <strong>Critical:</strong> the lock must have a TTL.</p>
+
+  <h3>Stale-While-Revalidate</h3>
+  <p>An HTTP/CDN caching directive (RFC 5861) that instructs the cache to serve stale content immediately while triggering an asynchronous background refresh. The client gets a fast response; the DB gets a single background refresh request. CDN-layer equivalent of mutex-based refresh without application code changes.</p>
+
+  <h3>TTL Jitter</h3>
+  <p>Instead of all keys sharing a fixed TTL, each key's TTL is randomized: <code>ttl = base_ttl + random(-jitter, +jitter)</code>. This spreads expirations over time, preventing batch-loaded keys from creating a synchronized stampede wave. Zero read-path overhead.</p>
+</section>
+
+<!-- SECTION 7 -->
+<section id="s7">
+  <h2 class="section-title"><span class="num">07</span> 🔍 First Principles — Why Does This Exist?</h2>
+  <p>Caches work by trading freshness for performance: instead of computing or fetching the same answer repeatedly, you store it once and serve it many times. The performance gain depends on the cache hit rate staying high. The moment a hot cached value expires, the cache provides zero protection — but all the requests that were being absorbed by the cache are now in-flight simultaneously when expiry occurs.</p>
+  <p>The DB, designed to handle only residual traffic that the cache doesn't cover, suddenly receives the full uncached load all at once. This is a systems-level thundering herd: many processes synchronized by a single shared event (the TTL clock), all waking up and competing for the same resource at the same moment. The paradox: the more successful your cache, the worse the stampede when it fails — because the DB has been starved of load and hasn't been sized to handle direct traffic.</p>
+</section>
+
+<!-- SECTION 8 -->
+<section id="s8">
+  <h2 class="section-title"><span class="num">08</span> 🗺️ Mental Models</h2>
+
+  <h3>Model 1: The Midnight Door Rush</h3>
+  <p>Imagine a nightclub that closes its doors at midnight (TTL expiry). Everyone waiting outside rushes in simultaneously the moment the doors open — instead of a steady trickle. The stampede is caused not by the volume of people but by the <em>synchronization</em> of their arrival. Jitter is the equivalent of opening the doors at random times between 11:55 PM and 12:05 PM — the crowd self-distributes.</p>
+  <p><em>Where it breaks down:</em> This doesn't capture the lock-holder failure scenario — if the first person in (lock holder) collapses in the doorway, you need a bouncer (lock TTL + stale fallback) to handle it.</p>
+
+  <h3>Model 2: The Checked-Out Document</h3>
+  <p>When a popular shared document is checked out for editing (cache miss + lock acquired), everyone else who needs it pauses and waits. This is correct — you don't want 500 people making the same edit simultaneously. But if the person who checked it out gets fired mid-edit (lock holder crashes), the document stays locked forever unless there's a policy to reclaim it after N minutes (lock TTL).</p>
+  <p><em>Where it breaks down:</em> In the office analogy, waiting is visible. In distributed systems, "waiting" means holding an HTTP connection open, consuming threads — the cost of waiting is non-obvious until connections exhaust.</p>
+
+  <h3>Model 3: Probabilistic Early Boarding</h3>
+  <p>A train departs at 10:00. Passengers who know it sometimes leaves early board randomly between 9:45 and 9:59. This is XFetch: each passenger independently decides when to "board early" based on how close to departure time it is and how long it takes to get to the platform (recompute cost). Randomness breaks synchrony without central coordination.</p>
+  <p><em>Where it breaks down:</em> If the cost of early departure (recompute) is very high, passengers avoid it and you still get a rush at 10:00. XFetch's <code>beta</code> parameter controls this sensitivity.</p>
+</section>
+
+<!-- SECTION 9 -->
+<section id="s9">
+  <h2 class="section-title"><span class="num">09</span> ⚙️ How It Works — Mechanics</h2>
+
+  <!-- DIAGRAM 2: Stampede sequence flow -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">⚙️ Stampede Sequence — Without Mitigation</div>
+    <svg viewBox="0 0 760 300" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:760px;display:block;margin:0 auto;">
+      <defs>
+        <marker id="a2" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#64748b"/></marker>
+        <marker id="a-red2" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#dc2626"/></marker>
+      </defs>
+      <!-- Steps 1–6 as boxes with arrows -->
+      <!-- Step 1 -->
+      <rect x="20" y="20" width="130" height="52" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="85" y="42" font-size="11" font-weight="700" fill="#1d4ed8" text-anchor="middle">① Key K cached</text>
+      <text x="85" y="57" font-size="10" fill="#1d4ed8" text-anchor="middle">TTL = T, hot key</text>
+      <text x="85" y="70" font-size="10" fill="#1d4ed8" text-anchor="middle">R req/s</text>
+      <!-- Arrow 1→2 -->
+      <line x1="150" y1="46" x2="188" y2="46" stroke="#64748b" stroke-width="1.5" marker-end="url(#a2)"/>
+      <!-- Step 2 -->
+      <rect x="190" y="20" width="130" height="52" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+      <text x="255" y="42" font-size="11" font-weight="700" fill="#92400e" text-anchor="middle">② TTL expires</text>
+      <text x="255" y="57" font-size="10" fill="#92400e" text-anchor="middle">All R in-flight reqs</text>
+      <text x="255" y="70" font-size="10" fill="#92400e" text-anchor="middle">see empty cache</text>
+      <!-- Arrow 2→3 -->
+      <line x1="320" y1="46" x2="358" y2="46" stroke="#64748b" stroke-width="1.5" marker-end="url(#a2)"/>
+      <!-- Step 3 -->
+      <rect x="360" y="20" width="140" height="52" rx="8" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5"/>
+      <text x="430" y="38" font-size="11" font-weight="700" fill="#dc2626" text-anchor="middle">③ N simultaneous</text>
+      <text x="430" y="53" font-size="10" fill="#dc2626" text-anchor="middle">DB queries fired</text>
+      <text x="430" y="68" font-size="10" fill="#dc2626" text-anchor="middle">N = R × latency_s</text>
+      <!-- Arrow 3→4 -->
+      <line x1="500" y1="46" x2="538" y2="46" stroke="#64748b" stroke-width="1.5" marker-end="url(#a2)"/>
+      <!-- Step 4 -->
+      <rect x="540" y="20" width="140" height="52" rx="8" fill="#fee2e2" stroke="#dc2626" stroke-width="2"/>
+      <text x="610" y="38" font-size="11" font-weight="700" fill="#dc2626" text-anchor="middle">④ DB overloaded</text>
+      <text x="610" y="53" font-size="10" fill="#dc2626" text-anchor="middle">Latency ↑ → queue ↑</text>
+      <text x="610" y="68" font-size="10" fill="#dc2626" text-anchor="middle">→ timeouts 💥</text>
+      <!-- Arrow 4→5 down -->
+      <line x1="610" y1="72" x2="610" y2="108" stroke="#dc2626" stroke-width="1.5" marker-end="url(#a-red2)"/>
+      <!-- Step 5 -->
+      <rect x="540" y="110" width="140" height="52" rx="8" fill="#fee2e2" stroke="#dc2626" stroke-width="2"/>
+      <text x="610" y="128" font-size="11" font-weight="700" fill="#dc2626" text-anchor="middle">⑤ Retries compound</text>
+      <text x="610" y="143" font-size="10" fill="#dc2626" text-anchor="middle">Retry storm amplifies</text>
+      <text x="610" y="158" font-size="10" fill="#dc2626" text-anchor="middle">→ cascading failure</text>
+      <!-- Arrow 5→6 left -->
+      <line x1="540" y1="136" x2="382" y2="136" stroke="#dc2626" stroke-width="1.5" marker-end="url(#a-red2)"/>
+      <!-- Step 6 -->
+      <rect x="190" y="110" width="190" height="52" rx="8" fill="#f3f4f6" stroke="#6b7280" stroke-width="1.5"/>
+      <text x="285" y="130" font-size="11" font-weight="700" fill="#111827" text-anchor="middle">⑥ System outage</text>
+      <text x="285" y="145" font-size="10" fill="#374151" text-anchor="middle">DB/service unavailable</text>
+      <text x="285" y="160" font-size="10" fill="#374151" text-anchor="middle">All users affected</text>
+
+      <!-- Formula box -->
+      <rect x="20" y="110" width="150" height="52" rx="8" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.5"/>
+      <text x="95" y="130" font-size="11" font-weight="700" fill="#6d28d9" text-anchor="middle">Amplification</text>
+      <text x="95" y="145" font-size="10" fill="#6d28d9" text-anchor="middle">N = R req/s ×</text>
+      <text x="95" y="160" font-size="10" fill="#6d28d9" text-anchor="middle">recompute_time (s)</text>
+
+      <!-- Annotation label -->
+      <text x="380" y="240" font-size="11" fill="#64748b" text-anchor="middle">10k req/s × 50ms recompute = 500 simultaneous DB queries from 1 expired key</text>
+    </svg>
+    <p class="caption">Six-step cascade from a single TTL expiry to full system outage.</p>
+  </div>
+
+  <h3>The Five Mitigations</h3>
+
+  <!-- DIAGRAM 3: Mitigations comparison -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">🛡️ Mitigation Strategies — Comparison</div>
+    <svg viewBox="0 0 760 380" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:760px;display:block;margin:0 auto;">
+      <!-- Headers -->
+      <rect x="0" y="0" width="760" height="36" fill="#f1f5f9" rx="4"/>
+      <text x="90" y="23" font-size="11" font-weight="700" fill="#475569" text-anchor="middle">Mitigation</text>
+      <text x="240" y="23" font-size="11" font-weight="700" fill="#475569" text-anchor="middle">Mechanism</text>
+      <text x="440" y="23" font-size="11" font-weight="700" fill="#475569" text-anchor="middle">Staleness</text>
+      <text x="580" y="23" font-size="11" font-weight="700" fill="#475569" text-anchor="middle">Coordination</text>
+      <text x="700" y="23" font-size="11" font-weight="700" fill="#475569" text-anchor="middle">Best for</text>
+      <!-- Row 1: XFetch -->
+      <rect x="0" y="36" width="760" height="60" fill="#fff7ed"/>
+      <rect x="8" y="44" width="160" height="44" rx="6" fill="#ffd8a8" stroke="#e67700" stroke-width="1.5"/>
+      <text x="88" y="63" font-size="11" font-weight="700" fill="#c2410c" text-anchor="middle">Probabilistic</text>
+      <text x="88" y="78" font-size="10" fill="#c2410c" text-anchor="middle">Early Expiry (XFetch)</text>
+      <text x="240" y="60" font-size="10" fill="#374151" text-anchor="middle">Random early</text>
+      <text x="240" y="73" font-size="10" fill="#374151" text-anchor="middle">refresh per request</text>
+      <text x="240" y="86" font-size="10" fill="#374151" text-anchor="middle">as TTL → 0</text>
+      <rect x="395" y="50" width="90" height="22" rx="10" fill="#dcfce7"/>
+      <text x="440" y="66" font-size="10" font-weight="700" fill="#16a34a" text-anchor="middle">⚡ Very low</text>
+      <rect x="530" y="50" width="90" height="22" rx="10" fill="#dcfce7"/>
+      <text x="575" y="66" font-size="10" font-weight="700" fill="#16a34a" text-anchor="middle">✅ None</text>
+      <text x="700" y="66" font-size="10" fill="#374151" text-anchor="middle">High-traffic</text>
+      <text x="700" y="79" font-size="10" fill="#374151" text-anchor="middle">content reads</text>
+      <!-- Row 2: Mutex -->
+      <rect x="0" y="96" width="760" height="60" fill="#f0fdf4"/>
+      <rect x="8" y="104" width="160" height="44" rx="6" fill="#b2f2bb" stroke="#2f9e44" stroke-width="1.5"/>
+      <text x="88" y="123" font-size="11" font-weight="700" fill="#15803d" text-anchor="middle">Mutex / SETNX</text>
+      <text x="88" y="138" font-size="10" fill="#15803d" text-anchor="middle">Request coalescing</text>
+      <text x="240" y="118" font-size="10" fill="#374151" text-anchor="middle">Lock: 1 req fetches,</text>
+      <text x="240" y="131" font-size="10" fill="#374151" text-anchor="middle">others wait or</text>
+      <text x="240" y="144" font-size="10" fill="#374151" text-anchor="middle">get stale data</text>
+      <rect x="395" y="110" width="90" height="22" rx="10" fill="#dcfce7"/>
+      <text x="440" y="126" font-size="10" font-weight="700" fill="#16a34a" text-anchor="middle">⚡ None/minimal</text>
+      <rect x="530" y="110" width="90" height="22" rx="10" fill="#fef3c7"/>
+      <text x="575" y="126" font-size="10" font-weight="700" fill="#d97706" text-anchor="middle">⚠️ Lock needed</text>
+      <text x="700" y="120" font-size="10" fill="#374151" text-anchor="middle">Pricing, inventory</text>
+      <text x="700" y="133" font-size="10" fill="#374151" text-anchor="middle">fresh data req'd</text>
+      <!-- Row 3: Stale-while-revalidate -->
+      <rect x="0" y="156" width="760" height="60" fill="#fdf4ff"/>
+      <rect x="8" y="164" width="160" height="44" rx="6" fill="#e9d5ff" stroke="#7c3aed" stroke-width="1.5"/>
+      <text x="88" y="183" font-size="11" font-weight="700" fill="#7c3aed" text-anchor="middle">Stale-while-</text>
+      <text x="88" y="198" font-size="10" fill="#7c3aed" text-anchor="middle">revalidate</text>
+      <text x="240" y="178" font-size="10" fill="#374151" text-anchor="middle">Serve stale now,</text>
+      <text x="240" y="191" font-size="10" fill="#374151" text-anchor="middle">async refresh in</text>
+      <text x="240" y="204" font-size="10" fill="#374151" text-anchor="middle">background</text>
+      <rect x="395" y="170" width="90" height="22" rx="10" fill="#fee2e2"/>
+      <text x="440" y="186" font-size="10" font-weight="700" fill="#dc2626" text-anchor="middle">⚠️ Stale window</text>
+      <rect x="530" y="170" width="90" height="22" rx="10" fill="#dcfce7"/>
+      <text x="575" y="186" font-size="10" font-weight="700" fill="#16a34a" text-anchor="middle">✅ CDN native</text>
+      <text x="700" y="180" font-size="10" fill="#374151" text-anchor="middle">CDN / Nginx /</text>
+      <text x="700" y="193" font-size="10" fill="#374151" text-anchor="middle">Varnish layers</text>
+      <!-- Row 4: TTL Jitter -->
+      <rect x="0" y="216" width="760" height="60" fill="#fffbeb"/>
+      <rect x="8" y="224" width="160" height="44" rx="6" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+      <text x="88" y="243" font-size="11" font-weight="700" fill="#b45309" text-anchor="middle">TTL Jitter</text>
+      <text x="88" y="258" font-size="10" fill="#b45309" text-anchor="middle">ttl ± random(10–20%)</text>
+      <text x="240" y="238" font-size="10" fill="#374151" text-anchor="middle">Randomize expiry</text>
+      <text x="240" y="251" font-size="10" fill="#374151" text-anchor="middle">time at write</text>
+      <text x="240" y="264" font-size="10" fill="#374151" text-anchor="middle">to spread misses</text>
+      <rect x="395" y="230" width="90" height="22" rx="10" fill="#dcfce7"/>
+      <text x="440" y="246" font-size="10" font-weight="700" fill="#16a34a" text-anchor="middle">⚡ Minimal</text>
+      <rect x="530" y="230" width="90" height="22" rx="10" fill="#dcfce7"/>
+      <text x="575" y="246" font-size="10" font-weight="700" fill="#16a34a" text-anchor="middle">✅ None</text>
+      <text x="700" y="240" font-size="10" fill="#374151" text-anchor="middle">Batch-loaded</text>
+      <text x="700" y="253" font-size="10" fill="#374151" text-anchor="middle">key sets</text>
+      <!-- Row 5: Background refresh -->
+      <rect x="0" y="276" width="760" height="60" fill="#f0f9ff"/>
+      <rect x="8" y="284" width="160" height="44" rx="6" fill="#bae6fd" stroke="#0284c7" stroke-width="1.5"/>
+      <text x="88" y="303" font-size="11" font-weight="700" fill="#0369a1" text-anchor="middle">Background</text>
+      <text x="88" y="318" font-size="10" fill="#0369a1" text-anchor="middle">Refresh / Pre-warm</text>
+      <text x="240" y="298" font-size="10" fill="#374151" text-anchor="middle">Monitor TTL,</text>
+      <text x="240" y="311" font-size="10" fill="#374151" text-anchor="middle">proactively refresh</text>
+      <text x="240" y="324" font-size="10" fill="#374151" text-anchor="middle">before expiry</text>
+      <rect x="395" y="290" width="90" height="22" rx="10" fill="#dcfce7"/>
+      <text x="440" y="306" font-size="10" font-weight="700" fill="#16a34a" text-anchor="middle">✅ Zero</text>
+      <rect x="530" y="290" width="90" height="22" rx="10" fill="#fee2e2"/>
+      <text x="575" y="306" font-size="10" font-weight="700" fill="#dc2626" text-anchor="middle">⚠️ Extra process</text>
+      <text x="700" y="300" font-size="10" fill="#374151" text-anchor="middle">Predictable</text>
+      <text x="700" y="313" font-size="10" fill="#374151" text-anchor="middle">hot keys</text>
+      <!-- Column dividers -->
+      <line x1="180" y1="0" x2="180" y2="336" stroke="#e2e8f0" stroke-width="1"/>
+      <line x1="310" y1="0" x2="310" y2="336" stroke="#e2e8f0" stroke-width="1"/>
+      <line x1="490" y1="0" x2="490" y2="336" stroke="#e2e8f0" stroke-width="1"/>
+      <line x1="630" y1="0" x2="630" y2="336" stroke="#e2e8f0" stroke-width="1"/>
+    </svg>
+    <p class="caption">Five mitigations compared on mechanism, staleness impact, coordination cost, and ideal use case.</p>
+  </div>
+
+  <!-- DIAGRAM 4: Mutex flow -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">🔒 Mutex / Request Coalescing — State Machine</div>
+    <svg viewBox="0 0 760 240" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:760px;display:block;margin:0 auto;">
+      <defs>
+        <marker id="a3" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#64748b"/></marker>
+        <marker id="a-g3" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#16a34a"/></marker>
+        <marker id="a-r3" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#dc2626"/></marker>
+        <marker id="a-o3" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#d97706"/></marker>
+      </defs>
+      <!-- Start: request arrives -->
+      <rect x="20" y="96" width="110" height="44" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="75" y="115" font-size="11" font-weight="700" fill="#1d4ed8" text-anchor="middle">Request</text>
+      <text x="75" y="130" font-size="10" fill="#1d4ed8" text-anchor="middle">Cache miss</text>
+      <!-- Arrow to lock attempt -->
+      <line x1="130" y1="118" x2="168" y2="118" stroke="#64748b" stroke-width="1.5" marker-end="url(#a3)"/>
+      <!-- Lock attempt -->
+      <rect x="170" y="96" width="130" height="44" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+      <text x="235" y="115" font-size="11" font-weight="700" fill="#92400e" text-anchor="middle">SETNX lock_key</text>
+      <text x="235" y="130" font-size="10" fill="#92400e" text-anchor="middle">"1" EX &lt;lock_ttl&gt;</text>
+      <!-- Branch: success -->
+      <line x1="300" y1="118" x2="338" y2="80" stroke="#16a34a" stroke-width="1.5" marker-end="url(#a-g3)"/>
+      <text x="318" y="96" font-size="10" fill="#16a34a">OK</text>
+      <!-- Success path -->
+      <rect x="340" y="50" width="130" height="44" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+      <text x="405" y="69" font-size="11" font-weight="700" fill="#15803d" text-anchor="middle">Fetch from DB</text>
+      <text x="405" y="84" font-size="10" fill="#15803d" text-anchor="middle">Write to cache</text>
+      <!-- Arrow to release -->
+      <line x1="470" y1="72" x2="508" y2="72" stroke="#16a34a" stroke-width="1.5" marker-end="url(#a-g3)"/>
+      <rect x="510" y="50" width="120" height="44" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+      <text x="570" y="69" font-size="11" font-weight="700" fill="#15803d" text-anchor="middle">Release lock</text>
+      <text x="570" y="84" font-size="10" fill="#15803d" text-anchor="middle">Return fresh data</text>
+
+      <!-- Branch: lock not acquired -->
+      <line x1="300" y1="118" x2="338" y2="156" stroke="#dc2626" stroke-width="1.5" marker-end="url(#a-r3)"/>
+      <text x="315" y="150" font-size="10" fill="#dc2626">FAIL</text>
+      <!-- Fail path: two options -->
+      <rect x="340" y="142" width="140" height="44" rx="8" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5"/>
+      <text x="410" y="161" font-size="11" font-weight="700" fill="#dc2626" text-anchor="middle">Option A: Wait</text>
+      <text x="410" y="176" font-size="10" fill="#dc2626" text-anchor="middle">sleep + retry cache</text>
+      <line x1="480" y1="164" x2="518" y2="140" stroke="#dc2626" stroke-width="1.5" marker-end="url(#a-r3)"/>
+      <rect x="520" y="120" width="140" height="44" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+      <text x="590" y="139" font-size="11" font-weight="700" fill="#92400e" text-anchor="middle">Option B: Serve</text>
+      <text x="590" y="154" font-size="10" fill="#92400e" text-anchor="middle">stale data (if exists)</text>
+
+      <!-- Lock TTL warning -->
+      <rect x="340" y="200" width="340" height="34" rx="6" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="4,3"/>
+      <text x="510" y="214" font-size="10" font-weight="700" fill="#dc2626" text-anchor="middle">⚠️ CRITICAL: Lock MUST have TTL (EX param)</text>
+      <text x="510" y="228" font-size="10" fill="#dc2626" text-anchor="middle">No TTL = crashed lock holder = permanent deadlock</text>
+    </svg>
+    <p class="caption">Mutex pattern: winner fetches from DB; losers wait or serve stale. The lock TTL is a safety must-have.</p>
+  </div>
+
+  <!-- DIAGRAM 5: XFetch probability curve -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">📈 XFetch — Probabilistic Early Refresh Curve</div>
+    <svg viewBox="0 0 640 260" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:640px;display:block;margin:0 auto;">
+      <!-- Axes -->
+      <line x1="60" y1="200" x2="580" y2="200" stroke="#94a3b8" stroke-width="1.5"/>
+      <line x1="60" y1="30" x2="60" y2="200" stroke="#94a3b8" stroke-width="1.5"/>
+      <text x="320" y="230" font-size="11" fill="#64748b" text-anchor="middle">TTL remaining (decreasing →)</text>
+      <text x="22" y="115" font-size="11" fill="#64748b" text-anchor="middle" transform="rotate(-90,22,115)">P(early refresh)</text>
+      <!-- X-axis labels -->
+      <text x="60" y="215" font-size="10" fill="#94a3b8" text-anchor="middle">TTL</text>
+      <text x="580" y="215" font-size="10" fill="#94a3b8" text-anchor="middle">0</text>
+      <text x="320" y="215" font-size="10" fill="#94a3b8" text-anchor="middle">TTL/2</text>
+      <!-- Y-axis labels -->
+      <text x="50" y="204" font-size="10" fill="#94a3b8" text-anchor="end">0</text>
+      <text x="50" y="35" font-size="10" fill="#94a3b8" text-anchor="end">1</text>
+      <text x="50" y="118" font-size="10" fill="#94a3b8" text-anchor="end">.5</text>
+      <!-- Dashed guide lines -->
+      <line x1="60" y1="115" x2="580" y2="115" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4,3"/>
+      <line x1="320" y1="30" x2="320" y2="200" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4,3"/>
+      <!-- XFetch curve (beta=1.0, approximated as exponential rise from left to right) -->
+      <!-- Points approximate P = exp(-delta/(beta * remaining)), as remaining → 0, P → 1 -->
+      <polyline points="60,198 80,196 100,194 130,190 160,183 190,173 220,160 250,143 280,122 310,98 340,72 370,46 400,34 430,32 460,31 490,30 520,30 550,30 580,30"
+        fill="none" stroke="#2563eb" stroke-width="2.5"/>
+      <!-- Shade under curve -->
+      <polygon points="60,198 80,196 100,194 130,190 160,183 190,173 220,160 250,143 280,122 310,98 340,72 370,46 400,34 430,32 460,31 490,30 520,30 550,30 580,30 580,200 60,200"
+        fill="#dbeafe" fill-opacity="0.4"/>
+      <!-- Annotations -->
+      <text x="100" y="178" font-size="10" fill="#94a3b8">Low probability</text>
+      <text x="100" y="190" font-size="10" fill="#94a3b8">of early refresh</text>
+      <text x="440" y="55" font-size="10" fill="#1d4ed8" font-weight="700">High probability</text>
+      <text x="440" y="67" font-size="10" fill="#1d4ed8" font-weight="700">near expiry</text>
+      <!-- Arrow pointing to high prob zone -->
+      <line x1="438" y1="70" x2="418" y2="50" stroke="#1d4ed8" stroke-width="1.5" marker-end="url(#a2)"/>
+      <!-- Formula -->
+      <rect x="195" y="15" width="250" height="28" rx="6" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.2"/>
+      <text x="320" y="34" font-size="11" fill="#6d28d9" text-anchor="middle">P = exp(−δ / β × ttl_remaining)</text>
+    </svg>
+    <p class="caption">As TTL approaches zero, XFetch probability of early refresh approaches 1 — requests self-distribute the refresh load without coordination.</p>
+  </div>
+
+  <div class="callout callout-warn">
+    <strong>Cold-Start Thundering Herd:</strong> When a cache server restarts empty (after crash, deployment, or scale-out), 100% of requests miss until warm. Mitigation: pre-warm by replaying hot keys before routing live traffic, restore from Redis RDB/AOF, or use circuit breakers to shed load during the warmup window.
+  </div>
+</section>
+
+<!-- SECTION 10 -->
+<section id="s10">
+  <h2 class="section-title"><span class="num">10</span> 🏭 Real-World System Examples</h2>
+  <div class="table-wrap">
+    <table>
+      <tr><th>System</th><th>How This Concept Applies</th><th>Notes</th></tr>
+      <tr>
+        <td><strong>Facebook / Meta</strong></td>
+        <td>Uses lease mechanism (similar to mutex) for L2 cache misses; probabilistic expiry for L1</td>
+        <td>"Thundering herd" terminology originates from their NSDI 2013 Memcache paper</td>
+      </tr>
+      <tr>
+        <td><strong>Reddit</strong></td>
+        <td>Suffered cache stampedes on viral post pages; addressed with coalesced refreshes and background warming</td>
+        <td>Especially severe during AMAs and front-page events</td>
+      </tr>
+      <tr>
+        <td><strong>Cloudflare CDN</strong></td>
+        <td>Stale-while-revalidate natively at edge; single background revalidation per PoP</td>
+        <td>Avoids stampede without touching origin servers</td>
+      </tr>
+      <tr>
+        <td><strong>Redis (app layer)</strong></td>
+        <td>SETNX + EX pattern is the canonical Redis stampede prevention implementation</td>
+        <td>Must use NX + EX atomically — separate SETNX + EXPIRE is not atomic (race window)</td>
+      </tr>
+      <tr>
+        <td><strong>Varnish Cache</strong></td>
+        <td>Built-in "grace mode" serves stale content during origin fetch</td>
+        <td>Configurable via VCL; effectively stale-while-revalidate at reverse proxy layer</td>
+      </tr>
+      <tr>
+        <td><strong>DoorDash</strong></td>
+        <td>Restaurant menu cache uses TTL jitter to spread expirations across lunch/dinner peak windows</td>
+        <td>Predictable traffic spikes make jitter especially effective here</td>
+      </tr>
+    </table>
+  </div>
+</section>
+
+<!-- SECTION 11 -->
+<section id="s11">
+  <h2 class="section-title"><span class="num">11</span> ⚖️ Trade-offs</h2>
+  <div class="table-wrap">
+    <table>
+      <tr><th>✅ Benefit</th><th>❌ Cost / Limitation</th></tr>
+      <tr>
+        <td><span class="benefit">XFetch: zero coordination, self-distributing</span></td>
+        <td><span class="cost">Serves slightly stale data more often; beta tuning requires empirical calibration</span></td>
+      </tr>
+      <tr>
+        <td><span class="benefit">Mutex: at-most-one DB fetch, waiting clients get fresh data</span></td>
+        <td><span class="cost">Lock holder failure blocks refreshes; waiting adds latency; requires distributed lock infra</span></td>
+      </tr>
+      <tr>
+        <td><span class="benefit">Stale-while-revalidate: zero added client latency, single background fetch</span></td>
+        <td><span class="cost">Not suitable for strongly consistent data (balances, inventory); stale window may be unacceptable</span></td>
+      </tr>
+      <tr>
+        <td><span class="benefit">TTL jitter: trivial to implement, zero read-path overhead</span></td>
+        <td><span class="cost">Only helps for batch-loaded keys; doesn't prevent a single viral hot key from stampeding</span></td>
+      </tr>
+      <tr>
+        <td><span class="benefit">Background refresh: read path never sees a miss for warmed keys</span></td>
+        <td><span class="cost">Requires separate process; wasted resources on unpopular keys; misses unexpected viral content</span></td>
+      </tr>
+    </table>
+  </div>
+</section>
+
+<!-- SECTION 12 -->
+<section id="s12">
+  <h2 class="section-title"><span class="num">12</span> 🎯 Interview Application</h2>
+  <h3>Trigger Phrases</h3>
+  <ul style="margin:0 0 16px 20px;font-size:14.5px;line-height:1.7;">
+    <li>"What happens when your cache expires for a popular item?"</li>
+    <li>"How do you handle a celebrity post or viral content in your cache layer?"</li>
+    <li>"Your cache just restarted — walk me through what happens to traffic."</li>
+    <li>"How would you prevent your DB from being overwhelmed if the cache fails?"</li>
+  </ul>
+  <h3>What You Say / Do</h3>
+  <p>In the deep-dive or trade-off discussion phase, proactively raise stampede as a failure mode: <em>"One thing I want to address is cache stampede — if this key is hot and expires, we could see a thundering herd to the DB. Here's how I'd prevent that…"</em> Then propose the appropriate mitigation based on staleness tolerance: XFetch or stale-while-revalidate for read-heavy social/content systems; mutex for inventory or pricing where staleness is costly.</p>
+  <div class="tradeoff-box">
+    "If we use a hard TTL, we get simplicity, but we pay with potential stampedes on hot keys. For this system, I'd use probabilistic early expiration because we can tolerate a few seconds of staleness and we want zero coordination overhead at scale."
+  </div>
+</section>
+
+<!-- SECTION 13 -->
+<section id="s13">
+  <h2 class="section-title"><span class="num">13</span> ⚠️ Common Misconceptions &amp; Gotchas</h2>
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><strong>Misconception:</strong>&nbsp;Cache stampede only happens when the cache server is down.</div>
+    <div class="right"><span class="icon">✅</span><strong>Reality:</strong>&nbsp;The most common cause is normal TTL expiration of a hot key. The cache is working perfectly — the stampede is caused by the expiry event itself, not a cache failure.</div>
+  </div>
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><strong>Misconception:</strong>&nbsp;Setting a longer TTL prevents stampedes.</div>
+    <div class="right"><span class="icon">✅</span><strong>Reality:</strong>&nbsp;A longer TTL delays the stampede but doesn't prevent it. When the key eventually expires, the same thundering herd occurs. Jitter, coalescing, or probabilistic expiry are the correct fixes.</div>
+  </div>
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><strong>Misconception:</strong>&nbsp;A mutex lock around cache miss handling is sufficient on its own.</div>
+    <div class="right"><span class="icon">✅</span><strong>Reality:</strong>&nbsp;A mutex without a TTL is a time bomb. If the lock holder crashes between acquiring the lock and writing to cache, the lock is never released and all future requests for that key are permanently serialized or blocked. Always set a lock expiry.</div>
+  </div>
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><strong>Misconception:</strong>&nbsp;Stale-while-revalidate causes unacceptable consistency problems.</div>
+    <div class="right"><span class="icon">✅</span><strong>Reality:</strong>&nbsp;Staleness is acceptable in many real systems — social feed rankings, product listings, news headlines. The key question is the staleness window tolerance, not whether any staleness exists.</div>
+  </div>
+</section>
+
+<!-- SECTION 14 -->
+<section id="s14">
+  <h2 class="section-title"><span class="num">14</span> 🔗 Relationships to Other Concepts</h2>
+  <div class="connections">
+    <div class="conn-card">
+      <span class="conn-icon">⬆️</span>
+      <div><div class="conn-label">Builds on</div>5.4 Eviction Policies (TTL is the trigger mechanism for stampedes) and 5.5 Cache Consistency &amp; Invalidation (stampede is a consistency failure at the expiry boundary)</div>
+    </div>
+    <div class="conn-card">
+      <span class="conn-icon">➡️</span>
+      <div><div class="conn-label">Enables</div>5.7 Hot Key Problem and Mitigation — hot keys are the subset most vulnerable to stampede; understanding stampede is prerequisite to understanding hot key mitigations at scale</div>
+    </div>
+    <div class="conn-card">
+      <span class="conn-icon">⚡</span>
+      <div><div class="conn-label">Tension with</div>Strong consistency requirements — stale-while-revalidate and probabilistic expiry both serve data that may be slightly outdated, incompatible with systems requiring linearizable reads (financial balances, inventory reservation)</div>
+    </div>
+    <div class="conn-card">
+      <span class="conn-icon">🔁</span>
+      <div><div class="conn-label">Also related to</div>19.2 Jitter in Fault Tolerance — jitter breaks synchronized retry storms by the same mechanism that jitter breaks synchronized cache expiry; the same insight applies in both contexts</div>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 15 -->
+<section id="s15">
+  <h2 class="section-title"><span class="num">15</span> 🧪 Self-Check Quiz</h2>
+  <div class="callout callout-quote">Answer out loud without looking. If you hesitate, revisit the indicated section.</div>
+
+  <div class="quiz-item" onclick="toggleQuiz(this)">
+    <div class="quiz-q">
+      <span class="quiz-num">1</span>
+      <span class="qtext">What is cache stampede, and what specific conditions make it likely to occur?</span>
+      <span class="quiz-toggle">▼ hint</span>
+    </div>
+    <div class="quiz-hint">💡 Think through your answer before expanding — if you hesitate, revisit Section 5 (Core Definition). Key elements: hot key, TTL expiry, concurrency, simultaneous miss.</div>
+  </div>
+
+  <div class="quiz-item" onclick="toggleQuiz(this)">
+    <div class="quiz-q">
+      <span class="quiz-num">2</span>
+      <span class="qtext">You're designing a read-heavy product catalog that can tolerate up to 5 seconds of stale data. Which stampede mitigation would you choose and why?</span>
+      <span class="quiz-toggle">▼ hint</span>
+    </div>
+    <div class="quiz-hint">💡 Consider: coordination overhead, implementation complexity, and staleness tolerance. Revisit Section 9 mitigations if needed. Multiple correct answers exist — justify your choice.</div>
+  </div>
+
+  <div class="quiz-item" onclick="toggleQuiz(this)">
+    <div class="quiz-q">
+      <span class="quiz-num">3</span>
+      <span class="qtext">What is the specific failure mode of a mutex-based stampede prevention that can cause worse behavior than having no mitigation at all?</span>
+      <span class="quiz-toggle">▼ hint</span>
+    </div>
+    <div class="quiz-hint">💡 Think about what happens when the lock holder crashes mid-refresh and the lock has no TTL. Revisit Section 9 Mitigation 3 (Mutex / Request Coalescing).</div>
+  </div>
+
+  <div class="quiz-item" onclick="toggleQuiz(this)">
+    <div class="quiz-q">
+      <span class="quiz-num">4</span>
+      <span class="qtext">Name a real production system that uses stale-while-revalidate and explain exactly how it prevents cache stampede at the CDN edge.</span>
+      <span class="quiz-toggle">▼ hint</span>
+    </div>
+    <div class="quiz-hint">💡 Revisit Section 10 if you can't name a concrete system. The answer should mention a specific product (Cloudflare, Varnish, Nginx) and describe the serve-stale + async-revalidate mechanism.</div>
+  </div>
+
+  <div class="quiz-item" onclick="toggleQuiz(this)">
+    <div class="quiz-q">
+      <span class="quiz-num">5</span>
+      <span class="qtext">A batch job loads 50,000 product records into Redis at startup with TTL = 1 hour. One hour later, the system receives a stampede. What was the root cause and what single change at write time would have prevented it?</span>
+      <span class="quiz-toggle">▼ hint</span>
+    </div>
+    <div class="quiz-hint">💡 This is the batch-load variant. All 50k keys expire at the same instant. Revisit the TTL Jitter mechanism in Section 9 — one-line fix at write time.</div>
+  </div>
+</section>
+
+<!-- SECTION 16 -->
+<section id="s16">
+  <h2 class="section-title"><span class="num">16</span> 📚 Further Reading</h2>
+  <ul class="reading-list" id="reading-list">
+    <li><div class="cb" onclick="toggleCheck(this)"></div><span class="rtext"><strong>"Scaling Memcache at Facebook"</strong> — Nishtala et al., NSDI 2013. The paper that coined "thundering herd" in caching and introduced the lease mechanism. Essential reading.</span></li>
+    <li><div class="cb" onclick="toggleCheck(this)"></div><span class="rtext"><strong>"XFetch: Optimal Probabilistic Cache Stampede Prevention"</strong> — Vattani, Chierichetti, Lowenstein (2015). Mathematical derivation of the algorithm behind probabilistic early expiration.</span></li>
+    <li><div class="cb" onclick="toggleCheck(this)"></div><span class="rtext"><strong>DDIA Chapter 11</strong> — Designing Data-Intensive Applications (Kleppmann). Covers backpressure and thundering herd in stream processing context.</span></li>
+    <li><div class="cb" onclick="toggleCheck(this)"></div><span class="rtext"><strong>Cloudflare Blog: "How CDN uses stale-while-revalidate"</strong> — cloudflare.com/blog. Practical CDN-layer implementation walkthrough.</span></li>
+    <li><div class="cb" onclick="toggleCheck(this)"></div><span class="rtext"><strong>Redis documentation: "Patterns — Distributed Locks"</strong> — redis.io/docs. Canonical SETNX + EX mutex pattern with failure analysis.</span></li>
+  </ul>
+</section>
+
+<!-- SECTION 17 -->
+<section id="s17">
+  <h2 class="section-title"><span class="num">17</span> ✍️ My Notes</h2>
+  <textarea class="notes-area" placeholder="Personal observations, things that confused me, analogies that helped. This is saved in your browser only."></textarea>
+</section>
+
+</article>
+</main>
+
+<script>
+  // Checklist toggle
+  function toggleCheck(cb) {
+    const li = cb.closest('li');
+    li.classList.toggle('checked');
+    saveState();
+  }
+
+  // Phase card toggle
+  function togglePhase(header) {
+    header.closest('.phase-card').classList.toggle('open');
+  }
+
+  // Quiz toggle
+  function toggleQuiz(item) {
+    item.classList.toggle('open');
+    const t = item.querySelector('.quiz-toggle');
+    if (t) t.textContent = item.classList.contains('open') ? '▲ hide' : '▼ hint';
+  }
+
+  // TOC active tracking
+  const sections = document.querySelectorAll('section[id]');
+  const tocLinks = document.querySelectorAll('#toc nav a');
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        tocLinks.forEach(l => l.classList.remove('active'));
+        const active = document.querySelector(`#toc nav a[href="#${e.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+  sections.forEach(s => observer.observe(s));
+
+  // Persist checklist state in localStorage
+  function saveState() {
+    const state = {};
+    document.querySelectorAll('.checklist li, .reading-list li').forEach((li, i) => {
+      state['li_' + i] = li.classList.contains('checked');
+    });
+    try { localStorage.setItem('5.6-state', JSON.stringify(state)); } catch(e) {}
+  }
+  function loadState() {
+    try {
+      const state = JSON.parse(localStorage.getItem('5.6-state') || '{}');
+      document.querySelectorAll('.checklist li, .reading-list li').forEach((li, i) => {
+        if (state['li_' + i]) li.classList.add('checked');
+      });
+    } catch(e) {}
+  }
+  // Persist notes
+  const notesArea = document.querySelector('.notes-area');
+  if (notesArea) {
+    try { notesArea.value = localStorage.getItem('5.6-notes') || ''; } catch(e) {}
+    notesArea.addEventListener('input', () => {
+      try { localStorage.setItem('5.6-notes', notesArea.value); } catch(e) {}
+    });
+  }
+  loadState();
+</script>
+</body>
+</html>
