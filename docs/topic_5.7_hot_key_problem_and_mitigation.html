@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.7 Hot Key Problem and Mitigation</title>
+<style>
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface-alt: #f3f2ef;
+    --border: #e5e3de; --text: #1a1917; --text-muted: #6b6861;
+    --accent: #2563eb; --accent-light: #dbeafe;
+    --green: #16a34a; --green-light: #dcfce7;
+    --red: #dc2626; --red-light: #fee2e2;
+    --yellow: #d97706; --yellow-light: #fef3c7;
+    --purple: #7c3aed; --purple-light: #ede9fe;
+    --orange: #ea580c; --orange-light: #ffedd5;
+    --code-bg: #1e1e2e; --code-text: #cdd6f4;
+    --sidebar-w: 240px; --content-max: 820px;
+    font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; }
+  #toc { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0 48px; z-index: 100; }
+  #toc-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  #toc-header .phase-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-bottom: 6px; }
+  #toc-header h2 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  #toc nav a { display: block; padding: 5px 16px 5px 20px; font-size: 12.5px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+  main { margin-left: var(--sidebar-w); padding: 48px 48px 96px; max-width: calc(var(--sidebar-w) + var(--content-max) + 96px); width: 100%; }
+  article { max-width: var(--content-max); }
+  .doc-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 2px solid var(--border); }
+  .doc-header .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+  .tag-phase { background: var(--accent-light); color: var(--accent); }
+  .tag-topic { background: var(--purple-light); color: var(--purple); }
+  .tag-date  { background: var(--surface-alt);  color: var(--text-muted); }
+  .doc-header h1 { font-size: 30px; font-weight: 800; line-height: 1.25; letter-spacing: -.02em; color: var(--text); }
+  section { margin-bottom: 52px; scroll-margin-top: 32px; }
+  h2.section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -.01em; }
+  h2.section-title .num { font-size: 11px; font-weight: 800; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; letter-spacing: .04em; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 24px 0 10px; }
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+  code { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-family: "SF Mono","Fira Code",Menlo,monospace; font-size: 12.5px; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 14px; border-left: 3px solid; }
+  .callout-goal  { background: var(--accent-light); border-color: var(--accent); color: #1e40af; }
+  .callout-tip   { background: var(--yellow-light); border-color: var(--yellow); color: #92400e; }
+  .callout-warn  { background: var(--red-light); border-color: var(--red); color: #7f1d1d; }
+  .callout-quote { background: var(--surface-alt);  border-color: var(--border); color: var(--text-muted); font-style: italic; }
+  .cheatsheet { background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 24px 28px; font-family: "SF Mono","Fira Code","Cascadia Code",Menlo,monospace; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-x: auto; margin-top: 16px; }
+  .cheatsheet .label { color: #cba6f7; font-weight: 700; letter-spacing: .08em; display: block; margin-top: 18px; margin-bottom: 4px; border-bottom: 1px solid #313244; padding-bottom: 3px; }
+  .cheatsheet .label:first-child { margin-top: 0; }
+  .diagram-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 16px 14px; margin: 20px 0 28px; overflow-x: auto; }
+  .diagram-wrap .diagram-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); margin-bottom: 12px; }
+  .diagram-wrap p.caption { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 10px; margin-bottom: 0; font-style: italic; }
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; font-size: 14.5px; line-height: 1.55; }
+  .checklist li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 2px; background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .checklist li.checked .cb { background: var(--green); border-color: var(--green); }
+  .checklist li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .checklist li.checked .text { color: var(--text-muted); text-decoration: line-through; }
+  .phase-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
+  .phase-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; cursor: pointer; user-select: none; background: var(--surface-alt); }
+  .phase-header:hover { background: var(--border); }
+  .phase-label { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+  .phase-badge { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 2px 8px; border-radius: 20px; }
+  .ph1 { background: #dbeafe; color: #1d4ed8; } .ph2 { background: #fce7f3; color: #9d174d; }
+  .ph3 { background: #d1fae5; color: #065f46; } .ph4 { background: #fef3c7; color: #92400e; }
+  .phase-chevron { font-size: 12px; color: var(--text-muted); transition: transform .2s; }
+  .phase-card.open .phase-chevron { transform: rotate(180deg); }
+  .phase-body { display: none; padding: 16px 20px 20px; }
+  .phase-card.open .phase-body { display: block; }
+  .phase-goal { font-size: 12.5px; color: var(--text-muted); font-style: italic; margin-bottom: 12px; }
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: var(--surface-alt); padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.5; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+  .misconception { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .misconception .wrong { background: var(--red-light); padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; }
+  .misconception .right { padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; color: #065f46; background: var(--green-light); }
+  .misconception .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .quiz-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .quiz-q { padding: 14px 18px; font-size: 14.5px; font-weight: 600; cursor: pointer; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .quiz-q:hover { background: var(--surface-alt); }
+  .quiz-num { flex-shrink: 0; width: 24px; height: 24px; background: var(--accent); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; margin-top: 1px; }
+  .quiz-q .qtext { flex: 1; }
+  .quiz-toggle { font-size: 11px; color: var(--text-muted); flex-shrink: 0; margin-top: 3px; }
+  .quiz-hint { display: none; padding: 10px 18px 14px; font-size: 13px; color: #92400e; background: var(--yellow-light); border-top: 1px solid var(--border); }
+  .quiz-item.open .quiz-hint { display: block; }
+  .reading-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .reading-list li { display: flex; align-items: flex-start; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; font-size: 14px; }
+  .reading-list li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 1px; cursor: pointer; background: var(--surface); display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .reading-list li.checked .cb { background: var(--green); border-color: var(--green); }
+  .reading-list li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .reading-list li.checked .rtext { color: var(--text-muted); text-decoration: line-through; }
+  .notes-area { width: 100%; min-height: 160px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: inherit; font-size: 14px; color: var(--text); resize: vertical; line-height: 1.6; }
+  .notes-area:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .focus-list { list-style: none; display: flex; flex-direction: column; gap: 14px; }
+  .focus-list li { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14.5px; line-height: 1.6; }
+  .focus-list li strong { color: var(--accent); display: block; margin-bottom: 4px; }
+  .connections { display: flex; flex-direction: column; gap: 12px; }
+  .conn-card { display: flex; align-items: flex-start; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14px; }
+  .conn-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .conn-label { font-weight: 700; margin-bottom: 3px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .tradeoff-box { background: var(--surface-alt); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 14px 18px; font-size: 14px; font-style: italic; color: var(--text); margin-top: 14px; }
+  .mitigation-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+  .mitigation-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; font-size: 14px; }
+  .mitigation-card h4 { font-size: 13px; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .mitigation-card .badge { font-size: 10px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; }
+  .badge-green { background: var(--green-light); color: var(--green); }
+  .badge-yellow { background: var(--yellow-light); color: var(--yellow); }
+  .badge-red { background: var(--red-light); color: var(--red); }
+  .badge-blue { background: var(--accent-light); color: var(--accent); }
+  @media (max-width: 900px) { #toc { display: none; } main { margin-left: 0; padding: 24px 20px 60px; } .mitigation-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<aside id="toc">
+  <div id="toc-header">
+    <div class="phase-tag">Phase B — Scalability</div>
+    <h2>5.7 Hot Key Problem &amp; Mitigation</h2>
+  </div>
+  <nav>
+    <a href="#s0">🗺️ Topic Overview</a>
+    <a href="#s1">🎯 Goal</a>
+    <a href="#s2">✅ Mastery</a>
+    <a href="#s3">🗓️ Study Phases</a>
+    <a href="#s4">📋 Cheatsheet</a>
+    <a href="#s5">🧠 Core Definition</a>
+    <a href="#s6">📦 Core Concepts</a>
+    <a href="#s7">🔍 First Principles</a>
+    <a href="#s8">🗺️ Mental Models</a>
+    <a href="#s9">⚙️ How It Works</a>
+    <a href="#s10">🏭 Real-World Examples</a>
+    <a href="#s11">⚖️ Trade-offs</a>
+    <a href="#s12">🎯 Interview Application</a>
+    <a href="#s13">⚠️ Misconceptions</a>
+    <a href="#s14">🔗 Relationships</a>
+    <a href="#s15">🧪 Self-Check Quiz</a>
+    <a href="#s16">📚 Further Reading</a>
+    <a href="#s17">✍️ My Notes</a>
+  </nav>
+</aside>
+
+<main>
+<article>
+
+<!-- HEADER -->
+<div class="doc-header">
+  <div class="meta">
+    <span class="tag tag-phase">⚡ Phase B — Scalability</span>
+    <span class="tag tag-topic">⚡ Topic 5 — Caching Systems</span>
+    <span class="tag tag-date">📅 2026-06-12</span>
+  </div>
+  <h1>5.7 Hot Key Problem &amp; Mitigation</h1>
+</div>
+
+<!-- SECTION 0 -->
+<section id="s0">
+  <h2 class="section-title"><span class="num">00</span> 🗺️ Topic Overview</h2>
+  <p>The hot key problem occurs when a small number of cache or data store keys attract a disproportionately large share of all traffic — saturating the single node responsible for those keys while the rest of the cluster sits idle. This is a <strong>concentration problem</strong>, not a capacity problem: adding more nodes to the cluster doesn't help because the hot key always hashes to the same shard.</p>
+  <p>The critical skill is distinguishing <em>hot reads</em> from <em>hot writes</em> and applying the right mitigation at the right layer — from local in-process caches to sharded counters and request coalescing.</p>
+
+  <!-- DIAGRAM 1: Hot Key Formation — The Concentration Problem -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">📊 Diagram 1 — Hot Key: Concentration vs. Uniform Load</div>
+    <svg viewBox="0 0 760 260" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:760px;display:block;margin:0 auto;" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif">
+      <!-- Left side: uniform -->
+      <text x="140" y="22" text-anchor="middle" font-size="12" font-weight="700" fill="#6b6861" letter-spacing=".05em">UNIFORM LOAD (healthy)</text>
+      <!-- 5 nodes, uniform traffic bars -->
+      <rect x="40"  y="60" width="44" height="150" rx="6" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <rect x="95"  y="60" width="44" height="150" rx="6" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <rect x="150" y="60" width="44" height="150" rx="6" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <rect x="205" y="60" width="44" height="150" rx="6" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <!-- traffic fill uniform ~50% -->
+      <rect x="40"  y="115" width="44" height="95" rx="4" fill="#3b5bdb" opacity=".7"/>
+      <rect x="95"  y="120" width="44" height="90" rx="4" fill="#3b5bdb" opacity=".7"/>
+      <rect x="150" y="112" width="44" height="98" rx="4" fill="#3b5bdb" opacity=".7"/>
+      <rect x="205" y="118" width="44" height="92" rx="4" fill="#3b5bdb" opacity=".7"/>
+      <!-- node labels -->
+      <text x="62"  y="225" text-anchor="middle" font-size="10.5" fill="#6b6861">N1</text>
+      <text x="117" y="225" text-anchor="middle" font-size="10.5" fill="#6b6861">N2</text>
+      <text x="172" y="225" text-anchor="middle" font-size="10.5" fill="#6b6861">N3</text>
+      <text x="227" y="225" text-anchor="middle" font-size="10.5" fill="#6b6861">N4</text>
+      <text x="140" y="248" text-anchor="middle" font-size="11" fill="#16a34a" font-weight="600">~50% utilization each</text>
+
+      <!-- Divider -->
+      <line x1="380" y1="30" x2="380" y2="240" stroke="#e5e3de" stroke-width="1.5" stroke-dasharray="5,4"/>
+
+      <!-- Right side: hot key -->
+      <text x="590" y="22" text-anchor="middle" font-size="12" font-weight="700" fill="#6b6861" letter-spacing=".05em">HOT KEY (problem)</text>
+      <rect x="475" y="60" width="44" height="150" rx="6" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <rect x="530" y="60" width="44" height="150" rx="6" fill="#fee2e2" stroke="#dc2626" stroke-width="2"/>
+      <rect x="585" y="60" width="44" height="150" rx="6" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <rect x="640" y="60" width="44" height="150" rx="6" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <!-- traffic fill: N2 overloaded, others ~10% -->
+      <rect x="475" y="195" width="44" height="15" rx="3" fill="#3b5bdb" opacity=".5"/>
+      <rect x="530" y="60" width="44" height="150" rx="4" fill="#dc2626" opacity=".8"/>
+      <rect x="585" y="195" width="44" height="15" rx="3" fill="#3b5bdb" opacity=".5"/>
+      <rect x="640" y="195" width="44" height="15" rx="3" fill="#3b5bdb" opacity=".5"/>
+      <!-- flame on N2 -->
+      <text x="552" y="50" text-anchor="middle" font-size="18">🔥</text>
+      <!-- node labels -->
+      <text x="497" y="225" text-anchor="middle" font-size="10.5" fill="#6b6861">N1</text>
+      <text x="552" y="225" text-anchor="middle" font-size="10.5" fill="#dc2626" font-weight="700">N2</text>
+      <text x="607" y="225" text-anchor="middle" font-size="10.5" fill="#6b6861">N3</text>
+      <text x="662" y="225" text-anchor="middle" font-size="10.5" fill="#6b6861">N4</text>
+      <!-- annotation arrows pointing at N2 -->
+      <line x1="552" y1="75" x2="490" y2="55" stroke="#dc2626" stroke-width="1.2" stroke-dasharray="4,3"/>
+      <text x="435" y="52" font-size="11" fill="#dc2626" font-weight="600">product:42</text>
+      <text x="435" y="66" font-size="11" fill="#dc2626">all traffic</text>
+      <text x="590" y="248" text-anchor="middle" font-size="11" fill="#dc2626" font-weight="600">N2 saturated; N1,N3,N4 idle</text>
+    </svg>
+    <p class="caption">Consistent hashing distributes key <em>space</em> evenly — but if one key gets 90% of requests, its node gets 90% of traffic. More nodes don't help.</p>
+  </div>
+
+  <ul class="focus-list">
+    <li><strong>1. Why consistent hashing alone doesn't solve it</strong>Consistent hashing distributes keys by name hash, not access frequency. A viral post always lands on one shard. Adding more shards doesn't change which shard <code>product:42</code> lands on.</li>
+    <li><strong>2. The three mitigation families</strong>Local L1 caching (eliminates network round-trips entirely), key replication (spreads reads across N copies), request coalescing (serializes concurrent fetches within a process). Each solves a different failure mode.</li>
+    <li><strong>3. Read vs. write asymmetry</strong>Hot reads are easy — replicate the value. Hot writes are hard — you cannot simply replicate a write target. Sharded counters and CRDT-based designs are required.</li>
+    <li><strong>4. Detection before mitigation</strong>Redis <code>OBJECT FREQ</code> + LFU eviction, <code>redis-cli --hotkeys</code>, DynamoDB Contributor Insights, client-side key-rate histograms.</li>
+    <li><strong>5. Freshness vs. load trade-off</strong>Every mitigation that adds a caching layer introduces a staleness window. The harder you push on load reduction, the more staleness you accept. Be explicit about this in every answer.</li>
+  </ul>
+</section>
+
+<!-- SECTION 1 -->
+<section id="s1">
+  <h2 class="section-title"><span class="num">01</span> 🎯 Goal of This Subtopic</h2>
+  <div class="callout callout-goal">
+    Be able to identify a hot key failure mode in a system design and propose a layered mitigation strategy that distinguishes between hot reads and hot writes. Understand the mechanism behind each mitigation — local caching, key replication, request coalescing, sharded counters — well enough to explain the consistency and complexity cost of each without notes.
+  </div>
+</section>
+
+<!-- SECTION 2 -->
+<section id="s2">
+  <h2 class="section-title"><span class="num">02</span> ✅ What Mastery Looks Like</h2>
+  <ul class="checklist" id="mastery-list">
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can explain why a hot key forms even in a well-sharded cluster and name two real scenarios that produce one (celebrity profile, flash-sale product)</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can describe at least three distinct mitigation strategies, when each is the right choice, and the cost of each</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can distinguish hot read keys from hot write keys and propose a different mitigation path for each</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can explain sharded counters from first principles: why they work, how they aggregate, and when eventual count consistency is acceptable</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can apply the mitigation decision in an interview: given a system requirement, choose and justify the right technique</span></li>
+  </ul>
+  <div class="callout callout-tip" style="margin-top:16px">💡 <strong>Rule of thumb:</strong> If you can teach it to someone else and field their follow-up questions, you've mastered it.</div>
+</section>
+
+<!-- SECTION 3 -->
+<section id="s3">
+  <h2 class="section-title"><span class="num">03</span> 🗓️ Study Phases to Achieve Mastery</h2>
+  <div class="phase-card open">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <span class="phase-label"><span class="phase-badge ph1">Phase 1</span> 📖 Acquire</span>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Read deeply enough that you could explain the concept without the doc.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text"><strong>DDIA Ch. 6</strong> — "Skewed Workloads and Relieving Hot Spots" (Kleppmann)</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text"><strong>Scaling Memcache at Facebook</strong> — Nishtala et al. (2013 NSDI) — lease mechanism for hot key mitigation</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text"><strong>ByteByteGo Newsletter</strong> — "How to Handle Hot Key Problem in Redis" — Alex Xu</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Read Sections 5–9 carefully; re-read Cheatsheet (Section 4) from memory after</span></li>
+      </ul>
+    </div>
+  </div>
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <span class="phase-label"><span class="phase-badge ph2">Phase 2</span> ✍️ Consolidate</span>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Verify you can reproduce the knowledge in your own words without looking.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Write out the Core Definition from memory, then compare</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Explain First Principles out loud — what was the root pain before this existed?</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Reconstruct How It Works step-by-step from memory for all four mitigations</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Restate each Trade-off row — if you can't name the cost, you don't own it yet</span></li>
+      </ul>
+    </div>
+  </div>
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <span class="phase-label"><span class="phase-badge ph3">Phase 3</span> 🔧 Apply</span>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Connect to real systems and simulate interview scenarios.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Go through Real-World Examples (Section 10) — verify each claim independently</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Practice Interview Application (Section 12) out loud — say the trigger phrases as if in a live interview</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Work through Misconceptions (Section 13) — explain why each misconception is wrong</span></li>
+      </ul>
+    </div>
+  </div>
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <span class="phase-label"><span class="phase-badge ph4">Phase 4</span> 🧪 Validate</span>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Confirm you actually own it, not just recognize it.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Answer every Self-Check Quiz question out loud without notes</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Recite the Cheatsheet from memory — if you can't, re-do Phase 2</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Tick off Mastery checklist items — only if you can demonstrate on demand</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Teach the concept to an imaginary interviewer for 2 minutes without hesitation</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 4 -->
+<section id="s4">
+  <h2 class="section-title"><span class="num">04</span> 📋 Cheatsheet</h2>
+  <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+
+  <!-- MINDMAP DIAGRAM -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">🧠 Concept Mindmap — Hot Key Problem &amp; Mitigation</div>
+    <svg viewBox="0 0 820 500" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:820px;display:block;margin:0 auto;" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif">
+      <!-- Central node -->
+      <ellipse cx="410" cy="250" rx="100" ry="42" fill="#a5d8ff" stroke="#1971c2" stroke-width="2.5"/>
+      <text x="410" y="245" font-size="13" font-weight="800" fill="#1971c2" text-anchor="middle">Hot Key</text>
+      <text x="410" y="261" font-size="11" fill="#1971c2" text-anchor="middle">Problem</text>
+
+      <!-- Branch 1: Why It Forms (top-left) -->
+      <line x1="325" y1="224" x2="205" y2="140" stroke="#3b5bdb" stroke-width="2"/>
+      <rect x="110" y="108" width="180" height="52" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="200" y="130" font-size="12" font-weight="700" fill="#3b5bdb" text-anchor="middle">Why It Forms</text>
+      <text x="200" y="147" font-size="11" fill="#3b5bdb" text-anchor="middle">Access freq ≠ key space</text>
+      <!-- leaves -->
+      <line x1="110" y1="134" x2="60" y2="100" stroke="#3b5bdb" stroke-width="1.2"/>
+      <rect x="0" y="82" width="130" height="36" rx="6" fill="#edf2ff" stroke="#3b5bdb" stroke-width="1"/>
+      <text x="65" y="98" font-size="10" fill="#3b5bdb" text-anchor="middle">Consistent hashing maps</text>
+      <text x="65" y="111" font-size="10" fill="#3b5bdb" text-anchor="middle">by name, not frequency</text>
+
+      <line x1="110" y1="148" x2="50" y2="168" stroke="#3b5bdb" stroke-width="1.2"/>
+      <rect x="0" y="152" width="120" height="36" rx="6" fill="#edf2ff" stroke="#3b5bdb" stroke-width="1"/>
+      <text x="60" y="168" font-size="10" fill="#3b5bdb" text-anchor="middle">Zipf's law: top 1%</text>
+      <text x="60" y="181" font-size="10" fill="#3b5bdb" text-anchor="middle">keys → 50%+ traffic</text>
+
+      <!-- Branch 2: Hot Read Mitigations (top-right) -->
+      <line x1="495" y1="224" x2="600" y2="140" stroke="#e67700" stroke-width="2"/>
+      <rect x="545" y="108" width="185" height="52" rx="8" fill="#ffd8a8" stroke="#e67700" stroke-width="1.5"/>
+      <text x="637" y="130" font-size="12" font-weight="700" fill="#e67700" text-anchor="middle">Hot Read Mitigations</text>
+      <text x="637" y="147" font-size="11" fill="#e67700" text-anchor="middle">Replicate, cache local, coalesce</text>
+      <!-- leaves -->
+      <line x1="730" y1="130" x2="775" y2="92" stroke="#e67700" stroke-width="1.2"/>
+      <rect x="685" y="68" width="130" height="40" rx="6" fill="#fff3e0" stroke="#e67700" stroke-width="1"/>
+      <text x="750" y="85" font-size="10" fill="#e67700" text-anchor="middle">Local L1 cache</text>
+      <text x="750" y="98" font-size="10" fill="#e67700" text-anchor="middle">TTL 1–5s per instance</text>
+
+      <line x1="730" y1="148" x2="775" y2="170" stroke="#e67700" stroke-width="1.2"/>
+      <rect x="682" y="153" width="130" height="40" rx="6" fill="#fff3e0" stroke="#e67700" stroke-width="1"/>
+      <text x="747" y="170" font-size="10" fill="#e67700" text-anchor="middle">Key replication</text>
+      <text x="747" y="183" font-size="10" fill="#e67700" text-anchor="middle">key:r0 … key:rN random</text>
+
+      <!-- Branch 3: Hot Write Mitigations (bottom-right) -->
+      <line x1="495" y1="276" x2="595" y2="358" stroke="#c92a2a" stroke-width="2"/>
+      <rect x="530" y="340" width="200" height="52" rx="8" fill="#ffc9c9" stroke="#c92a2a" stroke-width="1.5"/>
+      <text x="630" y="362" font-size="12" font-weight="700" fill="#c92a2a" text-anchor="middle">Hot Write Mitigations</text>
+      <text x="630" y="379" font-size="11" fill="#c92a2a" text-anchor="middle">Shard counters — never replicate</text>
+      <!-- leaves -->
+      <line x1="730" y1="362" x2="778" y2="336" stroke="#c92a2a" stroke-width="1.2"/>
+      <rect x="680" y="316" width="132" height="36" rx="6" fill="#fff1f1" stroke="#c92a2a" stroke-width="1"/>
+      <text x="746" y="331" font-size="10" fill="#c92a2a" text-anchor="middle">Write to shard:{rand(0,N)}</text>
+      <text x="746" y="344" font-size="10" fill="#c92a2a" text-anchor="middle">SUM all shards on read</text>
+
+      <line x1="730" y1="380" x2="778" y2="408" stroke="#c92a2a" stroke-width="1.2"/>
+      <rect x="680" y="393" width="132" height="36" rx="6" fill="#fff1f1" stroke="#c92a2a" stroke-width="1"/>
+      <text x="746" y="408" font-size="10" fill="#c92a2a" text-anchor="middle">YouTube: ~200 shards/</text>
+      <text x="746" y="421" font-size="10" fill="#c92a2a" text-anchor="middle">video for view counts</text>
+
+      <!-- Branch 4: Detection (bottom-left) -->
+      <line x1="325" y1="276" x2="210" y2="358" stroke="#0ca678" stroke-width="2"/>
+      <rect x="90" y="340" width="200" height="52" rx="8" fill="#c3fae8" stroke="#0ca678" stroke-width="1.5"/>
+      <text x="190" y="362" font-size="12" font-weight="700" fill="#0ca678" text-anchor="middle">Detection</text>
+      <text x="190" y="379" font-size="11" fill="#0ca678" text-anchor="middle">See it before it bites</text>
+      <!-- leaves -->
+      <line x1="90" y1="358" x2="42" y2="330" stroke="#0ca678" stroke-width="1.2"/>
+      <rect x="0" y="312" width="122" height="36" rx="6" fill="#e6fcf5" stroke="#0ca678" stroke-width="1"/>
+      <text x="61" y="327" font-size="10" fill="#0ca678" text-anchor="middle">Redis OBJECT FREQ</text>
+      <text x="61" y="340" font-size="10" fill="#0ca678" text-anchor="middle">+ --hotkeys (LFU mode)</text>
+
+      <line x1="90" y1="378" x2="40" y2="404" stroke="#0ca678" stroke-width="1.2"/>
+      <rect x="0" y="388" width="122" height="36" rx="6" fill="#e6fcf5" stroke="#0ca678" stroke-width="1"/>
+      <text x="61" y="403" font-size="10" fill="#0ca678" text-anchor="middle">DynamoDB Contributor</text>
+      <text x="61" y="416" font-size="10" fill="#0ca678" text-anchor="middle">Insights; client histograms</text>
+
+      <!-- Branch 5: Real Systems (bottom center) -->
+      <line x1="410" y1="292" x2="410" y2="382" stroke="#2f9e44" stroke-width="2"/>
+      <rect x="318" y="382" width="184" height="42" rx="8" fill="#b2f2bb" stroke="#2f9e44" stroke-width="1.5"/>
+      <text x="410" y="400" font-size="12" font-weight="700" fill="#2f9e44" text-anchor="middle">Real Systems</text>
+      <text x="410" y="415" font-size="11" fill="#2f9e44" text-anchor="middle">Twitter · Facebook · YouTube · DynamoDB</text>
+
+      <!-- Read vs Write rule callout -->
+      <rect x="295" y="442" width="230" height="42" rx="8" fill="#f8f9fa" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4,3"/>
+      <text x="410" y="460" font-size="10" fill="#495057" text-anchor="middle" font-style="italic">⚠️ Replication = hot read fix only</text>
+      <text x="410" y="475" font-size="10" fill="#495057" text-anchor="middle">Hot write → sharded counters, not replicas</text>
+    </svg>
+    <p class="caption">Radial mindmap: why hot keys form → hot read mitigations → hot write mitigations → detection → real systems</p>
+  </div>
+
+  <div class="cheatsheet">
+<span class="label">§ 1  WHY IT EXISTS</span>Distributed stores distribute key space evenly — not access frequency.
+A single viral key always hashes to one node regardless of cluster size.
+Adding more shards helps every OTHER key but not the hot one.
+The problem is concentration, not capacity — which is why horizontal
+scaling alone never fixes it. Access follows Zipf's law: top 1% of keys
+absorb 50%+ of traffic, saturating their shard while the rest sits idle.
+
+<span class="label">§ 2  WHAT EACH MITIGATION IS</span>Local L1   — each app instance caches hot keys in-process (Caffeine, 1–5s TTL).
+               Reduces shared cache load by factor of #app-instances.
+               Zero network cost on hit. Cost: per-instance staleness.
+Key replication — store as key:r0 … key:rN across N shards. Readers pick
+               random replica. Spreads read load N×. Cost: N× write fan-out.
+               READ-HEAVY ONLY — amplifies writes if key is write-heavy.
+Coalescing  — singleflight: only 1 goroutine/thread fetches; rest wait.
+               Limits origin fan-out to 1 per process. Doesn't help cross-process.
+Sharded counters — write to counter:key:shard:{rand(0,N)}. Read = SUM all N.
+               Distributes write load N× across shards. Count is eventually
+               consistent. Used by Facebook (likes), YouTube (views, ~200 shards).
+
+<span class="label">§ 3  THE 3 KEY DISTINCTIONS</span>1. Hot key vs. stampede: hot key is sustained overload on a warm key;
+   stampede is a transient spike from a synchronized expiry event.
+   Both can hit the same key simultaneously — different fixes.
+2. Read-heavy vs. write-heavy: determine this FIRST. Replication helps
+   reads; it multiplies write cost. Sharded counters help writes; O(N)
+   read aggregation is the trade-off.
+3. Per-process vs. cluster scope: coalescing (singleflight) only works
+   within one process. L1 cache + key replication are cluster-scope fixes.
+
+<span class="label">§ 4  USE / AVOID</span>Local L1:         read-heavy key, slight staleness OK, network RTT is bottleneck.
+Key replication:  pure read hotspot, write rate low relative to read rate.
+Coalescing:       stampede on cache miss within a single process.
+Sharded counters: hot write key (likes, views, inventory increments).
+AVOID replication on write-heavy keys — N× write amplification.
+AVOID sharded counters where strong consistency is required (financial
+  balances, inventory floor) — use locking or optimistic concurrency instead.
+
+<span class="label">§ 5  INTERVIEW TRIGGERS</span>-> "A single product is getting millions of hits during a flash sale."
+-> "Our cache node is saturated — adding more nodes didn't help."
+-> "How do you handle like counts on a viral post at 500k/min?"
+-> "A celebrity has 100M followers — how do you serve their profile reads?"
+
+<span class="label">§ 6  FTAC</span>F  "The hot key problem is a concentration issue: access patterns follow
+   Zipf's law, so a tiny fraction of keys absorbs the majority of traffic,
+   saturating the single node responsible for that key regardless of cluster size."
+T  "For read-heavy keys: local L1 cache (TTL 1–5s) reduces shared cache
+   load by #app-instances. Key replication spreads across N shards — but N×
+   write amplification. For write-heavy keys: sharded counters, write to
+   shard:{rand(0,N)}, sum on read — accepts eventual consistency."
+A  "Assuming this is a read-heavy catalog system with infrequent updates —"
+C  "Local L1 cache + key replication across 5 shards. Cost: up to 5s staleness
+   on L1; 5× write fan-out on replication. Acceptable for product catalog."
+
+<span class="label">§ 7  NUMBERS & GOTCHA</span>L1 TTL:           1–5s typical; 10–30s for pure read-only reference data
+Replication N:    3–10 replicas per hot read key (diminishing returns above 10)
+Shard count:      50–200 for high-write counters (YouTube: ~200 shards/video)
+Read aggregation cost: O(N) — cache the aggregated result to avoid per-request O(N)
+GOTCHA: Replicating a write-heavy key multiplies write cost N× and does
+  NOT reduce write load — always clarify read vs. write dominance first.
+  </div>
+</section>
+
+<!-- SECTION 5 -->
+<section id="s5">
+  <h2 class="section-title"><span class="num">05</span> 🧠 Core Definition</h2>
+  <p>A <strong>hot key</strong> is a single key in a cache or distributed data store that receives a disproportionately large share of traffic, saturating the node or shard responsible for it while leaving the rest of the cluster underutilized — a concentration problem that no amount of horizontal scaling can solve without targeted mitigation.</p>
+</section>
+
+<!-- SECTION 6 -->
+<section id="s6">
+  <h2 class="section-title"><span class="num">06</span> 📦 Core Concepts</h2>
+
+  <h3>Hot Key Formation</h3>
+  <p>A hot key forms when access patterns are skewed — a celebrity's profile, a trending news article, a flash-sale product, a real-time leaderboard entry. The key's name consistently hashes to the same node, so all requests funnel to one machine. This is distinct from cache stampede (5.6): the key is present and warm, but the node is overwhelmed by sheer request volume.</p>
+
+  <h3>Local (L1) In-Process Caching</h3>
+  <p>Each application instance maintains a small in-memory cache (Caffeine, Guava, or a simple HashMap with expiry) holding hot keys for 1–5 seconds. Requests are served from process memory, completely bypassing the shared cache tier. With 100 app servers, the shared cache receives at most ~1% of the traffic per server. Cost: per-instance memory footprint, and up to TTL seconds of staleness with no cross-instance invalidation path.</p>
+
+  <h3>Key Replication (Shard Cloning)</h3>
+  <p>Store the hot key under N differently-named keys — e.g., <code>product:42:r0</code> … <code>product:42:r9</code> — distributed across N shards. Readers pick a replica at random. Writers must invalidate or update all N copies. Spreads read load across shards. Only appropriate for read-dominated hot keys; for write-heavy keys, this amplifies the write cost N×.</p>
+
+  <h3>Request Coalescing (Singleflight)</h3>
+  <p>When multiple goroutines/threads request the same key simultaneously, only the first fetches from origin; the rest block and receive the same result. Go's <code>singleflight</code> and similar libraries implement this. Limits origin fan-out to one request per key per process, regardless of concurrent callers. Does not help across separate processes.</p>
+
+  <h3>Sharded Counters</h3>
+  <p>For hot write keys (likes, views, inventory), writes are distributed across N counter shards: <code>counter:post:42:shard:{rand(0,N-1)}</code>. Reads aggregate all N shards. The count is eventually consistent during the short aggregation window. Used by Facebook for reactions, YouTube for view counts (~200 shards per video at scale).</p>
+
+  <h3>Detection and Monitoring</h3>
+  <p>Redis: set eviction policy to <code>allkeys-lfu</code>, then run <code>redis-cli --hotkeys</code> or query <code>OBJECT FREQ key</code>. DynamoDB: enable Contributor Insights to surface top hot partition keys. Client-side: maintain a sliding window counter per key; alert when the top 1% of keys consume &gt;50% of traffic.</p>
+</section>
+
+<!-- SECTION 7 -->
+<section id="s7">
+  <h2 class="section-title"><span class="num">07</span> 🔍 First Principles — Why Does This Exist?</h2>
+
+  <!-- DIAGRAM 2: Zipf's Law — access skew visualization -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">📊 Diagram 2 — Zipf's Law: Access Distribution of Cache Keys</div>
+    <svg viewBox="0 0 720 260" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:720px;display:block;margin:0 auto;" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif">
+      <!-- Axes -->
+      <line x1="60" y1="220" x2="680" y2="220" stroke="#94a3b8" stroke-width="1.5"/>
+      <line x1="60" y1="30"  x2="60"  y2="220" stroke="#94a3b8" stroke-width="1.5"/>
+      <!-- Axis labels -->
+      <text x="370" y="248" text-anchor="middle" font-size="12" fill="#6b6861">Keys ranked by access frequency (rank 1 = most popular)</text>
+      <text x="20"  y="130" text-anchor="middle" font-size="12" fill="#6b6861" transform="rotate(-90,20,130)">Requests/sec</text>
+      <!-- Zipf curve -->
+      <path d="M 65,40 Q 100,55 140,90 Q 200,130 280,160 Q 380,185 500,200 Q 600,210 660,215" fill="none" stroke="#dc2626" stroke-width="2.5"/>
+      <!-- Hot zone shading -->
+      <path d="M 65,40 Q 100,55 140,90 L 140,220 L 65,220 Z" fill="#fee2e2" opacity=".5"/>
+      <text x="100" y="190" text-anchor="middle" font-size="11" fill="#dc2626" font-weight="700">🔥 Top 1%</text>
+      <text x="100" y="204" text-anchor="middle" font-size="11" fill="#dc2626">~50% traffic</text>
+      <!-- Long tail annotation -->
+      <text x="480" y="195" text-anchor="middle" font-size="11" fill="#6b6861">Long tail</text>
+      <text x="480" y="209" text-anchor="middle" font-size="11" fill="#6b6861">(most keys, little traffic)</text>
+      <!-- Y axis ticks -->
+      <line x1="56" y1="40" x2="64" y2="40" stroke="#94a3b8" stroke-width="1"/>
+      <text x="52" y="44" text-anchor="end" font-size="10.5" fill="#6b6861">High</text>
+      <line x1="56" y1="130" x2="64" y2="130" stroke="#94a3b8" stroke-width="1"/>
+      <text x="52" y="134" text-anchor="end" font-size="10.5" fill="#6b6861">Mid</text>
+      <!-- vertical guideline at ~top 1% -->
+      <line x1="140" y1="30" x2="140" y2="220" stroke="#dc2626" stroke-width="1" stroke-dasharray="4,3" opacity=".6"/>
+    </svg>
+    <p class="caption">Real access patterns follow a Zipf-like curve. The top 1% of keys absorbs 50%+ of traffic — the entire hot key problem flows from this shape.</p>
+  </div>
+
+  <p>Distributed caches and data stores distribute keys across nodes under one assumption: <em>access will be roughly uniform across keys</em>. Every sharding algorithm — consistent hashing, range partitioning, hash partitioning — is designed to distribute <em>key space</em> evenly, not <em>access frequency</em>.</p>
+  <p>In practice, access patterns follow a Zipf-like power law: a tiny fraction of keys (trending content, popular users, top products) accounts for the vast majority of traffic. When this happens, the node holding the hot key becomes a single-node bottleneck inside your distributed system. Adding more nodes doesn't help — the hot key always maps to one node.</p>
+  <p>The problem is not infrastructure scale; it is <em>concentration</em>. Every mitigation shares one design principle: break the concentration by introducing redirection, replication, or aggregation that spreads the load across multiple nodes — or eliminates remote calls entirely.</p>
+</section>
+
+<!-- SECTION 8 -->
+<section id="s8">
+  <h2 class="section-title"><span class="num">08</span> 🗺️ Mental Models</h2>
+
+  <h3>Model 1: The Superstar Cashier</h3>
+  <p>A supermarket has 20 checkout lanes. 18 lanes have zero customers. One lane has 500 people queued because a celebrity employee is working it. Adding more checkout lanes doesn't help the 500-person queue. You fix it by: (a) letting managers handle some transactions locally — local L1 cache; (b) cloning the celebrity's workflow across 10 lanes — key replication; (c) restructuring so no single cashier handles the singular resource — sharded counters. The failure mode is concentration, not capacity.</p>
+  <p><em>Where it breaks down:</em> The analogy doesn't capture the consistency cost — in a cache, "cloning" means keeping all clones in sync, which adds write overhead the supermarket model ignores.</p>
+
+  <h3>Model 2: Reads vs. Writes — Books vs. Bank Accounts</h3>
+  <p>A hot read key is like a very popular book at a library — the fix is to buy more copies (replicate). A hot write key is like a single shared bank account receiving thousands of simultaneous deposits — buying more copies doesn't help, because every copy needs to receive every write. The fix is to split the account into N sub-accounts and sum them on read (sharded counters). If you try to "replicate" a hot write key, you just amplify your write problem N-fold.</p>
+
+  <h3>Model 3: The Power Law is the Enemy</h3>
+  <p>Hot key problems are a manifestation of Zipf's law. The cure isn't a bigger node (vertical scaling); it's flattening the distribution by spreading load. Any mitigation that reduces a single node's load by a factor of N is equivalent to adding N× the capacity at that node — but without the hardware cost. However, flattening always adds latency, complexity, or staleness. You are trading one problem (saturation) for another (consistency lag, higher write amplification, or more complex code).</p>
+</section>
+
+<!-- SECTION 9 -->
+<section id="s9">
+  <h2 class="section-title"><span class="num">09</span> ⚙️ How It Works — Mechanics</h2>
+
+  <!-- DIAGRAM 3: Mitigation Decision Tree -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">📊 Diagram 3 — Hot Key Mitigation Decision Flow</div>
+    <svg viewBox="0 0 760 400" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:760px;display:block;margin:0 auto;" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif">
+      <defs>
+        <marker id="arrd" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+          <polygon points="0 0,8 3,0 6" fill="#64748b"/>
+        </marker>
+      </defs>
+      <!-- Start -->
+      <rect x="295" y="20" width="170" height="38" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="380" y="35" text-anchor="middle" font-size="13" font-weight="700" fill="#1e3a5f">Hot Key Detected</text>
+      <text x="380" y="51" text-anchor="middle" font-size="11.5" fill="#1e3a5f">Node utilization spike</text>
+      <line x1="380" y1="58" x2="380" y2="90" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrd)"/>
+
+      <!-- Decision: Read or Write? -->
+      <polygon points="380,90 480,120 380,150 280,120" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+      <text x="380" y="117" text-anchor="middle" font-size="12.5" font-weight="700" fill="#7c2d12">Read-heavy</text>
+      <text x="380" y="133" text-anchor="middle" font-size="12.5" font-weight="700" fill="#7c2d12">or Write-heavy?</text>
+
+      <!-- Read branch (left) -->
+      <line x1="280" y1="120" x2="160" y2="120" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrd)"/>
+      <text x="222" y="113" text-anchor="middle" font-size="11" fill="#16a34a" font-weight="700">READ</text>
+      <rect x="50" y="100" width="110" height="40" rx="7" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+      <text x="105" y="118" text-anchor="middle" font-size="12" font-weight="600" fill="#14532d">Read-Heavy</text>
+      <text x="105" y="132" text-anchor="middle" font-size="11" fill="#14532d">Mitigations ↓</text>
+
+      <!-- Read leaves -->
+      <line x1="105" y1="140" x2="80" y2="185" stroke="#64748b" stroke-width="1.2" marker-end="url(#arrd)"/>
+      <rect x="20" y="185" width="125" height="52" rx="7" fill="#f0fdf4" stroke="#16a34a" stroke-width="1"/>
+      <text x="82" y="202" text-anchor="middle" font-size="11.5" font-weight="700" fill="#14532d">Local L1 Cache</text>
+      <text x="82" y="217" text-anchor="middle" font-size="10.5" fill="#14532d">TTL 1–5s per</text>
+      <text x="82" y="230" text-anchor="middle" font-size="10.5" fill="#14532d">app instance</text>
+
+      <line x1="105" y1="140" x2="130" y2="185" stroke="#64748b" stroke-width="1.2" marker-end="url(#arrd)"/>
+      <rect x="80" y="185" width="125" height="52" rx="7" fill="#f0fdf4" stroke="#16a34a" stroke-width="1"/>
+      <text x="142" y="202" text-anchor="middle" font-size="11.5" font-weight="700" fill="#14532d">Key Replication</text>
+      <text x="142" y="217" text-anchor="middle" font-size="10.5" fill="#14532d">key:r0 … key:rN</text>
+      <text x="142" y="230" text-anchor="middle" font-size="10.5" fill="#14532d">random read</text>
+
+      <!-- Coalescing below -->
+      <line x1="105" y1="237" x2="105" y2="268" stroke="#64748b" stroke-width="1.2" marker-end="url(#arrd)"/>
+      <rect x="30" y="268" width="150" height="40" rx="7" fill="#f0fdf4" stroke="#16a34a" stroke-width="1"/>
+      <text x="105" y="283" text-anchor="middle" font-size="11.5" font-weight="700" fill="#14532d">Request Coalescing</text>
+      <text x="105" y="296" text-anchor="middle" font-size="10.5" fill="#14532d">singleflight (per process)</text>
+
+      <!-- Write branch (right) -->
+      <line x1="480" y1="120" x2="600" y2="120" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrd)"/>
+      <text x="538" y="113" text-anchor="middle" font-size="11" fill="#dc2626" font-weight="700">WRITE</text>
+      <rect x="600" y="100" width="110" height="40" rx="7" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5"/>
+      <text x="655" y="118" text-anchor="middle" font-size="12" font-weight="600" fill="#7f1d1d">Write-Heavy</text>
+      <text x="655" y="132" text-anchor="middle" font-size="11" fill="#7f1d1d">Mitigations ↓</text>
+
+      <!-- Write leaves -->
+      <line x1="655" y1="140" x2="620" y2="185" stroke="#64748b" stroke-width="1.2" marker-end="url(#arrd)"/>
+      <rect x="560" y="185" width="125" height="52" rx="7" fill="#fff1f2" stroke="#dc2626" stroke-width="1"/>
+      <text x="622" y="202" text-anchor="middle" font-size="11.5" font-weight="700" fill="#7f1d1d">Sharded Counters</text>
+      <text x="622" y="217" text-anchor="middle" font-size="10.5" fill="#7f1d1d">write to rand shard;</text>
+      <text x="622" y="230" text-anchor="middle" font-size="10.5" fill="#7f1d1d">sum N shards on read</text>
+
+      <line x1="655" y1="140" x2="695" y2="185" stroke="#64748b" stroke-width="1.2" marker-end="url(#arrd)"/>
+      <rect x="645" y="185" width="110" height="52" rx="7" fill="#fff1f2" stroke="#dc2626" stroke-width="1"/>
+      <text x="700" y="202" text-anchor="middle" font-size="11.5" font-weight="700" fill="#7f1d1d">CRDT / Write</text>
+      <text x="700" y="217" text-anchor="middle" font-size="10.5" fill="#7f1d1d">Aggregation</text>
+      <text x="700" y="230" text-anchor="middle" font-size="10.5" fill="#7f1d1d">eventual consistency</text>
+
+      <!-- Bottom warning -->
+      <rect x="230" y="330" width="300" height="50" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+      <text x="380" y="350" text-anchor="middle" font-size="12" font-weight="700" fill="#7c2d12">⚠️ Never replicate a write-heavy key</text>
+      <text x="380" y="367" text-anchor="middle" font-size="11.5" fill="#7c2d12">Replication × N copies = N× write amplification</text>
+    </svg>
+    <p class="caption">The first question to answer is always: read-heavy or write-heavy? The answer determines the entire mitigation path.</p>
+  </div>
+
+  <h3>Happy Path (No Hot Key)</h3>
+  <p>Client requests <code>GET product:42</code>. Consistent hash maps it to node 7 of 20. Node 7 returns the cached value in &lt;1ms. Traffic is roughly uniform across all 20 nodes.</p>
+
+  <h3>Hot Key Failure Path</h3>
+  <p>A product goes viral. 50,000 rps all request <code>GET product:42</code>. All 50,000 rps are routed to node 7 (same hash every time). Node 7's CPU, network bandwidth, or connection pool is exhausted. Latency for <code>product:42</code> rises; other keys on node 7 also degrade (collateral damage).</p>
+
+  <h3>Mitigation 1: Local L1 Cache</h3>
+  <p>Each app server maintains a local TTL cache (e.g., 2-second TTL). On a hit, the request never leaves the process. With 100 app servers, node 7 receives at most ~500 rps (1% of 50k), plus one miss per app server per TTL cycle.</p>
+  <p><code>Caffeine.newBuilder().expireAfterWrite(2, SECONDS).maximumSize(1000).build()</code></p>
+
+  <h3>Mitigation 2: Key Replication</h3>
+  <p>Write the value to <code>product:42:r0</code> … <code>product:42:r9</code> across 10 shards. Readers pick <code>product:42:r{random(0,9)}</code>. Each shard now receives ~5,000 rps instead of 50,000. Writers must update or invalidate all 10 replicas on change. Only works when writes are infrequent relative to reads.</p>
+
+  <h3>Mitigation 3: Request Coalescing (Singleflight)</h3>
+  <p>All concurrent requests for the same key within one process share one underlying fetch. Only the first goroutine hits the cache/origin; all others block and receive the same result. Eliminates thundering herd within a single process on cache miss. Doesn't help across separate processes.</p>
+
+  <h3>Mitigation 4: Sharded Counters (Hot Write Keys)</h3>
+  <p><strong>Write:</strong> <code>INCR counter:likes:post:42:shard:{rand(0,N-1)}</code><br>
+  <strong>Read:</strong> <code>SUM(counter:likes:post:42:shard:0 … shard:N-1)</code></p>
+  <p>With N=100 shards, write load is distributed across 100 keys on up to 100 different nodes. Read cost increases from O(1) to O(N), but reads are cacheable and aggregate counts typically tolerate slight staleness.</p>
+
+  <h3>Key Thresholds</h3>
+  <ul style="font-size:14px;line-height:2;padding-left:20px;">
+    <li>Local L1 TTL: 1–5 seconds typical; 10–30 seconds for pure read-only reference data</li>
+    <li>Shard count for counters: 50–200 shards at YouTube/Facebook scale</li>
+    <li>Replication fan-out: 3–10 replicas per hot read key — diminishing returns above 10</li>
+  </ul>
+</section>
+
+<!-- SECTION 10 -->
+<section id="s10">
+  <h2 class="section-title"><span class="num">10</span> 🏭 Real-World System Examples</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>System</th><th>How This Concept Applies</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Twitter / X</strong></td>
+          <td>Celebrity timeline cache (Obama, Katy Perry) was a hot key — accessed by millions simultaneously</td>
+          <td>Solved via fan-out-on-write: celebrity timelines are pre-computed and distributed, not read from a single hot key at query time</td>
+        </tr>
+        <tr>
+          <td><strong>Facebook (Tao)</strong></td>
+          <td>Like/reaction counts on viral posts are hot write keys</td>
+          <td>Uses sharded counters — writes to random shards, aggregation at read time; accepts ~1s eventual consistency for counts</td>
+        </tr>
+        <tr>
+          <td><strong>YouTube</strong></td>
+          <td>View count on trending videos reaches billions of increments/day</td>
+          <td>Sharded counter per video (~200 shards); periodically flushed to persistent storage; displayed count is an approximation, not a precise real-time count</td>
+        </tr>
+        <tr>
+          <td><strong>Redis Cluster</strong></td>
+          <td>Hot slot problem — a single hash slot maxes out a primary node despite large cluster</td>
+          <td>Redis 7.0+ added read scaling on replicas for hot slots; also supports hash tags to manually distribute related keys; <code>redis-cli --hotkeys</code> for detection</td>
+        </tr>
+        <tr>
+          <td><strong>Amazon DynamoDB</strong></td>
+          <td>Adaptive Capacity auto-migrates capacity from cold to hot partitions to absorb spikes</td>
+          <td>Contributor Insights surfaces top hot keys for manual intervention; Adaptive Capacity is not unlimited — sustained hot partitions above provisioned capacity still throttle</td>
+        </tr>
+        <tr>
+          <td><strong>Facebook Memcached</strong></td>
+          <td>Lease mechanism: on cache miss, one client gets a lease to fetch from DB; others wait</td>
+          <td>Described in the 2013 NSDI paper "Scaling Memcache at Facebook" — combines stampede prevention with hot key coalescing</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- SECTION 11 -->
+<section id="s11">
+  <h2 class="section-title"><span class="num">11</span> ⚖️ Trade-offs</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>✅ Benefit</th><th>❌ Cost / Limitation</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><span class="benefit">Local L1 cache</span> eliminates network round-trips; reduces remote cache load by factor of #app-instances</td>
+          <td>Each app instance holds stale data for up to TTL seconds; no cross-instance invalidation without a pub/sub layer; per-instance memory footprint</td>
+        </tr>
+        <tr>
+          <td><span class="benefit">Key replication</span> spreads read load across N shards linearly</td>
+          <td>Write amplification is N× — every update must propagate to all N replicas; consistency window during propagation; schema complexity increases</td>
+        </tr>
+        <tr>
+          <td><span class="benefit">Request coalescing</span> prevents stampede within a single process with zero added infrastructure</td>
+          <td>Only works within one process; with 200 app servers, still 200 concurrent requests reaching the shared cache (one per server); adds latency for all waiters behind the single fetch</td>
+        </tr>
+        <tr>
+          <td><span class="benefit">Sharded counters</span> distribute write load linearly across N shards</td>
+          <td>Read cost is O(N) — must sum all shards; count is eventually consistent during aggregation window; significantly more complex to implement and maintain</td>
+        </tr>
+        <tr>
+          <td><span class="benefit">DynamoDB Adaptive Capacity</span> handles moderate hot partition spikes automatically without code changes</td>
+          <td>Has hard limits — sustained spikes above provisioned capacity still throttle; not a substitute for proper data modeling and key design</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- SECTION 12 -->
+<section id="s12">
+  <h2 class="section-title"><span class="num">12</span> 🎯 Interview Application</h2>
+
+  <h3>Trigger Phrases</h3>
+  <ul style="font-size:14.5px;line-height:2.1;padding-left:20px;">
+    <li>"This product could get millions of views during a flash sale."</li>
+    <li>"We have celebrities with 100M followers — how do we handle their profile reads?"</li>
+    <li>"Our cache node is saturated even though we added more cache servers."</li>
+    <li>"How do you handle like counts on a viral post getting 500k reactions per minute?"</li>
+  </ul>
+
+  <h3>What You Say / Do</h3>
+  <p>First, clarify whether the hot key is read-heavy or write-heavy — this determines the entire mitigation path. For a read-heavy key (product page, celebrity profile), propose local L1 caching as the first line of defense, followed by key replication if L1 alone is insufficient. For a write-heavy key (like counter, view count), propose sharded counters and explicitly acknowledge the eventual consistency trade-off. Always name the detection mechanism — how would you know you have a hot key in production?</p>
+
+  <div class="tradeoff-box">
+    "If we choose local L1 caching, we get near-zero remote load for hot keys, but we pay with up to N seconds of staleness per node and the inability to instantly invalidate across instances. For this system — where product data changes infrequently and slight staleness is acceptable — L1 caching is the right call. If we needed strict read-after-write consistency, we'd need a pub/sub invalidation layer, which adds operational complexity."
+  </div>
+</section>
+
+<!-- SECTION 13 -->
+<section id="s13">
+  <h2 class="section-title"><span class="num">13</span> ⚠️ Common Misconceptions &amp; Gotchas</h2>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><span>Adding more shards or nodes to the cluster eliminates the hot key problem.</span></div>
+    <div class="right"><span class="icon">✅</span><span>Sharding distributes key <em>space</em>, not access <em>frequency</em>. A hot key always maps to one shard regardless of cluster size. The fix is changing how the hot key is accessed — not adding infrastructure.</span></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><span>Key replication works equally well for both hot reads and hot writes.</span></div>
+    <div class="right"><span class="icon">✅</span><span>Key replication helps hot reads by spreading load across N copies. For hot writes, it <em>amplifies</em> the write problem — every write must go to all N replicas. Hot writes require sharded counters or write aggregation.</span></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><span>Request coalescing (singleflight) solves the hot key problem at scale.</span></div>
+    <div class="right"><span class="icon">✅</span><span>Singleflight only works within a single process. With 200 app servers, 200 requests still reach the cache — one per server. It prevents stampede within one process, not across processes.</span></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><span>Sharded counters are unsuitable for any production system because the count is not accurate.</span></div>
+    <div class="right"><span class="icon">✅</span><span>The consistency model is configurable. Many systems (YouTube, Facebook) deliberately accept ~1 second of count staleness because exact real-time accuracy for view/like counts is not a business requirement. For inventory or financial counts, stricter patterns (centralized lock + reservation) are used instead.</span></div>
+  </div>
+</section>
+
+<!-- SECTION 14 -->
+<section id="s14">
+  <h2 class="section-title"><span class="num">14</span> 🔗 Relationships to Other Concepts</h2>
+  <div class="connections">
+    <div class="conn-card">
+      <span class="conn-icon">⬆️</span>
+      <div><div class="conn-label">Builds On</div>5.6 Cache Stampede / Thundering Herd — both are concentrated cache load failures; stampede is transient (expiry event), hot key is steady-state (constant traffic skew). Also 5.4 Eviction Policies — LFU eviction is what enables Redis hot key detection via <code>OBJECT FREQ</code>.</div>
+    </div>
+    <div class="conn-card">
+      <span class="conn-icon">🔓</span>
+      <div><div class="conn-label">Enables</div>5.8 Multi-Level Caching — local L1 caching as hot key mitigation is the primary motivation for L1/L2 hierarchies. Understanding hot keys makes the "why" of multi-tier caching obvious rather than arbitrary.</div>
+    </div>
+    <div class="conn-card">
+      <span class="conn-icon">⚡</span>
+      <div><div class="conn-label">Tension With</div>5.5 Cache Consistency and Invalidation — every hot key mitigation that introduces local caching or replication adds a consistency gap. The harder you push on load reduction, the wider the consistency window. This is the core trade-off of the entire caching tier.</div>
+    </div>
+    <div class="conn-card">
+      <span class="conn-icon">🔀</span>
+      <div><div class="conn-label">Cross-Topic</div>Topic 7 (Data Partitioning/Sharding) — hot partitions in databases are the same phenomenon as hot keys in caches. Consistent hashing (7.4) and hot partition mitigation (7.6) are the database-tier equivalents of everything covered here.</div>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 15 -->
+<section id="s15">
+  <h2 class="section-title"><span class="num">15</span> 🧪 Self-Check Quiz</h2>
+  <div class="callout callout-quote">Can you answer these without looking? If not, you haven't internalized it yet.</div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <span class="quiz-num">1</span>
+      <span class="qtext">A single product page is receiving 200,000 rps during a flash sale. Your cache cluster has 50 nodes, all at 5% utilization except one, which is at 100%. What is happening and why doesn't adding more nodes help?</span>
+      <span class="quiz-toggle">Show hint</span>
+    </div>
+    <div class="quiz-hint">💡 Think: consistent hashing maps keys by name, not by access frequency. Adding more shards distributes more keys — but product:42 still maps to exactly one shard. The hot key is a concentration problem, not a capacity problem. → Section 7</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <span class="quiz-num">2</span>
+      <span class="qtext">A social media post goes viral. It receives 500,000 like events per minute. What storage pattern would you use for the like count, and what consistency trade-off does it involve?</span>
+      <span class="quiz-toggle">Show hint</span>
+    </div>
+    <div class="quiz-hint">💡 Write-heavy key → sharded counters. Write to counter:post:42:shard:{rand(0,N)}. Read by summing all N shards. Trade-off: the count is eventually consistent during the aggregation window (~1s). This is acceptable for a like count, not for financial inventory. → Section 6 (Sharded Counters)</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <span class="quiz-num">3</span>
+      <span class="qtext">Your team proposes replicating every hot cache key across 10 shards. What question must you ask first, and under what condition does this proposal make things worse?</span>
+      <span class="quiz-toggle">Show hint</span>
+    </div>
+    <div class="quiz-hint">💡 Ask: is this key read-heavy or write-heavy? If write-heavy (e.g., a counter updated every second), replicating across 10 shards means every write must be sent to all 10 — 10× write amplification. The proposal makes the write problem worse, not better. → Section 8 (Mental Model 2)</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <span class="quiz-num">4</span>
+      <span class="qtext">Name a production system that uses sharded counters and explain how they implement read aggregation.</span>
+      <span class="quiz-toggle">Show hint</span>
+    </div>
+    <div class="quiz-hint">💡 YouTube (view counts, ~200 shards per video), Facebook/Tao (reaction counts). Read aggregation: sum all N shard keys at read time. The result is cached to avoid repeated O(N) aggregation on every view. → Section 10</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <span class="quiz-num">5</span>
+      <span class="qtext">You add a local L1 cache with a 3-second TTL to handle a hot read key. The interviewer asks: "What happens if the underlying data changes?" What is the worst-case consistency scenario, and how could you reduce the staleness window without eliminating L1 caching?</span>
+      <span class="quiz-toggle">Show hint</span>
+    </div>
+    <div class="quiz-hint">💡 Worst case: a key is updated 1ms after it's cached locally. All app instances serve stale data for up to 3 seconds. To reduce without removing L1: (a) use pub/sub (Redis Pub/Sub, Kafka) to broadcast invalidation events — app instances evict the key on receiving the event, so staleness drops from TTL to propagation latency (~ms); (b) use a shorter TTL at the cost of higher L1 miss rate. → Section 9 (Mitigation 1) + Section 11</div>
+  </div>
+</section>
+
+<!-- SECTION 16 -->
+<section id="s16">
+  <h2 class="section-title"><span class="num">16</span> 📚 Further Reading</h2>
+  <ul class="reading-list" id="reading-list">
+    <li><div class="cb" onclick="toggleRead(this)"></div><span class="rtext"><strong>Designing Data-Intensive Applications</strong> — Martin Kleppmann, Ch. 6: "Skewed Workloads and Relieving Hot Spots" — the foundational text on hot partitions</span></li>
+    <li><div class="cb" onclick="toggleRead(this)"></div><span class="rtext"><strong>Scaling Memcache at Facebook</strong> — Nishtala et al., NSDI 2013 — describes the lease mechanism for hot key + stampede mitigation at Facebook scale</span></li>
+    <li><div class="cb" onclick="toggleRead(this)"></div><span class="rtext"><strong>ByteByteGo Newsletter</strong> — "How to Handle Hot Key Problem in Redis" — Alex Xu (bytebytego.com) — practical patterns with diagrams</span></li>
+    <li><div class="cb" onclick="toggleRead(this)"></div><span class="rtext"><strong>AWS re:Invent DAT310</strong> — Amazon ElastiCache Best Practices — covers hot key detection in production Redis and Memcached clusters (YouTube)</span></li>
+    <li><div class="cb" onclick="toggleRead(this)"></div><span class="rtext"><strong>Redis Documentation</strong> — <code>OBJECT FREQ</code> command and LFU eviction policy (redis.io/docs) — how to enable hot key detection in Redis</span></li>
+  </ul>
+</section>
+
+<!-- SECTION 17 -->
+<section id="s17">
+  <h2 class="section-title"><span class="num">17</span> ✍️ My Notes</h2>
+  <textarea class="notes-area" id="notes" placeholder="Personal observations, analogies that clicked, examples from your experience..." oninput="saveNotes()"></textarea>
+</section>
+
+</article>
+</main>
+
+<script>
+// Checklist toggle
+function toggle(cb) {
+  const li = cb.closest('li');
+  li.classList.toggle('checked');
+  saveState();
+}
+// Reading list toggle
+function toggleRead(cb) {
+  const li = cb.closest('li');
+  li.classList.toggle('checked');
+  saveState();
+}
+// Phase card toggle
+function togglePhase(header) {
+  header.closest('.phase-card').classList.toggle('open');
+}
+// Quiz toggle
+function toggleQuiz(qDiv) {
+  const item = qDiv.closest('.quiz-item');
+  item.classList.toggle('open');
+  const tog = qDiv.querySelector('.quiz-toggle');
+  tog.textContent = item.classList.contains('open') ? 'Hide hint' : 'Show hint';
+}
+// TOC active link on scroll
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('#toc nav a');
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(a => a.classList.remove('active'));
+      const link = document.querySelector('#toc nav a[href="#' + e.target.id + '"]');
+      if (link) link.classList.add('active');
+    }
+  });
+}, { threshold: 0.3 });
+sections.forEach(s => observer.observe(s));
+// Persistence
+const KEY = 'sd_5_7_hot_key';
+function saveState() {
+  const checks = [...document.querySelectorAll('.checklist li, .reading-list li')].map(li => li.classList.contains('checked'));
+  localStorage.setItem(KEY + '_checks', JSON.stringify(checks));
+}
+function saveNotes() {
+  localStorage.setItem(KEY + '_notes', document.getElementById('notes').value);
+}
+window.addEventListener('DOMContentLoaded', () => {
+  const checks = JSON.parse(localStorage.getItem(KEY + '_checks') || '[]');
+  const allLi = [...document.querySelectorAll('.checklist li, .reading-list li')];
+  allLi.forEach((li, i) => { if (checks[i]) li.classList.add('checked'); });
+  const notes = localStorage.getItem(KEY + '_notes');
+  if (notes) document.getElementById('notes').value = notes;
+});
+</script>
+</body>
+</html>
