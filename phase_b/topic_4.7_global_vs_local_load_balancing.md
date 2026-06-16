@@ -333,3 +333,48 @@ Introduce the two-tier model explicitly: *"I'd use global load balancing to stee
 
 > *Personal observations, things that confused me, analogies that helped.*
 
+ONE-LINER
+  Global LB routes traffic to the right region; local LB routes it to the
+  right server — they form a mandatory two-tier stack in any global system.
+
+KEY PROPERTIES / RULES
+  1. Global LB operates at DNS or network layer (L3/L7); local LB at L4/L7.
+  2. DNS-based: latency/geo-routing, TTL-bounded failover, operationally simple.
+  3. Anycast: BGP routes packets to nearest PoP — sub-second failover, no TTL.
+  4. DNS TTL = failover lag; a downed region still gets traffic until TTL expires.
+  5. Global LB health checks are region-level, not server-level.
+
+DECISION RULE
+  Use DNS-based global LB when: operationally simple geo-routing is enough
+  and ~60s failover lag is acceptable (most stateless web apps).
+  Use anycast when: you need sub-second failover or DDoS absorption at edge
+  (CDNs, DNS resolvers, real-time systems).
+
+NUMBERS / FORMULAS
+  DNS TTL recommendation: 60–300s prod; 30–60s during maintenance windows.
+  Anycast failover: <1s (BGP route withdrawal propagation).
+  Health check detection window: check_interval × failure_threshold
+    e.g., 30s × 3 = 90s max detection lag before failover begins.
+
+GOTCHA TO NEVER FORGET
+  DNS TTL is NOT the only latency — resolvers cache aggressively and often
+  ignore TTLs. Real failover lag is TTL + resolver non-compliance; plan for
+  2–5× your configured TTL value.
+
+Failover routing:    primary region serves all; secondary on failure
+                     → use for active-passive global setup
+
+Latency-based:       route to lowest-latency region from client
+                     → use for performance-sensitive global apps
+
+Geolocation:         route by client geography regardless of latency
+                     → use for data residency / GDPR compliance
+                     (EU users must stay in EU region)
+
+Weighted:            split traffic by configured weight
+                     → use for blue/green deploys, canary at region level
+
+Anycast sub-second failover applies within a provider's 
+own BGP network (Cloudflare, Google, AWS). Global internet 
+BGP convergence is 10s–minutes — true anycast speed requires 
+a provider with global PoP infrastructure.

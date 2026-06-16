@@ -323,7 +323,7 @@ Share-nothing is an architecture in which app servers do not share any memory, d
 
 Because any node can handle any request, load balancers can route requests freely to any node.
 
-Use when: elastic horizaontal scaling and fault-tolerant stateless request handling are needed
+Use when: elastic horizontal scaling and fault-tolerant stateless request handling are needed
 
 Avoid when: sub-ms shared memory access is required(in memory grids)
 

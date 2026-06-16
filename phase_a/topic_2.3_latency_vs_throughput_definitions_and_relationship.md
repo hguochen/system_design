@@ -330,7 +330,7 @@ They are related via Little's Law:
 What's the tension between latency and throughput?
 - Increasing throughput often requires batching -> raises per-request latency
 - Minimizing latency means processing immediately -> sacrifices throughput
-- You chosoe a point on the curve based on workload:
+- You choose a point on the curve based on workload:
   - Interactive(user-facing): optimize latency, accept lower throughput
   - Batch / pipeline: optimize throughput, accept higher latency
 - Example: Kafka linger.ms — 0ms = low latency, low throughput; 

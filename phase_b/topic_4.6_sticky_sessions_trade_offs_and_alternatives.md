@@ -347,4 +347,11 @@ GOTCHA TO NEVER FORGET
   IP-hash collapses under NAT — thousands of corporate users share one IP,
   all routing to one server. Cookie-based affinity is generally preferred.
 
-  
+WebSocket legitimately requires sticky sessions because:
+  - WebSocket is a persistent, stateful TCP connection
+  - Connection state (socket, auth context, subscription list) 
+    lives in the server process
+  - You cannot transparently move a live WebSocket connection 
+    to another server mid-stream
+  - Fix: use a pub/sub broker (Redis Pub/Sub, Kafka) so any 
+    node can serve any client — then sticky sessions aren't needed

@@ -335,23 +335,118 @@ First, clarify whether the hot key is read-heavy or write-heavy — this determi
 1. A single product page is receiving 200,000 requests per second during a flash sale. Your cache cluster has 50 nodes, all of which are at 5% utilization except one, which is at 100%. What is happening and why doesn't adding more nodes help?
 
    > 💡 *Think through your answer before expanding — if you hesitate, revisit Section 7 (First Principles).*
+Here we have a hot read key problem where the product page for the Flux cell is serving an outsize number of requests. This product page read request maps to a single key that is sitting in only one of the nodes. Therefore, this node is getting 100% utilization because all of the requests are in this single node. So because this is a concentration problem and not a capacity problem, if we were to add more nodes, the new nodes do not contain the requester key and therefore do not help in reducing the saturation on the single node. 
+
+This is a hot READ key problem. A single cache key (the product page)
+maps to exactly one node via consistent hashing. All 200,000 rps hash
+to the same key name → same node → 100% utilization on that one node.
+
+Why adding nodes doesn't help:
+Consistent hashing distributes key SPACE, not access FREQUENCY.
+Adding a 51st node redistributes some other keys to it — but
+product:42 still maps to the same node it always did. The new node
+contains no copy of the hot key and receives none of its traffic.
+
+The fix is a mitigation at the access layer, not the cluster layer:
+local L1 caching, key replication across N shards, or request
+coalescing — all of which break the concentration without adding nodes.
 
 2. You are designing the like count system for a social media platform. A single post can receive 500,000 like events per minute during viral spread. What storage pattern would you use and what consistency trade-off does it involve?
 
    > 💡 *Think through your answer before expanding — if you hesitate, revisit Section 6 (Sharded Counters).*
 
+We are designing a Lighthouse system for a social media platform, and some posts can receive lots of events, especially for viral posts. In such viral posts, we are typically dealing with a write-heavy problem. The way to mitigate a write-heavy problem will be to use a shared counter mitigation strategy where, instead of writing the like counts to one node, we will now write to N distributed nodes. At read time for the like counts, we will aggregate all of the data from these N nodes and return the aggregated response. The trade off here is eventual consistency to reading the lag counts. Because there are two issues with using a shared counter approach:
+1. We can experience read and write interleaving, leading to inconsistent count numbers.
+2. The overhead of aggregating the read aggregated data increases the latency.
+
+Pattern: Sharded counters.
+
+Write path: INCR counter:likes:post:{id}:shard:{rand(0,N-1)}
+            Each like event writes to a random shard out of N.
+Read path:  SUM(counter:likes:post:{id}:shard:0 … shard:N-1)
+            Aggregate all N shards; cache the result.
+
+Consistency trade-off:
+The count is eventually consistent. During the aggregation window
+(typically milliseconds), a read that fires mid-write will miss the
+most recent increments — the sum of shards won't yet reflect all
+in-flight writes. For a like count, this is acceptable: displaying
+"1,000,042" vs "1,000,043" has no business consequence.
+
+NOT acceptable for: inventory counts, financial balances, anything
+requiring strict accuracy. Use atomic DB decrement with floor check
+or distributed locks instead.
+
 3. Your team proposes replicating every hot cache key across 10 shards to solve a hot key problem. What question must you ask first, and under what condition does this proposal make things worse?
 
    > 💡 *Think through your answer before expanding — if you hesitate, revisit Section 8 (Mental Model 3: Reads vs. Writes).*
+We must first ask ourselves: when we are solving the hotkey problem, we are replicating the hot cache key across test shots. Are we solving a read key problem, or are we solving a write key problem? If we are solving a read key problem, then this is the right approach because we now have the hot key sitting in ten shots. The read traffic will be distributed across these ten shots, thereby effectively solving the hot read key problem. If we actually have a write-heavy system and if we were to introduce 10 nodes, that means we are now effectively writing to 10 nodes to a hot write key. We are actually increasing the number of writes by n times, and this makes the write even worse because we increase n replicas to write. 
+
+First question: Is this key read-heavy or write-heavy?
+
+If READ-heavy:
+  Replication across 10 shards is correct. Readers pick a random
+  replica → read load spreads 10× across shards. Each shard handles
+  ~10% of the original traffic. Write amplification is 10× but
+  acceptable if writes are infrequent relative to reads.
+
+If WRITE-heavy:
+  Replication makes it worse. Every write must now propagate to all
+  10 replicas → 10× write amplification. You've taken a saturated
+  write node and turned it into 10 saturated write nodes.
+  Correct fix for write-heavy: sharded counters, not replication.
+
+Rule: Replication = hot read fix ONLY.
 
 4. Name a production system that uses sharded counters and explain concretely how they implement read aggregation.
 
    > 💡 *Think through your answer before expanding — if you hesitate, revisit Section 10 (Real-World Examples).*
 
+Another production system that uses the shared count bus is the YouTube Viewer Counts. Writing the viewer count, the system will write to n number of notes for viewer counts. At read viewer count time, the system will read from the n notes in order and aggregate the viewer count together to serve the aggregator view count data. 
+
+YouTube view counts (~200 shards per video at scale).
+
+Write path:
+  Every view event increments a random shard:
+  INCR viewcount:video:{id}:shard:{rand(0,200)}
+  Write load is distributed evenly across 200 keys on up to
+  200 different nodes.
+
+Read path (aggregation):
+  SUM(viewcount:video:{id}:shard:0 … shard:199)
+  The aggregated result is itself cached — so the O(N) aggregation
+  cost is not paid on every view, only on cache miss of the aggregate.
+
+Consistency: displayed view count is an approximation. YouTube
+  deliberately accepts ~1s eventual consistency for view counts —
+  "1,482,301 views" vs "1,482,299 views" has no user-facing impact.
+
 5. You implement local L1 caching with a 3-second TTL to handle a hot read key. An interviewer asks: "What happens if the underlying data changes?" Walk through the worst-case consistency scenario and propose a way to reduce the staleness window without eliminating L1 caching entirely.
 
    > 💡 *Think through your answer before expanding — if you hesitate, revisit Section 9 (Mitigation 1) and Section 11 (Trade-offs).*
+Worst-case scenario:
+  Key is updated 1ms after it's stored in L1 cache.
+  All 100 app instances serve stale data for up to 3 seconds.
+  If the change is a price drop from $100 to $50, users see the
+  wrong price for 3 seconds.
 
+Reducing staleness without removing L1:
+
+Option 1 — Shorter TTL:
+  Reduce from 3s to 1s. Staleness window drops by 3×, but L1 miss
+  rate triples → more requests reach the shared cache tier.
+  Trade-off: less staleness, more cache load.
+
+Option 2 — Pub/sub invalidation (better):
+  On data change, publish an invalidation event to a message bus
+  (Redis Pub/Sub, Kafka). Each app instance subscribes and evicts
+  the key immediately on receiving the event.
+  Staleness window drops from TTL (seconds) to propagation latency
+  (~milliseconds). TTL remains as a fallback safety net.
+  Trade-off: added operational complexity of a pub/sub layer.
+
+The pub/sub pattern is the production answer for systems that need
+low staleness AND low cache tier load simultaneously.
 ---
 
 ## 16. 📚 Further Reading

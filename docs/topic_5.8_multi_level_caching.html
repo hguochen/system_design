@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.8 Multi-Level Caching (L1/L2, Local + Distributed)</title>
+<style>
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface-alt: #f3f2ef;
+    --border: #e5e3de; --text: #1a1917; --text-muted: #6b6861;
+    --accent: #2563eb; --accent-light: #dbeafe;
+    --green: #16a34a; --green-light: #dcfce7;
+    --red: #dc2626; --red-light: #fee2e2;
+    --yellow: #d97706; --yellow-light: #fef3c7;
+    --purple: #7c3aed; --purple-light: #ede9fe;
+    --orange: #ea580c; --orange-light: #ffedd5;
+    --teal: #0d9488; --teal-light: #ccfbf1;
+    --code-bg: #1e1e2e; --code-text: #cdd6f4;
+    --sidebar-w: 240px; --content-max: 820px;
+    font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; }
+  #toc { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0 48px; z-index: 100; }
+  #toc-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  #toc-header .phase-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-bottom: 6px; }
+  #toc-header h2 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  #toc nav a { display: block; padding: 5px 16px 5px 20px; font-size: 12.5px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+  main { margin-left: var(--sidebar-w); padding: 48px 48px 96px; max-width: calc(var(--sidebar-w) + var(--content-max) + 96px); width: 100%; }
+  article { max-width: var(--content-max); }
+  .doc-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 2px solid var(--border); }
+  .doc-header .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+  .tag-phase { background: var(--accent-light); color: var(--accent); }
+  .tag-topic { background: var(--purple-light); color: var(--purple); }
+  .tag-date  { background: var(--surface-alt);  color: var(--text-muted); }
+  .doc-header h1 { font-size: 30px; font-weight: 800; line-height: 1.25; letter-spacing: -.02em; color: var(--text); }
+  section { margin-bottom: 52px; scroll-margin-top: 32px; }
+  h2.section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -.01em; }
+  h2.section-title .num { font-size: 11px; font-weight: 800; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; letter-spacing: .04em; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 24px 0 10px; }
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+  code { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-family: "SF Mono","Fira Code",Menlo,monospace; font-size: 12.5px; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 14px; border-left: 3px solid; }
+  .callout-goal  { background: var(--accent-light); border-color: var(--accent); color: #1e40af; }
+  .callout-tip   { background: var(--yellow-light); border-color: var(--yellow); color: #92400e; }
+  .callout-warn  { background: var(--red-light); border-color: var(--red); color: #7f1d1d; }
+  .callout-quote { background: var(--surface-alt); border-color: var(--border); color: var(--text-muted); font-style: italic; }
+  .callout-teal  { background: var(--teal-light); border-color: var(--teal); color: #134e4a; }
+  .cheatsheet { background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 24px 28px; font-family: "SF Mono","Fira Code","Cascadia Code",Menlo,monospace; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-x: auto; margin-top: 16px; }
+  .cheatsheet .label { color: #cba6f7; font-weight: 700; letter-spacing: .08em; display: block; margin-top: 18px; margin-bottom: 4px; border-bottom: 1px solid #313244; padding-bottom: 3px; }
+  .cheatsheet .label:first-child { margin-top: 0; }
+  .diagram-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 16px 14px; margin: 20px 0 28px; overflow-x: auto; }
+  .diagram-wrap .diagram-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); margin-bottom: 12px; }
+  .diagram-wrap p.caption { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 10px; margin-bottom: 0; font-style: italic; }
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; font-size: 14.5px; line-height: 1.55; }
+  .checklist li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 2px; background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .checklist li.checked .cb { background: var(--green); border-color: var(--green); }
+  .checklist li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .checklist li.checked .text { color: var(--text-muted); text-decoration: line-through; }
+  .phase-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
+  .phase-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; cursor: pointer; user-select: none; background: var(--surface-alt); }
+  .phase-header:hover { background: var(--border); }
+  .phase-label { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+  .phase-badge { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 2px 8px; border-radius: 20px; }
+  .ph1 { background: #dbeafe; color: #1d4ed8; } .ph2 { background: #fce7f3; color: #9d174d; }
+  .ph3 { background: #d1fae5; color: #065f46; } .ph4 { background: #fef3c7; color: #92400e; }
+  .phase-chevron { font-size: 12px; color: var(--text-muted); transition: transform .2s; }
+  .phase-card.open .phase-chevron { transform: rotate(180deg); }
+  .phase-body { display: none; padding: 16px 20px 20px; }
+  .phase-card.open .phase-body { display: block; }
+  .phase-goal { font-size: 12.5px; color: var(--text-muted); font-style: italic; margin-bottom: 12px; }
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: var(--surface-alt); padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.5; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+  .misconception { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .misconception .wrong { background: var(--red-light); padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; }
+  .misconception .right { padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; color: #065f46; background: var(--green-light); }
+  .misconception .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .quiz-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .quiz-q { padding: 14px 18px; font-size: 14.5px; font-weight: 600; cursor: pointer; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .quiz-q:hover { background: var(--surface-alt); }
+  .quiz-num { flex-shrink: 0; width: 24px; height: 24px; background: var(--accent); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; margin-top: 1px; }
+  .quiz-q .qtext { flex: 1; }
+  .quiz-toggle { font-size: 11px; color: var(--text-muted); flex-shrink: 0; margin-top: 3px; }
+  .quiz-hint { display: none; padding: 10px 18px 14px; font-size: 13px; color: #92400e; background: var(--yellow-light); border-top: 1px solid var(--border); }
+  .quiz-item.open .quiz-hint { display: block; }
+  .reading-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .reading-list li { display: flex; align-items: flex-start; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; font-size: 14px; }
+  .reading-list li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 1px; cursor: pointer; background: var(--surface); display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .reading-list li.checked .cb { background: var(--green); border-color: var(--green); }
+  .reading-list li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .reading-list li.checked .rtext { color: var(--text-muted); text-decoration: line-through; }
+  .notes-area { width: 100%; min-height: 160px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: inherit; font-size: 14px; color: var(--text); resize: vertical; line-height: 1.6; }
+  .notes-area:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .focus-list { list-style: none; display: flex; flex-direction: column; gap: 14px; }
+  .focus-list li { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14.5px; line-height: 1.6; }
+  .focus-list li strong { color: var(--accent); display: block; margin-bottom: 4px; }
+  .connections { display: flex; flex-direction: column; gap: 12px; }
+  .conn-card { display: flex; align-items: flex-start; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14px; }
+  .conn-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .conn-label { font-weight: 700; margin-bottom: 3px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .tradeoff-box { background: var(--surface-alt); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 14px 18px; font-size: 14px; font-style: italic; color: var(--text); margin-top: 14px; }
+  .tier-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 16px 0; }
+  .tier-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; font-size: 14px; }
+  .tier-card h4 { font-size: 13px; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .tier-card .stat { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 2px 7px; border-radius: 4px; }
+  .stat-blue { background: var(--accent-light); color: var(--accent); }
+  .stat-orange { background: var(--orange-light); color: var(--orange); }
+  .stat-green { background: var(--green-light); color: var(--green); }
+  .stat-red { background: var(--red-light); color: var(--red); }
+  @media (max-width: 900px) { #toc { display: none; } main { margin-left: 0; padding: 24px 20px 60px; } .tier-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<aside id="toc">
+  <div id="toc-header">
+    <span class="phase-tag">Phase B · Topic 5</span>
+    <h2>5.8 Multi-Level Caching</h2>
+  </div>
+  <nav>
+    <a href="#s0">🗺️ Overview</a>
+    <a href="#s1">🎯 Goal</a>
+    <a href="#s2">✅ Mastery Criteria</a>
+    <a href="#s3">🗓️ Study Phases</a>
+    <a href="#s4">📋 Cheatsheet</a>
+    <a href="#s5">🧠 Core Definition</a>
+    <a href="#s6">📦 Core Concepts</a>
+    <a href="#s7">🔍 First Principles</a>
+    <a href="#s8">🗺️ Mental Models</a>
+    <a href="#s9">⚙️ How It Works</a>
+    <a href="#s10">🏭 Real-World Examples</a>
+    <a href="#s11">⚖️ Trade-offs</a>
+    <a href="#s12">🎯 Interview Application</a>
+    <a href="#s13">⚠️ Misconceptions</a>
+    <a href="#s14">🔗 Relationships</a>
+    <a href="#s15">🧪 Self-Check Quiz</a>
+    <a href="#s16">📚 Further Reading</a>
+    <a href="#s17">✍️ My Notes</a>
+  </nav>
+</aside>
+
+<main>
+<article>
+
+<!-- HEADER -->
+<div class="doc-header">
+  <div class="meta">
+    <span class="tag tag-phase">⚡ Phase B — Scalability</span>
+    <span class="tag tag-topic">💾 Topic 5 — Caching Systems</span>
+    <span class="tag tag-date">📅 2026-06-15</span>
+  </div>
+  <h1>5.8 Multi-Level Caching<br><span style="font-weight:400;color:var(--text-muted);font-size:22px;">L1/L2, Local + Distributed</span></h1>
+</div>
+
+<!-- S0: OVERVIEW -->
+<section id="s0">
+  <h2 class="section-title"><span class="num">§0</span> 🗺️ Topic Overview</h2>
+  <p>Multi-level caching stacks two or more cache tiers — a fast in-process local cache (L1) and a larger shared distributed cache (L2) — to maximize hit rate while minimizing latency for the hottest data. The core tension is <strong>speed vs. coherence</strong>: L1 is nanosecond-fast but private per node, creating per-node stale windows; L2 is shared but adds a network round-trip. Mastering this topic means knowing when to add each layer, how to keep them coherent, and what failure modes emerge when both tiers go cold simultaneously.</p>
+
+  <ul class="focus-list" style="margin-top:18px;">
+    <li><strong>1. Layer responsibilities and sizing</strong> — L1 holds the hottest per-node keys; L2 holds the fleet-wide working set. Know how to size each tier given hit rate targets and object sizes.</li>
+    <li><strong>2. The read waterfall</strong> — L1 hit → return; L1 miss → L2 hit → fill L1; both miss → origin → fill L2 then L1. Be fluent with this path and the latency budget at each stage.</li>
+    <li><strong>3. Invalidation across all tiers</strong> — The hardest problem. A write must evict the key from L2 AND broadcast eviction to every node's L1. Know TTL-based and pub/sub-based strategies.</li>
+    <li><strong>4. Write path options</strong> — Write-invalidate (most common), write-through all tiers, or let TTL handle staleness. Know when each is appropriate.</li>
+    <li><strong>5. When NOT to add L1</strong> — Without cache affinity (sticky routing), L1 hit rates are near zero. Adding L1 to a round-robin load balanced fleet adds complexity with no latency benefit.</li>
+  </ul>
+</section>
+
+<!-- S1: GOAL -->
+<section id="s1">
+  <h2 class="section-title"><span class="num">§1</span> 🎯 Goal of This Subtopic</h2>
+  <div class="callout callout-goal">
+    After studying this, you should be able to design a complete multi-level cache architecture for a given system — specifying what lives at each tier, the TTL strategy per layer, the invalidation mechanism, and the consistency guarantees. You should also be able to identify when multi-level caching is unnecessary overhead versus a critical optimization.
+  </div>
+</section>
+
+<!-- S2: MASTERY -->
+<section id="s2">
+  <h2 class="section-title"><span class="num">§2</span> ✅ What Mastery Looks Like</h2>
+  <ul class="checklist" id="mastery-list">
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can draw the read and write paths through a two-tier cache stack (L1 → L2 → origin) and explain the latency at each hop</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can explain why L1 caches create per-node inconsistency and describe two mechanisms to handle it (TTL expiry and pub/sub invalidation)</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can choose between local-only, distributed-only, and multi-level caching for a given system based on traffic shape, node count, and consistency requirements</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can identify the thundering herd risk at origin during mass invalidation and propose a mitigation (request coalescing, mutex lock, probabilistic expiry)</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can estimate L1 memory sizing given hit rate targets, object sizes, and hot key count</span></li>
+  </ul>
+  <div class="callout callout-tip" style="margin-top:18px;">💡 <strong>Rule of thumb:</strong> If you can teach it to someone else and field their follow-up questions, you've mastered it.</div>
+</section>
+
+<!-- S3: STUDY PHASES -->
+<section id="s3">
+  <h2 class="section-title"><span class="num">§3</span> 🗓️ Study Phases to Achieve Mastery</h2>
+
+  <div class="phase-card open">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph1">Phase 1</span> Acquire 📖</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Read deeply enough that you could explain the concept without the doc.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text"><strong>Facebook's Memcache at Scale (NSDI 2013)</strong> — the canonical multi-level caching paper; focus on regional pools and the McSqueal invalidation pipeline</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text"><strong>ByteByteGo "A Crash Course in Caching"</strong> — <a href="https://blog.bytebytego.com/p/a-crash-course-in-caching-part-1" target="_blank">blog.bytebytego.com</a> — covers multi-level patterns accessibly</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text"><strong>Caffeine (Java) docs</strong> — <a href="https://github.com/ben-manes/caffeine" target="_blank">github.com/ben-manes/caffeine</a> — understand L1 implementation choices: maximumSize, expireAfterWrite, refreshAfterWrite</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Read Sections 5–9 of this doc carefully — don't skim</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Re-read the Cheatsheet (§4) and recite it from memory after</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph2">Phase 2</span> Consolidate ✍️</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Verify you can reproduce knowledge in your own words without looking.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Close the doc — write out the Core Definition from memory, then compare</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Explain First Principles out loud: what was painful before multi-level caching existed?</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Reconstruct the read waterfall and write-invalidate path from memory</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Restate each Trade-off row in your own words — if you can't explain the cost, you don't own it</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph3">Phase 3</span> Apply 🔧</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Connect to real systems and simulate interview scenarios.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Go through Real-World Examples (§10) — verify each claim and add notes to §17</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Practice Interview Application (§12) out loud — say the trigger phrases and your response as if in a live interview</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Work through Misconceptions (§13) — explain WHY each misconception is wrong</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Trace Relationships (§14) — explain each connection without looking</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph4">Phase 4</span> Validate 🧪</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Confirm you actually own it, not just recognize it.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Answer every Self-Check Quiz question (§15) out loud without notes</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Recite the Cheatsheet (§4) from memory — if you can't, re-do Phase 2</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Tick off mastery criteria in §2 — only check a box if you can demonstrate on demand</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Teach this concept to an imaginary interviewer for 2 minutes without hesitation</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- S4: CHEATSHEET -->
+<section id="s4">
+  <h2 class="section-title"><span class="num">§4</span> 📋 Cheatsheet</h2>
+  <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+
+  <!-- Radial Mindmap SVG -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">🧠 Concept Mindmap</div>
+    <svg viewBox="0 0 820 480" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:820px;display:block;margin:0 auto;">
+      <rect width="820" height="480" fill="#fafafa" rx="8"/>
+      <!-- Connector lines -->
+      <line x1="410" y1="240" x2="175" y2="100" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="645" y2="100" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="100" y2="280" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="720" y2="280" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="175" y2="400" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="645" y2="400" stroke="#aaa" stroke-width="1.5"/>
+      <!-- Central -->
+      <ellipse cx="410" cy="240" rx="100" ry="42" fill="#a5d8ff" stroke="#1971c2" stroke-width="2"/>
+      <text x="410" y="234" text-anchor="middle" dominant-baseline="middle" font-family="Arial,sans-serif" font-size="14" font-weight="bold" fill="#1a1917">Multi-Level</text>
+      <text x="410" y="252" text-anchor="middle" dominant-baseline="middle" font-family="Arial,sans-serif" font-size="14" font-weight="bold" fill="#1a1917">Caching</text>
+      <!-- L1 -->
+      <rect x="88" y="68" width="174" height="58" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="175" y="91" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">L1 — Local Cache</text>
+      <text x="175" y="107" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#333">&lt;0.1ms · Private per node</text>
+      <text x="175" y="120" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#333">Caffeine / lru-cache</text>
+      <!-- L2 -->
+      <rect x="558" y="68" width="174" height="58" rx="8" fill="#ffd8a8" stroke="#e67700" stroke-width="1.5"/>
+      <text x="645" y="91" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">L2 — Distributed Cache</text>
+      <text x="645" y="107" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#333">~1ms · Shared all nodes</text>
+      <text x="645" y="120" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#333">Redis / Memcached</text>
+      <!-- Read Path -->
+      <rect x="20" y="248" width="160" height="64" rx="8" fill="#c3fae8" stroke="#0ca678" stroke-width="1.5"/>
+      <text x="100" y="268" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Read Waterfall</text>
+      <text x="100" y="284" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">L1 hit → return</text>
+      <text x="100" y="298" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">L1 miss→L2→fill L1</text>
+      <text x="100" y="312" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Both miss→origin</text>
+      <!-- Invalidation -->
+      <rect x="640" y="248" width="160" height="64" rx="8" fill="#ffc9c9" stroke="#c92a2a" stroke-width="1.5"/>
+      <text x="720" y="268" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Invalidation</text>
+      <text x="720" y="284" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">TTL expiry (simple)</text>
+      <text x="720" y="298" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Pub/Sub broadcast</text>
+      <text x="720" y="312" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Write-through all</text>
+      <!-- Trade-offs -->
+      <rect x="88" y="372" width="174" height="58" rx="8" fill="#ffe3e3" stroke="#c92a2a" stroke-width="1.5"/>
+      <text x="175" y="393" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Gotchas</text>
+      <text x="175" y="409" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Staleness = L1 TTL window</text>
+      <text x="175" y="423" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Affinity needed for hit rate</text>
+      <!-- Real Systems -->
+      <rect x="558" y="372" width="174" height="58" rx="8" fill="#b2f2bb" stroke="#2f9e44" stroke-width="1.5"/>
+      <text x="645" y="393" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Real Systems</text>
+      <text x="645" y="409" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Facebook Memcache + mcrouter</text>
+      <text x="645" y="423" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Netflix EVCache + in-proc LRU</text>
+    </svg>
+    <p class="caption">Radial mindmap: six major clusters around the multi-level caching core concept</p>
+  </div>
+
+  <div class="cheatsheet">
+<span class="label">§ 1  WHY IT EXISTS</span>A single-tier L2 cache (Redis) solves DB offload but at extreme scale even 1ms per
+read is the latency floor. When a hot key absorbs millions of reads/second, the
+network hop itself is the bottleneck. Multi-level caching eliminates that hop for the
+hottest keys by adding an in-process L1 tier — zero network cost on hit. The compound
+hit rate gains are only achievable by layering: 90% L1 hit rate + 50% L2 hit rate on
+the remainder → 20× fewer origin queries compared to no caching at all.
+
+<span class="label">§ 2  WHAT EACH TIER IS</span>L1  — in-process cache (Caffeine, lru-cache, cachetools). Sub-ms reads.
+        Private per node. Staleness bounded by TTL or pub/sub eviction.
+L2  — shared distributed cache (Redis, Memcached). ~1ms RTT.
+        Shared across all nodes. Writes are instantly visible to all L2 readers.
+Read waterfall:
+  L1 hit → return (&lt;0.1ms)
+  L1 miss → L2 hit → populate L1 → return (~1ms)
+  Both miss → fetch origin → populate L2 then L1 → return (~10ms)
+Write-invalidate (most common):
+  Write to DB → DEL key from L2 → publish INVALIDATE to pub/sub →
+  all nodes evict from L1 → next read re-populates from fresh data.
+Write-through:
+  Write to DB → write new value to L2 → broadcast to all L1s.
+  Stronger consistency; higher write cost. Rarely used.
+
+<span class="label">§ 3  THE 3 KEY DISTINCTIONS</span>1. Affinity vs. no affinity: without sticky routing (round-robin LB), each key lands
+   on a different node per request — L1 hit rate ≈ 0%. With consistent-hash routing,
+   L1 hit rates reach 70–90% for hot keys. Affinity is the prerequisite.
+2. TTL ordering: L1 TTL must always be ≤ L2 TTL. If L1 TTL &gt; L2 TTL, a node can
+   serve data from L1 long after L2's copy has expired — staleness exceeds intent.
+   Enforce: L1 TTL ≤ L2 TTL always.
+3. Invalidation scope: deleting from L2 alone is insufficient. All nodes' L1s
+   retain the old value until TTL expiry or pub/sub eviction. Must invalidate
+   ALL tiers after every write.
+
+<span class="label">§ 4  USE / AVOID</span>Use L1:              RPS is high, hot key set fits in node memory, L2 latency is
+                     the bottleneck, cache affinity (consistent-hash LB) is enabled.
+Use TTL invalidation: writes are infrequent; staleness up to L1 TTL is acceptable.
+Use pub/sub:          staleness window must be milliseconds, not seconds.
+Avoid L1:             round-robin LB (no affinity), very high write rate, or
+                     strong consistency required.
+AVOID L1 TTL &gt; L2 TTL — enforce L1 TTL ≤ L2 TTL always.
+AVOID DEL from L2 only — L1s fleet-wide remain stale until TTL expires.
+
+<span class="label">§ 5  INTERVIEW TRIGGERS</span>→ "The system needs sub-millisecond latency at very high read QPS."
+→ "We have a hot key problem — certain Redis keys get millions of hits per second."
+→ "How would you reduce latency further? We already have Redis in place."
+→ "The cache is becoming a bottleneck even after scaling out the Redis cluster."
+
+<span class="label">§ 6  FTAC</span>F  "At high read QPS, even Redis at ~1ms per read accumulates significant latency for
+   hot keys. Multi-level caching adds an in-process L1 on each node so hot keys are
+   served in microseconds — no network hop required."
+T  "L1 gives sub-ms reads and reduces L2 traffic by the L1 hit rate. The cost is a
+   per-node staleness window (bounded by L1 TTL or pub/sub propagation delay) and
+   added invalidation complexity. Cache affinity is required for meaningful hit rates."
+A  "Assuming this is read-heavy, writes are infrequent, and eventual consistency
+   within 5–10 seconds is acceptable —"
+C  "Add Caffeine L1 (10s TTL) in front of Redis. On writes: DEL from L2, publish
+   INVALIDATE via Redis Pub/Sub. Cost: up to 10s staleness fleet-wide; pub/sub dep."
+
+<span class="label">§ 7  NUMBERS & GOTCHA</span>L1 TTL:       1–30s typical; must always be ≤ L2 TTL
+L2 TTL:       60s–hours depending on freshness tolerance
+L1 sizing:    (hot key count) × (avg object size) — 10K keys × 2KB = 20MB/node
+L1 hit rate:  70–90% for hot keys with affinity; ~0% without affinity
+GOTCHA: After mass invalidation (deploy/cache flush), ALL N nodes simultaneously miss
+  L1 AND L2 and fire concurrent origin fetches for the same key. This thundering herd
+  is N× worse than single-tier. Protect with SET NX mutex at L2: only one node fetches
+  per key; the rest wait and read from L2 after repopulation.
+  </div>
+</section>
+
+<!-- S5: CORE DEFINITION -->
+<section id="s5">
+  <h2 class="section-title"><span class="num">§5</span> 🧠 Core Definition</h2>
+  <div class="callout callout-teal" style="font-size:16px;font-weight:600;line-height:1.6;">
+    Multi-level caching is an architecture where data requests traverse a hierarchy of cache tiers — typically a fast in-process local cache (L1) followed by a slower but larger shared distributed cache (L2) — before reaching the origin data store, maximizing cache hit rate while minimizing read latency for the hottest data.
+  </div>
+
+  <!-- Tier comparison diagram -->
+  <div class="tier-grid" style="margin-top:20px;">
+    <div class="tier-card">
+      <h4>🔵 L1 — Local / In-Process <span class="stat stat-blue">~0.1 µs</span></h4>
+      <p style="font-size:13px;margin-bottom:6px;">Lives <strong>inside the application process</strong>. No network hop. Examples: Caffeine (Java), <code>lru-cache</code> (Node), Python <code>cachetools</code>.</p>
+      <p style="font-size:13px;margin-bottom:0;color:var(--red);">⚠️ Private to this node only — writes on other nodes don't update it.</p>
+    </div>
+    <div class="tier-card">
+      <h4>🟠 L2 — Distributed / Shared <span class="stat stat-orange">~1 ms</span></h4>
+      <p style="font-size:13px;margin-bottom:6px;">Shared across all application nodes over the network. Examples: Redis, Memcached, EVCache.</p>
+      <p style="font-size:13px;margin-bottom:0;color:var(--green);">✅ A write to L2 is immediately visible to all nodes that query L2 next (for keys not in their L1).</p>
+    </div>
+  </div>
+</section>
+
+<!-- S6: CORE CONCEPTS -->
+<section id="s6">
+  <h2 class="section-title"><span class="num">§6</span> 📦 Core Concepts</h2>
+
+  <h3>L1 Cache (Local / In-Process)</h3>
+  <p>An in-memory cache living inside the application process itself — typically a bounded LRU or LFU map with TTL (e.g., Caffeine in Java, <code>lru-cache</code> in Node.js). Reads complete in under a microsecond because there is no network hop. The downside is privacy: L1 is visible only to the node it lives on. A write on node A does not automatically update L1 on nodes B, C, or D — creating a stale window bounded only by TTL or an explicit invalidation signal.</p>
+
+  <h3>L2 Cache (Distributed / Shared)</h3>
+  <p>A shared caching tier accessible by all application nodes over the network — most commonly Redis or Memcached. Because L2 is shared, a write to L2 is immediately visible to any node that queries L2 next (for keys not cached in their L1). L2 latency is typically 0.5–2ms in a co-located datacenter, which is fast for most workloads but still 10,000× slower than L1. L2 holds a much larger working set than any single node's L1, making it the primary hit driver for the fleet.</p>
+
+  <h3>Cache Read Waterfall</h3>
+  <p>The canonical read sequence: <strong>check L1</strong> → on hit, return immediately; on miss, <strong>check L2</strong> → on hit, populate L1 and return; on L2 miss, <strong>fetch from origin</strong> → populate L2 then L1, return. Hot data migrates up to L1 after the first L2 hit, making subsequent reads on that node L1-fast. The origin is only reached when both tiers miss simultaneously.</p>
+
+  <!-- Read Waterfall Diagram -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">📊 Read Waterfall — All Three Scenarios</div>
+    <svg viewBox="0 0 780 280" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:780px;display:block;margin:0 auto;">
+      <rect width="780" height="280" fill="#fafafa" rx="8"/>
+
+      <!-- Scenario labels -->
+      <text x="130" y="24" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#2563eb">Scenario A</text>
+      <text x="130" y="38" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#666">L1 Hit</text>
+      <text x="390" y="24" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#e67700">Scenario B</text>
+      <text x="390" y="38" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#666">L1 Miss / L2 Hit</text>
+      <text x="650" y="24" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#dc2626">Scenario C</text>
+      <text x="650" y="38" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#666">Both Miss</text>
+
+      <!-- Scenario A: L1 Hit -->
+      <rect x="55" y="55" width="150" height="36" rx="6" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="130" y="77" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" fill="#1e40af" font-weight="bold">L1 Cache</text>
+      <rect x="55" y="105" width="150" height="36" rx="6" fill="#f3f2ef" stroke="#ccc" stroke-width="1"/>
+      <text x="130" y="127" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#aaa">L2 (skipped)</text>
+      <rect x="55" y="155" width="150" height="36" rx="6" fill="#f3f2ef" stroke="#ccc" stroke-width="1"/>
+      <text x="130" y="177" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#aaa">Origin (skipped)</text>
+      <text x="130" y="220" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="bold" fill="#16a34a">✓ Return &lt;0.1ms</text>
+      <!-- Arrow down to L1 -->
+      <line x1="130" y1="55" x2="130" y2="45" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arr)"/>
+      <text x="130" y="42" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#2563eb">Request</text>
+      <!-- HIT badge -->
+      <rect x="170" y="62" width="30" height="16" rx="4" fill="#16a34a"/>
+      <text x="185" y="73" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" font-weight="bold" fill="white">HIT</text>
+      <!-- Return arrow -->
+      <line x1="130" y1="91" x2="130" y2="235" stroke="#16a34a" stroke-width="1.5" stroke-dasharray="4,2"/>
+
+      <!-- Scenario B: L1 Miss / L2 Hit -->
+      <rect x="315" y="55" width="150" height="36" rx="6" fill="#f3f2ef" stroke="#ccc" stroke-width="1.5"/>
+      <text x="390" y="73" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" fill="#999">L1 Cache</text>
+      <rect x="315" y="105" width="150" height="36" rx="6" fill="#ffd8a8" stroke="#e67700" stroke-width="1.5"/>
+      <text x="390" y="127" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" fill="#7c2d12" font-weight="bold">L2 Cache</text>
+      <rect x="315" y="155" width="150" height="36" rx="6" fill="#f3f2ef" stroke="#ccc" stroke-width="1"/>
+      <text x="390" y="177" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#aaa">Origin (skipped)</text>
+      <!-- Miss badge on L1 -->
+      <rect x="435" y="62" width="28" height="16" rx="4" fill="#dc2626"/>
+      <text x="449" y="73" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" font-weight="bold" fill="white">MISS</text>
+      <!-- Hit badge on L2 -->
+      <rect x="435" y="112" width="28" height="16" rx="4" fill="#16a34a"/>
+      <text x="449" y="123" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" font-weight="bold" fill="white">HIT</text>
+      <line x1="390" y1="55" x2="390" y2="91" stroke="#dc2626" stroke-width="1.5"/>
+      <line x1="390" y1="91" x2="390" y2="105" stroke="#e67700" stroke-width="1.5"/>
+      <text x="390" y="220" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#e67700">→ Fill L1, return ~1ms</text>
+      <text x="390" y="235" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#666">Populate L1 with L2 value</text>
+
+      <!-- Scenario C: Both Miss -->
+      <rect x="575" y="55" width="150" height="36" rx="6" fill="#f3f2ef" stroke="#ccc" stroke-width="1.5"/>
+      <text x="650" y="73" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" fill="#999">L1 Cache</text>
+      <rect x="575" y="105" width="150" height="36" rx="6" fill="#f3f2ef" stroke="#ccc" stroke-width="1.5"/>
+      <text x="650" y="127" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" fill="#999">L2 Cache</text>
+      <rect x="575" y="155" width="150" height="36" rx="6" fill="#fce7f3" stroke="#9333ea" stroke-width="1.5"/>
+      <text x="650" y="177" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" fill="#6b21a8" font-weight="bold">Origin / DB</text>
+      <!-- Miss badges -->
+      <rect x="695" y="62" width="28" height="16" rx="4" fill="#dc2626"/>
+      <text x="709" y="73" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" font-weight="bold" fill="white">MISS</text>
+      <rect x="695" y="112" width="28" height="16" rx="4" fill="#dc2626"/>
+      <text x="709" y="123" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" font-weight="bold" fill="white">MISS</text>
+      <line x1="650" y1="55" x2="650" y2="91" stroke="#dc2626" stroke-width="1.5"/>
+      <line x1="650" y1="91" x2="650" y2="105" stroke="#dc2626" stroke-width="1.5"/>
+      <line x1="650" y1="141" x2="650" y2="155" stroke="#9333ea" stroke-width="1.5"/>
+      <text x="650" y="218" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#dc2626">⚠️ Fill L2 then L1 (~10ms)</text>
+      <text x="650" y="235" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#dc2626">Risk: thundering herd!</text>
+
+      <!-- Dividers -->
+      <line x1="260" y1="48" x2="260" y2="260" stroke="#e5e3de" stroke-width="1" stroke-dasharray="4,3"/>
+      <line x1="520" y1="48" x2="520" y2="260" stroke="#e5e3de" stroke-width="1" stroke-dasharray="4,3"/>
+
+      <defs>
+        <marker id="arr" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+          <path d="M0,0 L0,8 L8,4 z" fill="#2563eb"/>
+        </marker>
+      </defs>
+    </svg>
+    <p class="caption">Three read scenarios: L1 hit is cheapest; both-miss reaches origin and risks thundering herd</p>
+  </div>
+
+  <h3>L1 Invalidation</h3>
+  <p>Because L1 is private per-node, invalidation is the hardest problem. Two primary strategies: <strong>(1) TTL-based expiry</strong> — set L1 TTL short (e.g., 5–10 seconds) so stale data naturally expires; simple but tolerates staleness proportional to TTL. <strong>(2) Pub/Sub broadcast</strong> — on write, publish an invalidation message to a Redis channel; all nodes subscribe and evict the key from their L1 immediately; bounds staleness to propagation delay (~milliseconds) but adds a message bus dependency.</p>
+
+  <h3>Cache Affinity (Sticky Routing)</h3>
+  <p>L1 hit rates are dramatically higher when the same key is consistently routed to the same application node — achieved via consistent hashing at the load balancer or session pinning. Without affinity in a round-robin fleet, each node independently cold-caches every key and L1 hit rates approach zero. With affinity, L1 hit rates for hot keys can reach 70–90%, reducing L2 and origin load by an order of magnitude.</p>
+</section>
+
+<!-- S7: FIRST PRINCIPLES -->
+<section id="s7">
+  <h2 class="section-title"><span class="num">§7</span> 🔍 First Principles — Why Does This Exist?</h2>
+  <p>A single-tier distributed cache (L2 only) solved the problem of offloading the database — but at extreme scale, even Redis at 1ms per read becomes the latency floor. If you have 10,000 RPS flowing through a single application node and 80% hit the same 1,000 hot keys, those 8,000 reads/second are paying 1ms each in network overhead — adding 8 full seconds of aggregate wait per second on that node alone.</p>
+  <p>The insight behind L1 is that <strong>network latency is unnecessary for data already in the same process</strong>. By keeping the hottest subset in-process, you short-circuit the network entirely for those reads. Only misses — which are rare for hot keys — pay the L2 round-trip. The compound effect is multiplicative: 90% L1 hit rate → 10× fewer L2 queries → 50% L2 hit rate on the remainder → 20× fewer origin queries compared to no caching. You can only achieve this through layering.</p>
+
+  <!-- Latency Comparison Diagram -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">⏱️ Latency Budget — L1 vs L2 vs Origin</div>
+    <svg viewBox="0 0 720 180" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:720px;display:block;margin:0 auto;">
+      <rect width="720" height="180" fill="#fafafa" rx="8"/>
+      <!-- Y axis label -->
+      <text x="10" y="90" font-family="Arial,sans-serif" font-size="11" fill="#666" transform="rotate(-90,10,90)" text-anchor="middle">Latency (log scale)</text>
+
+      <!-- Bars (log-scaled widths: L1=0.1µs, L2=1ms=10000µs, Origin=10ms=100000µs) -->
+      <!-- L1: 0.1µs → width 6 -->
+      <rect x="80" y="40" width="6" height="32" rx="3" fill="#2563eb"/>
+      <text x="93" y="60" font-family="Arial,sans-serif" font-size="12" fill="#1e40af" font-weight="bold">L1 — 0.1µs</text>
+      <text x="93" y="75" font-family="Arial,sans-serif" font-size="10" fill="#666">in-process memory</text>
+
+      <!-- L2: 1ms → width 120 (1ms = 10,000µs, 2 orders of magnitude more) -->
+      <rect x="80" y="90" width="120" height="32" rx="3" fill="#e67700"/>
+      <text x="207" y="110" font-family="Arial,sans-serif" font-size="12" fill="#7c2d12" font-weight="bold">L2 — 1ms</text>
+      <text x="207" y="125" font-family="Arial,sans-serif" font-size="10" fill="#666">network round-trip (Redis)</text>
+
+      <!-- Origin: 10ms → width 480 (10ms = 10× more than L2 in absolute, but log scale here) -->
+      <rect x="80" y="140" width="480" height="32" rx="3" fill="#dc2626"/>
+      <text x="567" y="160" font-family="Arial,sans-serif" font-size="12" fill="#7f1d1d" font-weight="bold">Origin — 10ms</text>
+      <!-- Use a cut indicator for the origin bar -->
+
+      <!-- Scale annotations -->
+      <text x="80" y="30" font-family="Arial,sans-serif" font-size="10" fill="#666">Approximate widths proportional to relative order of magnitude</text>
+
+      <!-- 10,000x label -->
+      <text x="40" y="100" font-family="Arial,sans-serif" font-size="10" fill="#e67700" text-anchor="middle">10,000×</text>
+      <text x="40" y="113" font-family="Arial,sans-serif" font-size="10" fill="#e67700" text-anchor="middle">slower</text>
+      <text x="40" y="155" font-family="Arial,sans-serif" font-size="10" fill="#dc2626" text-anchor="middle">100,000×</text>
+      <text x="40" y="168" font-family="Arial,sans-serif" font-size="10" fill="#dc2626" text-anchor="middle">slower</text>
+    </svg>
+    <p class="caption">L1 saves 10,000× vs L2 per hit — at 90% L1 hit rate, the p99 tail collapses dramatically</p>
+  </div>
+</section>
+
+<!-- S8: MENTAL MODELS -->
+<section id="s8">
+  <h2 class="section-title"><span class="num">§8</span> 🗺️ Mental Models</h2>
+
+  <h3>Model 1: The CPU Cache Hierarchy</h3>
+  <p>Software multi-level caching mirrors the L1/L2/L3 cache inside a CPU. L1 CPU cache is tiny and blazing fast; L2 is larger and slightly slower; main memory (analogous to Redis/L2) is much larger but orders of magnitude slower; disk (analogous to the database) is authoritative but slowest. The engineering principle is identical: keep the hottest data in the fastest, closest tier and let misses fall through. <em>Where it breaks down:</em> CPU caches are hardware-coherent by design; software caches require explicit invalidation — the human must implement what the CPU does automatically.</p>
+
+  <h3>Model 2: The Store's Shelf vs. Back Room vs. Warehouse</h3>
+  <p>Think of L1 as the shelf stock visible to the cashier (fast, limited), L2 as the store's back room (larger, takes 30 seconds to retrieve), and the origin as the regional warehouse (authoritative, takes hours to ship). A popular product gets restocked from the back room to the shelf automatically. A product recall (invalidation) requires notifying every store's shelf simultaneously. <em>Where it breaks down:</em> in a real store, one cashier seeing the shelf means all cashiers see it. In multi-level caching, each application node has its own private shelf — the recall must reach every node independently.</p>
+
+  <h3>Model 3: The Latency Budget Frame</h3>
+  <p>Every cache read draws from a latency budget. L1 hit costs ~0.1µs; L2 hit costs ~1ms (10,000×); origin hit costs ~10ms (100,000×). A page load with 10 cache reads at 100% L2 costs 10ms in cache overhead alone. At 90% L1 hit rate: 9 × 0.1µs + 1 × 1ms ≈ 1ms total. L1 doesn't just improve average latency — it collapses the tail (p99 and p999) because tail latency is dominated by the slowest-tier reads. This model is your justification in interviews for adding L1 complexity.</p>
+</section>
+
+<!-- S9: HOW IT WORKS -->
+<section id="s9">
+  <h2 class="section-title"><span class="num">§9</span> ⚙️ How It Works — Mechanics</h2>
+
+  <!-- Write-Invalidate Flow Diagram -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">✏️ Write-Invalidate Path (Most Common)</div>
+    <svg viewBox="0 0 760 200" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:760px;display:block;margin:0 auto;">
+      <rect width="760" height="200" fill="#fafafa" rx="8"/>
+
+      <!-- Steps as numbered boxes -->
+      <!-- Step 1: Write to DB -->
+      <rect x="20" y="70" width="110" height="60" rx="8" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.5"/>
+      <text x="75" y="94" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#4c1d95">① Write</text>
+      <text x="75" y="108" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#4c1d95">to Primary</text>
+      <text x="75" y="120" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#4c1d95">Database</text>
+
+      <!-- Arrow -->
+      <line x1="130" y1="100" x2="158" y2="100" stroke="#666" stroke-width="1.5" marker-end="url(#arr2)"/>
+
+      <!-- Step 2: Delete from L2 -->
+      <rect x="160" y="70" width="115" height="60" rx="8" fill="#ffd8a8" stroke="#e67700" stroke-width="1.5"/>
+      <text x="218" y="94" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#7c2d12">② DEL key</text>
+      <text x="218" y="108" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#7c2d12">from L2</text>
+      <text x="218" y="120" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#7c2d12">(Redis)</text>
+
+      <!-- Arrow -->
+      <line x1="275" y1="100" x2="303" y2="100" stroke="#666" stroke-width="1.5" marker-end="url(#arr2)"/>
+
+      <!-- Step 3: Publish invalidation -->
+      <rect x="305" y="70" width="130" height="60" rx="8" fill="#c3fae8" stroke="#0ca678" stroke-width="1.5"/>
+      <text x="370" y="91" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#064e3b">③ Publish</text>
+      <text x="370" y="105" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#064e3b">INVALIDATE key</text>
+      <text x="370" y="118" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#064e3b">to Pub/Sub channel</text>
+
+      <!-- Fan-out arrow -->
+      <line x1="435" y1="100" x2="463" y2="75" stroke="#666" stroke-width="1.5" marker-end="url(#arr2)"/>
+      <line x1="435" y1="100" x2="463" y2="100" stroke="#666" stroke-width="1.5" marker-end="url(#arr2)"/>
+      <line x1="435" y1="100" x2="463" y2="125" stroke="#666" stroke-width="1.5" marker-end="url(#arr2)"/>
+
+      <!-- Step 4: All nodes evict L1 -->
+      <rect x="465" y="42" width="110" height="44" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="520" y="62" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#1e40af">④ Node A</text>
+      <text x="520" y="76" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#1e40af">evict from L1</text>
+      <rect x="465" y="95" width="110" height="44" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="520" y="115" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#1e40af">④ Node B</text>
+      <text x="520" y="129" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#1e40af">evict from L1</text>
+      <rect x="465" y="148" width="110" height="44" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="520" y="168" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#1e40af">④ Node C</text>
+      <text x="520" y="182" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#1e40af">evict from L1</text>
+
+      <!-- Step 5: Next read repopulates -->
+      <line x1="575" y1="100" x2="603" y2="100" stroke="#666" stroke-width="1.5" marker-end="url(#arr2)"/>
+      <rect x="605" y="70" width="135" height="60" rx="8" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5"/>
+      <text x="673" y="91" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#7f1d1d">⑤ Next read</text>
+      <text x="673" y="105" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#7f1d1d">misses L1+L2</text>
+      <text x="673" y="118" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#7f1d1d">→ fetches fresh</text>
+
+      <defs>
+        <marker id="arr2" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+          <path d="M0,0 L0,8 L8,4 z" fill="#666"/>
+        </marker>
+      </defs>
+    </svg>
+    <p class="caption">Write-invalidate: delete from L2, broadcast to all L1s, next read re-populates from fresh origin data</p>
+  </div>
+
+  <h3>TTL Strategy</h3>
+  <p>L1 TTL must always be ≤ L2 TTL. If L1 TTL > L2 TTL, a node could continue serving data from L1 even after L2's copy has expired — and when L1 finally expires, L2 is also gone, forcing an origin fetch that is older than intended. A good rule of thumb: L1 TTL = 5–30 seconds (short to bound stale window); L2 TTL = 5 minutes to several hours (depends on data freshness tolerance and write frequency).</p>
+
+  <h3>Key Sizing</h3>
+  <p>L1 should hold only the hottest key set. Size it as: <code>(hot key count) × (avg object size)</code>. For example, 10,000 hot objects × 2KB each = 20MB per node — comfortably within JVM heap or process memory. L2 holds the full working set; size it based on total cacheable data volume × desired coverage, factoring in Redis cluster replication overhead.</p>
+
+  <div class="callout callout-warn">
+    ⚠️ <strong>Mass invalidation thundering herd:</strong> After a deploy or cache flush, ALL nodes simultaneously miss both L1 and L2. Without protection, up to N application nodes each independently fetch the same key from origin — multiplying origin load by N. Mitigation: use a per-key mutex or Lua script at L2 (<code>SET key lock NX EX 1</code>) so only one node fetches and the rest wait, then reads the populated value.
+  </div>
+</section>
+
+<!-- S10: REAL-WORLD EXAMPLES -->
+<section id="s10">
+  <h2 class="section-title"><span class="num">§10</span> 🏭 Real-World System Examples</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>System</th><th>How Multi-Level Caching Applies</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Facebook Memcache</strong></td>
+          <td>Regional Memcached pools (L2) with per-web-server mcrouter local cache (L1); invalidation via McSqueal pub/sub pipeline</td>
+          <td>Described in NSDI 2013 paper; invalidation at Facebook scale required a dedicated invalidation bus — pub/sub latency was measured in milliseconds</td>
+        </tr>
+        <tr>
+          <td><strong>Netflix EVCache</strong></td>
+          <td>EVCache (Memcached-based, multi-AZ) serves as L2; Netflix API servers maintain in-process LRU caches (L1) for ultra-hot metadata (active show info, feature flags)</td>
+          <td>EVCache replicates across AZs for resilience; in-proc cache reduces cross-AZ network calls for the hottest subset of data</td>
+        </tr>
+        <tr>
+          <td><strong>Cloudflare CDN</strong></td>
+          <td>Tiered caching: PoP edge cache (L1-equivalent) in front of shield origin (L2-equivalent) in front of true origin. Only a fraction of misses ever reach the customer's origin.</td>
+          <td>"Argo Tiered Caching" and "Cache Reserve" are Cloudflare's explicit multi-level products; same principle at network layer</td>
+        </tr>
+        <tr>
+          <td><strong>Java microservices (Caffeine + Redis)</strong></td>
+          <td>Caffeine (in-JVM, nanoseconds, L1) in front of Redis (L2, ~1ms); L1 invalidated via short TTL or Redis Pub/Sub; extremely common pattern in high-traffic Java services</td>
+          <td>Caffeine with <code>maximumSize</code> and <code>expireAfterWrite</code> is the standard L1 implementation in the JVM ecosystem</td>
+        </tr>
+        <tr>
+          <td><strong>Instagram (Python + Redis)</strong></td>
+          <td>In-process <code>cachetools</code> LRU dict (L1) for hot user/feed data; Redis (L2) as the shared cross-process cache; TTL short on L1 to keep stale window manageable</td>
+          <td>Python's GIL makes in-process caching simpler to reason about for thread-safety than in JVM environments</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- S11: TRADE-OFFS -->
+<section id="s11">
+  <h2 class="section-title"><span class="num">§11</span> ⚖️ Trade-offs</h2>
+
+  <!-- Trade-off comparison diagram -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">⚖️ Single-Tier vs Multi-Level Caching — Key Dimensions</div>
+    <svg viewBox="0 0 720 200" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:720px;display:block;margin:0 auto;">
+      <rect width="720" height="200" fill="#fafafa" rx="8"/>
+
+      <!-- Headers -->
+      <text x="180" y="28" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="bold" fill="#e67700">L2 Only (Redis)</text>
+      <text x="540" y="28" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="bold" fill="#2563eb">L1 + L2 (Multi-Level)</text>
+      <line x1="360" y1="8" x2="360" y2="195" stroke="#e5e3de" stroke-width="1.5" stroke-dasharray="5,3"/>
+
+      <!-- Dimension labels -->
+      <text x="20" y="60" font-family="Arial,sans-serif" font-size="11" fill="#666" font-weight="bold">Hot-key latency</text>
+      <text x="20" y="90" font-family="Arial,sans-serif" font-size="11" fill="#666" font-weight="bold">Consistency</text>
+      <text x="20" y="120" font-family="Arial,sans-serif" font-size="11" fill="#666" font-weight="bold">Op complexity</text>
+      <text x="20" y="150" font-family="Arial,sans-serif" font-size="11" fill="#666" font-weight="bold">Origin protection</text>
+      <text x="20" y="180" font-family="Arial,sans-serif" font-size="11" fill="#666" font-weight="bold">Memory overhead</text>
+
+      <!-- L2 Only values -->
+      <rect x="130" y="46" width="200" height="18" rx="3" fill="#ffd8a8" stroke="none"/>
+      <text x="230" y="59" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#7c2d12">~1ms per read (network)</text>
+      <rect x="130" y="76" width="200" height="18" rx="3" fill="#dcfce7" stroke="none"/>
+      <text x="230" y="89" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#065f46">Strong (single source)</text>
+      <rect x="130" y="106" width="200" height="18" rx="3" fill="#dcfce7" stroke="none"/>
+      <text x="230" y="119" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#065f46">Low — just Redis</text>
+      <rect x="130" y="136" width="200" height="18" rx="3" fill="#ffd8a8" stroke="none"/>
+      <text x="230" y="149" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#7c2d12">Moderate</text>
+      <rect x="130" y="166" width="200" height="18" rx="3" fill="#dcfce7" stroke="none"/>
+      <text x="230" y="179" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#065f46">None beyond Redis</text>
+
+      <!-- L1+L2 values -->
+      <rect x="385" y="46" width="300" height="18" rx="3" fill="#dcfce7" stroke="none"/>
+      <text x="535" y="59" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#065f46">~0.1µs for L1 hits (massive win)</text>
+      <rect x="385" y="76" width="300" height="18" rx="3" fill="#fee2e2" stroke="none"/>
+      <text x="535" y="89" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#7f1d1d">Eventual — L1 stale window</text>
+      <rect x="385" y="106" width="300" height="18" rx="3" fill="#fee2e2" stroke="none"/>
+      <text x="535" y="119" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#7f1d1d">High — invalidation logic + pub/sub</text>
+      <rect x="385" y="136" width="300" height="18" rx="3" fill="#dcfce7" stroke="none"/>
+      <text x="535" y="149" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#065f46">Strong — L1 absorbs hot key spikes</text>
+      <rect x="385" y="166" width="300" height="18" rx="3" fill="#ffd8a8" stroke="none"/>
+      <text x="535" y="179" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#7c2d12">Higher — L1 consumes process memory</text>
+    </svg>
+    <p class="caption">Green = advantage, orange = acceptable, red = cost/limitation</p>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>✅ Benefit</th><th>❌ Cost / Limitation</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="benefit">Sub-microsecond reads for hot keys (vs. 1ms+ for L2)</td>
+          <td class="cost">Increased operational complexity: two cache tiers to monitor, size, tune, and troubleshoot independently</td>
+        </tr>
+        <tr>
+          <td class="benefit">Reduces L2 traffic by the L1 hit rate (e.g., 80% fewer Redis reads)</td>
+          <td class="cost">Per-node inconsistency window: L1 caches can serve stale data until TTL expires or invalidation propagates</td>
+        </tr>
+        <tr>
+          <td class="benefit">Shields L2 from hot key overload (N nodes' L1s absorb the hottest key)</td>
+          <td class="cost">Mass invalidation causes thundering herd at both L1 and L2 simultaneously — origin spike is worse than single-tier</td>
+        </tr>
+        <tr>
+          <td class="benefit">Reduces network bandwidth consumption across the fleet</td>
+          <td class="cost">L1 consumes process memory (competes with application heap/objects)</td>
+        </tr>
+        <tr>
+          <td class="benefit">Dramatically improves tail latency (p99, p999) for hot-key reads</td>
+          <td class="cost">Cache affinity (sticky routing) required for high L1 hit rate — breaks simple round-robin load balancing</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- S12: INTERVIEW APPLICATION -->
+<section id="s12">
+  <h2 class="section-title"><span class="num">§12</span> 🎯 Interview Application</h2>
+
+  <h3>Trigger Phrases</h3>
+  <ul style="margin-left:20px;margin-bottom:16px;font-size:14.5px;line-height:1.8;">
+    <li>"The system needs sub-millisecond latency for reads at high QPS"</li>
+    <li>"We have a hot key problem — certain keys are getting millions of hits per second on Redis"</li>
+    <li>"How would you further reduce latency? We already have Redis in place"</li>
+    <li>"The cache is becoming a bottleneck. What would you do?"</li>
+  </ul>
+
+  <h3>What You Say / Do</h3>
+  <p>In the deep dive or optimization phase, introduce multi-level caching as a targeted optimization for hot keys. Frame it explicitly: "Given the read pattern here, I'd add an in-process L1 cache — something like Caffeine with a 10-second TTL — in front of Redis. The hot 1% of keys will stay L1-resident on each node, cutting L2 traffic by an order of magnitude. The key challenge is invalidation: I'd use a Redis Pub/Sub broadcast so all nodes evict their L1 entry within milliseconds of a write." Then address the thundering herd risk proactively to show depth.</p>
+
+  <div class="tradeoff-box">
+    💬 <strong>Trade-off statement (memorize this):</strong><br><br>
+    "If we add an L1 in-process cache, we get sub-millisecond reads for hot keys and dramatically reduce Redis traffic, but we accept a staleness window bounded by L1 TTL — or we add pub/sub invalidation to shrink that window to milliseconds at the cost of a message bus dependency. For this system, where user profile data changes infrequently and eventual consistency within 5 seconds is acceptable, L1 caching is the right call and TTL alone is sufficient."
+  </div>
+</section>
+
+<!-- S13: MISCONCEPTIONS -->
+<section id="s13">
+  <h2 class="section-title"><span class="num">§13</span> ⚠️ Common Misconceptions &amp; Gotchas</h2>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> Adding L1 in front of Redis always improves performance.</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> L1 only provides significant benefit when the same node repeatedly serves the same keys (cache affinity). In a round-robin load balanced fleet where any node can serve any key, L1 hit rates are near zero and you're just adding memory overhead and invalidation complexity with no latency benefit.</div></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> L1 TTL can be longer than L2 TTL — L1 will just fall through to L2 on expiry anyway.</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> If L1 TTL &gt; L2 TTL, the L2 entry expires first. When L1 finally expires, L2 has a fresh version (or is empty). This means a node could serve a stale value from L1 for longer than the L2 copy would have been live — creating an inconsistency window that exceeds what you intended. L1 TTL must always be ≤ L2 TTL.</div></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> Invalidating L2 (deleting from Redis) is sufficient to keep the system consistent after a write.</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Invalidating L2 is necessary but not sufficient. All nodes' L1 caches may still hold the old value until their TTL expires or an explicit invalidation broadcast arrives. You must also invalidate all L1s (via pub/sub or wait for TTL), or you'll serve stale data for up to L1 TTL duration after every write.</div></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> Multi-level caching solves the thundering herd problem.</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Multi-level caching can make thundering herd <em>worse</em> at mass invalidation time. With N nodes each holding an L1 copy of a popular key, a mass invalidation (deploy, cache flush) causes ALL N nodes to simultaneously miss both L1 and L2 and fire concurrent origin requests for the same key. Without coalescing (mutex at L2), origin load spikes by N× compared to a single-tier setup.</div></div>
+  </div>
+</section>
+
+<!-- S14: RELATIONSHIPS -->
+<section id="s14">
+  <h2 class="section-title"><span class="num">§14</span> 🔗 Relationships to Other Concepts</h2>
+  <div class="connections">
+    <div class="conn-card">
+      <div class="conn-icon">🧱</div>
+      <div>
+        <div class="conn-label">Builds On</div>
+        <strong>5.6 Cache Stampede / Thundering Herd</strong> — understanding stampede is a prerequisite because multi-level caching amplifies it during mass invalidation; the mitigation (request coalescing, mutex) applies at L2 before falling through to origin. Also builds on <strong>5.7 Hot Key Problem</strong> — L1 per-node caching is one of the two primary hot key mitigations.
+      </div>
+    </div>
+    <div class="conn-card">
+      <div class="conn-icon">🔓</div>
+      <div>
+        <div class="conn-label">Enables</div>
+        <strong>Topic 6 — CDN Architecture</strong> — a CDN PoP cache + origin shield is multi-level caching at the network layer; understanding tiered principles makes CDN design immediately intuitive. Also enables understanding of <strong>Netflix EVCache / Facebook mcrouter</strong> as productionized L1 implementations.
+      </div>
+    </div>
+    <div class="conn-card">
+      <div class="conn-icon">⚡</div>
+      <div>
+        <div class="conn-label">Tension With</div>
+        <strong>5.5 Cache Consistency &amp; Invalidation</strong> — every L1 tier is a new invalidation target; the more cache layers, the harder it is to guarantee all tiers reflect the same truth after a write. Adding L1 fundamentally weakens the consistency guarantees you can offer unless you add pub/sub invalidation, which adds its own failure modes.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- S15: QUIZ -->
+<section id="s15">
+  <h2 class="section-title"><span class="num">§15</span> 🧪 Self-Check Quiz</h2>
+  <div class="callout callout-quote">Can you answer these without looking? If not, you haven't internalized it yet. Click to reveal the hint.</div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">1</div>
+      <div class="qtext">Walk through the three read scenarios in a two-tier cache system: L1 hit, L1 miss / L2 hit, and both miss. What happens at each step and what is the approximate latency?</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 Think through: L1 hit → return (~0.1µs). L1 miss → query L2 → hit → populate L1 and return (~1ms). Both miss → fetch origin → populate L2 then L1 → return (~10ms). If you hesitate on populating order, revisit §9.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">2</div>
+      <div class="qtext">Your load balancer uses round-robin across 20 application nodes, each with an in-process L1 cache. Will L1 provide meaningful latency benefit? Why or why not?</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 No. Without cache affinity (sticky routing), each request for a given key lands on a different node each time. L1 hit rate approaches 1/20 = 5% — negligible. L1 helps only when the same node repeatedly serves the same key. Revisit §6 (Cache Affinity) and §13 if you were unsure.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">3</div>
+      <div class="qtext">A write occurs to a user's profile. You update the database and delete the key from Redis (L2). What could still go wrong, and what additional step is required?</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 All nodes' L1 caches may still hold the old version until their TTL expires. Reads from those nodes will return stale profile data. Additional step: broadcast an invalidation message (e.g., Redis Pub/Sub) to all nodes so they immediately evict the key from their local L1. Revisit §9 (Write Path) and §13 if you missed this.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">4</div>
+      <div class="qtext">Name a real production system that uses multi-level caching. Describe specifically how the two tiers are structured and why they chose to add the L1 tier.</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 Facebook Memcache (NSDI 2013): L2 = regional Memcached pools; L1 = per-web-server mcrouter local cache. L1 was added because at Facebook's scale, even low Memcached latency became a bottleneck when each page load required hundreds of cache reads. Revisit §10 for Netflix EVCache and Cloudflare alternatives.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">5</div>
+      <div class="qtext">A deploy flushes all caches — L1 and L2 go cold simultaneously across 50 nodes, handling 50,000 RPS. What specific failure mode is at highest risk, and how do you mitigate it?</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 Thundering herd amplified: all 50 nodes simultaneously miss both tiers and fire concurrent origin fetches for popular keys. At 50K RPS, this could generate thousands of simultaneous DB queries for the same 100 hot keys. Mitigation: (1) use a mutex at L2 (Redis SET NX) so only one node fetches each key; others wait and read from L2 after repopulation. (2) Warm caches during a canary deploy before full rollout. Revisit §9 callout warning.</div>
+  </div>
+</section>
+
+<!-- S16: FURTHER READING -->
+<section id="s16">
+  <h2 class="section-title"><span class="num">§16</span> 📚 Further Reading</h2>
+  <ul class="reading-list">
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>Facebook's Memcache at Scale (NSDI 2013)</strong> — <a href="https://www.usenix.org/system/files/conference/nsdi13/nsdi13-final170_update.pdf" target="_blank">usenix.org</a> — the canonical multi-level caching paper; focus on regional pools and the McSqueal invalidation pipeline</div></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>ByteByteGo "A Crash Course in Caching"</strong> — <a href="https://blog.bytebytego.com/p/a-crash-course-in-caching-part-1" target="_blank">blog.bytebytego.com</a> — covers multi-level patterns accessibly with diagrams</div></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>Caffeine (Java) documentation</strong> — <a href="https://github.com/ben-manes/caffeine" target="_blank">github.com/ben-manes/caffeine</a> — understand L1 implementation choices: maximumSize, expireAfterWrite, refreshAfterWrite</div></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>Redis Pub/Sub documentation</strong> — <a href="https://redis.io/docs/manual/pubsub/" target="_blank">redis.io</a> — the standard mechanism for broadcasting L1 invalidation events across all nodes</div></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>DDIA Chapter 5</strong> (Kleppmann) — covers replication lag and consistency models that underpin why multi-level caching creates the consistency challenges discussed here</div></li>
+  </ul>
+</section>
+
+<!-- S17: MY NOTES -->
+<section id="s17">
+  <h2 class="section-title"><span class="num">§17</span> ✍️ My Notes</h2>
+  <div class="callout callout-quote">Personal observations, things that confused me, analogies that helped. This section is yours.</div>
+  <textarea class="notes-area" placeholder="Add your personal notes here — analogies that clicked, interview stories, things that confused you..."></textarea>
+</section>
+
+</article>
+</main>
+
+<script>
+// TOC active state
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('#toc nav a');
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(a => a.classList.remove('active'));
+      const a = document.querySelector(`#toc nav a[href="#${e.target.id}"]`);
+      if (a) a.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+sections.forEach(s => obs.observe(s));
+
+// Checklist toggle
+function toggle(cb) {
+  const li = cb.closest('li');
+  li.classList.toggle('checked');
+}
+
+// Phase card toggle
+function togglePhase(header) {
+  header.closest('.phase-card').classList.toggle('open');
+}
+
+// Quiz toggle
+function toggleQuiz(q) {
+  const item = q.closest('.quiz-item');
+  item.classList.toggle('open');
+  q.querySelector('.quiz-toggle').textContent = item.classList.contains('open') ? '▲ Hide' : '▼ Hint';
+}
+
+// Reading list toggle
+function toggleReading(cb) {
+  const li = cb.closest('li');
+  li.classList.toggle('checked');
+}
+
+// Notes auto-save (in-memory only)
+const notesArea = document.querySelector('.notes-area');
+const NOTES_KEY = 'notes_5_8';
+if (localStorage.getItem(NOTES_KEY)) notesArea.value = localStorage.getItem(NOTES_KEY);
+notesArea.addEventListener('input', () => {
+  try { localStorage.setItem(NOTES_KEY, notesArea.value); } catch(e) {}
+});
+</script>
+</body>
+</html>
