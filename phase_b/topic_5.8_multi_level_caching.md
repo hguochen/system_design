@@ -91,6 +91,46 @@ After studying this, you should be able to design a complete multi-level cache a
 
 ![5.8 Multi-Level Caching — Mindmap](../assets/images/topic_5.8_multi_level_caching_mindmap.png)
 
+### 🗺️ Cache Tier Decision Map
+
+```
+Is read latency / DB load a problem?
+├── No  ──────────────────────────────────────► No cache needed yet
+└── Yes
+    │
+    ▼
+Multiple nodes need shared data OR writes are frequent?
+├── Yes ──────────────────────────────────────► L2 Only (Redis/Memcached)
+└── No
+    │
+    ▼
+Is L2 latency (~1ms) still the bottleneck, or hot key saturating it?
+├── No  ──────────────────────────────────────► L2 Only is sufficient
+└── Yes
+    │
+    ▼
+Can you enable cache affinity (consistent-hash / sticky routing)?
+├── No  ──────────────────────────────────────► Key replication or request coalescing
+│                                               (L1 hit rate ≈ 0% without affinity)
+└── Yes
+    │
+    ▼
+Writes infrequent enough to tolerate a staleness window (TTL or pub/sub)?
+├── No  ──────────────────────────────────────► L2 Only (writes too hot for L1)
+└── Yes
+    │
+    ▼
+    ┌─────────────────────────────────────────────────────┐
+    │           L1 + L2  (Multi-Level Caching)            │
+    │  In-process L1 (Caffeine, TTL 5–30s)                │
+    │  + Shared L2 (Redis/Memcached)                      │
+    └─────────────────────────────────────────────────────┘
+    ⚠️  Must invalidate BOTH tiers on write:
+        DEL from L2  +  pub/sub broadcast to all L1s
+    ⚠️  Mass eviction = N× thundering herd:
+        Protect origin with SET NX mutex at L2
+```
+
 ```
 § 1  WHY IT EXISTS
 A single-tier L2 cache (Redis) solves DB offload but at extreme scale even 1ms per
@@ -347,23 +387,105 @@ In the deep dive or optimization phase, introduce multi-level caching as a targe
 1. What is the read path through a two-tier cache system? Walk through all three scenarios: L1 hit, L1 miss / L2 hit, both miss.
 
    > 💡 *Think through your answer before expanding — if you hesitate, revisit Section 9.*
+L1 HIT:            Check L1 → hit → return value (<0.1ms)
+
+L1 MISS / L2 HIT:  Check L1 → miss → check L2 → hit →
+                   populate L1 from response → return value (~1ms)
+
+BOTH MISS:         Check L1 → miss → check L2 → miss →
+                   fetch from DB → populate L2 → populate L1 → return value (~10ms)
+
+Key rule: on miss-fill, always write L2 first (shared tier benefits all nodes),
+then write L1 from the same in-memory value — not by re-reading L2.
 
 2. You have a Redis cluster (L2) and are considering adding an in-process L1 cache. Your load balancer uses round-robin. Should you add L1? Why or why not?
 
    > 💡 *Think through your answer before expanding — if you hesitate, revisit Section 6 (Cache Affinity) and Section 13.*
+We should not implement an L1 cache with round robin because in a round robin system mechanism, we hardly get any caches, because the requests are randomly assigned to the nodes. We cannot guarantee that there will be consistent cache hits with certain hotkeys. In fact, the cache hit with a round robin mechanism will be near 0% cache hit rate. If we want to implement an L1 cache, we will need cache affinity. That means we will need to use a consistent hashing mechanism to make sure that the same request for a key will always hit the same node. In this case, we can achieve a 70 to 90% cache rate for L1 cache. 
+
+DO NOT add L1 with round-robin load balancing.
+
+Why: each request for key K lands on a random node. The same key
+is served by a different node each time, so L1 is almost never warm.
+L1 hit rate ≈ 0% → you've added memory overhead and invalidation
+complexity for zero latency benefit.
+
+Prerequisite for L1: cache affinity via consistent-hash routing.
+Same key → same 1–3 nodes every time → L1 hit rates reach 70–90%
+for hot keys. Without affinity, L2-only is the correct architecture.
 
 3. A write occurs to a user's profile. You update the database and delete the key from Redis (L2). What could still go wrong, and what additional step is required?
 
    > 💡 *Think through your answer before expanding — if you hesitate, revisit Section 9 (Write Path) and Section 13.*
+Delete the key from Redis L2, but the L1 cache key is still present and within the TTL. That means further requests will continue to be serving the cached L1 data throughout the TTL period. We will also need to have a Redis Pub/Sub to emit an event to invalidate the L1 cache keys. 
+
+Problem: deleting from L2 alone leaves all N nodes' L1 caches
+holding the old value until their TTL expires — up to 5–30 seconds
+of stale data fleet-wide.
+
+Required additional step:
+  1. DEL key from L2
+  2. Publish INVALIDATE event via Redis Pub/Sub
+  3. All nodes' L1 cache listeners receive event → evict the key locally
+  4. Next read misses L1 → misses L2 → fetches fresh data from DB
+
+Caveat: pub/sub delivery is best-effort (not guaranteed).
+TTL is the correctness backstop — size L1 TTL to the maximum
+staleness your SLA can tolerate in case a message is dropped.
 
 4. Name a real production system that uses multi-level caching and explain specifically how the two tiers are structured and why.
 
    > 💡 *Think through your answer before expanding — if you hesitate, revisit Section 10.*
+Facebook memcache users are L1 and L2 multi-tier caching. Facebook has regional main cache pools L2 per web server, and there is also an MC router local cache L1. When a key is to be deleted, the app servers will first of all delete the L2 cache keys and, in addition, broadcast a delete key event so that all the L1 nodes can delete their local cache data. 
+
+Facebook's Memcached at scale (NSDI 2013):
+
+L1 — mcrouter (local in-process proxy cache) on each web server.
+     Serves the hottest keys with sub-ms latency, no network hop.
+
+L2 — regional Memcached pools, shared across all web servers in a region.
+     Holds the broader working set; ~1ms RTT.
+
+Invalidation path:
+  Write to MySQL → McSqueal reads binlog → sends DEL to L2 Memcached
+  → L2 DEL also triggers invalidation broadcast to all L1 mcrouters.
+
+Why two tiers: celebrity / viral content creates hot keys that
+saturate individual Memcached nodes. L1 absorbs that traffic
+locally so L2 nodes don't become single points of saturation.
 
 5. Your system has just done a cache-clearing deploy. All L1 and L2 entries are gone simultaneously. What specific failure mode is now at highest risk, and how would you mitigate it in a system that handles 50,000 requests per second?
 
    > 💡 *Think through your answer before expanding — if you hesitate, revisit Sections 9 and 13 (thundering herd amplification).*
+By having a cache clearing deploy, all of the L1 and L2 cache are empty and therefore will have 100% cache miss. All of the requests will hit the database, so we are looking at a thundering herd problem.
+To mitigate the thundering herd problem, we can do a few mitigations:
+1. Pre-warming of the caches before bringing it back online. We can pre-warm the cache we previously knew was hot working sets and populate them into the cache before subjecting the cache to traffic again.
+2. We can also have a request coalescing so that all of the requests asking for the same keys will now filter through to the database as one single request, or all the other requests will wait for the DB to return data.
+After the data is returned from DB, app servers will populate L2 cache first and then populate L1 cache. Subsequent requests will be using the cached data instead of hitting the DB.
 
+Failure mode: THUNDERING HERD — amplified N× in two-tier systems.
+All 500 nodes simultaneously miss L1 AND L2 → all 500 fire concurrent
+DB reads for the same keys. At 50K req/sec across 500 nodes = 100
+req/sec per node, but ALL hitting origin = 50K simultaneous DB queries.
+
+Mitigations:
+
+1. SET NX MUTEX AT L2 (request coalescing)
+   First node to miss acquires Redis lock: SET key:lock NX EX 1
+   That node fetches from DB, populates L2, releases lock.
+   All other nodes spin-wait or serve stale until L2 is warm.
+   Prevents N duplicate DB fetches for the same key.
+
+2. CACHE PRE-WARMING before re-opening traffic
+   Identify the known hot working set (top keys by frequency).
+   Write them into L2 before routing live traffic to the new cluster.
+   Reduces cold-start miss rate from 100% to the tail of the distribution.
+
+3. GRADUAL TRAFFIC RAMP (bonus)
+   Route 1% of traffic → 10% → 100% with time between steps.
+   Allows caches to warm organically before absorbing full load.
+
+On miss-fill: populate L2 first (shared tier) → then L1 (local node).
 ---
 
 ## 16. 📚 Further Reading

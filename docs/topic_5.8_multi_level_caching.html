@@ -325,6 +325,128 @@
     <p class="caption">Radial mindmap: six major clusters around the multi-level caching core concept</p>
   </div>
 
+  <!-- Decision Map -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">🗺️ Cache Tier Decision Map</div>
+    <svg viewBox="0 0 720 700" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:720px;display:block;margin:0 auto;" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+      <rect width="720" height="700" fill="#fafafa" rx="8"/>
+
+      <!-- START -->
+      <rect x="280" y="14" width="160" height="38" rx="19" fill="#1a1917"/>
+      <text x="360" y="37" text-anchor="middle" font-size="12" font-weight="600" fill="#fff">System needs caching?</text>
+
+      <line x1="360" y1="52" x2="360" y2="74" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+
+      <!-- Q1 -->
+      <rect x="200" y="74" width="320" height="44" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="360" y="93" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">Is read latency / DB load</text>
+      <text x="360" y="109" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">a bottleneck?</text>
+      <!-- No left -->
+      <line x1="200" y1="96" x2="108" y2="96" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="154" y="88" text-anchor="middle" font-size="10" fill="#6b6861">No</text>
+      <rect x="14" y="74" width="94" height="44" rx="8" fill="#f3f2ef" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="61" y="93" text-anchor="middle" font-size="11" fill="#6b6861">No cache</text>
+      <text x="61" y="108" text-anchor="middle" font-size="11" fill="#6b6861">needed yet</text>
+      <!-- Yes down -->
+      <line x1="360" y1="118" x2="360" y2="140" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="372" y="133" font-size="10" fill="#6b6861">Yes</text>
+
+      <!-- Q2 -->
+      <rect x="180" y="140" width="360" height="44" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="360" y="159" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">Shared data across nodes</text>
+      <text x="360" y="175" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">OR writes are frequent?</text>
+      <!-- Yes right -->
+      <line x1="540" y1="162" x2="608" y2="162" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="572" y="154" text-anchor="middle" font-size="10" fill="#6b6861">Yes</text>
+      <rect x="608" y="140" width="100" height="44" rx="8" fill="#ffd8a8" stroke="#e67700" stroke-width="1.5"/>
+      <text x="658" y="159" text-anchor="middle" font-size="12" font-weight="700" fill="#7c2d12">L2 Only</text>
+      <text x="658" y="175" text-anchor="middle" font-size="10" fill="#7c2d12">Redis/Memcached</text>
+      <!-- No down -->
+      <line x1="360" y1="184" x2="360" y2="206" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="372" y="199" font-size="10" fill="#6b6861">No</text>
+
+      <!-- Q3 -->
+      <rect x="170" y="206" width="380" height="44" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="360" y="225" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">L2 latency still a bottleneck</text>
+      <text x="360" y="241" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">OR hot key saturating L2?</text>
+      <!-- No left -->
+      <line x1="170" y1="228" x2="108" y2="228" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="139" y="220" text-anchor="middle" font-size="10" fill="#6b6861">No</text>
+      <rect x="14" y="206" width="94" height="44" rx="8" fill="#ffd8a8" stroke="#e67700" stroke-width="1.5"/>
+      <text x="61" y="225" text-anchor="middle" font-size="12" font-weight="700" fill="#7c2d12">L2 Only</text>
+      <text x="61" y="241" text-anchor="middle" font-size="10" fill="#7c2d12">is sufficient</text>
+      <!-- Yes down -->
+      <line x1="360" y1="250" x2="360" y2="272" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="372" y="265" font-size="10" fill="#6b6861">Yes</text>
+
+      <!-- Q4 -->
+      <rect x="175" y="272" width="370" height="44" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="360" y="291" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">Cache affinity feasible</text>
+      <text x="360" y="307" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">(consistent-hash / sticky routing)?</text>
+      <!-- No left -->
+      <line x1="175" y1="294" x2="108" y2="294" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="141" y="286" text-anchor="middle" font-size="10" fill="#6b6861">No</text>
+      <rect x="14" y="272" width="94" height="60" rx="8" fill="#fce7f3" stroke="#9333ea" stroke-width="1.5"/>
+      <text x="61" y="291" text-anchor="middle" font-size="11" font-weight="700" fill="#6b21a8">Key replication</text>
+      <text x="61" y="306" text-anchor="middle" font-size="10" fill="#6b21a8">or request</text>
+      <text x="61" y="320" text-anchor="middle" font-size="10" fill="#6b21a8">coalescing</text>
+      <!-- Yes down -->
+      <line x1="360" y1="316" x2="360" y2="338" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="372" y="331" font-size="10" fill="#6b6861">Yes</text>
+
+      <!-- Q5 -->
+      <rect x="155" y="338" width="390" height="44" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="360" y="357" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">Writes infrequent enough to tolerate</text>
+      <text x="360" y="373" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">a staleness window (TTL or pub/sub)?</text>
+      <!-- No right -->
+      <line x1="545" y1="360" x2="608" y2="360" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="574" y="352" text-anchor="middle" font-size="10" fill="#6b6861">No</text>
+      <rect x="608" y="338" width="100" height="44" rx="8" fill="#ffd8a8" stroke="#e67700" stroke-width="1.5"/>
+      <text x="658" y="357" text-anchor="middle" font-size="12" font-weight="700" fill="#7c2d12">L2 Only</text>
+      <text x="658" y="373" text-anchor="middle" font-size="10" fill="#7c2d12">writes too hot</text>
+      <!-- Yes down -->
+      <line x1="360" y1="382" x2="360" y2="408" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="372" y="399" font-size="10" fill="#6b6861">Yes</text>
+
+      <!-- OUTCOME -->
+      <rect x="195" y="408" width="330" height="60" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+      <text x="360" y="430" text-anchor="middle" font-size="14" font-weight="800" fill="#1e40af">L1 + L2 (Multi-Level)</text>
+      <text x="360" y="448" text-anchor="middle" font-size="11" fill="#1e40af">In-process L1 (Caffeine, TTL 5–30s)</text>
+      <text x="360" y="463" text-anchor="middle" font-size="11" fill="#1e40af">+ Shared L2 (Redis / Memcached)</text>
+
+      <!-- Warning 1 -->
+      <rect x="195" y="482" width="330" height="42" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+      <text x="360" y="499" text-anchor="middle" font-size="11" font-weight="700" fill="#92400e">⚠️ Must invalidate BOTH tiers on write</text>
+      <text x="360" y="515" text-anchor="middle" font-size="11" fill="#92400e">DEL from L2  +  pub/sub broadcast to all L1s</text>
+
+      <!-- Warning 2 -->
+      <rect x="195" y="534" width="330" height="42" rx="8" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5"/>
+      <text x="360" y="551" text-anchor="middle" font-size="11" font-weight="700" fill="#7f1d1d">⚠️ Mass eviction = N× thundering herd</text>
+      <text x="360" y="567" text-anchor="middle" font-size="11" fill="#7f1d1d">Protect origin with SET NX mutex at L2</text>
+
+      <!-- Legend -->
+      <rect x="195" y="590" width="330" height="96" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="360" y="610" text-anchor="middle" font-size="11" font-weight="700" fill="#6b6861">LEGEND</text>
+      <rect x="216" y="620" width="12" height="12" rx="2" fill="#f3f2ef" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="235" y="631" font-size="10" fill="#6b6861">No cache</text>
+      <rect x="296" y="620" width="12" height="12" rx="2" fill="#ffd8a8" stroke="#e67700" stroke-width="1.5"/>
+      <text x="315" y="631" font-size="10" fill="#7c2d12">L2 Only</text>
+      <rect x="376" y="620" width="12" height="12" rx="2" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="395" y="631" font-size="10" fill="#1e40af">L1 + L2</text>
+      <rect x="446" y="620" width="12" height="12" rx="2" fill="#fce7f3" stroke="#9333ea" stroke-width="1.5"/>
+      <text x="465" y="631" font-size="10" fill="#6b21a8">Alternative</text>
+      <text x="216" y="660" font-size="10" fill="#6b6861">Gates answered top-to-bottom. First Yes/No that matches → follow that branch.</text>
+      <text x="216" y="675" font-size="10" fill="#6b6861">L1 TTL must always be ≤ L2 TTL, regardless of which path you take.</text>
+
+      <defs>
+        <marker id="dm-arr" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+          <path d="M0,0 L0,7 L7,3.5 z" fill="#bbb"/>
+        </marker>
+      </defs>
+    </svg>
+    <p class="caption">Five decision gates — answer top to bottom; first matching branch is your answer</p>
+  </div>
+
   <div class="cheatsheet">
 <span class="label">§ 1  WHY IT EXISTS</span>A single-tier L2 cache (Redis) solves DB offload but at extreme scale even 1ms per
 read is the latency floor. When a hot key absorbs millions of reads/second, the
