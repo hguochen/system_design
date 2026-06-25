@@ -1,0 +1,1000 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6.1 CDN Architecture — PoPs and Edge Servers</title>
+<style>
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface-alt: #f3f2ef;
+    --border: #e5e3de; --text: #1a1917; --text-muted: #6b6861;
+    --accent: #2563eb; --accent-light: #dbeafe;
+    --green: #16a34a; --green-light: #dcfce7;
+    --red: #dc2626; --red-light: #fee2e2;
+    --yellow: #d97706; --yellow-light: #fef3c7;
+    --purple: #7c3aed; --purple-light: #ede9fe;
+    --orange: #ea580c; --orange-light: #ffedd5;
+    --teal: #0891b2; --teal-light: #cffafe;
+    --code-bg: #1e1e2e; --code-text: #cdd6f4;
+    --sidebar-w: 240px; --content-max: 820px;
+    font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; }
+  #toc { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0 48px; z-index: 100; }
+  #toc-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  #toc-header .phase-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-bottom: 6px; }
+  #toc-header h2 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  #toc nav a { display: block; padding: 5px 16px 5px 20px; font-size: 12.5px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+  main { margin-left: var(--sidebar-w); padding: 48px 48px 96px; max-width: calc(var(--sidebar-w) + var(--content-max) + 96px); width: 100%; }
+  article { max-width: var(--content-max); }
+  .doc-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 2px solid var(--border); }
+  .doc-header .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+  .tag-phase { background: var(--accent-light); color: var(--accent); }
+  .tag-topic { background: var(--teal-light); color: var(--teal); }
+  .tag-date  { background: var(--surface-alt);  color: var(--text-muted); }
+  .doc-header h1 { font-size: 30px; font-weight: 800; line-height: 1.25; letter-spacing: -.02em; color: var(--text); }
+  section { margin-bottom: 52px; scroll-margin-top: 32px; }
+  h2.section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -.01em; }
+  h2.section-title .num { font-size: 11px; font-weight: 800; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; letter-spacing: .04em; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 24px 0 10px; }
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+  code { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-family: "SF Mono","Fira Code",Menlo,monospace; font-size: 12.5px; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 14px; border-left: 3px solid; }
+  .callout-goal  { background: var(--accent-light); border-color: var(--accent); color: #1e40af; }
+  .callout-tip   { background: var(--yellow-light); border-color: var(--yellow); color: #92400e; }
+  .callout-warn  { background: var(--red-light); border-color: var(--red); color: #7f1d1d; }
+  .callout-quote { background: var(--surface-alt);  border-color: var(--border); color: var(--text-muted); font-style: italic; }
+  .cheatsheet { background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 24px 28px; font-family: "SF Mono","Fira Code","Cascadia Code",Menlo,monospace; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-x: auto; margin-top: 16px; }
+  .cheatsheet .label { color: #cba6f7; font-weight: 700; letter-spacing: .08em; display: block; margin-top: 18px; margin-bottom: 4px; border-bottom: 1px solid #313244; padding-bottom: 3px; }
+  .cheatsheet .label:first-child { margin-top: 0; }
+  .diagram-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 16px 14px; margin: 20px 0 28px; overflow-x: auto; }
+  .diagram-wrap .diagram-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); margin-bottom: 12px; }
+  .diagram-wrap p.caption { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 10px; margin-bottom: 0; font-style: italic; }
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; font-size: 14.5px; line-height: 1.55; }
+  .checklist li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 2px; background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .checklist li.checked .cb { background: var(--green); border-color: var(--green); }
+  .checklist li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .checklist li.checked .text { color: var(--text-muted); text-decoration: line-through; }
+  .phase-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
+  .phase-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; cursor: pointer; user-select: none; background: var(--surface-alt); }
+  .phase-header:hover { background: var(--border); }
+  .phase-label { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+  .phase-badge { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 2px 8px; border-radius: 20px; }
+  .ph1 { background: #dbeafe; color: #1d4ed8; } .ph2 { background: #fce7f3; color: #9d174d; }
+  .ph3 { background: #d1fae5; color: #065f46; } .ph4 { background: #fef3c7; color: #92400e; }
+  .phase-chevron { font-size: 12px; color: var(--text-muted); transition: transform .2s; }
+  .phase-card.open .phase-chevron { transform: rotate(180deg); }
+  .phase-body { display: none; padding: 16px 20px 20px; }
+  .phase-card.open .phase-body { display: block; }
+  .phase-goal { font-size: 12.5px; color: var(--text-muted); font-style: italic; margin-bottom: 12px; }
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: var(--surface-alt); padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.5; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+  .misconception { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .misconception .wrong { background: var(--red-light); padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; }
+  .misconception .right { padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; color: #065f46; background: var(--green-light); }
+  .misconception .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .quiz-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .quiz-q { padding: 14px 18px; font-size: 14.5px; font-weight: 600; cursor: pointer; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .quiz-q:hover { background: var(--surface-alt); }
+  .quiz-num { flex-shrink: 0; width: 24px; height: 24px; background: var(--accent); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; margin-top: 1px; }
+  .quiz-q .qtext { flex: 1; }
+  .quiz-toggle { font-size: 11px; color: var(--text-muted); flex-shrink: 0; margin-top: 3px; }
+  .quiz-hint { display: none; padding: 10px 18px 14px; font-size: 13px; color: #92400e; background: var(--yellow-light); border-top: 1px solid var(--border); }
+  .quiz-item.open .quiz-hint { display: block; }
+  .reading-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .reading-list li { display: flex; align-items: flex-start; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; font-size: 14px; }
+  .reading-list li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 1px; cursor: pointer; background: var(--surface); display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .reading-list li.checked .cb { background: var(--green); border-color: var(--green); }
+  .reading-list li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .reading-list li.checked .rtext { color: var(--text-muted); text-decoration: line-through; }
+  .notes-area { width: 100%; min-height: 160px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: inherit; font-size: 14px; color: var(--text); resize: vertical; line-height: 1.6; }
+  .notes-area:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .focus-list { list-style: none; display: flex; flex-direction: column; gap: 14px; }
+  .focus-list li { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14.5px; line-height: 1.6; }
+  .focus-list li strong { color: var(--accent); display: block; margin-bottom: 4px; }
+  .connections { display: flex; flex-direction: column; gap: 12px; }
+  .conn-card { display: flex; align-items: flex-start; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14px; }
+  .conn-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .conn-label { font-weight: 700; margin-bottom: 3px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .tradeoff-box { background: var(--surface-alt); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 14px 18px; font-size: 14px; font-style: italic; color: var(--text); margin-top: 14px; }
+  .path-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+  .path-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; font-size: 14px; }
+  .path-card h4 { font-size: 13px; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .path-card ol { padding-left: 18px; }
+  .path-card ol li { margin-bottom: 6px; line-height: 1.5; }
+  .badge { font-size: 10px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; }
+  .badge-green { background: var(--green-light); color: var(--green); }
+  .badge-red { background: var(--red-light); color: var(--red); }
+  .badge-blue { background: var(--accent-light); color: var(--accent); }
+  .badge-yellow { background: var(--yellow-light); color: var(--yellow); }
+  @media (max-width: 900px) { #toc { display: none; } main { margin-left: 0; padding: 24px 20px 60px; } .path-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<aside id="toc">
+  <div id="toc-header">
+    <div class="phase-tag">Phase B — Scalability</div>
+    <h2>6.1 CDN Architecture — PoPs &amp; Edge Servers</h2>
+  </div>
+  <nav>
+    <a href="#s0">🗺️ Topic Overview</a>
+    <a href="#s1">🎯 Goal</a>
+    <a href="#s2">✅ Mastery</a>
+    <a href="#s3">🗓️ Study Phases</a>
+    <a href="#s4">📋 Cheatsheet</a>
+    <a href="#s5">🧠 Core Definition</a>
+    <a href="#s6">📦 Core Concepts</a>
+    <a href="#s7">🔍 First Principles</a>
+    <a href="#s8">🗺️ Mental Models</a>
+    <a href="#s9">⚙️ How It Works</a>
+    <a href="#s10">🏭 Real-World Examples</a>
+    <a href="#s11">⚖️ Trade-offs</a>
+    <a href="#s12">🎯 Interview Application</a>
+    <a href="#s13">⚠️ Misconceptions</a>
+    <a href="#s14">🔗 Relationships</a>
+    <a href="#s15">🧪 Self-Check Quiz</a>
+    <a href="#s16">📚 Further Reading</a>
+    <a href="#s17">✍️ My Notes</a>
+  </nav>
+</aside>
+
+<main>
+<article>
+
+<!-- HEADER -->
+<div class="doc-header">
+  <div class="meta">
+    <span class="tag tag-phase">⚡ Phase B — Scalability</span>
+    <span class="tag tag-topic">🌍 Topic 6 — CDN</span>
+    <span class="tag tag-date">📅 2026-06-23</span>
+  </div>
+  <h1>6.1 CDN Architecture — PoPs &amp; Edge Servers</h1>
+</div>
+
+<!-- SECTION 0 -->
+<section id="s0">
+  <h2 class="section-title"><span class="num">00</span> 🗺️ Topic Overview</h2>
+
+  <p>A CDN (Content Delivery Network) is a globally distributed network of edge servers — organized into <strong>Points of Presence (PoPs)</strong> — that cache and serve content from locations physically close to end users. The core tension it resolves: you want a single source of truth (origin), but you need to serve that content to users around the world with sub-30ms latency. Without a CDN, a user in Singapore accessing a US-hosted asset pays 200–300ms in round-trip time — every single request.</p>
+
+  <!-- DIAGRAM 1: Global CDN Topology -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">🌍 CDN Global Architecture — User → PoP → Origin Shield → Origin</div>
+    <svg viewBox="0 0 820 360" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:820px;display:block;margin:0 auto;">
+      <defs>
+        <marker id="arr" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#64748b"/></marker>
+        <marker id="arr-blue" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#2563eb"/></marker>
+        <marker id="arr-green" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#16a34a"/></marker>
+        <marker id="arr-orange" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#ea580c"/></marker>
+      </defs>
+
+      <!-- Background regions -->
+      <rect x="10" y="10" width="820" height="340" rx="12" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
+
+      <!-- === USERS (left side) === -->
+      <!-- User Tokyo -->
+      <circle cx="60" cy="80" r="22" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+      <text x="60" y="75" font-size="16" text-anchor="middle">👤</text>
+      <text x="60" y="95" font-size="9" font-weight="700" fill="#1d4ed8" text-anchor="middle">TOKYO</text>
+
+      <!-- User London -->
+      <circle cx="60" cy="180" r="22" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+      <text x="60" y="175" font-size="16" text-anchor="middle">👤</text>
+      <text x="60" y="195" font-size="9" font-weight="700" fill="#1d4ed8" text-anchor="middle">LONDON</text>
+
+      <!-- User São Paulo -->
+      <circle cx="60" cy="280" r="22" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+      <text x="60" y="275" font-size="16" text-anchor="middle">👤</text>
+      <text x="60" y="295" font-size="9" font-weight="700" fill="#1d4ed8" text-anchor="middle">SÃO PAULO</text>
+
+      <!-- LABEL: Users -->
+      <text x="60" y="330" font-size="10" font-weight="700" fill="#64748b" text-anchor="middle">USERS</text>
+
+      <!-- === EDGE PoPs (middle-left) === -->
+      <!-- PoP Tokyo -->
+      <rect x="130" y="55" width="115" height="52" rx="8" fill="#cffafe" stroke="#0891b2" stroke-width="2"/>
+      <text x="187" y="74" font-size="11" font-weight="800" fill="#0e7490" text-anchor="middle">🏢 PoP — Tokyo</text>
+      <text x="187" y="89" font-size="10" fill="#0e7490" text-anchor="middle">LB · TLS · Cache</text>
+      <text x="187" y="101" font-size="9" fill="#0e7490" text-anchor="middle">~8ms to user</text>
+
+      <!-- PoP London -->
+      <rect x="130" y="155" width="115" height="52" rx="8" fill="#cffafe" stroke="#0891b2" stroke-width="2"/>
+      <text x="187" y="174" font-size="11" font-weight="800" fill="#0e7490" text-anchor="middle">🏢 PoP — London</text>
+      <text x="187" y="189" font-size="10" fill="#0e7490" text-anchor="middle">LB · TLS · Cache</text>
+      <text x="187" y="201" font-size="9" fill="#0e7490" text-anchor="middle">~10ms to user</text>
+
+      <!-- PoP São Paulo -->
+      <rect x="130" y="255" width="115" height="52" rx="8" fill="#cffafe" stroke="#0891b2" stroke-width="2"/>
+      <text x="187" y="274" font-size="11" font-weight="800" fill="#0e7490" text-anchor="middle">🏢 PoP — São Paulo</text>
+      <text x="187" y="289" font-size="10" fill="#0e7490" text-anchor="middle">LB · TLS · Cache</text>
+      <text x="187" y="301" font-size="9" fill="#0e7490" text-anchor="middle">~12ms to user</text>
+
+      <!-- LABEL: Edge PoPs -->
+      <text x="187" y="330" font-size="10" font-weight="700" fill="#0891b2" text-anchor="middle">EDGE PoPs</text>
+
+      <!-- === ORIGIN SHIELD (middle) === -->
+      <rect x="320" y="155" width="140" height="52" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="2.5"/>
+      <text x="390" y="174" font-size="12" font-weight="800" fill="#92400e" text-anchor="middle">🛡️ Origin Shield</text>
+      <text x="390" y="189" font-size="10" fill="#92400e" text-anchor="middle">Mid-tier cache</text>
+      <text x="390" y="201" font-size="9" fill="#92400e" text-anchor="middle">concentrates misses</text>
+
+      <text x="390" y="330" font-size="10" font-weight="700" fill="#d97706" text-anchor="middle">ORIGIN SHIELD</text>
+
+      <!-- === ORIGIN (right) === -->
+      <rect x="550" y="145" width="130" height="72" rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="2.5"/>
+      <text x="615" y="170" font-size="11" font-weight="800" fill="#166534" text-anchor="middle">🖥️ Origin Server</text>
+      <text x="615" y="186" font-size="10" fill="#166534" text-anchor="middle">US East (Virginia)</text>
+      <text x="615" y="200" font-size="9" fill="#166534" text-anchor="middle">Source of truth</text>
+      <text x="615" y="212" font-size="9" fill="#166534" text-anchor="middle">~120ms to shield</text>
+
+      <text x="615" y="330" font-size="10" font-weight="700" fill="#16a34a" text-anchor="middle">ORIGIN</text>
+
+      <!-- === ARROWS: Users → PoPs (DNS/Anycast) === -->
+      <line x1="82" y1="80" x2="128" y2="81" stroke="#2563eb" stroke-width="1.8" marker-end="url(#arr-blue)"/>
+      <line x1="82" y1="180" x2="128" y2="181" stroke="#2563eb" stroke-width="1.8" marker-end="url(#arr-blue)"/>
+      <line x1="82" y1="280" x2="128" y2="281" stroke="#2563eb" stroke-width="1.8" marker-end="url(#arr-blue)"/>
+
+      <!-- DNS/Anycast label -->
+      <text x="105" y="135" font-size="9" fill="#2563eb" font-weight="700" text-anchor="middle">DNS/</text>
+      <text x="105" y="146" font-size="9" fill="#2563eb" font-weight="700" text-anchor="middle">Anycast</text>
+
+      <!-- Cache HIT return arrows (PoPs → Users, green) -->
+      <line x1="128" y1="93" x2="83" y2="90" stroke="#16a34a" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-green)"/>
+      <line x1="128" y1="193" x2="83" y2="190" stroke="#16a34a" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-green)"/>
+      <line x1="128" y1="293" x2="83" y2="290" stroke="#16a34a" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-green)"/>
+      <text x="100" y="108" font-size="8" fill="#16a34a" font-weight="700" text-anchor="middle">HIT ✓</text>
+      <text x="100" y="208" font-size="8" fill="#16a34a" font-weight="700" text-anchor="middle">HIT ✓</text>
+      <text x="100" y="308" font-size="8" fill="#16a34a" font-weight="700" text-anchor="middle">HIT ✓</text>
+
+      <!-- Cache MISS: PoPs → Origin Shield (orange) -->
+      <line x1="245" y1="81" x2="318" y2="170" stroke="#ea580c" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr-orange)"/>
+      <line x1="245" y1="181" x2="318" y2="181" stroke="#ea580c" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr-orange)"/>
+      <line x1="245" y1="281" x2="318" y2="192" stroke="#ea580c" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr-orange)"/>
+
+      <!-- MISS label -->
+      <text x="272" y="155" font-size="9" fill="#ea580c" font-weight="700" text-anchor="middle">MISS</text>
+      <text x="272" y="166" font-size="9" fill="#ea580c" font-weight="700" text-anchor="middle">→ fill</text>
+
+      <!-- Origin Shield → Origin -->
+      <line x1="460" y1="181" x2="548" y2="181" stroke="#d97706" stroke-width="2" marker-end="url(#arr)"/>
+      <text x="504" y="175" font-size="9" fill="#d97706" font-weight="700" text-anchor="middle">if shield miss</text>
+
+      <!-- Legend -->
+      <rect x="650" y="40" width="155" height="90" rx="8" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
+      <text x="665" y="58" font-size="10" font-weight="700" fill="#64748b">LEGEND</text>
+      <line x1="665" y1="70" x2="695" y2="70" stroke="#2563eb" stroke-width="1.8"/>
+      <text x="700" y="74" font-size="9" fill="#334155">Request routing</text>
+      <line x1="665" y1="84" x2="695" y2="84" stroke="#16a34a" stroke-width="1.5" stroke-dasharray="5,3"/>
+      <text x="700" y="88" font-size="9" fill="#334155">Cache HIT response</text>
+      <line x1="665" y1="98" x2="695" y2="98" stroke="#ea580c" stroke-width="1.5" stroke-dasharray="4,3"/>
+      <text x="700" y="102" font-size="9" fill="#334155">Cache MISS → fill</text>
+      <line x1="665" y1="112" x2="695" y2="112" stroke="#d97706" stroke-width="2"/>
+      <text x="700" y="116" font-size="9" fill="#334155">Shield → Origin</text>
+    </svg>
+    <p class="caption">CDN topology: Users route to nearest PoP via DNS/anycast. Cache HITs return immediately (~10ms). Cache MISSes fan in through origin shield to protect origin from N×traffic amplification.</p>
+  </div>
+
+  <ul class="focus-list">
+    <li><strong>1. PoP topology and what lives at the edge</strong> — A PoP is not just a cache server. It contains load balancers, TLS terminators, caching layers, and sometimes compute (edge functions). Know what each component does and why co-locating them at the edge reduces latency.</li>
+    <li><strong>2. How a user request reaches the nearest PoP</strong> — DNS-based geo-routing and anycast are the two main mechanisms. Be able to explain each and why anycast is preferred for global scale.</li>
+    <li><strong>3. Cache hit vs. cache miss path</strong> — The performance contract only holds on a cache hit. On a miss, the edge must fetch from origin (cache fill). Know the full round-trip for both paths and the latency implications.</li>
+    <li><strong>4. Origin shield (mid-tier caching)</strong> — Between edge PoPs and origin, many CDNs add a shield layer to concentrate cache-miss traffic and protect origin from thundering herd at edge scale.</li>
+    <li><strong>5. When CDN helps vs. hurts</strong> — CDN is not a universal accelerator. For non-cacheable content (personalized, no-store), CDN adds latency. Knowing the limits separates solid answers from great ones.</li>
+  </ul>
+</section>
+
+<!-- SECTION 1 -->
+<section id="s1">
+  <h2 class="section-title"><span class="num">01</span> 🎯 Goal</h2>
+  <div class="callout callout-goal">
+    Be able to describe the full CDN architecture — from DNS resolution routing a user to the nearest PoP, through the edge server's cache lookup, to a cache miss that fills from origin via origin shield — and explain why each component exists. Be able to identify which requests benefit from CDN and justify its inclusion (or exclusion) in any system design.
+  </div>
+</section>
+
+<!-- SECTION 2 -->
+<section id="s2">
+  <h2 class="section-title"><span class="num">02</span> ✅ What Mastery Looks Like</h2>
+  <ul class="checklist" id="mastery-list">
+    <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Can explain how a user in Singapore reaches a CDN PoP rather than a US-based origin, naming the routing mechanism (DNS or anycast) and why it works</span></li>
+    <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Can draw the full request flow for both a cache hit and a cache miss, including the origin shield layer, and state the latency difference between paths</span></li>
+    <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Can explain what a PoP contains (LB, TLS terminator, caching tier, optionally edge compute) and why each component is co-located at the edge</span></li>
+    <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Can explain the origin shield's purpose: concentrating cache-fill requests to protect origin from N×traffic fan-out during cache miss storms</span></li>
+    <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Can identify at least three content types that are poor CDN candidates and explain why CDN adds latency (not reduces it) for these cases</span></li>
+  </ul>
+  <div class="callout callout-tip" style="margin-top:16px">💡 <strong>Rule of thumb:</strong> If you can teach it and field follow-up questions, you've mastered it.</div>
+</section>
+
+<!-- SECTION 3 -->
+<section id="s3">
+  <h2 class="section-title"><span class="num">03</span> 🗓️ Study Phases</h2>
+  <div class="phase-card open">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <span class="phase-label"><span class="phase-badge ph1">Phase 1</span> Acquire 📖</span>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Read deeply enough to explain without the doc.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Read <strong>Cloudflare Learning Center — "What is a CDN?"</strong> — cloudflare.com/learning/cdn/what-is-a-cdn/</span></li>
+        <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Read <strong>AWS CloudFront Developer Guide — "How CloudFront Delivers Content"</strong> — docs.aws.amazon.com/AmazonCloudFront</span></li>
+        <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Read <strong>ByteByteGo System Design Interview Vol. 1 — Chapter 11 (Design a CDN)</strong></span></li>
+        <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Read <strong>Sections 5–9</strong> carefully — don't skim</span></li>
+        <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Re-read the <strong>Cheatsheet</strong> and recite from memory after</span></li>
+      </ul>
+    </div>
+  </div>
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <span class="phase-label"><span class="phase-badge ph2">Phase 2</span> Consolidate ✍️</span>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Reproduce in your own words without looking.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Close the doc — write the Core Definition from memory, then compare</span></li>
+        <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Explain First Principles out loud — why does geographic distance cause latency? What does a PoP solve?</span></li>
+        <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Reconstruct the cache hit vs. cache miss flow step-by-step from memory</span></li>
+        <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Restate each Trade-off row in your own words — cost column must be specific</span></li>
+      </ul>
+    </div>
+  </div>
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <span class="phase-label"><span class="phase-badge ph3">Phase 3</span> Apply 🔧</span>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Connect to real systems and simulate interview scenarios.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Verify each Real-World System Example independently and add notes</span></li>
+        <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Practice Interview Application out loud — say trigger phrases and responses as in a live interview</span></li>
+        <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Work through Common Misconceptions — explain <em>why</em> each is wrong, not just that it is</span></li>
+        <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Trace Relationships to Other Concepts without looking</span></li>
+      </ul>
+    </div>
+  </div>
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <span class="phase-label"><span class="phase-badge ph4">Phase 4</span> Validate 🧪</span>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Confirm you actually own it, not just recognize it.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Answer every Self-Check Quiz question out loud without notes</span></li>
+        <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Recite the Cheatsheet from memory — if you can't, re-do Phase 2</span></li>
+        <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Tick off mastery checklist — only if demonstrable on demand</span></li>
+        <li><div class="cb" onclick="toggleCheck(this)"></div><span class="text">Teach this concept for 2 minutes to an imaginary interviewer without hesitation</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 4 -->
+<section id="s4">
+  <h2 class="section-title"><span class="num">04</span> 📋 Cheatsheet</h2>
+  <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+
+  <!-- MINDMAP -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">🧠 Concept Mindmap — CDN Architecture</div>
+    <svg viewBox="0 0 820 480" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:820px;display:block;margin:0 auto;">
+      <!-- Central node -->
+      <ellipse cx="410" cy="240" rx="105" ry="45" fill="#a5d8ff" stroke="#1971c2" stroke-width="2.5"/>
+      <text x="410" y="234" font-size="13" font-weight="800" fill="#1971c2" text-anchor="middle">CDN Architecture</text>
+      <text x="410" y="252" font-size="11" fill="#1971c2" text-anchor="middle">PoPs &amp; Edge Servers</text>
+
+      <!-- Branch 1: PoP Components (top-left) -->
+      <line x1="320" y1="213" x2="210" y2="130" stroke="#3b5bdb" stroke-width="2"/>
+      <rect x="95" y="95" width="185" height="70" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="187" y="115" font-size="12" font-weight="700" fill="#3b5bdb" text-anchor="middle">🏢 PoP Components</text>
+      <text x="187" y="131" font-size="10" fill="#3b5bdb" text-anchor="middle">Load Balancer</text>
+      <text x="187" y="144" font-size="10" fill="#3b5bdb" text-anchor="middle">TLS Terminator · L1/L2 Cache</text>
+      <text x="187" y="157" font-size="10" fill="#3b5bdb" text-anchor="middle">Edge Compute (optional)</text>
+
+      <!-- Branch 2: Routing Mechanisms (top-right) -->
+      <line x1="500" y1="213" x2="610" y2="130" stroke="#e67700" stroke-width="2"/>
+      <rect x="535" y="92" width="185" height="76" rx="8" fill="#ffd8a8" stroke="#e67700" stroke-width="1.5"/>
+      <text x="627" y="113" font-size="12" font-weight="700" fill="#e67700" text-anchor="middle">🔀 Routing to Nearest PoP</text>
+      <text x="627" y="129" font-size="10" fill="#e67700" text-anchor="middle">DNS Geo-routing</text>
+      <text x="627" y="143" font-size="10" fill="#e67700" text-anchor="middle">(maps resolver IP → PoP)</text>
+      <text x="627" y="157" font-size="10" fill="#e67700" text-anchor="middle">Anycast BGP (preferred)</text>
+
+      <!-- Branch 3: Cache Hit Path (left) -->
+      <line x1="305" y1="240" x2="185" y2="240" stroke="#3b5bdb" stroke-width="2"/>
+      <rect x="50" y="212" width="135" height="56" rx="8" fill="#b2f2bb" stroke="#2f9e44" stroke-width="1.5"/>
+      <text x="117" y="233" font-size="12" font-weight="700" fill="#2f9e44" text-anchor="middle">✅ Cache HIT</text>
+      <text x="117" y="249" font-size="10" fill="#2f9e44" text-anchor="middle">User → PoP → response</text>
+      <text x="117" y="261" font-size="10" fill="#2f9e44" text-anchor="middle">~10–30ms total</text>
+
+      <!-- Branch 4: Cache Miss Path (right) -->
+      <line x1="515" y1="240" x2="635" y2="240" stroke="#3b5bdb" stroke-width="2"/>
+      <rect x="635" y="212" width="160" height="56" rx="8" fill="#ffc9c9" stroke="#c92a2a" stroke-width="1.5"/>
+      <text x="715" y="233" font-size="12" font-weight="700" fill="#c92a2a" text-anchor="middle">❌ Cache MISS</text>
+      <text x="715" y="249" font-size="10" fill="#c92a2a" text-anchor="middle">PoP → Shield → Origin</text>
+      <text x="715" y="261" font-size="10" fill="#c92a2a" text-anchor="middle">+100–200ms</text>
+
+      <!-- Branch 5: Origin Shield (bottom-left) -->
+      <line x1="335" y1="278" x2="215" y2="355" stroke="#0ca678" stroke-width="2"/>
+      <rect x="80" y="330" width="175" height="62" rx="8" fill="#c3fae8" stroke="#0ca678" stroke-width="1.5"/>
+      <text x="167" y="350" font-size="12" font-weight="700" fill="#0ca678" text-anchor="middle">🛡️ Origin Shield</text>
+      <text x="167" y="366" font-size="10" fill="#0ca678" text-anchor="middle">Mid-tier cache</text>
+      <text x="167" y="380" font-size="10" fill="#0ca678" text-anchor="middle">1 origin req per object</text>
+
+      <!-- Branch 6: CDN Limits (bottom-right) -->
+      <line x1="485" y1="278" x2="605" y2="355" stroke="#c92a2a" stroke-width="2"/>
+      <rect x="540" y="330" width="210" height="62" rx="8" fill="#ffc9c9" stroke="#c92a2a" stroke-width="1.5"/>
+      <text x="645" y="350" font-size="12" font-weight="700" fill="#c92a2a" text-anchor="middle">⚠️ CDN Limits</text>
+      <text x="645" y="366" font-size="10" fill="#c92a2a" text-anchor="middle">Personalized → no CHR benefit</text>
+      <text x="645" y="380" font-size="10" fill="#c92a2a" text-anchor="middle">Low CHR = CDN adds latency</text>
+    </svg>
+  </div>
+
+  <div class="cheatsheet">
+<span class="label">§1 ONE-LINER</span>A CDN is a network of geographically distributed PoPs that serve cached content close to users,
+cutting latency by eliminating long-haul round trips to a centralized origin.
+
+<span class="label">§2 KEY PROPERTIES / RULES</span>PoP = Point of Presence = edge datacenter (LB + TLS terminator + cache ± edge compute)
+Routing: DNS geo-routing (resolver IP → region) OR anycast BGP (packet-level, preferred)
+Cache HIT:  User → PoP → response                        ~10–30ms
+Cache MISS: User → PoP → Origin Shield → Origin → fill   +100–200ms extra
+Origin shield = mid-tier cache that concentrates cache-fill requests (N PoPs → 1 origin fetch)
+
+<span class="label">§3 DECISION RULE</span>Use CDN when:  static assets (JS/CSS/images), video segments, globally distributed users,
+               high expected cache hit ratio (> ~85%).
+Avoid CDN when: personalized/user-specific responses, no-store headers, low CHR content
+               (CDN adds a hop and makes latency WORSE, not better).
+
+<span class="label">§4 NUMBERS</span>Typical PoP-to-user latency:  &lt; 20ms  (vs. 100–300ms cross-continental to origin)
+Cache hit ratio target:       &gt; 90%  for CDN to be net-positive
+Cloudflare PoPs: ~300 globally   |   Akamai: ~4,000+ edge servers
+BGP reconvergence on PoP failure: seconds → brief disruption window
+
+<span class="label">§5 GOTCHA TO NEVER FORGET</span>CDN adds latency on a cache MISS. If your CHR is low (personalized API, auth-required
+content), putting CDN in front makes performance WORSE. Always estimate CHR first.
+  </div>
+</section>
+
+<!-- SECTION 5 -->
+<section id="s5">
+  <h2 class="section-title"><span class="num">05</span> 🧠 Core Definition</h2>
+  <p>A <strong>CDN (Content Delivery Network)</strong> is a globally distributed network of edge servers — organized into <strong>Points of Presence (PoPs)</strong> — that cache and serve content from locations physically close to end users, reducing latency by eliminating long round trips to a centralized origin server.</p>
+  <p>A <strong>PoP</strong> is the atomic unit: a co-located cluster of load balancers, TLS terminators, and caching servers deployed in Internet Exchange Points (IXPs) and carrier-neutral datacenters worldwide. When a user requests content, DNS or anycast routing directs them to the nearest PoP, which serves the response from its local cache — bypassing the origin entirely on a hit.</p>
+</section>
+
+<!-- SECTION 6 -->
+<section id="s6">
+  <h2 class="section-title"><span class="num">06</span> 📦 Core Concepts</h2>
+
+  <!-- DIAGRAM 2: PoP Internal Architecture -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">🏢 Inside a PoP — Component Architecture</div>
+    <svg viewBox="0 0 780 300" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:780px;display:block;margin:0 auto;">
+      <defs>
+        <marker id="arr2" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#64748b"/></marker>
+        <marker id="arr2-blue" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#2563eb"/></marker>
+        <marker id="arr2-orange" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#ea580c"/></marker>
+      </defs>
+
+      <!-- PoP boundary -->
+      <rect x="130" y="20" width="550" height="240" rx="14" fill="#f0f9ff" stroke="#0891b2" stroke-width="2.5" stroke-dasharray="8,4"/>
+      <text x="405" y="42" font-size="12" font-weight="800" fill="#0e7490" text-anchor="middle">🏢 PoP — Point of Presence (e.g., Tokyo, Singapore, London)</text>
+
+      <!-- User -->
+      <circle cx="50" cy="150" r="28" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+      <text x="50" y="146" font-size="18" text-anchor="middle">👤</text>
+      <text x="50" y="163" font-size="9" font-weight="700" fill="#1d4ed8" text-anchor="middle">USER</text>
+
+      <!-- Component 1: Load Balancer -->
+      <rect x="145" y="115" width="105" height="70" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="197" y="143" font-size="11" font-weight="700" fill="#3b5bdb" text-anchor="middle">⚖️ Load</text>
+      <text x="197" y="157" font-size="11" font-weight="700" fill="#3b5bdb" text-anchor="middle">Balancer</text>
+      <text x="197" y="174" font-size="9" fill="#3b5bdb" text-anchor="middle">distributes traffic</text>
+
+      <!-- Component 2: TLS Terminator -->
+      <rect x="275" y="115" width="110" height="70" rx="8" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.5"/>
+      <text x="330" y="143" font-size="11" font-weight="700" fill="#7c3aed" text-anchor="middle">🔒 TLS</text>
+      <text x="330" y="157" font-size="11" font-weight="700" fill="#7c3aed" text-anchor="middle">Terminator</text>
+      <text x="330" y="174" font-size="9" fill="#7c3aed" text-anchor="middle">handshake ~15ms</text>
+
+      <!-- Component 3: L1 Cache -->
+      <rect x="410" y="90" width="105" height="55" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+      <text x="462" y="113" font-size="11" font-weight="700" fill="#166534" text-anchor="middle">💾 L1 Cache</text>
+      <text x="462" y="129" font-size="9" fill="#166534" text-anchor="middle">In-memory (RAM)</text>
+      <text x="462" y="141" font-size="9" fill="#166534" text-anchor="middle">sub-1ms lookup</text>
+
+      <!-- Component 4: L2 Cache -->
+      <rect x="410" y="162" width="105" height="55" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+      <text x="462" y="185" font-size="11" font-weight="700" fill="#92400e" text-anchor="middle">💿 L2 Cache</text>
+      <text x="462" y="201" font-size="9" fill="#92400e" text-anchor="middle">SSD (NVMe)</text>
+      <text x="462" y="213" font-size="9" fill="#92400e" text-anchor="middle">~1–5ms lookup</text>
+
+      <!-- Component 5: Edge Compute (optional) -->
+      <rect x="540" y="115" width="120" height="70" rx="8" fill="#cffafe" stroke="#0891b2" stroke-width="1.5" stroke-dasharray="5,3"/>
+      <text x="600" y="138" font-size="11" font-weight="700" fill="#0e7490" text-anchor="middle">⚡ Edge</text>
+      <text x="600" y="152" font-size="11" font-weight="700" fill="#0e7490" text-anchor="middle">Compute</text>
+      <text x="600" y="166" font-size="9" fill="#0e7490" text-anchor="middle">Workers / Lambda</text>
+      <text x="600" y="178" font-size="9" fill="#0e7490" text-anchor="middle">(optional)</text>
+
+      <!-- Origin (outside PoP) -->
+      <rect x="710" y="125" width="55" height="50" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+      <text x="737" y="148" font-size="10" font-weight="700" fill="#166534" text-anchor="middle">🖥️</text>
+      <text x="737" y="163" font-size="9" fill="#166534" text-anchor="middle">ORIGIN</text>
+
+      <!-- ARROWS -->
+      <!-- User → LB -->
+      <line x1="78" y1="150" x2="143" y2="150" stroke="#2563eb" stroke-width="2" marker-end="url(#arr2-blue)"/>
+      <!-- LB → TLS -->
+      <line x1="250" y1="150" x2="273" y2="150" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr2)"/>
+      <!-- TLS → L1 -->
+      <line x1="385" y1="135" x2="408" y2="120" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr2)"/>
+      <!-- TLS → L2 -->
+      <line x1="385" y1="165" x2="408" y2="180" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr2)"/>
+      <!-- TLS → Edge Compute -->
+      <line x1="385" y1="150" x2="538" y2="150" stroke="#64748b" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr2)"/>
+      <!-- L1/L2 miss → Origin (outside PoP) -->
+      <line x1="515" y1="150" x2="708" y2="150" stroke="#ea580c" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr2-orange)"/>
+
+      <!-- Labels -->
+      <text x="95" y="143" font-size="9" fill="#2563eb" font-weight="700">HTTPS</text>
+      <text x="638" y="143" font-size="9" fill="#ea580c" font-weight="700">miss →</text>
+      <text x="638" y="155" font-size="9" fill="#ea580c" font-weight="700">origin</text>
+
+      <!-- IXP label -->
+      <text x="405" y="268" font-size="10" fill="#0e7490" text-anchor="middle" font-style="italic">Hosted at Internet Exchange Point (IXP) — directly peered with ISPs for minimum hops</text>
+    </svg>
+    <p class="caption">Inside a PoP: TLS terminates locally (saving 150–200ms vs. origin handshake), cache tiers serve hits in microseconds–milliseconds. Origin is only contacted on a full cache miss through both L1 and L2.</p>
+  </div>
+
+  <h3>Point of Presence (PoP)</h3>
+  <p>A PoP is a CDN's edge datacenter — a physical location where the CDN operates servers close to end users. A typical PoP includes: an Anycast IP receiver or DNS resolution handler, one or more load balancers, TLS termination infrastructure (so TLS handshakes complete locally), a multi-layer cache (L1 in-memory + L2 SSD), and increasingly edge compute (Cloudflare Workers, Lambda@Edge). PoPs are strategically placed at Internet Exchange Points (IXPs) to peer directly with ISPs, minimizing network hops to users.</p>
+
+  <h3>Edge Server</h3>
+  <p>An edge server is an individual server within a PoP that handles user requests. It checks its local cache for the requested content; on a hit, it responds immediately. On a miss, it fetches from origin (or origin shield) and caches the response for subsequent requests. Edge servers are stateless with respect to business logic — their only job is cache lookup and cache fill.</p>
+
+  <h3>Origin Shield (Mid-Tier Cache)</h3>
+  <p>An origin shield is an optional but critical intermediate caching layer between edge PoPs and the origin server. When hundreds of PoPs simultaneously miss the same object (after a cache invalidation or popularity spike), they would each independently fetch from origin — creating N×traffic amplification. The shield acts as a single rendezvous point: all PoPs funnel cache-miss requests through it, so the origin sees at most one fetch per object regardless of how many PoPs request it. This is essential for protecting origin at CDN scale.</p>
+
+  <h3>Cache Fill and Cache Hit Ratio</h3>
+  <p>Cache fill is the process of fetching content from origin to populate the edge cache after a miss. The <strong>cache hit ratio (CHR)</strong> is the fraction of requests served from cache without hitting origin. CHR is the primary CDN effectiveness metric — a CHR of 95% means only 5% of requests travel to origin. CHR is driven by content TTL, content uniqueness, and request volume per object.</p>
+
+  <h3>Routing to the Nearest PoP</h3>
+  <p><strong>DNS-based geo-routing</strong> maps the requesting DNS resolver's IP to a geographically appropriate PoP — simple, but inaccurate when resolver IPs don't reflect user location. <strong>Anycast routing</strong> assigns the same IP to all PoPs and relies on BGP to route packets to the topologically closest PoP — more accurate, lower latency, no DNS TTL dependency. Anycast is preferred by latency-critical CDNs (Cloudflare uses it extensively).</p>
+</section>
+
+<!-- SECTION 7 -->
+<section id="s7">
+  <h2 class="section-title"><span class="num">07</span> 🔍 First Principles — Why Does This Exist?</h2>
+  <p>The speed of light is finite. A round trip from Singapore to a US East Coast server takes 200–300ms at the physical limit — and real network routing adds more. For web content, this means every asset paid this latency tax on every request.</p>
+  <p>Early internet content was hosted in single datacenters because storage was expensive; geographic distribution was cost-prohibitive. As bandwidth costs fell and static content (images, video, scripts) became the dominant volume of internet traffic, the latency problem became critical. Users in Tokyo shouldn't pay the latency cost of a server in Virginia for a static JavaScript file that hasn't changed in weeks.</p>
+  <p>The solution is obvious in retrospect: cache the content close to where users are. CDNs were born to do exactly this — Akamai's founding insight in 1998 was that you could dramatically improve web performance by distributed caching at the network edge, without requiring website owners to operate their own global infrastructure.</p>
+</section>
+
+<!-- SECTION 8 -->
+<section id="s8">
+  <h2 class="section-title"><span class="num">08</span> 🗺️ Mental Models</h2>
+
+  <h3>Model 1: The Library Branch Network 📚</h3>
+  <p>Think of the CDN as a public library system. The main library (origin) has every book (all content). Branch libraries (PoPs) hold popular books locally — anyone nearby can check them out instantly. If a branch doesn't have the book, they order it from the main library and keep a copy for future requests. The origin shield is a regional distribution center: branch libraries request from the regional hub, not directly from the main library, so the main library doesn't get a thousand simultaneous orders for the same new bestseller. <em>Where it breaks:</em> library books don't expire — CDN TTLs mean your cached copy may go stale and be discarded even if the original hasn't changed.</p>
+
+  <h3>Model 2: Cache Hit Ratio Is Your CDN's Report Card 📊</h3>
+  <p>The CDN is only as good as its cache hit ratio. Every miss is a tax — you paid CDN fees, added a hop, and still made an origin round trip. A CDN with 40% CHR on personalized API responses is not improving performance; it's adding infrastructure complexity with no latency benefit and potential latency harm. Before adding CDN to a design, estimate the CHR: how cacheable is the content, what's the TTL, how many requests will warm the cache per object?</p>
+
+  <h3>Model 3: Anycast as "Nearest Subway Station" 🚇</h3>
+  <p>Anycast routing is like a city where every subway station has the same address — you enter "subway" into your navigation and it routes you to the nearest one. BGP does the routing automatically based on network topology. If a PoP goes down, BGP reconverges and automatically routes traffic to the next-nearest PoP — no manual failover needed. <em>Where it breaks:</em> BGP convergence isn't instant (seconds to minutes), so there's a brief disruption window during PoP failure.</p>
+</section>
+
+<!-- SECTION 9 -->
+<section id="s9">
+  <h2 class="section-title"><span class="num">09</span> ⚙️ How It Works — Mechanics</h2>
+
+  <!-- DIAGRAM 3: Cache Hit vs Miss Path Comparison -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">⚡ Cache HIT vs. Cache MISS — Full Request Flow Comparison</div>
+    <svg viewBox="0 0 800 350" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:800px;display:block;margin:0 auto;">
+      <defs>
+        <marker id="arr3" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#64748b"/></marker>
+        <marker id="arr3-green" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#16a34a"/></marker>
+        <marker id="arr3-red" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#dc2626"/></marker>
+        <marker id="arr3-orange" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#ea580c"/></marker>
+      </defs>
+
+      <!-- === TOP HALF: CACHE HIT === -->
+      <rect x="10" y="10" width="780" height="155" rx="10" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5"/>
+      <text x="25" y="32" font-size="12" font-weight="800" fill="#16a34a">✅ CACHE HIT PATH — ~15ms total</text>
+
+      <!-- Hit: User -->
+      <circle cx="70" cy="90" r="25" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+      <text x="70" y="85" font-size="15" text-anchor="middle">👤</text>
+      <text x="70" y="100" font-size="9" font-weight="700" fill="#1d4ed8" text-anchor="middle">USER</text>
+
+      <!-- Hit: Step annotations -->
+      <text x="70" y="130" font-size="9" fill="#64748b" text-anchor="middle">① DNS resolves</text>
+      <text x="70" y="141" font-size="9" fill="#64748b" text-anchor="middle">to nearest PoP</text>
+
+      <!-- Arrow 1: User → PoP -->
+      <line x1="95" y1="85" x2="215" y2="72" stroke="#2563eb" stroke-width="2" marker-end="url(#arr3)"/>
+
+      <!-- Hit: PoP -->
+      <rect x="215" y="52" width="150" height="75" rx="8" fill="#cffafe" stroke="#0891b2" stroke-width="2"/>
+      <text x="290" y="74" font-size="11" font-weight="700" fill="#0e7490" text-anchor="middle">🏢 PoP Edge Server</text>
+      <text x="290" y="90" font-size="10" fill="#0e7490" text-anchor="middle">② TLS handshake (~10ms)</text>
+      <text x="290" y="104" font-size="10" fill="#16a34a" font-weight="700" text-anchor="middle">③ Cache lookup → HIT ✓</text>
+      <text x="290" y="118" font-size="10" fill="#0e7490" text-anchor="middle">responds immediately</text>
+
+      <!-- Arrow back: PoP → User (cache hit response) -->
+      <line x1="215" y1="95" x2="97" y2="95" stroke="#16a34a" stroke-width="2.5" stroke-dasharray="5,3" marker-end="url(#arr3-green)"/>
+      <text x="155" y="108" font-size="9" fill="#16a34a" font-weight="700" text-anchor="middle">④ Response ← ~5ms</text>
+
+      <!-- Hit: Origin (greyed out) -->
+      <rect x="590" y="60" width="120" height="60" rx="8" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="5,3"/>
+      <text x="650" y="88" font-size="11" fill="#94a3b8" text-anchor="middle" font-weight="700">🖥️ Origin</text>
+      <text x="650" y="104" font-size="9" fill="#94a3b8" text-anchor="middle">NOT contacted</text>
+
+      <text x="420" y="88" font-size="22" fill="#e2e8f0" text-anchor="middle">✗</text>
+      <text x="420" y="100" font-size="9" fill="#94a3b8" text-anchor="middle">skipped</text>
+
+      <!-- === BOTTOM HALF: CACHE MISS === -->
+      <rect x="10" y="185" width="780" height="150" rx="10" fill="#fff7ed" stroke="#ea580c" stroke-width="1.5"/>
+      <text x="25" y="207" font-size="12" font-weight="800" fill="#ea580c">❌ CACHE MISS PATH — ~180ms total (varies by geography)</text>
+
+      <!-- Miss: User -->
+      <circle cx="70" cy="270" r="25" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+      <text x="70" y="265" font-size="15" text-anchor="middle">👤</text>
+      <text x="70" y="280" font-size="9" font-weight="700" fill="#1d4ed8" text-anchor="middle">USER</text>
+
+      <!-- Arrow 1 miss: User → PoP -->
+      <line x1="95" y1="262" x2="205" y2="250" stroke="#2563eb" stroke-width="2" marker-end="url(#arr3)"/>
+
+      <!-- Miss: PoP -->
+      <rect x="205" y="230" width="140" height="65" rx="8" fill="#cffafe" stroke="#0891b2" stroke-width="1.5"/>
+      <text x="275" y="250" font-size="11" font-weight="700" fill="#0e7490" text-anchor="middle">🏢 PoP (~10ms)</text>
+      <text x="275" y="266" font-size="10" fill="#dc2626" font-weight="700" text-anchor="middle">Cache MISS ✗</text>
+      <text x="275" y="282" font-size="9" fill="#0e7490" text-anchor="middle">→ forward to shield</text>
+
+      <!-- Arrow: PoP → Shield -->
+      <line x1="345" y1="263" x2="415" y2="263" stroke="#ea580c" stroke-width="2" marker-end="url(#arr3-orange)"/>
+      <text x="380" y="255" font-size="9" fill="#ea580c" font-weight="700">~30ms</text>
+
+      <!-- Miss: Origin Shield -->
+      <rect x="415" y="232" width="140" height="62" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+      <text x="485" y="252" font-size="11" font-weight="700" fill="#92400e" text-anchor="middle">🛡️ Shield (~5ms)</text>
+      <text x="485" y="268" font-size="10" fill="#92400e" text-anchor="middle">check shield cache</text>
+      <text x="485" y="282" font-size="9" fill="#92400e" text-anchor="middle">→ miss → origin</text>
+
+      <!-- Arrow: Shield → Origin -->
+      <line x1="555" y1="263" x2="630" y2="263" stroke="#ea580c" stroke-width="2" marker-end="url(#arr3-orange)"/>
+      <text x="592" y="255" font-size="9" fill="#ea580c" font-weight="700">~120ms</text>
+
+      <!-- Miss: Origin -->
+      <rect x="630" y="232" width="130" height="62" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+      <text x="695" y="255" font-size="11" font-weight="700" fill="#166534" text-anchor="middle">🖥️ Origin</text>
+      <text x="695" y="271" font-size="10" fill="#166534" text-anchor="middle">generates response</text>
+      <text x="695" y="285" font-size="9" fill="#166534" text-anchor="middle">caches at shield+PoP</text>
+
+      <!-- Return arrow: back to user -->
+      <line x1="205" y1="286" x2="97" y2="282" stroke="#64748b" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr3)"/>
+      <text x="148" y="300" font-size="9" fill="#64748b" text-anchor="middle">response to user</text>
+    </svg>
+    <p class="caption">Key insight: the HIT path completely bypasses origin (the expensive round-trip). The MISS path pays full origin latency plus the CDN overhead. Your system's performance is a CHR-weighted average of these two paths.</p>
+  </div>
+
+  <div class="path-grid">
+    <div class="path-card">
+      <h4>✅ <span class="badge badge-green">CACHE HIT</span> — ~15ms</h4>
+      <ol>
+        <li>User's browser DNS query resolves to nearest PoP IP (anycast or DNS geo-routing)</li>
+        <li>TLS handshake completes at PoP (~10ms local vs. ~150ms to origin)</li>
+        <li>Edge server checks L1 (RAM) then L2 (SSD) cache → <strong>object found, not expired</strong></li>
+        <li>Edge returns response with <code>Age</code> and <code>X-Cache: HIT</code> headers</li>
+        <li>Total: ~10–30ms depending on user-PoP distance</li>
+      </ol>
+    </div>
+    <div class="path-card">
+      <h4>❌ <span class="badge badge-red">CACHE MISS</span> — ~150–300ms</h4>
+      <ol>
+        <li>Steps 1–2 same as HIT (DNS + TLS at PoP)</li>
+        <li>Edge checks cache → <strong>object not found or TTL expired</strong></li>
+        <li>Edge forwards request to <strong>origin shield</strong> (mid-tier cache)</li>
+        <li>Shield miss → forwards to origin; origin generates response</li>
+        <li>Response cached at shield → forwarded to edge → edge caches it → user receives it</li>
+        <li>Subsequent requests for same object are cache HITs at the PoP</li>
+      </ol>
+    </div>
+  </div>
+
+  <h3>Key Cache-Control Headers</h3>
+  <p>The CDN respects <code>Cache-Control</code> headers from origin to determine cacheability and TTL:</p>
+  <ul style="padding-left:20px;font-size:14px;line-height:1.8;">
+    <li><code>Cache-Control: max-age=86400</code> — cache for 24 hours (both browser and CDN)</li>
+    <li><code>Cache-Control: s-maxage=3600</code> — CDN-specific TTL override (browser ignores this)</li>
+    <li><code>Cache-Control: no-store</code> — CDN must not cache; every request hits origin</li>
+    <li><code>Cache-Control: private</code> — CDN must not cache; response is user-specific</li>
+    <li><code>Surrogate-Key / Cache-Tag</code> — CDN-specific headers enabling tag-based purging</li>
+  </ul>
+
+  <h3>TLS Termination at the Edge</h3>
+  <p>The TLS handshake is one of the most latency-expensive operations in HTTPS — it takes 1–2 network round trips just to negotiate cipher suites and exchange certificates. By terminating TLS at the nearest PoP (~10ms away), the CDN ensures the handshake completes locally. The PoP-to-origin connection uses a pre-warmed, persistent TLS tunnel, so the user only pays the PoP-proximity handshake cost.</p>
+</section>
+
+<!-- SECTION 10 -->
+<section id="s10">
+  <h2 class="section-title"><span class="num">10</span> 🏭 Real-World System Examples</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>System</th><th>How This Concept Applies</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Cloudflare</strong></td>
+          <td>Anycast routing across ~300 PoPs globally; TLS terminates at edge; edge compute (Workers) runs at every PoP for request transformation and custom logic</td>
+          <td>Industry leader in anycast CDN; also provides DDoS scrubbing at edge — traffic is inspected before reaching origin</td>
+        </tr>
+        <tr>
+          <td><strong>AWS CloudFront</strong></td>
+          <td>~600 edge locations + 13 regional edge caches (origin shield); integrates natively with S3, EC2, ALB, and API Gateway as origins</td>
+          <td>Regional edge cache = CloudFront's origin shield implementation; TTL-based invalidation or explicit API purge</td>
+        </tr>
+        <tr>
+          <td><strong>Akamai</strong></td>
+          <td>~4,000+ edge servers globally; DNS-based routing with EDNS client subnet for location accuracy; pioneered CDN for web content</td>
+          <td>Largest CDN by edge node count; used heavily for media delivery and large software downloads (OS updates, game patches)</td>
+        </tr>
+        <tr>
+          <td><strong>Netflix Open Connect</strong></td>
+          <td>Netflix operates its own CDN (Open Connect Appliances) co-located <em>inside</em> ISP networks — the most extreme form of PoP proximity</td>
+          <td>ISP-embedded CDN eliminates transit costs entirely; only practical at Netflix's hundreds-of-Gbps scale. Not a managed CDN — Netflix owns the hardware</td>
+        </tr>
+        <tr>
+          <td><strong>Fastly</strong></td>
+          <td>PoP-based CDN with near-instant purging API; <code>Surrogate-Key</code> headers enable tag-based invalidation of thousands of objects in &lt;150ms globally</td>
+          <td>Favored by media companies (New York Times, GitHub) specifically for its invalidation speed — critical for content that changes frequently</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- SECTION 11 -->
+<section id="s11">
+  <h2 class="section-title"><span class="num">11</span> ⚖️ Trade-offs</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>✅ Benefit</th><th>❌ Cost / Limitation</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="benefit">Dramatically reduces latency for globally distributed users (~15ms vs. ~200ms)</td>
+          <td class="cost">Cache misses add a network hop — if CHR is low, CDN makes performance worse, not better</td>
+        </tr>
+        <tr>
+          <td class="benefit">Reduces origin load — high CHR means origin handles only a fraction of total requests</td>
+          <td class="cost">Additional infrastructure complexity: TTL tuning, invalidation strategy, CDN vendor lock-in risk</td>
+        </tr>
+        <tr>
+          <td class="benefit">TLS termination at edge eliminates long-distance handshake latency (~150ms savings)</td>
+          <td class="cost">Non-cacheable content (personalized, <code>private</code>, <code>no-store</code>) receives zero benefit and incurs CDN overhead</td>
+        </tr>
+        <tr>
+          <td class="benefit">DDoS absorption at edge — malicious traffic is scrubbed before reaching origin</td>
+          <td class="cost">CDN egress bandwidth costs significant money at scale; high-traffic sites pay per-GB for CDN delivery</td>
+        </tr>
+        <tr>
+          <td class="benefit">Origin shield concentrates cache-fill load, preventing thundering herd at origin</td>
+          <td class="cost">Origin shield adds one more network hop on a miss, slightly increasing cache-miss latency (~30ms)</td>
+        </tr>
+        <tr>
+          <td class="benefit">Anycast provides automatic PoP failover via BGP reconvergence</td>
+          <td class="cost">BGP reconvergence during PoP failure takes seconds–minutes — brief traffic disruption window</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- SECTION 12 -->
+<section id="s12">
+  <h2 class="section-title"><span class="num">12</span> 🎯 Interview Application</h2>
+  <p><strong>When an interviewer asks / says:</strong></p>
+  <ul style="padding-left:20px;font-size:14px;margin-bottom:16px;line-height:1.8;">
+    <li>"How would you handle users in Asia accessing your US-hosted service?"</li>
+    <li>"Your static assets are slow for users in Europe — what do you do?"</li>
+    <li>"How do you reduce load on your origin servers at scale?"</li>
+    <li>"Walk me through the full request path from a user to your content"</li>
+  </ul>
+  <p><strong>What you say / do:</strong> Introduce CDN during the high-level design phase when you identify geographically distributed users or heavy static asset serving. Draw the PoP layer explicitly between users and origin. State your assumption about cache hit ratio and tie it to the content type. Always mention origin shield if scale is large enough that cache-miss fan-out is a concern.</p>
+  <div class="tradeoff-box">
+    "If we add CDN, we get sub-30ms latency for our static assets globally and reduce origin load by ~95%, but we pay for CDN bandwidth and need to manage cache invalidation carefully. For this system serving static JS/CSS and user-uploaded images, CDN is the right call — but I'd explicitly exclude our personalized feed API from CDN since it's <code>Cache-Control: private</code> and would get zero CHR benefit."
+  </div>
+</section>
+
+<!-- SECTION 13 -->
+<section id="s13">
+  <h2 class="section-title"><span class="num">13</span> ⚠️ Misconceptions &amp; Gotchas</h2>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><strong>Misconception:</strong> CDN always improves performance</div>
+    <div class="right"><span class="icon">✅</span><strong>Reality:</strong> CDN only improves performance on a cache HIT. For non-cacheable content (personalized responses, <code>no-store</code> or <code>private</code> headers), CDN adds a network hop and makes latency slightly worse. Always estimate CHR before adding CDN.</div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><strong>Misconception:</strong> CDN is only for static files (images, JS, CSS)</div>
+    <div class="right"><span class="icon">✅</span><strong>Reality:</strong> Modern CDNs accelerate dynamic content too — through TCP connection pre-warming (persistent tunnels to origin), edge compute (Cloudflare Workers run arbitrary logic at the PoP), and short-TTL caching. The correct framing is <em>cacheable</em> vs. <em>non-cacheable</em>, not static vs. dynamic.</div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><strong>Misconception:</strong> DNS geo-routing is as accurate as anycast</div>
+    <div class="right"><span class="icon">✅</span><strong>Reality:</strong> DNS geo-routing maps the <em>DNS resolver's</em> IP, not the user's IP, to a PoP. Corporate or ISP resolvers may be in a different city or country from the user, causing incorrect PoP selection. Anycast uses BGP at the packet level — it routes based on actual network topology and is far more accurate.</div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><strong>Misconception:</strong> You need to build your own CDN for very large scale</div>
+    <div class="right"><span class="icon">✅</span><strong>Reality:</strong> Even Netflix uses a CDN (Open Connect) — but that's exceptional and driven by ISP transit cost elimination at hundreds-of-Gbps scale. For virtually all systems at interview scale, a managed CDN (Cloudflare, CloudFront, Fastly) is correct. Building your own is a distraction unless you're designing "Netflix at Netflix scale."</div>
+  </div>
+</section>
+
+<!-- SECTION 14 -->
+<section id="s14">
+  <h2 class="section-title"><span class="num">14</span> 🔗 Relationships to Other Concepts</h2>
+  <div class="connections">
+    <div class="conn-card">
+      <div class="conn-icon">🧱</div>
+      <div>
+        <div class="conn-label">Builds On</div>
+        <strong>Topic 5 — Caching Systems</strong>: CDN edge servers are geographically distributed caches. The same concepts of cache hit/miss, TTL, eviction, and invalidation apply. A CDN PoP is essentially a cache-aside layer deployed at the network edge. If you understand L1/L2 caching, the CDN PoP cache hierarchy is the same concept at geographic scale.
+      </div>
+    </div>
+    <div class="conn-card">
+      <div class="conn-icon">🔓</div>
+      <div>
+        <div class="conn-label">Enables</div>
+        <strong>Topic 6.2 — Pull vs. Push CDN</strong>: Understanding PoP architecture is the prerequisite for reasoning about how content gets <em>into</em> the PoP (pull on first miss vs. push pre-population). <strong>Topic 6.3 — Cache Invalidation at the Edge</strong>: Invalidating across hundreds of PoPs simultaneously is the hardest CDN operational challenge — only meaningful once you know what a PoP is.
+      </div>
+    </div>
+    <div class="conn-card">
+      <div class="conn-icon">⚡</div>
+      <div>
+        <div class="conn-label">Tension With</div>
+        <strong>Topic 6.3 — Cache Invalidation</strong>: Longer TTLs improve CDN effectiveness (higher CHR, lower origin load) but make it harder to push fresh content to users quickly. This TTL-vs-freshness tension is the central CDN operational challenge and will surface in any interview involving frequently updated content served via CDN.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 15 -->
+<section id="s15">
+  <h2 class="section-title"><span class="num">15</span> 🧪 Self-Check Quiz</h2>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">1</div>
+      <div class="qtext">What is a Point of Presence (PoP) and what components does it typically contain?</div>
+      <div class="quiz-toggle">▼ hint</div>
+    </div>
+    <div class="quiz-hint">💡 Think through the full component list before checking — if you forget TLS termination, revisit Section 6. A PoP is not just a cache server — it's a full mini-datacenter at the network edge.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">2</div>
+      <div class="qtext">A user in Tokyo requests a JavaScript file served from a CDN with a US-based origin. Walk through the complete request path assuming it's a cache HIT at the Tokyo PoP. What mechanism routed the user to Tokyo?</div>
+      <div class="quiz-toggle">▼ hint</div>
+    </div>
+    <div class="quiz-hint">💡 Name the routing mechanism (DNS geo-routing or anycast?). Trace: user → DNS → PoP IP → TLS → cache lookup → hit → response. What latency at each step?</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">3</div>
+      <div class="qtext">What is an origin shield and what specific failure mode does it prevent?</div>
+      <div class="quiz-toggle">▼ hint</div>
+    </div>
+    <div class="quiz-hint">💡 The failure mode has a name you've seen before in Topic 5. Think about what happens when 300 PoPs all simultaneously miss the same object after a cache invalidation — without a shield.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">4</div>
+      <div class="qtext">Cloudflare uses anycast; AWS CloudFront uses DNS-based routing. What is the practical difference in routing accuracy and why does it matter for users behind a shared corporate DNS resolver?</div>
+      <div class="quiz-toggle">▼ hint</div>
+    </div>
+    <div class="quiz-hint">💡 DNS geo-routing maps the resolver's IP, not the user's IP. A company with all employees using a single DNS server in HQ city X would route all users to the PoP near X — even employees in another city.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">5</div>
+      <div class="qtext">A candidate proposes putting CDN in front of a personalized social feed API to reduce origin load. What's the flaw in this reasoning? Under what specific conditions would it actually work?</div>
+      <div class="quiz-toggle">▼ hint</div>
+    </div>
+    <div class="quiz-hint">💡 Think about cache hit ratio. A personalized feed is user-specific — what's its CHR? Under what conditions could a "feed" API be cacheable? (Hint: think about shared vs. personalized content, and Cache-Control headers.)</div>
+  </div>
+</section>
+
+<!-- SECTION 16 -->
+<section id="s16">
+  <h2 class="section-title"><span class="num">16</span> 📚 Further Reading</h2>
+  <ul class="reading-list">
+    <li>
+      <div class="cb" onclick="toggleReadingCheck(this)"></div>
+      <div class="rtext"><strong>Cloudflare Learning Center — "What is a CDN?"</strong><br><span style="color:var(--text-muted);font-size:13px;">cloudflare.com/learning/cdn/what-is-a-cdn/ — best free overview; covers PoP architecture, anycast, and edge caching</span></div>
+    </li>
+    <li>
+      <div class="cb" onclick="toggleReadingCheck(this)"></div>
+      <div class="rtext"><strong>AWS CloudFront Developer Guide — "How CloudFront Delivers Content"</strong><br><span style="color:var(--text-muted);font-size:13px;">docs.aws.amazon.com/AmazonCloudFront — covers distributions, edge locations, and origin shield implementation</span></div>
+    </li>
+    <li>
+      <div class="cb" onclick="toggleReadingCheck(this)"></div>
+      <div class="rtext"><strong>ByteByteGo System Design Interview Vol. 1 — Chapter 11 (Design a CDN)</strong><br><span style="color:var(--text-muted);font-size:13px;">Alex Xu's treatment covers PoP architecture, push vs. pull, and CDN for media delivery</span></div>
+    </li>
+    <li>
+      <div class="cb" onclick="toggleReadingCheck(this)"></div>
+      <div class="rtext"><strong>Netflix Tech Blog — "Open Connect"</strong><br><span style="color:var(--text-muted);font-size:13px;">netflixtechblog.com — Netflix's ISP-embedded CDN architecture; extreme case study of PoP placement strategy</span></div>
+    </li>
+    <li>
+      <div class="cb" onclick="toggleReadingCheck(this)"></div>
+      <div class="rtext"><strong>Fastly Blog — "Origin Shield"</strong><br><span style="color:var(--text-muted);font-size:13px;">fastly.com/blog — detailed explanation of origin shielding mechanics and why it matters for high-traffic sites</span></div>
+    </li>
+  </ul>
+</section>
+
+<!-- SECTION 17 -->
+<section id="s17">
+  <h2 class="section-title"><span class="num">17</span> ✍️ My Notes</h2>
+  <div class="callout callout-tip">Personal space — add your own observations, analogies, interview stories, or things that confused you.</div>
+  <textarea class="notes-area" id="my-notes" placeholder="Your notes here..."></textarea>
+</section>
+
+</article>
+</main>
+
+<script>
+function toggleCheck(el) {
+  const li = el.closest('li');
+  li.classList.toggle('checked');
+}
+function togglePhase(headerEl) {
+  headerEl.closest('.phase-card').classList.toggle('open');
+}
+function toggleQuiz(qEl) {
+  qEl.closest('.quiz-item').classList.toggle('open');
+}
+function toggleReadingCheck(el) {
+  const li = el.closest('li');
+  li.classList.toggle('checked');
+}
+
+// TOC scroll spy
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('#toc nav a');
+function onScroll() {
+  let current = '';
+  sections.forEach(s => { if (window.scrollY >= s.offsetTop - 60) current = s.id; });
+  navLinks.forEach(a => {
+    a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+  });
+}
+window.addEventListener('scroll', onScroll, { passive: true });
+onScroll();
+
+// Persist notes to localStorage
+const notesKey = 'notes_6_1_cdn_architecture';
+const notesEl = document.getElementById('my-notes');
+if (notesEl) {
+  notesEl.value = localStorage.getItem(notesKey) || '';
+  notesEl.addEventListener('input', () => localStorage.setItem(notesKey, notesEl.value));
+}
+</script>
+</body>
+</html>
