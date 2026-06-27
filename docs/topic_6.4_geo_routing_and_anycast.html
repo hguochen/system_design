@@ -1,0 +1,1042 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6.4 Geo-routing and Anycast</title>
+<style>
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface-alt: #f3f2ef;
+    --border: #e5e3de; --text: #1a1917; --text-muted: #6b6861;
+    --accent: #2563eb; --accent-light: #dbeafe;
+    --green: #16a34a; --green-light: #dcfce7;
+    --red: #dc2626; --red-light: #fee2e2;
+    --yellow: #d97706; --yellow-light: #fef3c7;
+    --purple: #7c3aed; --purple-light: #ede9fe;
+    --orange: #ea580c; --orange-light: #ffedd5;
+    --teal: #0d9488; --teal-light: #ccfbf1;
+    --code-bg: #1e1e2e; --code-text: #cdd6f4;
+    --sidebar-w: 240px; --content-max: 820px;
+    font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; }
+  #toc { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0 48px; z-index: 100; }
+  #toc-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  #toc-header .phase-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-bottom: 6px; }
+  #toc-header h2 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  #toc nav a { display: block; padding: 5px 16px 5px 20px; font-size: 12.5px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+  main { margin-left: var(--sidebar-w); padding: 48px 48px 96px; max-width: calc(var(--sidebar-w) + var(--content-max) + 96px); width: 100%; }
+  article { max-width: var(--content-max); }
+  .doc-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 2px solid var(--border); }
+  .doc-header .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+  .tag-phase { background: var(--accent-light); color: var(--accent); }
+  .tag-topic { background: var(--teal-light); color: var(--teal); }
+  .tag-date  { background: var(--surface-alt); color: var(--text-muted); }
+  .doc-header h1 { font-size: 30px; font-weight: 800; line-height: 1.25; letter-spacing: -.02em; color: var(--text); }
+  section { margin-bottom: 52px; scroll-margin-top: 32px; }
+  h2.section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -.01em; }
+  h2.section-title .num { font-size: 11px; font-weight: 800; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; letter-spacing: .04em; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 24px 0 10px; }
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+  code { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-family: "SF Mono","Fira Code",Menlo,monospace; font-size: 12.5px; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 14px; border-left: 3px solid; }
+  .callout-goal  { background: var(--accent-light); border-color: var(--accent); color: #1e40af; }
+  .callout-tip   { background: var(--yellow-light); border-color: var(--yellow); color: #92400e; }
+  .callout-warn  { background: var(--red-light); border-color: var(--red); color: #7f1d1d; }
+  .callout-quote { background: var(--surface-alt); border-color: var(--border); color: var(--text-muted); font-style: italic; }
+  .callout-teal  { background: var(--teal-light); border-color: var(--teal); color: #134e4a; }
+  .cheatsheet { background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 24px 28px; font-family: "SF Mono","Fira Code","Cascadia Code",Menlo,monospace; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-x: auto; margin-top: 16px; }
+  .cheatsheet .label { color: #cba6f7; font-weight: 700; letter-spacing: .08em; display: block; margin-top: 18px; margin-bottom: 4px; border-bottom: 1px solid #313244; padding-bottom: 3px; }
+  .cheatsheet .label:first-child { margin-top: 0; }
+  .diagram-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 16px 14px; margin: 20px 0 28px; overflow-x: auto; }
+  .diagram-wrap .diagram-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); margin-bottom: 12px; }
+  .diagram-wrap p.caption { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 10px; margin-bottom: 0; font-style: italic; }
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; font-size: 14.5px; line-height: 1.55; }
+  .checklist li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 2px; background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .checklist li.checked .cb { background: var(--green); border-color: var(--green); }
+  .checklist li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .checklist li.checked .text { color: var(--text-muted); text-decoration: line-through; }
+  .phase-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
+  .phase-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; cursor: pointer; user-select: none; background: var(--surface-alt); }
+  .phase-header:hover { background: var(--border); }
+  .phase-label { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+  .phase-badge { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 2px 8px; border-radius: 20px; }
+  .ph1 { background: #dbeafe; color: #1d4ed8; } .ph2 { background: #fce7f3; color: #9d174d; }
+  .ph3 { background: #d1fae5; color: #065f46; } .ph4 { background: #fef3c7; color: #92400e; }
+  .phase-chevron { font-size: 12px; color: var(--text-muted); transition: transform .2s; }
+  .phase-card.open .phase-chevron { transform: rotate(180deg); }
+  .phase-body { display: none; padding: 16px 20px 20px; }
+  .phase-card.open .phase-body { display: block; }
+  .phase-goal { font-size: 12.5px; color: var(--text-muted); font-style: italic; margin-bottom: 12px; }
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: var(--surface-alt); padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.5; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+  .misconception { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .misconception .wrong { background: var(--red-light); padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; }
+  .misconception .right { padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; color: #065f46; background: var(--green-light); }
+  .misconception .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .quiz-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .quiz-q { padding: 14px 18px; font-size: 14.5px; font-weight: 600; cursor: pointer; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .quiz-q:hover { background: var(--surface-alt); }
+  .quiz-num { flex-shrink: 0; width: 24px; height: 24px; background: var(--accent); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; margin-top: 1px; }
+  .quiz-q .qtext { flex: 1; }
+  .quiz-toggle { font-size: 11px; color: var(--text-muted); flex-shrink: 0; margin-top: 3px; }
+  .quiz-hint { display: none; padding: 10px 18px 14px; font-size: 13px; color: #92400e; background: var(--yellow-light); border-top: 1px solid var(--border); }
+  .quiz-item.open .quiz-hint { display: block; }
+  .reading-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .reading-list li { display: flex; align-items: flex-start; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; font-size: 14px; }
+  .reading-list li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 1px; cursor: pointer; background: var(--surface); display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .reading-list li.checked .cb { background: var(--green); border-color: var(--green); }
+  .reading-list li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .reading-list li.checked .rtext { color: var(--text-muted); text-decoration: line-through; }
+  .notes-area { width: 100%; min-height: 160px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: inherit; font-size: 14px; color: var(--text); resize: vertical; line-height: 1.6; }
+  .notes-area:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .focus-list { list-style: none; display: flex; flex-direction: column; gap: 14px; }
+  .focus-list li { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14.5px; line-height: 1.6; }
+  .focus-list li strong { color: var(--accent); display: block; margin-bottom: 4px; }
+  .connections { display: flex; flex-direction: column; gap: 12px; }
+  .conn-card { display: flex; align-items: flex-start; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14px; }
+  .conn-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .conn-label { font-weight: 700; margin-bottom: 3px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .tradeoff-box { background: var(--surface-alt); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 14px 18px; font-size: 14px; font-style: italic; color: var(--text); margin-top: 14px; }
+  .compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 16px 0; }
+  .compare-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; font-size: 14px; }
+  .compare-card h4 { font-size: 13px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+  .compare-card ul { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+  .compare-card ul li { font-size: 13px; padding-left: 14px; position: relative; }
+  .compare-card ul li::before { content: '•'; position: absolute; left: 0; color: var(--text-muted); }
+  .stat { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 2px 7px; border-radius: 4px; }
+  .stat-blue { background: var(--accent-light); color: var(--accent); }
+  .stat-orange { background: var(--orange-light); color: var(--orange); }
+  .stat-green { background: var(--green-light); color: var(--green); }
+  .stat-red { background: var(--red-light); color: var(--red); }
+  @media (max-width: 900px) { #toc { display: none; } main { margin-left: 0; padding: 24px 20px 60px; } .compare-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<aside id="toc">
+  <div id="toc-header">
+    <span class="phase-tag">Phase B · Topic 6</span>
+    <h2>6.4 Geo-routing &amp; Anycast</h2>
+  </div>
+  <nav>
+    <a href="#s0">🗺️ Overview</a>
+    <a href="#s1">🎯 Goal</a>
+    <a href="#s2">✅ Mastery Criteria</a>
+    <a href="#s3">🗓️ Study Phases</a>
+    <a href="#s4">📋 Cheatsheet</a>
+    <a href="#s5">🧠 Core Definition</a>
+    <a href="#s6">📦 Core Concepts</a>
+    <a href="#s7">🔍 First Principles</a>
+    <a href="#s8">🗺️ Mental Models</a>
+    <a href="#s9">⚙️ How It Works</a>
+    <a href="#s10">🏭 Real-World Examples</a>
+    <a href="#s11">⚖️ Trade-offs</a>
+    <a href="#s12">🎯 Interview Application</a>
+    <a href="#s13">⚠️ Misconceptions</a>
+    <a href="#s14">🔗 Relationships</a>
+    <a href="#s15">🧪 Self-Check Quiz</a>
+    <a href="#s16">📚 Further Reading</a>
+    <a href="#s17">✍️ My Notes</a>
+  </nav>
+</aside>
+
+<main>
+<article>
+
+<!-- HEADER -->
+<div class="doc-header">
+  <div class="meta">
+    <span class="tag tag-phase">⚡ Phase B — Scalability</span>
+    <span class="tag tag-topic">🌍 Topic 6 — CDN</span>
+    <span class="tag tag-date">📅 2026-06-25</span>
+  </div>
+  <h1>6.4 Geo-routing and Anycast<br><span style="font-weight:400;color:var(--text-muted);font-size:22px;">Steering users to the nearest edge</span></h1>
+</div>
+
+<!-- S0: OVERVIEW -->
+<section id="s0">
+  <h2 class="section-title"><span class="num">§0</span> 🗺️ Topic Overview</h2>
+  <p>Geo-routing and anycast are the two primary mechanisms CDNs use to route each user to the geographically or topologically nearest PoP. <strong>Anycast</strong> works at the network layer: the same IP prefix is announced from every PoP via BGP, and the internet's routing infrastructure naturally delivers packets to the closest announcer. <strong>DNS geo-routing</strong> works at the application layer: the authoritative DNS server returns a different A record per region based on the resolver's inferred location. Together, they reduce round-trip time from 150–300ms (cross-continent) to 5–30ms (nearest PoP). The core tension is <strong>routing speed vs. accuracy</strong>: anycast is automatic and instant but topologically imprecise; DNS geo-routing is flexible and accurate but requires ECS support and tolerates TTL-bounded staleness during failover.</p>
+
+  <ul class="focus-list" style="margin-top:18px;">
+    <li><strong>1. Anycast BGP mechanics</strong> — The same /24 prefix is announced from all PoPs. BGP selects the path with fewest AS hops. Know that "nearest" is topological, not geographic — a well-peered far PoP can beat a poorly-peered close one.</li>
+    <li><strong>2. DNS geo-routing path</strong> — Trace the full resolution: client → recursive resolver → authoritative DNS with geo-logic → PoP A record. The authoritative DNS sees the <em>resolver's</em> IP, not the client's. This is the root cause of geo-routing inaccuracy.</li>
+    <li><strong>3. EDNS Client Subnet (ECS)</strong> — Partial fix: resolver forwards a /24 client prefix to authoritative DNS. Improves accuracy at the cost of privacy. Not universally supported.</li>
+    <li><strong>4. Failover behavior</strong> — Anycast: BGP route withdrawal → re-convergence in 30–120s (or &lt;5s with BFD). DNS geo-routing: TTL expiry before failover takes effect — short TTL = faster failover but higher DNS load.</li>
+    <li><strong>5. When to use each</strong> — Anycast for UDP protocols (DNS itself, QUIC), DDoS absorption, and zero-overhead routing. DNS geo-routing for fine-grained per-user policies and TCP traffic with complex routing rules.</li>
+  </ul>
+</section>
+
+<!-- S1: GOAL -->
+<section id="s1">
+  <h2 class="section-title"><span class="num">§1</span> 🎯 Goal of This Subtopic</h2>
+  <div class="callout callout-goal">
+    After studying this, you should be able to explain how a CDN routes a user in Tokyo to a Tokyo PoP rather than a US origin — covering both the anycast BGP path and the DNS geo-routing path. You should be able to compare the two mechanisms on accuracy, latency, failover speed, and protocol suitability, and select the right one for a given interview scenario. You should also understand how EDNS Client Subnet and BGP route withdrawal enable accurate routing and automatic failover respectively.
+  </div>
+</section>
+
+<!-- S2: MASTERY -->
+<section id="s2">
+  <h2 class="section-title"><span class="num">§2</span> ✅ What Mastery Looks Like</h2>
+  <ul class="checklist" id="mastery-list">
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can explain the anycast BGP mechanism step by step: same IP prefix from multiple PoPs, BGP selects shortest AS path, packets reach nearest announcer — without notes</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can trace the full DNS geo-routing resolution path and explain why the authoritative server sees the resolver IP, not the client IP — and what ECS does to fix this</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can compare anycast vs. DNS geo-routing on five dimensions: routing latency, accuracy, failover speed, protocol support, and operational complexity</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can describe the failover mechanics of both mechanisms: BGP route withdrawal timing and TTL-bounded DNS failover</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can identify when to reach for anycast (DDoS scrubbing, UDP routing) vs. DNS geo-routing (complex per-user policies) in a system design interview</span></li>
+  </ul>
+  <div class="callout callout-tip" style="margin-top:18px;">💡 <strong>Rule of thumb:</strong> If you can teach it to someone else and field their follow-up questions, you've mastered it.</div>
+</section>
+
+<!-- S3: STUDY PHASES -->
+<section id="s3">
+  <h2 class="section-title"><span class="num">§3</span> 🗓️ Study Phases to Achieve Mastery</h2>
+
+  <div class="phase-card open">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph1">Phase 1</span> Acquire 📖</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Read deeply enough that you could explain the concept without the doc.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text"><strong>Cloudflare blog — "Load Balancing without Load Balancers"</strong> — <a href="https://blog.cloudflare.com/cloudflares-architecture-eliminating-single-points-of-failure/" target="_blank">blog.cloudflare.com</a> — explains how anycast powers Cloudflare's global network</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text"><strong>AWS Route 53 routing policies docs</strong> — <a href="https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/routing-policy.html" target="_blank">docs.aws.amazon.com</a> — DNS geo-routing in practice (latency-based, geolocation, geoproximity)</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text"><strong>RFC 7871 — EDNS Client Subnet</strong> — <a href="https://tools.ietf.org/html/rfc7871" target="_blank">tools.ietf.org</a> — skim the motivation and §6 overview for ECS mechanics</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Read Sections §5–§9 of this doc carefully — don't skim</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Re-read the Cheatsheet (§4) and recite it from memory after</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph2">Phase 2</span> Consolidate ✍️</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Verify you can reproduce knowledge in your own words without looking.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Close the doc — write out the Core Definition from memory, then compare</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Explain First Principles out loud: what was broken before anycast and geo-routing existed?</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Reconstruct both routing paths (anycast BGP + DNS geo-routing) from memory, including failure cases</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Restate each Trade-off row in your own words — if you can't explain the cost, you don't own it</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph3">Phase 3</span> Apply 🔧</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Connect to real systems and simulate interview scenarios.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Go through Real-World Examples (§10) — verify each claim independently and add notes to §17</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Practice Interview Application (§12) out loud — say the trigger phrases and your response as if in a live interview</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Work through Misconceptions (§13) — explain WHY each misconception is wrong, not just that it is</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Trace Relationships (§14) — explain each connection without looking</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph4">Phase 4</span> Validate 🧪</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Confirm you actually own it, not just recognize it.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Answer every Self-Check Quiz question (§15) out loud without notes</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Recite the Cheatsheet (§4) from memory — if you can't, re-do Phase 2</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Tick off mastery criteria in §2 — only check a box if you can demonstrate on demand</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Teach this concept to an imaginary interviewer for 2 minutes without hesitation</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- S4: CHEATSHEET -->
+<section id="s4">
+  <h2 class="section-title"><span class="num">§4</span> 📋 Cheatsheet</h2>
+  <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+
+  <!-- Radial Mindmap SVG -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">🧠 Concept Mindmap</div>
+    <svg viewBox="0 0 820 480" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:820px;display:block;margin:0 auto;">
+      <rect width="820" height="480" fill="#fafafa" rx="8"/>
+      <!-- Connector lines -->
+      <line x1="410" y1="240" x2="175" y2="100" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="645" y2="100" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="90"  y2="270" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="730" y2="270" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="175" y2="390" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="645" y2="390" stroke="#aaa" stroke-width="1.5"/>
+      <!-- Central -->
+      <ellipse cx="410" cy="240" rx="110" ry="44" fill="#a5d8ff" stroke="#1971c2" stroke-width="2"/>
+      <text x="410" y="233" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="bold" fill="#1a1917">Geo-routing &amp;</text>
+      <text x="410" y="251" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="bold" fill="#1a1917">Anycast</text>
+      <!-- Anycast -->
+      <rect x="78" y="68" width="194" height="58" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="175" y="90" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Anycast (BGP)</text>
+      <text x="175" y="106" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#333">Same IP, many PoPs</text>
+      <text x="175" y="119" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#333">BGP → shortest AS path</text>
+      <!-- DNS Geo-routing -->
+      <rect x="548" y="68" width="194" height="58" rx="8" fill="#ffd8a8" stroke="#e67700" stroke-width="1.5"/>
+      <text x="645" y="90" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">DNS Geo-routing</text>
+      <text x="645" y="106" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#333">Different A record per region</text>
+      <text x="645" y="119" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#333">Authoritative DNS decides</text>
+      <!-- ECS -->
+      <rect x="10" y="242" width="160" height="56" rx="8" fill="#c3fae8" stroke="#0ca678" stroke-width="1.5"/>
+      <text x="90" y="264" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">ECS (RFC 7871)</text>
+      <text x="90" y="279" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Resolver forwards /24</text>
+      <text x="90" y="292" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">client prefix to auth DNS</text>
+      <!-- Failover -->
+      <rect x="650" y="242" width="160" height="56" rx="8" fill="#ffc9c9" stroke="#c92a2a" stroke-width="1.5"/>
+      <text x="730" y="264" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Failover</text>
+      <text x="730" y="279" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Anycast: BGP withdraw</text>
+      <text x="730" y="292" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">DNS: bounded by TTL</text>
+      <!-- Gotchas -->
+      <rect x="78" y="362" width="194" height="58" rx="8" fill="#ffe3e3" stroke="#c92a2a" stroke-width="1.5"/>
+      <text x="175" y="385" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Gotchas</text>
+      <text x="175" y="400" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">DNS sees resolver IP, not user</text>
+      <text x="175" y="413" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">BGP ≠ geographic nearest</text>
+      <!-- Real Systems -->
+      <rect x="548" y="362" width="194" height="58" rx="8" fill="#b2f2bb" stroke="#2f9e44" stroke-width="1.5"/>
+      <text x="645" y="385" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Real Systems</text>
+      <text x="645" y="400" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Cloudflare → pure anycast</text>
+      <text x="645" y="413" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">CloudFront → DNS latency-based</text>
+    </svg>
+    <p class="caption">Six clusters around the geo-routing and anycast core — anycast and DNS geo-routing as the two primary mechanisms</p>
+  </div>
+
+  <div class="cheatsheet">
+<span class="label">§ 1  WHY IT EXISTS</span>The speed of light is the constraint. A packet from Sydney to London traverses ~17,000 km
+of fiber at ~200,000 km/s — a minimum one-way latency of 85ms, 170ms RTT. For a page
+needing 10 round trips, that's 1.7s of irreducible delay. CDNs deploy PoPs globally to
+move servers closer to users, but proximity only helps if traffic is actually routed to
+the nearest PoP. Geo-routing and anycast are the two mechanisms that ensure this —
+without them, all users would hit the same origin IP regardless of geography.
+
+<span class="label">§ 2  ANYCAST — HOW IT WORKS</span>The same IP prefix (e.g., 104.16.0.0/12) is announced via BGP from every PoP
+simultaneously. Internet routers build paths toward the closest announcer by AS hop
+count. A packet destined for that IP automatically reaches the nearest PoP.
+No per-request DNS overhead. Routing decision is made at the IP layer.
+Failover: PoP withdraws BGP route → neighbors propagate withdrawal →
+  traffic reconverges to next-best PoP. Time: 30–120s (or &lt;5s with BFD).
+Limit: BGP "nearest" = fewest AS hops, NOT geographic miles.
+  A well-peered far PoP can beat a poorly-peered near one.
+
+<span class="label">§ 3  DNS GEO-ROUTING — HOW IT WORKS</span>Resolution path:
+  Client OS → recursive resolver (e.g. 8.8.8.8) → authoritative DNS →
+  returns PoP A record based on resolver's inferred region.
+PROBLEM: authoritative DNS sees resolver IP, not user IP.
+  User in Tokyo + Google 8.8.8.8 resolver → auth DNS thinks "Mountain View" →
+  routes to US PoP. User gets 200ms RTT instead of 5ms.
+ECS FIX: resolver includes client /24 prefix in query to authoritative DNS.
+  Auth DNS routes on actual client location. Privacy cost: client /24 visible.
+Failover: health checks update DNS response → clients get new IP after TTL expires.
+  With TTL=60s → failover window ≤ 60s. Short TTL = faster failover, more DNS load.
+
+<span class="label">§ 4  ANYCAST vs DNS GEO-ROUTING</span>                  Anycast          DNS Geo-routing
+Routing latency:  Zero (IP layer)   DNS RTT on first lookup (~20–100ms)
+Accuracy:         Topological       Geographic + ECS (more precise)
+Failover:         30–120s BGP       TTL-bounded (set TTL 30–60s)
+Protocol:         Any (UDP ideal)   TCP only without extra effort
+Policies:         Coarse            Fine-grained (country/city/ISP)
+Use anycast for:  DDoS, UDP, DNS itself, zero-overhead global routing
+Use DNS for:      Complex per-user rules, TCP HTTPS, weighted failover
+
+<span class="label">§ 5  INTERVIEW TRIGGERS</span>→ "Users across the world need low-latency access to our CDN"
+→ "How does traffic get routed to the correct regional PoP?"
+→ "A PoP goes down — how do users failover without manual intervention?"
+→ "We need to absorb DDoS traffic globally across all our edge locations"
+
+<span class="label">§ 6  NUMBERS</span>Cross-continent RTT (no CDN): 150–300ms
+User-to-nearest-PoP RTT:    5–30ms
+BGP convergence (no BFD):   30–120s
+BGP convergence (with BFD): 1–5s
+DNS TTL for geo records:    30–300s (30s = fast failover; 300s = cache-friendly)
+ECS prefix length:          /24 IPv4, /56 IPv6 (privacy vs. accuracy trade-off)
+
+<span class="label">§ 7  GOTCHA</span>The #1 mistake: assuming DNS geo-routing sees the USER's IP.
+It sees the RECURSIVE RESOLVER's IP. A user in Frankfurt using 8.8.8.8 gets routed
+as if they're in Mountain View. ECS partially fixes this — but only when the
+resolver supports it AND the operator enables it. Always mention ECS when
+discussing DNS geo-routing accuracy in an interview.
+  </div>
+</section>
+
+<!-- S5: CORE DEFINITION -->
+<section id="s5">
+  <h2 class="section-title"><span class="num">§5</span> 🧠 Core Definition</h2>
+  <div class="callout callout-teal" style="font-size:16px;font-weight:600;line-height:1.6;">
+    Geo-routing and anycast are complementary traffic-steering mechanisms that route each user to the CDN PoP with the lowest round-trip time: anycast achieves this at the network layer by advertising one IP from all PoPs and letting BGP converge packets to the nearest announcer; DNS geo-routing achieves it at the application layer by resolving a domain to the A record of the nearest PoP based on the client's inferred location.
+  </div>
+
+  <div class="compare-grid" style="margin-top:20px;">
+    <div class="compare-card">
+      <h4>🔵 Anycast <span class="stat stat-blue">Layer 3</span></h4>
+      <ul>
+        <li>Same IP prefix announced from all PoPs via BGP</li>
+        <li>Routing at the packet level — zero DNS overhead</li>
+        <li>Ideal for UDP (DNS, QUIC) and DDoS scrubbing</li>
+        <li>Failover: automatic BGP route withdrawal</li>
+      </ul>
+    </div>
+    <div class="compare-card">
+      <h4>🟠 DNS Geo-routing <span class="stat stat-orange">Layer 7</span></h4>
+      <ul>
+        <li>Different A records returned per geographic region</li>
+        <li>Routing at resolution time — TTL-cached per client</li>
+        <li>Ideal for fine-grained per-user routing policies</li>
+        <li>Failover: bounded by DNS TTL (set 30–60s)</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- S6: CORE CONCEPTS -->
+<section id="s6">
+  <h2 class="section-title"><span class="num">§6</span> 📦 Core Concepts</h2>
+
+  <h3>Anycast IP Routing</h3>
+  <p>A network addressing scheme where the same IP prefix (e.g., <code>192.0.2.0/24</code>) is announced from multiple autonomous systems (CDN PoPs) via BGP simultaneously. When a packet is addressed to that IP, every internet router along the path forwards it toward whichever announcer has the best BGP path — typically the one with the fewest AS hops. No per-request DNS is needed; routing is a property of the IP-layer infrastructure. Cloudflare's 300+ PoP network operates on a small number of anycast prefixes — every Cloudflare customer shares the same IP range globally.</p>
+
+  <h3>DNS-Based Geo-routing</h3>
+  <p>The authoritative DNS server for a CDN domain inspects the source IP of each DNS query and returns a different A record based on the inferred geography of that resolver. A resolver in Singapore receives the Singapore PoP IP; a resolver in Frankfurt gets the Frankfurt PoP IP. The routing decision is made once per TTL window at DNS resolution time — not per packet. AWS Route 53 offers this as "latency-based routing" (routes to lowest-latency region rather than nearest region by geo) and "geolocation routing" (routes by country/continent).</p>
+
+  <h3>EDNS Client Subnet (ECS)</h3>
+  <p>An extension to DNS (RFC 7871) where the recursive resolver includes a truncated version of the client's IP address (e.g., the /24 prefix) in the DNS query sent to the authoritative server. Without ECS, a user in Tokyo using Google's 8.8.8.8 resolver causes the authoritative DNS to route based on Mountain View — a continent away. With ECS, the resolver says "this query is on behalf of a client in <code>203.0.113.0/24</code>", and the authoritative server routes accurately. Privacy cost: the client /24 is exposed to the authoritative DNS operator and potentially logged.</p>
+
+  <h3>BGP Route Withdrawal and Re-convergence</h3>
+  <p>When an anycast PoP goes offline, its BGP sessions drop and its route announcements are withdrawn. Neighboring routers detect the missing announcements and propagate the withdrawal through the BGP mesh, removing the failed PoP from routing tables globally. Traffic re-routes to the next-best PoP as BGP reconverges — typically 30–120 seconds without optimization. With Bidirectional Forwarding Detection (BFD), failure is detected in milliseconds and convergence completes in 1–5 seconds. This automatic failover requires no operator action and no DNS change.</p>
+
+  <h3>TTL and DNS Failover</h3>
+  <p>DNS geo-routing failover is bounded by TTL. When a PoP goes unhealthy, the authoritative DNS updates its response — but clients who already resolved the old IP continue using it until their cached TTL expires. A 300-second TTL means up to 5 minutes of clients hitting a failed PoP. A 30-second TTL reduces this to 30 seconds, but 10× the DNS query volume hits the authoritative server. Most CDNs use 60–120 seconds as the practical default, with the ability to drop to 30 seconds during incident response.</p>
+
+</section>
+
+<!-- S7: FIRST PRINCIPLES -->
+<section id="s7">
+  <h2 class="section-title"><span class="num">§7</span> 🔍 First Principles — Why Does This Exist?</h2>
+  <p>The root constraint is physics: the speed of light in fiber is approximately 200,000 km/s. A round trip between Sydney and London (17,000 km of cable) takes at minimum 170ms — before any processing. For a web page requiring 10 sequential round trips, that's 1.7 seconds of pure propagation delay. No amount of faster servers or better code eliminates this — only proximity does.</p>
+  <p>CDNs solve this by placing servers at hundreds of PoPs worldwide. But proximity is only valuable if users are actually routed to nearby PoPs. Before geo-routing existed, DNS returned a single IP for a domain — all traffic hit the origin server, regardless of whether a closer PoP existed 5ms away. The user in Tokyo paid 200ms to reach a US server even if a Tokyo PoP sat idle.</p>
+  <p>Anycast and DNS geo-routing solve the routing half of the problem. They transform a single-IP address space into a globally distributed routing fabric where each user is automatically directed to their nearest point of service — without the user, application, or client knowing anything about the underlying topology.</p>
+
+  <!-- RTT comparison diagram -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">⏱️ Why Proximity Matters — RTT Without vs. With Geo-routing</div>
+    <svg viewBox="0 0 740 200" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:740px;display:block;margin:0 auto;" font-family="Arial,sans-serif">
+      <rect width="740" height="200" fill="#fafafa" rx="8"/>
+
+      <!-- WITHOUT CDN / geo-routing -->
+      <text x="20" y="28" font-size="12" font-weight="bold" fill="#6b6861">WITHOUT geo-routing (user hits origin)</text>
+      <!-- user box -->
+      <rect x="20" y="38" width="80" height="36" rx="6" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="60" y="60" text-anchor="middle" font-size="11" font-weight="bold" fill="#1a1917">User</text>
+      <text x="60" y="73" text-anchor="middle" font-size="10" fill="#555">Tokyo</text>
+      <!-- arrow -->
+      <line x1="100" y1="56" x2="580" y2="56" stroke="#dc2626" stroke-width="2" stroke-dasharray="6,3" marker-end="url(#arr-red)"/>
+      <text x="340" y="48" text-anchor="middle" font-size="11" font-weight="bold" fill="#dc2626">~200ms RTT (cross-continent)</text>
+      <!-- origin -->
+      <rect x="580" y="38" width="140" height="36" rx="6" fill="#ffc9c9" stroke="#c92a2a" stroke-width="1.5"/>
+      <text x="650" y="60" text-anchor="middle" font-size="11" font-weight="bold" fill="#1a1917">Origin Server</text>
+      <text x="650" y="73" text-anchor="middle" font-size="10" fill="#555">US East</text>
+
+      <!-- WITH geo-routing -->
+      <text x="20" y="112" font-size="12" font-weight="bold" fill="#6b6861">WITH geo-routing (user hits nearest PoP)</text>
+      <!-- user box -->
+      <rect x="20" y="122" width="80" height="36" rx="6" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="60" y="144" text-anchor="middle" font-size="11" font-weight="bold" fill="#1a1917">User</text>
+      <text x="60" y="157" text-anchor="middle" font-size="10" fill="#555">Tokyo</text>
+      <!-- short arrow to PoP -->
+      <line x1="100" y1="140" x2="218" y2="140" stroke="#16a34a" stroke-width="2" marker-end="url(#arr-green)"/>
+      <text x="160" y="132" text-anchor="middle" font-size="11" font-weight="bold" fill="#16a34a">~10ms</text>
+      <!-- PoP -->
+      <rect x="220" y="122" width="110" height="36" rx="6" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+      <text x="275" y="144" text-anchor="middle" font-size="11" font-weight="bold" fill="#1a1917">PoP Tokyo</text>
+      <text x="275" y="157" text-anchor="middle" font-size="10" fill="#555">Cache hit!</text>
+      <!-- cache miss dotted line to origin -->
+      <line x1="330" y1="140" x2="578" y2="140" stroke="#aaa" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr-grey)"/>
+      <text x="454" y="132" text-anchor="middle" font-size="10" fill="#aaa">cache miss only (~200ms)</text>
+      <!-- origin -->
+      <rect x="580" y="122" width="140" height="36" rx="6" fill="#f3f2ef" stroke="#ccc" stroke-width="1.5"/>
+      <text x="650" y="144" text-anchor="middle" font-size="11" fill="#999">Origin Server</text>
+      <text x="650" y="157" text-anchor="middle" font-size="10" fill="#aaa">US East</text>
+
+      <defs>
+        <marker id="arr-red" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L0,8 L8,4 z" fill="#dc2626"/></marker>
+        <marker id="arr-green" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L0,8 L8,4 z" fill="#16a34a"/></marker>
+        <marker id="arr-grey" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L0,8 L8,4 z" fill="#aaa"/></marker>
+      </defs>
+    </svg>
+    <p class="caption">Geo-routing collapses RTT from 200ms → 10ms for cache hits; origin is only reached on cache miss</p>
+  </div>
+</section>
+
+<!-- S8: MENTAL MODELS -->
+<section id="s8">
+  <h2 class="section-title"><span class="num">§8</span> 🗺️ Mental Models</h2>
+
+  <h3>Model 1: The Post Office Network (Anycast)</h3>
+  <p>Imagine a postal service where thousands of sorting facilities worldwide all carry the same address label. When you drop a letter in a mailbox, the postal routing system sends it to whichever facility is closest — not because your letter has routing instructions, but because the routing infrastructure has pre-configured "send mail of this type to the nearest facility." Anycast works identically: the IP prefix is the "class of address," and BGP routing tables are the pre-configured rules that forward packets to the nearest announcer. <em>Where it breaks down:</em> BGP "nearest" means fewest AS hops, not fewest kilometers — a geographically distant PoP with better peering can win over a physically closer one with worse BGP metrics.</p>
+
+  <h3>Model 2: The Smart Receptionist (DNS Geo-routing)</h3>
+  <p>Think of the authoritative DNS server as a multinational company's central receptionist. When you call in, the receptionist asks "where are you calling from?" based on your caller ID (the resolver's IP), then transfers you to the nearest regional office (PoP IP). ECS is like telling the telephone exchange to include your local area code in the transfer request — so the receptionist routes you based on your actual location, not the exchange's. <em>Where it breaks down:</em> once transferred, you stay on that line for the duration of the TTL — even if the regional office goes down, you're stuck until the TTL expires and you call the receptionist again.</p>
+
+  <h3>Model 3: Two Layers — City and Building</h3>
+  <p>In production CDNs, anycast and DNS geo-routing work together at different granularities. Anycast decides <em>which city</em> (datacenter) receives the packet at the IP layer. DNS geo-routing decides <em>which building</em> (cache cluster or origin shield) within that city handles the request at the application layer. This two-layer model is why Cloudflare uses anycast globally while AWS CloudFront uses DNS-based latency routing — different architectures for the same end goal, or sometimes combined in the same system.</p>
+</section>
+
+<!-- S9: HOW IT WORKS -->
+<section id="s9">
+  <h2 class="section-title"><span class="num">§9</span> ⚙️ How It Works — Mechanics</h2>
+
+  <!-- Anycast Flow Diagram -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">🌐 Anycast BGP Routing — Happy Path &amp; Failure Path</div>
+    <svg viewBox="0 0 780 340" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:780px;display:block;margin:0 auto;" font-family="Arial,sans-serif">
+      <rect width="780" height="340" fill="#fafafa" rx="8"/>
+
+      <!-- Title labels -->
+      <text x="200" y="22" text-anchor="middle" font-size="12" font-weight="bold" fill="#16a34a">Happy Path — PoP Online</text>
+      <text x="590" y="22" text-anchor="middle" font-size="12" font-weight="bold" fill="#dc2626">Failure Path — PoP Offline</text>
+      <line x1="390" y1="10" x2="390" y2="330" stroke="#e5e3de" stroke-width="1" stroke-dasharray="4,3"/>
+
+      <!-- HAPPY PATH -->
+      <!-- User -->
+      <rect x="20" y="40" width="90" height="40" rx="6" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="65" y="63" text-anchor="middle" font-size="11" font-weight="bold" fill="#1a1917">User Tokyo</text>
+      <!-- Arrow 1 -->
+      <line x1="110" y1="60" x2="148" y2="60" stroke="#555" stroke-width="1.5" marker-end="url(#arr-b)"/>
+      <text x="129" y="52" text-anchor="middle" font-size="9" fill="#555">packet to</text>
+      <text x="129" y="62" text-anchor="middle" font-size="9" fill="#555">104.16.1.1</text>
+      <!-- ISP Router -->
+      <rect x="150" y="40" width="90" height="40" rx="6" fill="#f3f2ef" stroke="#aaa" stroke-width="1.5"/>
+      <text x="195" y="60" text-anchor="middle" font-size="11" fill="#555">ISP Router</text>
+      <text x="195" y="72" text-anchor="middle" font-size="10" fill="#888">BGP table</text>
+      <!-- Arrow 2: shortest path -->
+      <line x1="240" y1="60" x2="278" y2="60" stroke="#16a34a" stroke-width="2" marker-end="url(#arr-g)"/>
+      <text x="259" y="52" text-anchor="middle" font-size="9" fill="#16a34a">shortest</text>
+      <text x="259" y="63" text-anchor="middle" font-size="9" fill="#16a34a">AS path</text>
+      <!-- PoP Tokyo (online) -->
+      <rect x="280" y="34" width="100" height="52" rx="6" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+      <text x="330" y="56" text-anchor="middle" font-size="11" font-weight="bold" fill="#1a1917">PoP Tokyo</text>
+      <text x="330" y="70" text-anchor="middle" font-size="10" fill="#16a34a">Announces</text>
+      <text x="330" y="82" text-anchor="middle" font-size="10" fill="#16a34a">104.16.0.0/12</text>
+
+      <!-- PoP London (farther) -->
+      <rect x="120" y="130" width="100" height="40" rx="6" fill="#f3f2ef" stroke="#aaa" stroke-width="1.5"/>
+      <text x="170" y="150" text-anchor="middle" font-size="11" fill="#aaa">PoP London</text>
+      <text x="170" y="163" text-anchor="middle" font-size="10" fill="#ccc">also announces</text>
+      <text x="55" y="142" font-size="10" fill="#aaa">Farther AS path</text>
+      <text x="55" y="154" font-size="10" fill="#aaa">→ NOT chosen</text>
+
+      <!-- Response arrow -->
+      <line x1="280" y1="76" x2="112" y2="76" stroke="#16a34a" stroke-width="1.5" stroke-dasharray="4,2" marker-end="url(#arr-g)"/>
+      <text x="196" y="90" text-anchor="middle" font-size="10" fill="#16a34a">Response served</text>
+
+      <!-- BGP best path label -->
+      <rect x="20" y="190" width="360" height="60" rx="6" fill="#f0fdf4" stroke="#16a34a" stroke-width="1"/>
+      <text x="200" y="212" text-anchor="middle" font-size="11" font-weight="bold" fill="#166534">BGP selects: Tokyo PoP (AS path length = 2)</text>
+      <text x="200" y="228" text-anchor="middle" font-size="10" fill="#555">London PoP also announces same prefix but has longer AS path</text>
+      <text x="200" y="242" text-anchor="middle" font-size="10" fill="#555">→ BGP prefers Tokyo. Packet goes to Tokyo automatically.</text>
+
+      <!-- FAILURE PATH -->
+      <!-- User -->
+      <rect x="415" y="40" width="90" height="40" rx="6" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="460" y="63" text-anchor="middle" font-size="11" font-weight="bold" fill="#1a1917">User Tokyo</text>
+      <!-- Arrow -->
+      <line x1="505" y1="60" x2="543" y2="60" stroke="#555" stroke-width="1.5" marker-end="url(#arr-b)"/>
+      <!-- PoP Tokyo (offline) -->
+      <rect x="545" y="34" width="100" height="52" rx="6" fill="#fee2e2" stroke="#dc2626" stroke-width="2" stroke-dasharray="5,3"/>
+      <text x="595" y="56" text-anchor="middle" font-size="11" font-weight="bold" fill="#dc2626">PoP Tokyo</text>
+      <text x="595" y="70" text-anchor="middle" font-size="11" fill="#dc2626">OFFLINE</text>
+      <text x="595" y="83" text-anchor="middle" font-size="10" fill="#dc2626">Route withdrawn</text>
+      <!-- X mark -->
+      <line x1="568" y1="38" x2="618" y2="82" stroke="#dc2626" stroke-width="2"/>
+      <line x1="618" y1="38" x2="568" y2="82" stroke="#dc2626" stroke-width="2"/>
+
+      <!-- BGP withdraw flow -->
+      <line x1="595" y1="86" x2="595" y2="115" stroke="#dc2626" stroke-width="1.5" marker-end="url(#arr-r)"/>
+      <rect x="495" y="116" width="200" height="34" rx="6" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+      <text x="595" y="133" text-anchor="middle" font-size="11" font-weight="bold" fill="#92400e">BGP withdrawal propagates</text>
+      <text x="595" y="146" text-anchor="middle" font-size="10" fill="#92400e">30–120s (or &lt;5s with BFD)</text>
+
+      <!-- Next PoP -->
+      <line x1="595" y1="150" x2="595" y2="175" stroke="#555" stroke-width="1.5" marker-end="url(#arr-b)"/>
+      <rect x="510" y="176" width="170" height="40" rx="6" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+      <text x="595" y="196" text-anchor="middle" font-size="11" font-weight="bold" fill="#1a1917">PoP Osaka / Seoul</text>
+      <text x="595" y="210" text-anchor="middle" font-size="10" fill="#16a34a">Next-best BGP path wins</text>
+
+      <!-- Note -->
+      <rect x="415" y="232" width="350" height="60" rx="6" fill="#fef3c7" stroke="#d97706" stroke-width="1"/>
+      <text x="590" y="254" text-anchor="middle" font-size="11" font-weight="bold" fill="#92400e">⚠️ Automatic — no operator action needed</text>
+      <text x="590" y="270" text-anchor="middle" font-size="10" fill="#555">New connections re-route after BGP convergence.</text>
+      <text x="590" y="284" text-anchor="middle" font-size="10" fill="#555">Existing TCP connections drop — clients must reconnect.</text>
+
+      <defs>
+        <marker id="arr-b" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L0,8 L8,4 z" fill="#555"/></marker>
+        <marker id="arr-g" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L0,8 L8,4 z" fill="#16a34a"/></marker>
+        <marker id="arr-r" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L0,8 L8,4 z" fill="#dc2626"/></marker>
+      </defs>
+    </svg>
+    <p class="caption">Left: BGP selects Tokyo PoP (shortest AS path). Right: Tokyo offline → BGP withdrawal → traffic re-converges to next-best PoP</p>
+  </div>
+
+  <!-- DNS Geo-routing Flow Diagram -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">📡 DNS Geo-routing Resolution Path — With and Without ECS</div>
+    <svg viewBox="0 0 780 310" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:780px;display:block;margin:0 auto;" font-family="Arial,sans-serif">
+      <rect width="780" height="310" fill="#fafafa" rx="8"/>
+
+      <!-- WITHOUT ECS -->
+      <text x="190" y="22" text-anchor="middle" font-size="12" font-weight="bold" fill="#dc2626">Without ECS — Inaccurate Routing</text>
+
+      <!-- Step 1: Client in Frankfurt -->
+      <rect x="10" y="36" width="90" height="44" rx="6" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="55" y="56" text-anchor="middle" font-size="11" font-weight="bold" fill="#1a1917">Client</text>
+      <text x="55" y="70" text-anchor="middle" font-size="10" fill="#555">Frankfurt</text>
+      <text x="55" y="82" text-anchor="middle" font-size="10" fill="#555">212.95.x.x</text>
+
+      <!-- Arrow to resolver -->
+      <line x1="100" y1="58" x2="148" y2="58" stroke="#555" stroke-width="1.5" marker-end="url(#arr-b2)"/>
+      <text x="124" y="50" text-anchor="middle" font-size="9" fill="#555">DNS query</text>
+
+      <!-- Recursive Resolver (US) -->
+      <rect x="150" y="36" width="110" height="44" rx="6" fill="#ffd8a8" stroke="#e67700" stroke-width="1.5"/>
+      <text x="205" y="56" text-anchor="middle" font-size="11" font-weight="bold" fill="#1a1917">Resolver</text>
+      <text x="205" y="70" text-anchor="middle" font-size="10" fill="#e67700">8.8.8.8</text>
+      <text x="205" y="82" text-anchor="middle" font-size="10" fill="#e67700">Mountain View</text>
+
+      <!-- Arrow to auth DNS — shows resolver IP, not client -->
+      <line x1="260" y1="58" x2="308" y2="58" stroke="#dc2626" stroke-width="1.5" marker-end="url(#arr-r2)"/>
+      <text x="284" y="46" text-anchor="middle" font-size="9" fill="#dc2626">source: 8.8.8.8</text>
+      <text x="284" y="58" text-anchor="middle" font-size="9" fill="#dc2626">(NOT Frankfurt!)</text>
+
+      <!-- Auth DNS -->
+      <rect x="310" y="36" width="110" height="44" rx="6" fill="#f3f2ef" stroke="#aaa" stroke-width="1.5"/>
+      <text x="365" y="56" text-anchor="middle" font-size="11" font-weight="bold" fill="#1a1917">Auth DNS</text>
+      <text x="365" y="70" text-anchor="middle" font-size="10" fill="#555">Sees 8.8.8.8</text>
+      <text x="365" y="82" text-anchor="middle" font-size="10" fill="#dc2626">→ "US region"</text>
+
+      <!-- Wrong PoP returned -->
+      <line x1="365" y1="80" x2="365" y2="105" stroke="#dc2626" stroke-width="1.5" marker-end="url(#arr-r2)"/>
+      <rect x="295" y="106" width="140" height="40" rx="6" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5"/>
+      <text x="365" y="126" text-anchor="middle" font-size="11" font-weight="bold" fill="#dc2626">Returns US PoP IP</text>
+      <text x="365" y="139" text-anchor="middle" font-size="10" fill="#dc2626">~200ms RTT from Frankfurt!</text>
+
+      <!-- WITHOUT ECS divider -->
+      <line x1="0" y1="160" x2="390" y2="160" stroke="#e5e3de" stroke-width="1" stroke-dasharray="3,3"/>
+
+      <!-- WITH ECS -->
+      <text x="190" y="178" text-anchor="middle" font-size="12" font-weight="bold" fill="#16a34a">With ECS — Accurate Routing</text>
+
+      <!-- Client -->
+      <rect x="10" y="190" width="90" height="44" rx="6" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="55" y="210" text-anchor="middle" font-size="11" font-weight="bold" fill="#1a1917">Client</text>
+      <text x="55" y="224" text-anchor="middle" font-size="10" fill="#555">Frankfurt</text>
+      <text x="55" y="236" text-anchor="middle" font-size="10" fill="#555">212.95.x.x</text>
+
+      <!-- Arrow to resolver -->
+      <line x1="100" y1="212" x2="148" y2="212" stroke="#555" stroke-width="1.5" marker-end="url(#arr-b2)"/>
+
+      <!-- Resolver -->
+      <rect x="150" y="190" width="110" height="44" rx="6" fill="#ffd8a8" stroke="#e67700" stroke-width="1.5"/>
+      <text x="205" y="210" text-anchor="middle" font-size="11" font-weight="bold" fill="#1a1917">Resolver</text>
+      <text x="205" y="224" text-anchor="middle" font-size="10" fill="#e67700">8.8.8.8</text>
+      <text x="205" y="236" text-anchor="middle" font-size="10" fill="#e67700">ECS enabled</text>
+
+      <!-- Arrow with ECS prefix -->
+      <line x1="260" y1="212" x2="308" y2="212" stroke="#16a34a" stroke-width="1.5" marker-end="url(#arr-g2)"/>
+      <text x="284" y="200" text-anchor="middle" font-size="9" fill="#16a34a">ECS: client</text>
+      <text x="284" y="211" text-anchor="middle" font-size="9" fill="#16a34a">212.95.0.0/24</text>
+
+      <!-- Auth DNS -->
+      <rect x="310" y="190" width="110" height="44" rx="6" fill="#f3f2ef" stroke="#aaa" stroke-width="1.5"/>
+      <text x="365" y="210" text-anchor="middle" font-size="11" font-weight="bold" fill="#1a1917">Auth DNS</text>
+      <text x="365" y="224" text-anchor="middle" font-size="10" fill="#555">Sees 212.95.0.0/24</text>
+      <text x="365" y="236" text-anchor="middle" font-size="10" fill="#16a34a">→ "Frankfurt"</text>
+
+      <!-- Correct PoP returned -->
+      <line x1="365" y1="234" x2="365" y2="259" stroke="#16a34a" stroke-width="1.5" marker-end="url(#arr-g2)"/>
+      <rect x="280" y="260" width="170" height="40" rx="6" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+      <text x="365" y="280" text-anchor="middle" font-size="11" font-weight="bold" fill="#166534">Returns Frankfurt PoP IP</text>
+      <text x="365" y="293" text-anchor="middle" font-size="10" fill="#16a34a">~10ms RTT. Correct!</text>
+
+      <!-- ECS privacy note -->
+      <rect x="420" y="36" width="350" height="220" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+      <text x="595" y="58" text-anchor="middle" font-size="12" font-weight="bold" fill="#92400e">⚠️ ECS Privacy Trade-off</text>
+      <text x="435" y="82" font-size="11" fill="#555">ECS exposes client /24 to:</text>
+      <text x="435" y="100" font-size="11" fill="#555">  • The authoritative DNS operator</text>
+      <text x="435" y="118" font-size="11" fill="#555">  • Any DNS middleware in the path</text>
+      <text x="435" y="148" font-size="12" font-weight="bold" fill="#92400e">ECS Prefix Length Trade-off</text>
+      <text x="435" y="168" font-size="11" fill="#555">Shorter prefix = more privacy</text>
+      <text x="435" y="186" font-size="11" fill="#555">  /24 → ~256 users, good accuracy</text>
+      <text x="435" y="204" font-size="11" fill="#555">  /0  → no client info, no ECS benefit</text>
+      <text x="435" y="222" font-size="11" fill="#555">IPv6: /56 is standard ECS prefix</text>
+
+      <defs>
+        <marker id="arr-b2" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L0,8 L8,4 z" fill="#555"/></marker>
+        <marker id="arr-r2" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L0,8 L8,4 z" fill="#dc2626"/></marker>
+        <marker id="arr-g2" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L0,8 L8,4 z" fill="#16a34a"/></marker>
+      </defs>
+    </svg>
+    <p class="caption">Without ECS: auth DNS routes based on resolver location (Mountain View), not user location (Frankfurt). ECS fixes this by forwarding client /24.</p>
+  </div>
+
+  <!-- DNS Failover Timeline -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">⏱️ Failover Timeline — Anycast vs. DNS Geo-routing</div>
+    <svg viewBox="0 0 740 220" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:740px;display:block;margin:0 auto;" font-family="Arial,sans-serif">
+      <rect width="740" height="220" fill="#fafafa" rx="8"/>
+
+      <!-- Timeline axis -->
+      <line x1="60" y1="160" x2="700" y2="160" stroke="#aaa" stroke-width="1.5"/>
+      <!-- Ticks -->
+      <line x1="60"  y1="156" x2="60"  y2="164" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="185" y1="156" x2="185" y2="164" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="310" y1="156" x2="310" y2="164" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="435" y1="156" x2="435" y2="164" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="560" y1="156" x2="560" y2="164" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="700" y1="156" x2="700" y2="164" stroke="#aaa" stroke-width="1.5"/>
+      <text x="60"  y="178" text-anchor="middle" font-size="10" fill="#555">0s</text>
+      <text x="185" y="178" text-anchor="middle" font-size="10" fill="#555">30s</text>
+      <text x="310" y="178" text-anchor="middle" font-size="10" fill="#555">60s</text>
+      <text x="435" y="178" text-anchor="middle" font-size="10" fill="#555">90s</text>
+      <text x="560" y="178" text-anchor="middle" font-size="10" fill="#555">120s</text>
+      <text x="700" y="178" text-anchor="middle" font-size="10" fill="#555">180s</text>
+      <text x="700" y="195" text-anchor="middle" font-size="10" fill="#aaa">time →</text>
+
+      <!-- Failure event -->
+      <line x1="60" y1="20" x2="60" y2="160" stroke="#dc2626" stroke-width="2" stroke-dasharray="5,3"/>
+      <text x="62" y="18" font-size="10" font-weight="bold" fill="#dc2626">PoP fails</text>
+
+      <!-- Anycast bar -->
+      <text x="20" y="62" text-anchor="middle" font-size="11" font-weight="bold" fill="#3b5bdb" transform="rotate(-90,20,62)">Anycast</text>
+      <rect x="60" y="40" width="125" height="26" rx="4" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5"/>
+      <text x="122" y="56" text-anchor="middle" font-size="10" fill="#dc2626">BGP withdrawing (30–120s)</text>
+      <rect x="185" y="40" width="515" height="26" rx="4" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+      <text x="442" y="56" text-anchor="middle" font-size="11" font-weight="bold" fill="#166534">✅ Traffic re-converged to next PoP</text>
+
+      <!-- BFD note -->
+      <rect x="60" y="72" width="50" height="20" rx="4" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1"/>
+      <text x="85" y="85" text-anchor="middle" font-size="9" fill="#1e40af">BFD: &lt;5s</text>
+      <line x1="85" y1="66" x2="85" y2="72" stroke="#3b5bdb" stroke-width="1"/>
+
+      <!-- DNS bar -->
+      <text x="20" y="120" text-anchor="middle" font-size="11" font-weight="bold" fill="#e67700" transform="rotate(-90,20,120)">DNS TTL=60s</text>
+      <rect x="60" y="100" width="250" height="26" rx="4" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5"/>
+      <text x="185" y="116" text-anchor="middle" font-size="10" fill="#dc2626">Cached clients still hit failed PoP (TTL window)</text>
+      <rect x="310" y="100" width="390" height="26" rx="4" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+      <text x="505" y="116" text-anchor="middle" font-size="11" font-weight="bold" fill="#166534">✅ TTL expired → new DNS → healthy PoP</text>
+
+      <text x="60" y="200" font-size="10" fill="#555">Key insight: Anycast re-routes at the IP layer without DNS. DNS failover window = max(TTL, resolver cache time).</text>
+    </svg>
+    <p class="caption">Anycast converges in 30–120s (1–5s with BFD). DNS geo-routing failover is bounded by the TTL of cached records.</p>
+  </div>
+
+</section>
+
+<!-- S10: REAL-WORLD EXAMPLES -->
+<section id="s10">
+  <h2 class="section-title"><span class="num">§10</span> 🏭 Real-World System Examples</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>System</th><th>How Geo-routing / Anycast Applies</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Cloudflare</strong></td><td>Pure anycast — all 300+ PoPs announce the same IP prefixes; BGP steers every packet at L3 to the nearest PoP</td><td>Enables global DDoS absorption without any DNS changes; Cloudflare's 1.1.1.1 DNS resolver is also anycast</td></tr>
+        <tr><td><strong>AWS CloudFront</strong></td><td>DNS latency-based routing via Route 53 — measures actual latency from resolver to each CloudFront POP and returns the lowest-latency endpoint IP</td><td>More accurate than pure IP geolocation — uses empirical latency data, not just geo databases</td></tr>
+        <tr><td><strong>Akamai</strong></td><td>DNS-based Global Server Load Balancing (GSLB) — authoritative DNS returns PoP IPs based on resolver geography combined with real-time health and load data</td><td>One of the earliest and most sophisticated DNS geo-routing implementations; combines geo + health + load in routing decision</td></tr>
+        <tr><td><strong>Google (8.8.8.8)</strong></td><td>Google's public DNS resolver is reachable via anycast — the resolver itself is routed to the nearest Google datacenter before resolving your query</td><td>Anycast applied at the resolver level: your query goes to the nearest Google resolver PoP, not just the nearest CDN PoP</td></tr>
+        <tr><td><strong>Fastly</strong></td><td>Anycast for user-to-edge routing; DNS geo-routing for edge-to-origin selection within shield PoPs</td><td>Layered model: anycast for the outer hop (user → edge), DNS for the inner hop (edge → origin shield)</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- S11: TRADE-OFFS -->
+<section id="s11">
+  <h2 class="section-title"><span class="num">§11</span> ⚖️ Trade-offs</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>✅ Benefit</th><th>❌ Cost / Limitation</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><span class="benefit">Anycast: automatic failover</span> — BGP route withdrawal re-routes traffic without operator action or DNS changes</td>
+          <td><span class="cost">BGP convergence is slow</span> — 30–120s without BFD; clients hit the failed PoP during convergence; BFD helps but requires peering support</td>
+        </tr>
+        <tr>
+          <td><span class="benefit">Anycast: zero routing overhead</span> — no per-request DNS lookup for routing; routing is baked into the IP layer</td>
+          <td><span class="cost">BGP "nearest" ≠ geographic nearest</span> — topological proximity (AS hops) can route users to a farther PoP if the closer one has worse peering relationships</td>
+        </tr>
+        <tr>
+          <td><span class="benefit">DNS geo-routing: fine-grained policies</span> — can route by country, city, ISP, weight, or real-time latency measurement (Route 53 latency-based)</td>
+          <td><span class="cost">DNS sees resolver IP, not user IP</span> — without ECS, a user's resolver location can cause routing to a distant PoP; ECS partial fix with privacy cost</td>
+        </tr>
+        <tr>
+          <td><span class="benefit">DNS geo-routing: fast failover possible</span> — short TTL (30s) + health checks enables failover in under one minute</td>
+          <td><span class="cost">Short TTL increases DNS load</span> — every client must re-query when TTL expires; 10× TTL reduction = 10× DNS query volume on authoritative servers</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="tradeoff-box">
+    "If we choose anycast, we get automatic BGP-driven failover and zero routing overhead, but we pay with 30–120 second convergence windows and imprecise geographic targeting from BGP topology. For DDoS scrubbing and UDP protocols, anycast is the right call; for fine-grained per-user routing policies and TCP HTTPS traffic, DNS geo-routing gives us more control."
+  </div>
+</section>
+
+<!-- S12: INTERVIEW APPLICATION -->
+<section id="s12">
+  <h2 class="section-title"><span class="num">§12</span> 🎯 Interview Application</h2>
+
+  <p><strong>When an interviewer asks / says:</strong></p>
+  <ul style="margin:10px 0 18px 20px;display:flex;flex-direction:column;gap:6px;font-size:14.5px;">
+    <li>"Users across the world need low-latency access — how does your CDN route them to the nearest PoP?"</li>
+    <li>"How does traffic get to the correct regional edge server?"</li>
+    <li>"A PoP goes down — how do users failover automatically?"</li>
+    <li>"We need global DDoS protection — how is attack traffic absorbed across the network?"</li>
+  </ul>
+
+  <p><strong>What you say / do:</strong></p>
+  <p style="margin-bottom:18px;">Introduce geo-routing during the high-level design when placing PoPs: <em>"Each PoP announces an anycast prefix via BGP, so the internet's routing fabric automatically steers each packet to the nearest PoP — no per-request DNS overhead, and failover is automatic via BGP route withdrawal."</em> If probed on DNS, add: <em>"We pair this with DNS geo-routing with a 60-second TTL and health checks, so application-layer routing decisions (like weighted failover between regions) take effect within one TTL window."</em></p>
+
+  <div class="connections">
+    <div class="conn-card">
+      <div class="conn-icon">🎯</div>
+      <div>
+        <div class="conn-label">Trade-off statement</div>
+        <div>"Anycast gives us automatic BGP-driven failover and zero routing latency — ideal for DDoS absorption and UDP traffic. DNS geo-routing gives us fine-grained per-user policies at the cost of TTL-bounded failover. Most production CDNs use both: anycast for the outer hop, DNS for application-layer routing within regions."</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- S13: MISCONCEPTIONS -->
+<section id="s13">
+  <h2 class="section-title"><span class="num">§13</span> ⚠️ Common Misconceptions &amp; Gotchas</h2>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><strong>Misconception:</strong>&nbsp;"Anycast routes to the geographically nearest PoP."</div>
+    <div class="right"><span class="icon">✅</span><strong>Reality:</strong> Anycast routes to the <em>topologically</em> nearest announcer as determined by BGP path selection — based on AS hop count, local preference, and MED, not geographic distance. A PoP with a shorter AS path (better peering) can win over a physically closer PoP with worse BGP metrics.</div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><strong>Misconception:</strong>&nbsp;"DNS geo-routing sees the user's actual IP address."</div>
+    <div class="right"><span class="icon">✅</span><strong>Reality:</strong> The authoritative DNS server sees the <em>recursive resolver's</em> IP address, not the end user's. A user in Tokyo using Google's 8.8.8.8 resolver causes the authoritative DNS to route based on Mountain View. ECS partially addresses this — but requires resolver support and exposes the client /24 to the authoritative server.</div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><strong>Misconception:</strong>&nbsp;"Short DNS TTL means instant failover."</div>
+    <div class="right"><span class="icon">✅</span><strong>Reality:</strong> TTL determines when a cached entry <em>expires</em>. Clients that already resolved the old IP continue using it until their TTL expires. Failover latency = max(remaining TTL on cached entry). Also, some resolvers and OS caches ignore TTL minimums and cache longer — so real failover can exceed the configured TTL.</div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><strong>Misconception:</strong>&nbsp;"Anycast and DNS geo-routing are alternatives — you pick one."</div>
+    <div class="right"><span class="icon">✅</span><strong>Reality:</strong> Production CDNs commonly use both in a layered model — anycast for L3/L4 routing (which PoP gets the packet) and DNS for L7 routing (which cache tier or origin shield to use within a region). They solve routing at different layers, not the same problem.</div>
+  </div>
+</section>
+
+<!-- S14: RELATIONSHIPS -->
+<section id="s14">
+  <h2 class="section-title"><span class="num">§14</span> 🔗 Relationships to Other Concepts</h2>
+  <div class="connections">
+    <div class="conn-card">
+      <div class="conn-icon">⬆️</div>
+      <div>
+        <div class="conn-label">Builds on</div>
+        <strong>6.1 CDN Architecture — PoPs and Edge Servers</strong> — geo-routing and anycast operate over the PoP network defined in 6.1; you can't route to PoPs that don't exist. Also builds on <strong>4.7 Global vs. Local Load Balancing</strong> — DNS geo-routing is the same mechanism as DNS-based global load balancing.
+      </div>
+    </div>
+    <div class="conn-card">
+      <div class="conn-icon">⬇️</div>
+      <div>
+        <div class="conn-label">Enables</div>
+        <strong>6.7 CDN as DDoS Mitigation Layer</strong> — anycast is the mechanism by which DDoS traffic is absorbed across all PoPs simultaneously; global scrubbing only works because anycast distributes traffic before it concentrates. Also enables <strong>6.5 CDN for Static vs. Dynamic Content</strong> — geo-routing determines which edge PoP serves content; it's the prerequisite for CDN content decisions.
+      </div>
+    </div>
+    <div class="conn-card">
+      <div class="conn-icon">⚡</div>
+      <div>
+        <div class="conn-label">Tension with</div>
+        <strong>6.3 Cache Invalidation at the Edge</strong> — geo-routing can complicate cache invalidation: if a user hits different PoPs across requests (e.g., after BGP reconvergence or TTL expiry), they may see inconsistent cached states during a purge propagation window. Correct invalidation must reach all PoPs before geo-routing can guarantee consistency.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- S15: SELF-CHECK QUIZ -->
+<section id="s15">
+  <h2 class="section-title"><span class="num">§15</span> 🧪 Self-Check Quiz</h2>
+  <div class="callout callout-tip">Can you answer these without looking? If you hesitate, note which section to revisit.</div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <span class="quiz-num">1</span>
+      <span class="qtext">What is anycast, and how does BGP determine which PoP receives a packet addressed to an anycast IP?</span>
+      <span class="quiz-toggle">Show hint ▼</span>
+    </div>
+    <div class="quiz-hint">💡 Think through: same IP prefix, multiple announcers, BGP path selection (AS path length, local preference). If you hesitate, revisit §6 (Core Concepts).</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <span class="quiz-num">2</span>
+      <span class="qtext">A user in Frankfurt uses Google's 8.8.8.8 DNS resolver. The CDN uses DNS geo-routing without ECS. Which PoP will they likely be routed to, and why is this a problem? How does ECS fix it?</span>
+      <span class="quiz-toggle">Show hint ▼</span>
+    </div>
+    <div class="quiz-hint">💡 Key: auth DNS sees resolver IP (8.8.8.8 = Mountain View), not user IP (Frankfurt). Routes to US PoP despite Frankfurt PoP being 10ms away. ECS: resolver forwards /24 client prefix → auth DNS routes accurately. If you hesitate, revisit §6 (EDNS Client Subnet).</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <span class="quiz-num">3</span>
+      <span class="qtext">A CDN PoP in Singapore goes offline. Compare how long it takes for traffic to re-route under (a) anycast and (b) DNS geo-routing with a 60-second TTL.</span>
+      <span class="quiz-toggle">Show hint ▼</span>
+    </div>
+    <div class="quiz-hint">💡 Anycast: BGP route withdrawal → re-convergence 30–120s (or &lt;5s with BFD). DNS: clients cached before failure continue hitting Singapore for up to 60s until TTL expires, then get new IP. If you hesitate, revisit §9 (failure paths) and the failover timeline diagram.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <span class="quiz-num">4</span>
+      <span class="qtext">Cloudflare announces the same /24 prefix from 300+ PoPs. A user in Johannesburg sends a packet to that prefix. Walk through exactly how the internet routes it to the Johannesburg PoP rather than the London PoP.</span>
+      <span class="quiz-toggle">Show hint ▼</span>
+    </div>
+    <div class="quiz-hint">💡 Trace: user packet → South African ISP router → BGP table shows Johannesburg PoP has shorter AS path than London PoP → packet forwarded toward Johannesburg announcer. BGP selects on AS path length + local preference + MED. If you hesitate, revisit §9 (anycast happy path diagram).</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <span class="quiz-num">5</span>
+      <span class="qtext">An interviewer asks you to design global routing for a CDN with 50 PoPs. They then ask: "What if we need both DDoS protection AND fine-grained per-country routing policies?" How do you use anycast and DNS geo-routing together?</span>
+      <span class="quiz-toggle">Show hint ▼</span>
+    </div>
+    <div class="quiz-hint">💡 Layered model: anycast for L3/L4 — all PoPs announce same prefix, BGP distributes traffic globally and absorbs DDoS volume. DNS geo-routing for L7 — within a region, authoritative DNS returns region-specific IPs for country-level policies, weighted routing, or health-based failover. Both work at different layers — not alternatives. If you hesitate, revisit §5 (Core Definition compare grid) and §8 (Mental Model 3).</div>
+  </div>
+</section>
+
+<!-- S16: FURTHER READING -->
+<section id="s16">
+  <h2 class="section-title"><span class="num">§16</span> 📚 Further Reading</h2>
+  <ul class="reading-list">
+    <li>
+      <div class="cb" onclick="toggleReading(this)"></div>
+      <span class="rtext"><strong>Cloudflare blog — "Load Balancing without Load Balancers"</strong> — <a href="https://blog.cloudflare.com/cloudflares-architecture-eliminating-single-points-of-failure/" target="_blank">blog.cloudflare.com</a> — explains Cloudflare's anycast architecture and why it eliminates single points of failure</span>
+    </li>
+    <li>
+      <div class="cb" onclick="toggleReading(this)"></div>
+      <span class="rtext"><strong>AWS Route 53 Routing Policies docs</strong> — <a href="https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/routing-policy.html" target="_blank">docs.aws.amazon.com</a> — covers latency-based, geolocation, and geoproximity DNS routing in production</span>
+    </li>
+    <li>
+      <div class="cb" onclick="toggleReading(this)"></div>
+      <span class="rtext"><strong>RFC 7871 — EDNS Client Subnet</strong> — <a href="https://tools.ietf.org/html/rfc7871" target="_blank">tools.ietf.org</a> — original ECS spec; focus on §6 (ECS option) and §11 (privacy considerations)</span>
+    </li>
+    <li>
+      <div class="cb" onclick="toggleReading(this)"></div>
+      <span class="rtext"><strong>ByteByteGo — "How Does CDN Work?"</strong> — <a href="https://blog.bytebytego.com/p/how-does-a-cdn-work" target="_blank">blog.bytebytego.com</a> — accessible overview covering both DNS and anycast routing approaches</span>
+    </li>
+    <li>
+      <div class="cb" onclick="toggleReading(this)"></div>
+      <span class="rtext"><strong>Facebook Engineering — "BGP in Large-Scale Data Centers"</strong> — <a href="https://engineering.fb.com/2021/05/13/data-center-engineering/bgp/" target="_blank">engineering.fb.com</a> — how large networks use BGP for routing; context for understanding anycast BGP mechanics</span>
+    </li>
+  </ul>
+</section>
+
+<!-- S17: MY NOTES -->
+<section id="s17">
+  <h2 class="section-title"><span class="num">§17</span> ✍️ My Notes</h2>
+  <div class="callout callout-quote">Personal observations, things that confused you, analogies that helped — add them here.</div>
+  <textarea class="notes-area" id="my-notes" placeholder="Start typing your notes here..."></textarea>
+</section>
+
+</article>
+</main>
+
+<script>
+// Checkbox toggle
+function toggle(el) {
+  const li = el.closest('li');
+  li.classList.toggle('checked');
+  saveState();
+}
+
+// Phase card expand/collapse
+function togglePhase(header) {
+  header.closest('.phase-card').classList.toggle('open');
+}
+
+// Quiz expand/collapse
+function toggleQuiz(qEl) {
+  qEl.closest('.quiz-item').classList.toggle('open');
+  const tog = qEl.querySelector('.quiz-toggle');
+  tog.textContent = qEl.closest('.quiz-item').classList.contains('open') ? 'Hide ▲' : 'Show hint ▼';
+}
+
+// Reading list toggle
+function toggleReading(el) {
+  const li = el.closest('li');
+  li.classList.toggle('checked');
+  saveState();
+}
+
+// Sidebar active link on scroll
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('#toc nav a');
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(a => a.classList.remove('active'));
+      const active = document.querySelector(`#toc nav a[href="#${e.target.id}"]`);
+      if (active) active.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+sections.forEach(s => observer.observe(s));
+
+// Persist state in localStorage
+const STORAGE_KEY = 'sd-6.4-state';
+
+function saveState() {
+  const state = { checks: [], notes: document.getElementById('my-notes').value };
+  document.querySelectorAll('.checklist li, .reading-list li').forEach((li, i) => {
+    state.checks[i] = li.classList.contains('checked');
+  });
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
+}
+
+function loadState() {
+  try {
+    const state = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    if (state.checks) {
+      document.querySelectorAll('.checklist li, .reading-list li').forEach((li, i) => {
+        if (state.checks[i]) li.classList.add('checked');
+      });
+    }
+    if (state.notes) document.getElementById('my-notes').value = state.notes;
+  } catch(e) {}
+}
+
+document.getElementById('my-notes').addEventListener('input', saveState);
+loadState();
+</script>
+</body>
+</html>

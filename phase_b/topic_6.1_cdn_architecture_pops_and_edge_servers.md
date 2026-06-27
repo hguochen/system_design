@@ -334,3 +334,97 @@ A user profile API returns personalized data — different response per user, pe
 
 > *Personal observations, things that confused me, analogies that helped.*
 
+Can explain how a user in Singapore reaches a CDN PoP rather than a US-based origin, naming the routing mechanism (DNS or anycast) and why it works
+
+Routing mechanism - DNS Geo routing
+Say we have a user in Singapore making request to abc.com. With DNS Geo Routing mechanism, the CDN's authoritative DNS resolves to an IP address based on the resolver's IP. The request is routed to the nearest PoP to the resolve's IP address.
+This creates an accuracy gap when the resolver is geographically distant from the user. As a result, the user's might be routed to a PoP that's not near to the user, thereby incurring additional RTT overhead with a far away PoP.
+By design, this request is unlikely to be routed to the US based origin server, unless the resolver's IP address is deemed nearest to the origin server.
+
+Routing mechanism - Anycast
+A user in Singapore making request to abc.com. DNS resolves the domain to the server's IP address. With Anycast routing mechanism, all of the PoP's have the same server's IP address, so the user's request is inspected at packet level and subsequently routed to the nearest PoP to user.
+
+With Anycast routing mechanism, DNS resolves the CDN domain to a single anycast IP. multiple PoPs announce same IP address via BGP to the internet. when user requests arrives at ISP router, BGP routing table determines which PoP is closest to user and packets are forwarded there automatically.The routing decision is made by BGP at the network layer
+
+
+Can draw the full request flow for both a cache hit and a cache miss, including the origin shield layer, and state the latency difference between paths
+
+Cache Hit
+1. user requests abc.com
+2. routing sends request to nearest PoP
+3. PoP contains edge server that checks L1 cache for requested data. Cache Hit
+4. PoP edge server sends response to user. 10-30ms RTT
+
+Cache Miss
+1. user requests abc.com
+2. routing sends request to nearest PoP
+3. PoP contains edge server that checks L1 Cache -> miss -> L2 Cache miss
+4. PoP then forwards request to Origin Shield, which collects same requests and makes single flight request to origin server
+5. origin server sends response to origin shield.
+6. origin shield forwards response to PoP that requested the data. as well as populating its own caches
+7. subsequent same requests hit origin shield and are served the cached response from it 100-300ms 
+
+Can explain what a PoP contains (LB, TLS terminator, caching tier, optionally edge compute) and why each component is co-located at the edge
+
+PoP components and why each is co-located at the edge:
+
+- Load Balancer: distributes incoming requests across multiple edge servers
+  within the PoP. Co-located so traffic is spread locally without a
+  round trip back to origin.
+
+- TLS Terminator: ends the encrypted TLS session at the edge server.
+  Co-located so the TLS handshake (1–2 RTTs) happens to a nearby server
+  (~10ms) rather than to a US origin (~150ms). Also offloads crypto
+  compute from origin.
+
+- Caching Tier (L1 edge cache, optionally L2 regional): stores cacheable
+  responses close to the user. Co-located to serve cache hits in 10–30ms
+  without touching origin.
+
+- Edge Compute (e.g. Cloudflare Workers, Lambda@Edge): programmable
+  runtime for custom logic — auth checks, request rewriting, A/B testing,
+  personalization — executed at the edge. Co-located so latency-sensitive
+  logic runs near the user without a round trip to origin.
+
+Why co-location matters as a principle: every component here would add
+100–300ms of latency if it lived at the origin. Co-location eliminates
+those round trips for the common case.
+
+Can explain the origin shield's purpose: concentrating cache-fill requests to protect origin from N×traffic fan-out during cache miss storms
+
+Origin shield sits between PoPs and the origin server. When a cache miss
+occurs simultaneously across multiple PoPs (e.g. after a cache purge or
+a cold start), each PoP would independently fetch from origin — N PoPs
+= N×traffic hitting origin.
+
+Origin shield prevents this by acting as a shared cache tier. All PoPs
+in a region forward cache-miss requests to the origin shield. The shield
+coalesces duplicate in-flight requests into a single fetch to origin
+(request collapsing / single-flight). Once the response returns, the
+shield caches it and fans out to all waiting PoPs.
+
+Result: origin sees 1 request regardless of how many PoPs missed. This
+protects origin from thundering herd / cache stampede during high-miss
+events (purges, traffic spikes, new content).
+
+Can identify at least three content types that are poor CDN candidates and explain why CDN adds latency (not reduces it) for these cases
+
+Poor CDN candidates:
+
+1. Highly personalized data (e.g. user feeds, recommendations, dashboards)
+   — unique per user, CHR ~0%, CDN adds a network hop with no cache
+   benefit. Extra RTT to PoP + cache miss + origin = slower than direct.
+
+2. Authenticated/private API responses (e.g. /api/cart, /api/profile)
+   — session-specific, cannot be shared across users at a shared edge
+   node. Caching risks serving one user's data to another. Usually
+   bypassed entirely (Cache-Control: private).
+
+3. Rapidly changing data (e.g. live scores, stock prices, live auctions)
+   — TTL must be near-zero to avoid staleness, so data expires before
+   reuse. CHR ~0%, CDN adds hop overhead with no hit benefit.
+
+4. Write traffic (uploads, form submissions, API mutations)
+   — CDN is a read-path optimization. Writes must reach origin; PoP
+   adds latency. Some CDNs route writes directly to origin, bypassing
+   edge entirely.
