@@ -92,32 +92,65 @@ Be able to classify any CDN content delivery scenario as Pull, Push, or hybrid a
 > *Everything you need to recall this concept in 30 seconds — for quick review before an interview.*
 
 ```
-ONE-LINER
-  Pull CDN caches content on demand (first miss triggers origin fetch);
-  Push CDN pre-loads content you explicitly upload before requests arrive.
+§ 1  ONE-LINER
+Pull CDN caches on demand (first miss triggers origin fetch, TTL controls freshness);
+Push CDN is pre-loaded by the operator before any user request arrives (zero cold-start,
+but you own the full content lifecycle).
 
-KEY PROPERTIES / RULES
-  Pull: self-populating — edge fetches from origin on cache miss, TTL controls freshness
-  Pull: cold-start penalty — first user per PoP always hits origin latency
-  Push: zero cold-start — content exists at edge before first request
-  Push: you own the lifecycle — upload, update, and delete are your responsibility
-  Hybrid: serve static large/predictable assets via Push, dynamic/personalized via Pull
+§ 2  PULL CDN MECHANICS
+Cache miss flow:
+  User → PoP (MISS) → origin fetch → cache at PoP with max-age TTL → serve user
+  All subsequent requests from same PoP: HIT until TTL expires.
 
-DECISION RULE
-  Use Pull when: content is frequently updated, demand is geographically unpredictable,
-                or file count is very large (too many to pre-push everywhere).
-  Use Push when: content is large, rarely changes, and demand is globally predictable
-                (e.g., game clients, OS installers, marketing video assets).
-  Use Hybrid when: you have both categories in the same system.
+Cache hit flow:
+  User → PoP (HIT) → return cached response (origin not contacted)
 
-NUMBERS / FORMULAS
-  Pull TTL typical range: 60s (dynamic) to 86400s (24h, static assets)
-  Cache-Control: max-age=<seconds> is the primary Pull TTL mechanism
-  Push CDN storage × PoP count: pushing a 1GB binary to 300 PoPs = 300GB edge storage
+Key headers:
+  Cache-Control: max-age=<seconds>    — TTL for both CDN and browser
+  Cache-Control: s-maxage=<seconds>   — CDN-only TTL (overrides max-age for CDN)
+  Cache-Control: no-store              — NEVER cache (defeats CDN entirely)
+  Surrogate-Control: max-age=<sec>    — Fastly/Varnish CDN-only TTL
 
-GOTCHA TO NEVER FORGET
-  Pull CDN with a short TTL (or no cache header) still hits origin on every request —
-  misconfigured Cache-Control headers eliminate all CDN benefit entirely.
+Invalidation before TTL:
+  Versioned URLs: app.abc123.js — deploy new hash, old URL keeps serving from cache.
+  Purge API: CloudFront Invalidation, Fastly Purge — global propagation in 1–10s.
+  CDN shield (origin shield): single PoP fetches from origin, others fetch from shield.
+
+§ 3  PUSH CDN MECHANICS
+Lifecycle:
+  1. Upload  → operator pushes files to CDN via API or rsync; CDN distributes to all PoPs
+  2. Serve   → any request = immediate cache HIT (no cold-start, ever)
+  3. Update  → re-upload new version; old content may need explicit delete
+  4. Delete  → operator issues delete; confirmed globally before storage is released
+
+Storage cost:
+  Push 1GB binary × 300 PoPs = 300GB edge storage consumed immediately.
+  Pull: same binary stored only at PoPs where it is actually requested.
+
+§ 4  DECISION RULE
+Use PULL when: content changes frequently, demand is unpredictable geographically,
+              or file count is too large to pre-push everywhere (e.g., user avatars).
+Use PUSH when: content is large, rarely changes, and globally demanded predictably
+              (e.g., game client, OS installer, marketing video).
+Use HYBRID:   static large assets (Push) + dynamic/personalized assets (Pull).
+              Most production CDN setups are hybrids.
+
+AVOID no-store on cacheable responses — confirms zero CDN benefit.
+AVOID long TTL on frequently changing content — stale serving window widens.
+AVOID forgetting to delete Push content — stale files persist until explicit delete.
+
+§ 5  NUMBERS
+Pull TTL typical range: 60s (dynamic) → 86400s (24h, static JS/CSS/images)
+Purge API propagation: 1–10 seconds globally
+Push storage math: (file count) × (avg size) × (PoP count) = total edge storage
+AWS CloudFront invalidation: first 1000 paths/month free; $0.005/path after
+Fastly purge: real-time (~150ms global), no per-purge charge
+
+§ 6  GOTCHA TO NEVER FORGET
+A Pull CDN with Cache-Control: no-store (or no cache header at all from origin)
+provides ZERO caching benefit — every request hits origin as if CDN doesn't exist.
+This is the most common CDN misconfiguration in production. Always verify origin
+response headers before assuming CDN is working.
 ```
 
 ---
@@ -297,22 +330,49 @@ During high-level design, when you propose a CDN layer, immediately distinguish 
 1. What is the difference between Pull CDN and Push CDN? Explain both in two sentences each.
 
    > 💡 *Think through your answer before expanding — if you hesitate, revisit Section 5.*
+Pull CDN: edge servers fetch content from origin on the first cache miss and cache it
+for subsequent requests; TTL controls how long the cached copy is served before
+re-fetching. It is self-populating — no operator action required.
+
+Push CDN: the operator explicitly uploads content to all edge PoPs before any user
+request arrives, guaranteeing every request is a cache hit. The operator owns the full
+lifecycle: upload, update, and delete.
 
 2. A social media platform serves user-uploaded profile photos (millions of unique images, updated occasionally). Which CDN model would you use and why?
 
    > 💡 *Consider: file count, update frequency, and storage economics. Revisit Section 6 if unsure.*
+Pull CDN. There are millions of unique profile photos — pre-pushing all of them to
+300+ PoPs would cost millions × file size × 300 in storage, which is prohibitive.
+Pull CDN organically populates each PoP only with photos actually requested there,
+making storage proportional to actual demand.
 
 3. What is the cold-start problem in Pull CDN, and what two strategies can mitigate it?
 
    > 💡 *Think about what happens on the very first request. Revisit Section 9 if unsure.*
+Cold-start is when a PoP has never cached a piece of content, so the first request
+from that PoP incurs full origin latency instead of a cache hit. It affects every PoP
+independently — a file cached in the US PoP is still cold in the Tokyo PoP.
+
+Mitigation 1: Origin shield — designate a single intermediary PoP between all edge
+PoPs and origin; simultaneous misses from N PoPs collapse into one origin fetch.
+
+Mitigation 2: Cache pre-warming — proactively seed PoP caches with known hot content
+before a traffic spike (e.g., before a product launch) so first requests are HITs.
 
 4. Name a real system that uses Push CDN and explain specifically why Pull CDN would be a poor fit for that use case.
 
    > 💡 *Consider file size, demand predictability, and the consequence of cold-start. Revisit Section 10.*
+Steam (Valve) uses Push CDN for game distributions. Pull CDN would be a poor fit
+because game files are 50–100GB and millions of users download simultaneously at
+launch — cold-start across all PoPs at the same moment would flood origin with
+concurrent 100GB fetch requests, overwhelming it before any PoP warms up.
 
 5. A developer sets `Cache-Control: no-store` on all API responses but wraps the API behind CloudFront. Are API responses cached? What's the implication for cache hit rate?
 
    > 💡 *This is the most common CDN misconfiguration gotcha. Revisit Section 13 if unsure.*
+No — Cache-Control: no-store instructs CloudFront never to cache the response.
+Every request passes through to origin as if CloudFront doesn't exist.
+Cache hit rate = 0%. CloudFront provides connection offload only, not caching benefit.
 
 ---
 
@@ -332,3 +392,39 @@ During high-level design, when you propose a CDN layer, immediately distinguish 
 
 > *Personal observations, things that confused me, analogies that helped.*
 
+Pull/Pull Model Decision Tree
+
+Is content dynamic or personalized (user-specific)?
+│
+├── YES → Bypass CDN entirely (or Pull with very short TTL, e.g., 60s)
+│         API responses, user feeds, personalized pages
+│
+└── NO (static content) → continue
+         │
+         ├── Is content large (>100MB) AND globally demanded AND rarely changes?
+         │   │
+         │   ├── YES → Push CDN
+         │   │         Game clients, OS installers, large video assets
+         │   │         (pre-load before launch; cold-start would be catastrophic)
+         │   │
+         │   └── NO → continue
+         │             │
+         │             ├── Is file count very large (millions of unique files)?
+         │             │   │
+         │             │   └── YES → Pull CDN
+         │             │             User avatars, article images, thumbnails
+         │             │             (too many to pre-push; organic population wins)
+         │             │
+         │             └── Does content change frequently (deploys, updates)?
+         │                 │
+         │                 ├── YES → Pull CDN + versioned URLs + long TTL
+         │                 │         JS/CSS bundles, image assets, fonts
+         │                 │
+         │                 └── NO → Pull CDN (long TTL, ≤TTL staleness acceptable)
+         │                           OR Push if launch predictability matters
+         │
+         └── Does your system have BOTH large stable binaries AND dynamic content?
+             │
+             └── YES → Hybrid
+                       Push: large binaries, stable marketing assets
+                       Pull: everything else
