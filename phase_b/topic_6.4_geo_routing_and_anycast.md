@@ -305,21 +305,64 @@ In a CDN or globally distributed system design, introduce geo-routing during the
 
    > 💡 *Think through your answer before expanding — if you hesitate, revisit Section 6.*
 
+Anycast assigns the same IP prefix to every PoP simultaneously. Each PoP
+advertises that prefix into BGP. Internet routers forward packets toward the
+nearest announcer by AS hop count — no DNS lookup, no per-request overhead,
+pure IP-layer routing. BGP "nearest" = fewest AS hops, not geographic miles.
+A well-peered distant PoP can beat a poorly-peered nearby one.
+
 2. A user in Frankfurt uses Google's 8.8.8.8 DNS resolver. The CDN uses DNS geo-routing without ECS. Which PoP will they likely be routed to, and why is this a problem?
 
    > 💡 *Think through your answer before expanding — if you hesitate, revisit Section 6 (EDNS Client Subnet).*
+1. User in Frankfurt requests for IP address for abc.com domain.
+2. OS sends the request to Google resolver
+3. Google resolver forwards the request to a authoritative DNS server.
+4. Auth DNS reads the resolver's IP address, find the nearest geographical PoP IP address and returns the PoP IP address
+5. Resolver forwards the IP address to user
+
+Without ECS, auth DNS sees Google's resolver IP (Mountain View, CA), not the
+Frankfurt client IP. It returns the US PoP address. The Frankfurt user gets
+~150ms RTT instead of ~5ms. Root cause: auth DNS has no visibility into the
+actual client IP — it only sees the recursive resolver.
 
 3. A CDN PoP in Singapore goes offline. Compare how long it takes for traffic to re-route under (a) anycast and (b) DNS geo-routing with a 60-second TTL.
 
    > 💡 *Think through your answer before expanding — if you hesitate, revisit Section 9 (failure paths).*
+(a) Anycast: The dead PoP withdraws its BGP route. Without BFD: 30–120s
+convergence. With BFD: 1–5s. Traffic automatically reconverges to the
+next-best PoP — no operator action needed.
+
+(b) DNS geo-routing: Health checks detect failure and update DNS. But clients
+that already cached the old PoP IP keep hitting it until TTL expires (up to 60s).
+Effective failover = DNS propagation + TTL. Total window: 60–120s.
+
+Key contrast: BFD-assisted anycast failover is 10–100× faster than TTL-bounded
+DNS failover.
 
 4. Cloudflare announces the same /24 prefix from 300 PoPs worldwide. A user in Johannesburg, South Africa sends a packet to that prefix. Walk through how the internet routes that packet to the Johannesburg PoP rather than the London PoP.
 
    > 💡 *Think through your answer before expanding — if you hesitate, revisit Section 9 (anycast happy path).*
+Cloudflare uses anycast CDN routing mechanism. 
+All 300 PoPs advertise the same /24 into BGP. Routers in Johannesburg see two
+paths: Johannesburg PoP (short AS path) and London PoP (long AS path). BGP
+selects shortest AS path. Packet is forwarded to Johannesburg. London's
+announcement is simply not selected — it has more AS hops from that vantage point.
 
 5. An interviewer asks: "What happens if two CDN PoPs are equidistant (same AS path length) from a user under anycast?" What does BGP do, and what does the user experience?
 
    > 💡 *Think through your answer before expanding — consider BGP tiebreakers (MED, router-id) and TCP connection stickiness.*
+BGP tiebreakers apply in order: LOCAL_PREF → AS path length (tied) → MED
+(Multi-Exit Discriminator, set by Cloudflare to signal preference) → eBGP over
+iBGP → IGP cost to next hop → lowest router-id.
+
+If still tied after all tiebreakers, some routers use ECMP (Equal-Cost
+Multi-Path): traffic is hashed by 5-tuple (src IP, dst IP, src/dst port,
+protocol) and split across both PoPs.
+
+User experience: within a single TCP connection, the hash is stable — all
+packets go to the same PoP, so the session is coherent. Across different
+connections, traffic may split between PoPs. The practical risk is cache
+inconsistency if the two PoPs have different cached content versions.
 
 ---
 

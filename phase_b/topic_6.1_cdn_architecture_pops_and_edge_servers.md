@@ -92,32 +92,68 @@ Be able to describe the full architecture of a CDN — from DNS resolution that 
 > *Everything you need to recall this concept in 30 seconds — for quick review before an interview.*
 
 ```
-ONE-LINER
-  A CDN is a geographically distributed network of PoPs that serves cached content
-  close to users, cutting latency by eliminating long-haul round trips to origin.
+§ 1  WHY IT EXISTS
+The speed of light is the constraint. A packet from Sydney to London traverses ~17,000 km
+of fiber at ~200,000 km/s — a minimum one-way latency of 85ms, 170ms RTT. For a page
+needing 10 round trips, that's 1.7s of irreducible delay. CDNs deploy PoPs globally to
+move servers closer to users, but proximity only helps if traffic is actually routed to
+the nearest PoP. Geo-routing and anycast are the two mechanisms that ensure this —
+without them, all users would hit the same origin IP regardless of geography.
 
-KEY PROPERTIES / RULES
-  PoP = Point of Presence = edge datacenter (LB + TLS + cache + optionally compute)
-  Routing to nearest PoP: DNS-based geo-routing OR anycast (anycast preferred at scale)
-  Cache hit path: User → PoP → response (fast; no origin round trip)
-  Cache miss path: User → PoP → Origin Shield → Origin → PoP (cache fill) → User
-  Origin shield = mid-tier cache layer that concentrates cache-miss load to protect origin
+§ 2  ANYCAST — HOW IT WORKS
+The same IP prefix (e.g., 104.16.0.0/12) is announced via BGP from every PoP
+simultaneously. Internet routers build paths toward the closest announcer by AS hop
+count. A packet destined for that IP automatically reaches the nearest PoP.
+No per-request DNS overhead. Routing decision is made at the IP layer.
+Failover: PoP withdraws BGP route → neighbors propagate withdrawal →
+  traffic reconverges to next-best PoP. Time: 30–120s (or <5s with BFD).
+Limit: BGP "nearest" = fewest AS hops, NOT geographic miles.
+  A well-peered far PoP can beat a poorly-peered near one.
 
-DECISION RULE
-  Use CDN when: serving static assets (JS/CSS/images), media (video segments), or
-    globally distributed users with cacheable content (high cache hit ratio expected).
-  Avoid CDN (or use carefully) when: content is user-specific/personalized,
-    responses are non-cacheable (auth headers, no-store), or latency of a miss > benefit.
+§ 3  DNS GEO-ROUTING — HOW IT WORKS
+Resolution path:
+  Client OS → recursive resolver (e.g. 8.8.8.8) → authoritative DNS →
+  returns PoP A record based on resolver's inferred region.
+PROBLEM: authoritative DNS sees resolver IP, not user IP.
+  User in Tokyo + Google 8.8.8.8 resolver → auth DNS thinks "Mountain View" →
+  routes to US PoP. User gets 200ms RTT instead of 5ms.
+ECS FIX: resolver includes client /24 prefix in query to authoritative DNS.
+  Auth DNS routes on actual client location. Privacy cost: client /24 visible.
+Failover: health checks update DNS response → clients get new IP after TTL expires.
+  With TTL=60s → failover window ≤ 60s. Short TTL = faster failover, more DNS load.
 
-NUMBERS / FORMULAS
-  Typical PoP-to-user latency: < 20ms for well-distributed CDN
-  Cross-continental origin latency: 100–300ms (what CDN eliminates on cache hit)
-  Cache hit ratio target: > 90% for CDN to be net-positive for latency
-  Cloudflare: ~300 PoPs worldwide; Akamai: ~4,000+ edge servers globally
+§ 4  ANYCAST vs DNS GEO-ROUTING
+                  Anycast          DNS Geo-routing
+Routing latency:  Zero (IP layer)   DNS RTT on first lookup (~20–100ms)
+Accuracy:         Topological       Geographic + ECS (more precise)
+Failover:         30–120s BGP       TTL-bounded (set TTL 30–60s)
+Protocol:         Any (UDP ideal)   TCP only without extra effort
+Policies:         Coarse            Fine-grained (country/city/ISP)
+Use anycast for:  DDoS, UDP, DNS itself, zero-overhead global routing
+Use DNS for:      Complex per-user rules, TCP HTTPS, weighted failover
 
-GOTCHA TO NEVER FORGET
-  CDN adds latency on a cache MISS — if your cache hit ratio is low (e.g., personalized
-  content), CDN makes things WORSE, not better.
+§ 5  INTERVIEW TRIGGERS
+→ "Users across the world need low-latency access to our CDN"
+→ "How does traffic get routed to the correct regional PoP?"
+→ "A PoP goes down — how do users failover without manual intervention?"
+→ "We need to absorb DDoS traffic globally across all our edge locations"
+
+§ 6  NUMBERS
+Cross-continent RTT (no CDN): 150–300ms
+User-to-nearest-PoP RTT:    5–30ms
+BGP convergence (no BFD):   30–120s
+BGP convergence (with BFD): 1–5s
+DNS TTL for geo records:    30–300s (30s = fast failover; 300s = cache-friendly)
+ECS prefix length:          /24 IPv4, /56 IPv6 (privacy vs. accuracy trade-off)
+
+§ 7  GOTCHA
+The #1 mistake: assuming DNS geo-routing sees the USER's IP.
+It sees the RECURSIVE RESOLVER's IP. A user in Frankfurt using 8.8.8.8 gets routed
+as if they're in Mountain View. ECS partially fixes this — but only when the
+resolver supports it AND the operator enables it. Always mention ECS when
+discussing DNS geo-routing accuracy in an interview.
+
+
 ```
 
 ---

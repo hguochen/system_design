@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6.2 Pull CDN vs. Push CDN</title>
+<style>
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface-alt: #f3f2ef;
+    --border: #e5e3de; --text: #1a1917; --text-muted: #6b6861;
+    --accent: #2563eb; --accent-light: #dbeafe;
+    --green: #16a34a; --green-light: #dcfce7;
+    --red: #dc2626; --red-light: #fee2e2;
+    --yellow: #d97706; --yellow-light: #fef3c7;
+    --purple: #7c3aed; --purple-light: #ede9fe;
+    --orange: #ea580c; --orange-light: #ffedd5;
+    --teal: #0d9488; --teal-light: #ccfbf1;
+    --code-bg: #1e1e2e; --code-text: #cdd6f4;
+    --sidebar-w: 240px; --content-max: 820px;
+    font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; }
+  #toc { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0 48px; z-index: 100; }
+  #toc-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  #toc-header .phase-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-bottom: 6px; }
+  #toc-header h2 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  #toc nav a { display: block; padding: 5px 16px 5px 20px; font-size: 12.5px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+  main { margin-left: var(--sidebar-w); padding: 48px 48px 96px; max-width: calc(var(--sidebar-w) + var(--content-max) + 96px); width: 100%; }
+  article { max-width: var(--content-max); }
+  .doc-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 2px solid var(--border); }
+  .doc-header .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+  .tag-phase { background: var(--accent-light); color: var(--accent); }
+  .tag-topic { background: var(--purple-light); color: var(--purple); }
+  .tag-date  { background: var(--surface-alt);  color: var(--text-muted); }
+  .doc-header h1 { font-size: 30px; font-weight: 800; line-height: 1.25; letter-spacing: -.02em; color: var(--text); }
+  section { margin-bottom: 52px; scroll-margin-top: 32px; }
+  h2.section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -.01em; }
+  h2.section-title .num { font-size: 11px; font-weight: 800; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; letter-spacing: .04em; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 24px 0 10px; }
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+  code { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-family: "SF Mono","Fira Code",Menlo,monospace; font-size: 12.5px; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 14px; border-left: 3px solid; }
+  .callout-goal  { background: var(--accent-light); border-color: var(--accent); color: #1e40af; }
+  .callout-tip   { background: var(--yellow-light); border-color: var(--yellow); color: #92400e; }
+  .callout-warn  { background: var(--red-light); border-color: var(--red); color: #7f1d1d; }
+  .callout-quote { background: var(--surface-alt); border-color: var(--border); color: var(--text-muted); font-style: italic; }
+  .callout-teal  { background: var(--teal-light); border-color: var(--teal); color: #134e4a; }
+  .cheatsheet { background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 24px 28px; font-family: "SF Mono","Fira Code","Cascadia Code",Menlo,monospace; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-x: auto; margin-top: 16px; }
+  .cheatsheet .label { color: #cba6f7; font-weight: 700; letter-spacing: .08em; display: block; margin-top: 18px; margin-bottom: 4px; border-bottom: 1px solid #313244; padding-bottom: 3px; }
+  .cheatsheet .label:first-child { margin-top: 0; }
+  .diagram-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 16px 14px; margin: 20px 0 28px; overflow-x: auto; }
+  .diagram-wrap .diagram-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); margin-bottom: 12px; }
+  .diagram-wrap p.caption { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 10px; margin-bottom: 0; font-style: italic; }
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; font-size: 14.5px; line-height: 1.55; }
+  .checklist li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 2px; background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .checklist li.checked .cb { background: var(--green); border-color: var(--green); }
+  .checklist li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .checklist li.checked .text { color: var(--text-muted); text-decoration: line-through; }
+  .phase-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
+  .phase-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; cursor: pointer; user-select: none; background: var(--surface-alt); }
+  .phase-header:hover { background: var(--border); }
+  .phase-label { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+  .phase-badge { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 2px 8px; border-radius: 20px; }
+  .ph1 { background: #dbeafe; color: #1d4ed8; } .ph2 { background: #fce7f3; color: #9d174d; }
+  .ph3 { background: #d1fae5; color: #065f46; } .ph4 { background: #fef3c7; color: #92400e; }
+  .phase-chevron { font-size: 12px; color: var(--text-muted); transition: transform .2s; }
+  .phase-card.open .phase-chevron { transform: rotate(180deg); }
+  .phase-body { display: none; padding: 16px 20px 20px; }
+  .phase-card.open .phase-body { display: block; }
+  .phase-goal { font-size: 12.5px; color: var(--text-muted); font-style: italic; margin-bottom: 12px; }
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: var(--surface-alt); padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.5; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+  .misconception { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .misconception .wrong { background: var(--red-light); padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; }
+  .misconception .right { padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; color: #065f46; background: var(--green-light); }
+  .misconception .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .quiz-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .quiz-q { padding: 14px 18px; font-size: 14.5px; font-weight: 600; cursor: pointer; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .quiz-q:hover { background: var(--surface-alt); }
+  .quiz-num { flex-shrink: 0; width: 24px; height: 24px; background: var(--accent); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; margin-top: 1px; }
+  .quiz-q .qtext { flex: 1; }
+  .quiz-toggle { font-size: 11px; color: var(--text-muted); flex-shrink: 0; margin-top: 3px; }
+  .quiz-hint { display: none; padding: 10px 18px 14px; font-size: 13px; color: #92400e; background: var(--yellow-light); border-top: 1px solid var(--border); }
+  .quiz-item.open .quiz-hint { display: block; }
+  .reading-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .reading-list li { display: flex; align-items: flex-start; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; font-size: 14px; }
+  .reading-list li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 1px; cursor: pointer; background: var(--surface); display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .reading-list li.checked .cb { background: var(--green); border-color: var(--green); }
+  .reading-list li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .reading-list li.checked .rtext { color: var(--text-muted); text-decoration: line-through; }
+  .notes-area { width: 100%; min-height: 160px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: inherit; font-size: 14px; color: var(--text); resize: vertical; line-height: 1.6; }
+  .notes-area:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .focus-list { list-style: none; display: flex; flex-direction: column; gap: 14px; }
+  .focus-list li { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14.5px; line-height: 1.6; }
+  .focus-list li strong { color: var(--accent); display: block; margin-bottom: 4px; }
+  .connections { display: flex; flex-direction: column; gap: 12px; }
+  .conn-card { display: flex; align-items: flex-start; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14px; }
+  .conn-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .conn-label { font-weight: 700; margin-bottom: 3px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .tradeoff-box { background: var(--surface-alt); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 14px 18px; font-size: 14px; font-style: italic; color: var(--text); margin-top: 14px; }
+  .compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 16px 0; }
+  .compare-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; font-size: 14px; }
+  .compare-card h4 { font-size: 13px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+  .compare-card ul { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+  .compare-card ul li { font-size: 13px; line-height: 1.5; padding-left: 14px; position: relative; }
+  .compare-card ul li::before { content: "→"; position: absolute; left: 0; color: var(--text-muted); }
+  .stat { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 2px 7px; border-radius: 4px; }
+  .stat-blue { background: var(--accent-light); color: var(--accent); }
+  .stat-orange { background: var(--orange-light); color: var(--orange); }
+  .stat-green { background: var(--green-light); color: var(--green); }
+  .stat-red { background: var(--red-light); color: var(--red); }
+  @media (max-width: 900px) { #toc { display: none; } main { margin-left: 0; padding: 24px 20px 60px; } .compare-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<aside id="toc">
+  <div id="toc-header">
+    <span class="phase-tag">Phase B · Topic 6</span>
+    <h2>6.2 Pull CDN vs. Push CDN</h2>
+  </div>
+  <nav>
+    <a href="#s0">🗺️ Overview</a>
+    <a href="#s1">🎯 Goal</a>
+    <a href="#s2">✅ Mastery Criteria</a>
+    <a href="#s3">🗓️ Study Phases</a>
+    <a href="#s4">📋 Cheatsheet</a>
+    <a href="#s5">🧠 Core Definition</a>
+    <a href="#s6">📦 Core Concepts</a>
+    <a href="#s7">🔍 First Principles</a>
+    <a href="#s8">🗺️ Mental Models</a>
+    <a href="#s9">⚙️ How It Works</a>
+    <a href="#s10">🏭 Real-World Examples</a>
+    <a href="#s11">⚖️ Trade-offs</a>
+    <a href="#s12">🎯 Interview Application</a>
+    <a href="#s13">⚠️ Misconceptions</a>
+    <a href="#s14">🔗 Relationships</a>
+    <a href="#s15">🧪 Self-Check Quiz</a>
+    <a href="#s16">📚 Further Reading</a>
+    <a href="#s17">✍️ My Notes</a>
+  </nav>
+</aside>
+
+<main>
+<article>
+
+<!-- HEADER -->
+<div class="doc-header">
+  <div class="meta">
+    <span class="tag tag-phase">⚡ Phase B — Scalability</span>
+    <span class="tag tag-topic">🌍 Topic 6 — CDN</span>
+    <span class="tag tag-date">📅 2026-06-29</span>
+  </div>
+  <h1>6.2 Pull CDN vs. Push CDN<br><span style="font-weight:400;color:var(--text-muted);font-size:22px;">Content Delivery Models — Demand-Driven vs. Pre-Loaded</span></h1>
+</div>
+
+<!-- S0: OVERVIEW -->
+<section id="s0">
+  <h2 class="section-title"><span class="num">§0</span> 🗺️ Topic Overview</h2>
+  <p>Pull CDN and Push CDN are the two fundamental models for getting content onto edge servers. The central tension is <strong>control vs. automation</strong>: Pull CDN is origin-driven on demand (the edge fetches on first miss), while Push CDN is operator-driven upfront (you explicitly upload content to all PoPs before any request arrives). Mastering this topic means understanding which model fits your content's update frequency, predictability, and volume — and being able to justify the choice without hand-waving.</p>
+
+  <ul class="focus-list" style="margin-top:18px;">
+    <li><strong>1. The Pull cache fill flow</strong> — On a cache miss, the edge fetches from origin and caches the response. Understand the cold-start implication: the first user per PoP always gets origin latency. This is the core UX risk of Pull CDN.</li>
+    <li><strong>2. The Push pre-load flow</strong> — You control what lives at the edge. Files are uploaded proactively, so first request = cache hit. But you own the entire lifecycle: upload, invalidate, and cleanup.</li>
+    <li><strong>3. TTL and invalidation in Pull CDN</strong> — Short TTL = fresh, high origin load; long TTL = stale, low origin load. Know how to break this tension with versioned URLs or purge APIs.</li>
+    <li><strong>4. Storage and cost tradeoffs</strong> — Push CDN pre-populates every PoP regardless of demand; Pull CDN stores only what is requested at each location. At scale, Push storage cost = files × PoP count.</li>
+    <li><strong>5. When each model fits</strong> — Pull = dynamic/unpredictable demand; Push = large, static, predictably global. Real production systems typically use a hybrid.</li>
+  </ul>
+</section>
+
+<!-- S1: GOAL -->
+<section id="s1">
+  <h2 class="section-title"><span class="num">§1</span> 🎯 Goal of This Subtopic</h2>
+  <div class="callout callout-goal">
+    After studying this, you should be able to classify any CDN delivery scenario as Pull, Push, or hybrid and justify the choice using concrete criteria: update frequency, file size, demand predictability, and latency requirements. You should state the TTL/invalidation trade-off and the Push operational burden under interview pressure without hesitation.
+  </div>
+</section>
+
+<!-- S2: MASTERY -->
+<section id="s2">
+  <h2 class="section-title"><span class="num">§2</span> ✅ What Mastery Looks Like</h2>
+  <ul class="checklist" id="mastery-list">
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can explain the Pull CDN request flow — including cold-start — without notes in under 60 seconds</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can explain the Push CDN upload and invalidation lifecycle and name the operator responsibilities</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can select Pull vs. Push for a given scenario (e.g., user avatars vs. a 4GB game installer) and justify with concrete reasoning</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can describe two invalidation strategies for Pull CDN (TTL expiry, versioned URLs, API purge) and state their trade-offs</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can identify when a hybrid model is appropriate and describe the content split</span></li>
+  </ul>
+  <div class="callout callout-tip" style="margin-top:18px;">💡 <strong>Rule of thumb:</strong> If you can teach it to someone else and field their follow-up questions, you've mastered it.</div>
+</section>
+
+<!-- S3: STUDY PHASES -->
+<section id="s3">
+  <h2 class="section-title"><span class="num">§3</span> 🗓️ Study Phases to Achieve Mastery</h2>
+
+  <div class="phase-card open">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph1">Phase 1</span> Acquire 📖</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Read deeply enough that you could explain the concept without the doc.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text"><strong>Cloudflare Learning Center — "What is a CDN?"</strong> — <a href="https://www.cloudflare.com/learning/cdn/what-is-a-cdn/" target="_blank">cloudflare.com/learning</a> — accessible overview of both Pull and Push mechanics</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text"><strong>AWS CloudFront Developer Guide — Managing Cache Expiration</strong> — <a href="https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/Expiration.html" target="_blank">docs.aws.amazon.com</a> — real-world Pull CDN TTL and invalidation configuration</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text"><strong>Fastly Blog — "Cache freshness and invalidation"</strong> — <a href="https://developer.fastly.com/learning/concepts/cache-freshness/" target="_blank">developer.fastly.com</a> — strong treatment of TTL, surrogate keys, and purge strategies</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Read Sections 5–9 of this doc carefully — don't skim</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Re-read the Cheatsheet (§4) and recite it from memory after</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph2">Phase 2</span> Consolidate ✍️</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Verify you can reproduce knowledge in your own words without looking.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Close the doc — write out the Core Definition from memory, then compare</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Explain First Principles out loud: what was the problem before Pull/Push CDN existed?</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Reconstruct the Pull miss-fill-serve flow and Push upload-serve-delete lifecycle from memory</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Restate each Trade-off row in your own words — if you can't explain the cost, you don't own it</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph3">Phase 3</span> Apply 🔧</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Connect to real systems and simulate interview scenarios.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Go through Real-World Examples (§10) — verify each claim and add notes to §17</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Practice Interview Application (§12) out loud — say the trigger phrases and your response as if in a live interview</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Work through Misconceptions (§13) — explain WHY each misconception is wrong</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Trace Relationships (§14) — explain each connection without looking</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph4">Phase 4</span> Validate 🧪</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Confirm you actually own it, not just recognize it.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Answer every Self-Check Quiz question (§15) out loud without notes</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Recite the Cheatsheet (§4) from memory — if you can't, re-do Phase 2</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Tick off mastery criteria in §2 — only check a box if you can demonstrate on demand</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Teach this concept to an imaginary interviewer for 2 minutes without hesitation</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- S4: CHEATSHEET -->
+<section id="s4">
+  <h2 class="section-title"><span class="num">§4</span> 📋 Cheatsheet</h2>
+  <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+
+  <!-- Radial Mindmap SVG -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">🧠 Concept Mindmap</div>
+    <svg viewBox="0 0 820 480" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:820px;display:block;margin:0 auto;">
+      <rect width="820" height="480" fill="#fafafa" rx="8"/>
+      <!-- Connector lines -->
+      <line x1="410" y1="240" x2="175" y2="100" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="645" y2="100" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="96"  y2="270" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="724" y2="270" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="175" y2="390" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="645" y2="390" stroke="#aaa" stroke-width="1.5"/>
+      <!-- Central -->
+      <ellipse cx="410" cy="240" rx="100" ry="42" fill="#a5d8ff" stroke="#1971c2" stroke-width="2"/>
+      <text x="410" y="234" text-anchor="middle" dominant-baseline="middle" font-family="Arial,sans-serif" font-size="14" font-weight="bold" fill="#1a1917">Pull CDN vs.</text>
+      <text x="410" y="252" text-anchor="middle" dominant-baseline="middle" font-family="Arial,sans-serif" font-size="14" font-weight="bold" fill="#1a1917">Push CDN</text>
+      <!-- Pull CDN -->
+      <rect x="85" y="66" width="180" height="60" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="175" y="89" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Pull CDN</text>
+      <text x="175" y="105" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#333">Demand-driven · Self-populating</text>
+      <text x="175" y="119" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#555">Cold-start on first miss</text>
+      <!-- Push CDN -->
+      <rect x="555" y="66" width="180" height="60" rx="8" fill="#ffd8a8" stroke="#e67700" stroke-width="1.5"/>
+      <text x="645" y="89" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Push CDN</text>
+      <text x="645" y="105" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#333">Pre-loaded · Zero cold-start</text>
+      <text x="645" y="119" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#555">Operator owns lifecycle</text>
+      <!-- TTL / Invalidation -->
+      <rect x="14" y="240" width="164" height="60" rx="8" fill="#ffc9c9" stroke="#c92a2a" stroke-width="1.5"/>
+      <text x="96" y="263" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Invalidation</text>
+      <text x="96" y="279" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">TTL expiry (simple)</text>
+      <text x="96" y="293" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Versioned URLs (safe)</text>
+      <text x="96" y="307" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Purge API (costly)</text>
+      <!-- When to Use -->
+      <rect x="642" y="240" width="164" height="60" rx="8" fill="#c3fae8" stroke="#0ca678" stroke-width="1.5"/>
+      <text x="724" y="263" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">When to Use</text>
+      <text x="724" y="279" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Pull: dynamic, unpredictable</text>
+      <text x="724" y="293" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Push: large, stable, global</text>
+      <text x="724" y="307" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Hybrid: both in one system</text>
+      <!-- Gotchas -->
+      <rect x="85" y="362" width="180" height="60" rx="8" fill="#ffe3e3" stroke="#c92a2a" stroke-width="1.5"/>
+      <text x="175" y="385" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Gotchas</text>
+      <text x="175" y="401" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">no-store = no CDN benefit</text>
+      <text x="175" y="415" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Push storage × PoP count</text>
+      <!-- Real Systems -->
+      <rect x="555" y="362" width="180" height="60" rx="8" fill="#b2f2bb" stroke="#2f9e44" stroke-width="1.5"/>
+      <text x="645" y="385" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Real Systems</text>
+      <text x="645" y="401" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">CloudFront, Fastly → Pull</text>
+      <text x="645" y="415" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Akamai NetStorage → Push</text>
+    </svg>
+    <p class="caption">Radial mindmap: six clusters — Pull CDN, Push CDN, Invalidation, When to Use, Gotchas, Real Systems</p>
+  </div>
+
+  <!-- Cheatsheet text block -->
+  <div class="cheatsheet">
+<span class="label">§ 1  ONE-LINER</span>Pull CDN caches on demand (first miss triggers origin fetch, TTL controls freshness);
+Push CDN is pre-loaded by the operator before any user request arrives (zero cold-start,
+but you own the full content lifecycle).
+
+<span class="label">§ 2  PULL CDN MECHANICS</span>Cache miss flow:
+  User → PoP (MISS) → origin fetch → cache at PoP with max-age TTL → serve user
+  All subsequent requests from same PoP: HIT until TTL expires.
+
+Cache hit flow:
+  User → PoP (HIT) → return cached response (origin not contacted)
+
+Key headers:
+  Cache-Control: max-age=&lt;seconds&gt;    — TTL for both CDN and browser
+  Cache-Control: s-maxage=&lt;seconds&gt;   — CDN-only TTL (overrides max-age for CDN)
+  Cache-Control: no-store              — NEVER cache (defeats CDN entirely)
+  Surrogate-Control: max-age=&lt;sec&gt;    — Fastly/Varnish CDN-only TTL
+
+Invalidation before TTL:
+  Versioned URLs: app.abc123.js — deploy new hash, old URL keeps serving from cache.
+  Purge API: CloudFront Invalidation, Fastly Purge — global propagation in 1–10s.
+  CDN shield (origin shield): single PoP fetches from origin, others fetch from shield.
+
+<span class="label">§ 3  PUSH CDN MECHANICS</span>Lifecycle:
+  1. Upload  → operator pushes files to CDN via API or rsync; CDN distributes to all PoPs
+  2. Serve   → any request = immediate cache HIT (no cold-start, ever)
+  3. Update  → re-upload new version; old content may need explicit delete
+  4. Delete  → operator issues delete; confirmed globally before storage is released
+
+Storage cost:
+  Push 1GB binary × 300 PoPs = 300GB edge storage consumed immediately.
+  Pull: same binary stored only at PoPs where it is actually requested.
+
+<span class="label">§ 4  DECISION RULE</span>Use PULL when: content changes frequently, demand is unpredictable geographically,
+              or file count is too large to pre-push everywhere (e.g., user avatars).
+Use PUSH when: content is large, rarely changes, and globally demanded predictably
+              (e.g., game client, OS installer, marketing video).
+Use HYBRID:   static large assets (Push) + dynamic/personalized assets (Pull).
+              Most production CDN setups are hybrids.
+
+AVOID no-store on cacheable responses — confirms zero CDN benefit.
+AVOID long TTL on frequently changing content — stale serving window widens.
+AVOID forgetting to delete Push content — stale files persist until explicit delete.
+
+<span class="label">§ 5  NUMBERS</span>Pull TTL typical range: 60s (dynamic) → 86400s (24h, static JS/CSS/images)
+Purge API propagation: 1–10 seconds globally
+Push storage math: (file count) × (avg size) × (PoP count) = total edge storage
+AWS CloudFront invalidation: first 1000 paths/month free; $0.005/path after
+Fastly purge: real-time (~150ms global), no per-purge charge
+
+<span class="label">§ 6  GOTCHA TO NEVER FORGET</span>A Pull CDN with Cache-Control: no-store (or no cache header at all from origin)
+provides ZERO caching benefit — every request hits origin as if CDN doesn't exist.
+This is the most common CDN misconfiguration in production. Always verify origin
+response headers before assuming CDN is working.
+  </div>
+</section>
+
+<!-- S5: CORE DEFINITION -->
+<section id="s5">
+  <h2 class="section-title"><span class="num">§5</span> 🧠 Core Definition</h2>
+  <div class="callout callout-teal" style="font-size:16px;font-weight:600;line-height:1.6;">
+    Pull CDN is a demand-driven model where edge servers cache content on the first cache miss by fetching from origin; Push CDN is an operator-driven model where content is proactively uploaded to edge servers before any user request, guaranteeing zero cold-start latency at the cost of managing the full content lifecycle manually.
+  </div>
+
+  <!-- Side-by-side comparison cards -->
+  <div class="compare-grid" style="margin-top:20px;">
+    <div class="compare-card" style="border-top: 3px solid var(--accent);">
+      <h4>🔵 Pull CDN <span class="stat stat-blue">Demand-Driven</span></h4>
+      <ul>
+        <li>Edge fetches from origin on cache miss</li>
+        <li>Self-populating — no operator action needed</li>
+        <li>Cold-start penalty on first request per PoP</li>
+        <li>TTL controls freshness window</li>
+        <li>Storage efficient — only requested content stored</li>
+      </ul>
+    </div>
+    <div class="compare-card" style="border-top: 3px solid var(--orange);">
+      <h4>🟠 Push CDN <span class="stat stat-orange">Pre-Loaded</span></h4>
+      <ul>
+        <li>Operator uploads content before requests arrive</li>
+        <li>Zero cold-start — always a cache HIT</li>
+        <li>Operator manages upload, update, delete</li>
+        <li>Storage cost = files × PoP count</li>
+        <li>Best for large, stable, globally demanded files</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- S6: CORE CONCEPTS -->
+<section id="s6">
+  <h2 class="section-title"><span class="num">§6</span> 📦 Core Concepts</h2>
+
+  <h3>Pull CDN — Demand-Driven Caching</h3>
+  <p>An edge server that receives a request for uncached content fetches it from origin, caches it locally, and returns it to the user. The duration of caching is controlled by <code>Cache-Control: max-age</code> (or <code>s-maxage</code> for CDN-only TTL). The first request per PoP per key always goes to origin — this is the cold-start penalty. Pull CDN is self-maintaining: as TTLs expire, the edge automatically refreshes on the next miss. This makes Pull ideal for content that changes frequently or has unpredictable geographic demand.</p>
+
+  <h3>Push CDN — Proactive Pre-Loading</h3>
+  <p>Operators explicitly upload content to CDN edge nodes before any user requests it. The CDN stores the files and serves them directly — there is no origin fetch on demand, so the first request is always a cache HIT. However, the operator must manage the full content lifecycle: pushing updates, issuing deletes when content is retired, and monitoring storage usage. Push is appropriate for large, rarely-changed assets where you can predict global demand (e.g., game clients, software binaries, marketing campaign videos).</p>
+
+  <h3>TTL and Cache Invalidation (Pull-specific)</h3>
+  <p>TTL (Time-To-Live) controls how long Pull CDN edges serve a cached copy before considering it stale. The three invalidation strategies have different trade-offs:</p>
+  <ul style="list-style:disc;padding-left:20px;margin-bottom:14px;font-size:14px;line-height:1.7;">
+    <li><strong>TTL expiry</strong> — simplest, but content may be stale for the full TTL window after an update</li>
+    <li><strong>Versioned URLs</strong> — <code>app.abc123.js</code> bypasses cached old versions entirely; no purge needed; safest approach</li>
+    <li><strong>CDN Purge API</strong> — forcibly evicts a key from all PoP caches; propagates in 1–10s globally; charged at scale (CloudFront: $0.005/path after first 1000/month)</li>
+  </ul>
+
+  <h3>Push CDN Storage Economics</h3>
+  <p>Push CDN requires reserving edge storage at every targeted PoP. With 200–500 global PoPs, storage costs multiply fast. Pushing a 1 GB binary to 300 PoPs consumes 300 GB of edge storage immediately — regardless of whether users in those PoPs actually request it. Pull CDN avoids this by only storing what is requested. This is the primary scaling constraint of Push CDN: it works well for a small library of large files, but is prohibitively expensive for thousands of small, frequently updated files.</p>
+
+  <h3>Hybrid CDN</h3>
+  <p>Most production systems use both models simultaneously. Static, large, rarely-changed assets (JS/CSS bundles, images, video assets) are served via Pull CDN with long TTLs. Large binary distributions (software installers, game updates) may use Push CDN. Dynamic content (API responses, personalized pages) typically bypasses CDN entirely or uses very short TTLs.</p>
+</section>
+
+<!-- S7: FIRST PRINCIPLES -->
+<section id="s7">
+  <h2 class="section-title"><span class="num">§7</span> 🔍 First Principles — Why Does This Exist?</h2>
+  <p>Before CDNs, every user request traversed to origin regardless of geographic distance. A user in Tokyo requesting a file from a US-hosted server would see 150+ ms of round-trip latency — and origin had to serve every user globally, creating both a latency problem and a capacity problem.</p>
+  <p>CDNs solved this by distributing content to edge nodes closer to users. But this immediately raised the question: <em>when should content move to the edge?</em> Two philosophies emerged:</p>
+  <p><strong>Pull CDN</strong> answers: "move it when someone asks" — demand drives population organically. This works perfectly for unpredictable content — you can't know which PoPs will see demand for a given user avatar or article. Fetching on demand avoids pre-populating 300 PoPs with content most of them will never serve.</p>
+  <p><strong>Push CDN</strong> answers: "move it before anyone asks" — trade edge storage cost for guaranteed availability. This works for predictable, large content — if you're shipping a game installer, you know millions of users worldwide will request it immediately at launch. Waiting for the first miss per PoP when 1 million users hit simultaneously would be catastrophic. Pre-loading is the only viable strategy.</p>
+  <p>Both models co-exist because different content types have fundamentally different demand properties, and no single model is globally optimal.</p>
+</section>
+
+<!-- S8: MENTAL MODELS -->
+<section id="s8">
+  <h2 class="section-title"><span class="num">§8</span> 🗺️ Mental Models</h2>
+
+  <h3>Model 1: The Public Library vs. the Bookstore</h3>
+  <p>Pull CDN is like a public library — books are brought to the local branch only when patrons request them. The first patron who requests a rare book waits for it to arrive (cold start); subsequent patrons find it already on the shelf. Push CDN is like a bookstore that pre-stocks shelves before opening — every title is on the shelf the moment doors open, but someone made buying decisions upfront and unsold stock sits on shelves (wasted storage). The model breaks down in that CDNs have near-instant distribution globally; use it to understand the demand-driven vs. supply-driven mental frame.</p>
+
+  <h3>Model 2: Cache-Aside vs. Cache Pre-Warming</h3>
+  <p>Pull CDN is architecturally identical to the cache-aside pattern — the edge is the cache, origin is the database, TTL is the expiry. This is the same pattern as application-layer caching, just pushed to the network edge. Push CDN maps to cache pre-warming — explicitly seeding the cache before traffic arrives. If you understand cache-aside (Topic 5.1) and pre-warming, you already understand the CDN analogs. The key difference: cache-aside usually has one shared cache; Pull CDN has 200–500 PoP caches globally, each with independent cold-start.</p>
+
+  <h3>Model 3: The Freshness Dial</h3>
+  <p>Think of Pull CDN TTL as a dial between two extremes: TTL=0 means "always hit origin" (CDN provides connection offload only, no caching benefit); TTL=∞ means "never update at edge" (maximum performance, broken for changing content). Every Pull CDN configuration is finding the right position on that dial for a given content type. Where the model breaks down: TTL is set per <code>Cache-Control</code> header on the origin response, not a global CDN setting — misconfigured origin responses result in unintended positions on the dial without any visible CDN-side error.</p>
+</section>
+
+<!-- S9: HOW IT WORKS -->
+<section id="s9">
+  <h2 class="section-title"><span class="num">§9</span> ⚙️ How It Works — Mechanics</h2>
+
+  <!-- Pull CDN flow diagram -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">📡 Pull CDN — Cache Miss &amp; Cache Hit Flows</div>
+    <svg viewBox="0 0 780 340" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:780px;display:block;margin:0 auto;" font-family="Arial,sans-serif">
+      <defs>
+        <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#555"/>
+        </marker>
+        <marker id="arr-red" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#c92a2a"/>
+        </marker>
+        <marker id="arr-green" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#2f9e44"/>
+        </marker>
+      </defs>
+      <rect width="780" height="340" fill="#fafafa" rx="8"/>
+
+      <!-- Title labels -->
+      <text x="195" y="22" text-anchor="middle" font-size="11" font-weight="700" fill="#c92a2a">CACHE MISS (Cold Start)</text>
+      <text x="590" y="22" text-anchor="middle" font-size="11" font-weight="700" fill="#2f9e44">CACHE HIT</text>
+      <line x1="390" y1="14" x2="390" y2="330" stroke="#e5e3de" stroke-width="1" stroke-dasharray="4,4"/>
+
+      <!-- MISS FLOW -->
+      <!-- User -->
+      <ellipse cx="50" cy="70" rx="36" ry="22" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="50" y="74" text-anchor="middle" font-size="11" font-weight="600" fill="#1a1917">User</text>
+      <!-- Arrow to PoP -->
+      <line x1="86" y1="70" x2="130" y2="70" stroke="#555" stroke-width="1.5" marker-end="url(#arr)"/>
+      <text x="108" y="62" text-anchor="middle" font-size="10" fill="#555">GET /file</text>
+      <!-- PoP (MISS) -->
+      <rect x="130" y="52" width="90" height="36" rx="8" fill="#ffc9c9" stroke="#c92a2a" stroke-width="1.5"/>
+      <text x="175" y="71" text-anchor="middle" font-size="11" font-weight="600" fill="#c92a2a">PoP  MISS</text>
+      <!-- Arrow to Origin -->
+      <line x1="220" y1="70" x2="275" y2="70" stroke="#c92a2a" stroke-width="1.5" marker-end="url(#arr-red)"/>
+      <text x="248" y="62" text-anchor="middle" font-size="10" fill="#c92a2a">cache fill</text>
+      <!-- Origin -->
+      <rect x="275" y="52" width="90" height="36" rx="8" fill="#fff" stroke="#aaa" stroke-width="1.5"/>
+      <text x="320" y="71" text-anchor="middle" font-size="11" font-weight="600" fill="#1a1917">Origin</text>
+
+      <!-- Response back -->
+      <line x1="320" y1="88" x2="320" y2="130" stroke="#555" stroke-width="1.2"/>
+      <line x1="320" y1="130" x2="175" y2="130" stroke="#555" stroke-width="1.2"/>
+      <line x1="175" y1="130" x2="175" y2="110" stroke="#555" stroke-width="1.2" marker-end="url(#arr)"/>
+      <text x="248" y="148" text-anchor="middle" font-size="10" fill="#555">response + TTL cached at PoP</text>
+
+      <!-- Serve user back -->
+      <line x1="130" y1="88" x2="86" y2="88" stroke="#555" stroke-width="1.2" marker-end="url(#arr)"/>
+      <text x="108" y="103" text-anchor="middle" font-size="10" fill="#555">serve</text>
+
+      <!-- Cold start note -->
+      <rect x="30" y="160" width="340" height="50" rx="6" fill="#fff8e1" stroke="#d97706" stroke-width="1"/>
+      <text x="200" y="181" text-anchor="middle" font-size="11" font-weight="600" fill="#92400e">⚠️ Cold Start: First user per PoP pays origin latency</text>
+      <text x="200" y="199" text-anchor="middle" font-size="10" fill="#92400e">Subsequent requests are served from cache until TTL expires</text>
+
+      <!-- Subsequent requests annotation -->
+      <text x="175" y="240" text-anchor="middle" font-size="10" fill="#555">After cold-start, same PoP →</text>
+      <rect x="130" y="250" width="90" height="36" rx="8" fill="#d1fae5" stroke="#16a34a" stroke-width="1.5"/>
+      <text x="175" y="270" text-anchor="middle" font-size="11" font-weight="600" fill="#16a34a">PoP  HIT</text>
+      <line x1="130" y1="268" x2="86" y2="268" stroke="#2f9e44" stroke-width="1.5" marker-end="url(#arr-green)"/>
+      <text x="108" y="260" text-anchor="middle" font-size="10" fill="#2f9e44">serve</text>
+
+      <!-- HIT FLOW -->
+      <!-- User -->
+      <ellipse cx="450" cy="70" rx="36" ry="22" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="450" y="74" text-anchor="middle" font-size="11" font-weight="600" fill="#1a1917">User</text>
+      <!-- Arrow to PoP -->
+      <line x1="486" y1="70" x2="530" y2="70" stroke="#555" stroke-width="1.5" marker-end="url(#arr)"/>
+      <text x="508" y="62" text-anchor="middle" font-size="10" fill="#555">GET /file</text>
+      <!-- PoP (HIT) -->
+      <rect x="530" y="52" width="90" height="36" rx="8" fill="#d1fae5" stroke="#16a34a" stroke-width="1.5"/>
+      <text x="575" y="71" text-anchor="middle" font-size="11" font-weight="600" fill="#16a34a">PoP  HIT</text>
+      <!-- Response back -->
+      <line x1="530" y1="88" x2="486" y2="88" stroke="#2f9e44" stroke-width="1.5" marker-end="url(#arr-green)"/>
+      <text x="508" y="103" text-anchor="middle" font-size="10" fill="#2f9e44">serve (no origin)</text>
+      <!-- Origin (ghosted) -->
+      <rect x="680" y="52" width="90" height="36" rx="8" fill="#f3f2ef" stroke="#ddd" stroke-width="1.5"/>
+      <text x="725" y="71" text-anchor="middle" font-size="11" fill="#bbb">Origin</text>
+      <line x1="620" y1="70" x2="680" y2="70" stroke="#ddd" stroke-width="1" stroke-dasharray="4,3"/>
+      <text x="650" y="62" text-anchor="middle" font-size="10" fill="#bbb">not contacted</text>
+
+      <!-- TTL note -->
+      <rect x="430" y="160" width="340" height="50" rx="6" fill="#dcfce7" stroke="#16a34a" stroke-width="1"/>
+      <text x="600" y="181" text-anchor="middle" font-size="11" font-weight="600" fill="#065f46">✅ Origin not contacted — zero latency add</text>
+      <text x="600" y="199" text-anchor="middle" font-size="10" fill="#065f46">Cache-Control: max-age=86400 → cached for 24h</text>
+    </svg>
+    <p class="caption">Pull CDN: cache miss triggers origin fetch (cold start); cache hit serves from edge with no origin contact</p>
+  </div>
+
+  <!-- Push CDN flow diagram -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">📤 Push CDN — Upload Lifecycle</div>
+    <svg viewBox="0 0 780 260" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:780px;display:block;margin:0 auto;" font-family="Arial,sans-serif">
+      <defs>
+        <marker id="arr2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#555"/>
+        </marker>
+        <marker id="arr-orange" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#e67700"/>
+        </marker>
+      </defs>
+      <rect width="780" height="260" fill="#fafafa" rx="8"/>
+
+      <!-- Upload step -->
+      <rect x="14" y="30" width="120" height="44" rx="8" fill="#fff" stroke="#aaa" stroke-width="1.5"/>
+      <text x="74" y="50" text-anchor="middle" font-size="11" font-weight="600" fill="#1a1917">Operator</text>
+      <text x="74" y="66" text-anchor="middle" font-size="10" fill="#555">Deploy system</text>
+
+      <line x1="134" y1="52" x2="188" y2="52" stroke="#e67700" stroke-width="1.5" marker-end="url(#arr-orange)"/>
+      <text x="161" y="44" text-anchor="middle" font-size="10" fill="#e67700">Upload API</text>
+
+      <rect x="188" y="30" width="130" height="44" rx="8" fill="#ffd8a8" stroke="#e67700" stroke-width="1.5"/>
+      <text x="253" y="50" text-anchor="middle" font-size="11" font-weight="600" fill="#1a1917">CDN Platform</text>
+      <text x="253" y="66" text-anchor="middle" font-size="10" fill="#555">Distribute to all PoPs</text>
+
+      <!-- PoP grid -->
+      <text x="390" y="20" text-anchor="middle" font-size="10" fill="#555">CDN distributes to all PoPs automatically</text>
+      <line x1="318" y1="52" x2="360" y2="52" stroke="#555" stroke-width="1.2" marker-end="url(#arr2)"/>
+
+      <rect x="360" y="30" width="72" height="36" rx="6" fill="#ffd8a8" stroke="#e67700" stroke-width="1"/>
+      <text x="396" y="50" text-anchor="middle" font-size="10" font-weight="600" fill="#1a1917">PoP US</text>
+      <rect x="446" y="30" width="72" height="36" rx="6" fill="#ffd8a8" stroke="#e67700" stroke-width="1"/>
+      <text x="482" y="50" text-anchor="middle" font-size="10" font-weight="600" fill="#1a1917">PoP EU</text>
+      <rect x="532" y="30" width="72" height="36" rx="6" fill="#ffd8a8" stroke="#e67700" stroke-width="1"/>
+      <text x="568" y="50" text-anchor="middle" font-size="10" font-weight="600" fill="#1a1917">PoP APAC</text>
+      <rect x="618" y="30" width="72" height="36" rx="6" fill="#ffd8a8" stroke="#e67700" stroke-width="1"/>
+      <text x="654" y="50" text-anchor="middle" font-size="10" font-weight="600" fill="#1a1917">PoP …</text>
+
+      <!-- User requests arrow -->
+      <text x="390" y="110" text-anchor="middle" font-size="10" fill="#555">Users request from nearest PoP — always a HIT</text>
+      <!-- users -->
+      <ellipse cx="396" cy="155" rx="28" ry="18" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="396" y="159" text-anchor="middle" font-size="10" font-weight="600" fill="#1a1917">User</text>
+      <ellipse cx="482" cy="155" rx="28" ry="18" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="482" y="159" text-anchor="middle" font-size="10" font-weight="600" fill="#1a1917">User</text>
+      <ellipse cx="568" cy="155" rx="28" ry="18" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="568" y="159" text-anchor="middle" font-size="10" font-weight="600" fill="#1a1917">User</text>
+
+      <line x1="396" y1="137" x2="396" y2="66" stroke="#2f9e44" stroke-width="1.5" marker-end="url(#arr-orange)"/>
+      <line x1="482" y1="137" x2="482" y2="66" stroke="#2f9e44" stroke-width="1.5" marker-end="url(#arr-orange)"/>
+      <line x1="568" y1="137" x2="568" y2="66" stroke="#2f9e44" stroke-width="1.5" marker-end="url(#arr-orange)"/>
+
+      <!-- HIT badges -->
+      <rect x="370" y="80" width="52" height="20" rx="10" fill="#d1fae5" stroke="#16a34a" stroke-width="1"/>
+      <text x="396" y="93" text-anchor="middle" font-size="9" font-weight="700" fill="#16a34a">HIT ✅</text>
+      <rect x="456" y="80" width="52" height="20" rx="10" fill="#d1fae5" stroke="#16a34a" stroke-width="1"/>
+      <text x="482" y="93" text-anchor="middle" font-size="9" font-weight="700" fill="#16a34a">HIT ✅</text>
+      <rect x="542" y="80" width="52" height="20" rx="10" fill="#d1fae5" stroke="#16a34a" stroke-width="1"/>
+      <text x="568" y="93" text-anchor="middle" font-size="9" font-weight="700" fill="#16a34a">HIT ✅</text>
+
+      <!-- Cost note -->
+      <rect x="14" y="200" width="750" height="44" rx="6" fill="#fff8e1" stroke="#d97706" stroke-width="1"/>
+      <text x="389" y="220" text-anchor="middle" font-size="11" font-weight="600" fill="#92400e">⚠️ Storage cost = file size × number of PoPs (regardless of actual demand at each PoP)</text>
+      <text x="389" y="236" text-anchor="middle" font-size="10" fill="#92400e">Example: 1GB binary × 300 PoPs = 300GB edge storage consumed immediately on upload</text>
+    </svg>
+    <p class="caption">Push CDN: operator uploads once; CDN distributes to all PoPs; every user request is a guaranteed cache HIT</p>
+  </div>
+
+  <!-- TTL / Invalidation decision diagram -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">⏱️ Pull CDN Invalidation Strategy Decision</div>
+    <svg viewBox="0 0 780 320" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:780px;display:block;margin:0 auto;" font-family="Arial,sans-serif">
+      <defs>
+        <marker id="da" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#777"/>
+        </marker>
+      </defs>
+      <rect width="780" height="320" fill="#fafafa" rx="8"/>
+
+      <!-- Start -->
+      <rect x="290" y="12" width="200" height="36" rx="18" fill="#1a1917"/>
+      <text x="390" y="33" text-anchor="middle" font-size="12" font-weight="600" fill="#fff">Content needs to be updated?</text>
+      <line x1="390" y1="48" x2="390" y2="76" stroke="#bbb" stroke-width="1.5" marker-end="url(#da)"/>
+
+      <!-- Q1 -->
+      <rect x="230" y="76" width="320" height="40" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="390" y="96" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">Can staleness window = TTL duration be tolerated?</text>
+      <text x="390" y="110" text-anchor="middle" font-size="11" fill="#6b6861">(e.g., max 24h stale is OK)</text>
+
+      <!-- Yes branch -->
+      <line x1="390" y1="116" x2="390" y2="150" stroke="#bbb" stroke-width="1.5" marker-end="url(#da)"/>
+      <text x="400" y="138" font-size="10" fill="#16a34a">Yes</text>
+      <rect x="290" y="150" width="200" height="44" rx="8" fill="#d1fae5" stroke="#16a34a" stroke-width="1.5"/>
+      <text x="390" y="170" text-anchor="middle" font-size="12" font-weight="700" fill="#065f46">Let TTL expire</text>
+      <text x="390" y="186" text-anchor="middle" font-size="10" fill="#065f46">Cache-Control: max-age=&lt;N&gt;</text>
+
+      <!-- No branch right -->
+      <line x1="550" y1="96" x2="620" y2="96" stroke="#bbb" stroke-width="1.5" marker-end="url(#da)"/>
+      <text x="585" y="88" text-anchor="middle" font-size="10" fill="#c92a2a">No</text>
+      <rect x="620" y="76" width="160" height="40" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="700" y="94" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">Is URL change possible</text>
+      <text x="700" y="108" text-anchor="middle" font-size="11" fill="#6b6861">(deploy new filename)?</text>
+
+      <!-- No/URL Yes -->
+      <line x1="700" y1="116" x2="700" y2="150" stroke="#bbb" stroke-width="1.5" marker-end="url(#da)"/>
+      <text x="710" y="138" font-size="10" fill="#16a34a">Yes</text>
+      <rect x="620" y="150" width="160" height="44" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="700" y="170" text-anchor="middle" font-size="12" font-weight="700" fill="#1d4ed8">Versioned URLs</text>
+      <text x="700" y="186" text-anchor="middle" font-size="10" fill="#1d4ed8">app.abc123.js (safest)</text>
+
+      <!-- No/URL No left -->
+      <line x1="620" y1="96" x2="540" y2="160" stroke="#bbb" stroke-width="1.5" marker-end="url(#da)"/>
+      <text x="566" y="132" font-size="10" fill="#c92a2a">No (URL fixed)</text>
+      <rect x="440" y="160" width="200" height="44" rx="8" fill="#ffd8a8" stroke="#e67700" stroke-width="1.5"/>
+      <text x="540" y="180" text-anchor="middle" font-size="12" font-weight="700" fill="#7c2d12">Purge API</text>
+      <text x="540" y="196" text-anchor="middle" font-size="10" fill="#7c2d12">CloudFront Invalidation / Fastly Purge</text>
+
+      <!-- Cost notes -->
+      <rect x="14" y="240" width="200" height="64" rx="8" fill="#f3f2ef" stroke="#e5e3de" stroke-width="1"/>
+      <text x="114" y="260" text-anchor="middle" font-size="11" font-weight="700" fill="#1a1917">TTL Expiry</text>
+      <text x="114" y="276" text-anchor="middle" font-size="10" fill="#555">Simplest. Zero cost.</text>
+      <text x="114" y="292" text-anchor="middle" font-size="10" fill="#c92a2a">Stale for up to TTL window.</text>
+      <text x="114" y="308" text-anchor="middle" font-size="10" fill="#555">Best for rarely-changed assets.</text>
+
+      <rect x="230" y="240" width="220" height="64" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="1"/>
+      <text x="340" y="260" text-anchor="middle" font-size="11" font-weight="700" fill="#1d4ed8">Versioned URLs</text>
+      <text x="340" y="276" text-anchor="middle" font-size="10" fill="#555">No purge needed. Instant.</text>
+      <text x="340" y="292" text-anchor="middle" font-size="10" fill="#16a34a">Best for JS/CSS/image bundles.</text>
+      <text x="340" y="308" text-anchor="middle" font-size="10" fill="#555">Old URL stays cached (harmless).</text>
+
+      <rect x="466" y="240" width="300" height="64" rx="8" fill="#ffedd5" stroke="#ea580c" stroke-width="1"/>
+      <text x="616" y="260" text-anchor="middle" font-size="11" font-weight="700" fill="#7c2d12">CDN Purge API</text>
+      <text x="616" y="276" text-anchor="middle" font-size="10" fill="#555">1–10s global propagation.</text>
+      <text x="616" y="292" text-anchor="middle" font-size="10" fill="#c92a2a">CloudFront: $0.005/path after 1k/mo.</text>
+      <text x="616" y="308" text-anchor="middle" font-size="10" fill="#555">Use when URL is fixed and freshness is critical.</text>
+    </svg>
+    <p class="caption">Invalidation strategy decision tree for Pull CDN — TTL expiry → versioned URLs → Purge API</p>
+  </div>
+
+  <h3>Pull CDN — Key HTTP Headers</h3>
+  <p><code>Cache-Control: max-age=86400</code> — cache for 24h at both CDN and browser. <code>Cache-Control: s-maxage=86400</code> — cache at CDN for 24h but browser respects its own cache independently. <code>Cache-Control: no-store</code> — never cache, defeats CDN entirely. <code>Vary: Accept-Encoding</code> — creates separate cache entries per encoding (gzip vs. br); can fragment cache and reduce hit rates if overused. <code>Surrogate-Control: max-age=N</code> — Fastly/Varnish CDN-only TTL not forwarded to browser.</p>
+
+  <h3>Push CDN — Lifecycle Details</h3>
+  <p>Upload via CDN API (REST or rsync). CDN distributes to all target PoPs immediately. Serve: any request = guaranteed HIT. Update: re-upload new version to same path or new path. Delete: explicit delete API call; storage freed after global confirmation. Storage is charged for all uploaded content across all PoPs until deletion, regardless of request volume.</p>
+</section>
+
+<!-- S10: REAL WORLD -->
+<section id="s10">
+  <h2 class="section-title"><span class="num">§10</span> 🏭 Real-World System Examples</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>System</th><th>CDN Model</th><th>How It Applies</th><th>Notes</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>AWS CloudFront</strong></td><td><span class="stat stat-blue">Pull</span></td><td>Origin fetches on cache miss; TTL from <code>Cache-Control</code> headers</td><td>Supports Invalidation API; origin groups for failover; Lambda@Edge for customization</td></tr>
+        <tr><td><strong>Cloudflare</strong></td><td><span class="stat stat-blue">Pull</span></td><td>Aggressive default caching + Page Rules for per-path TTL; Cache Reserve for persistent edge storage</td><td>Also offers Argo (smart routing) to reduce origin latency on misses</td></tr>
+        <tr><td><strong>Fastly</strong></td><td><span class="stat stat-blue">Pull</span></td><td>VCL (Varnish) for fine-grained cache key control; real-time purge in ~150ms globally</td><td>Differentiated by purge speed — used by news sites where content changes by the minute</td></tr>
+        <tr><td><strong>Akamai NetStorage</strong></td><td><span class="stat stat-orange">Push</span></td><td>Operators upload directly to Akamai's edge storage; served from edge on all requests</td><td>Used for large software distribution, game patches, enterprise content delivery</td></tr>
+        <tr><td><strong>Steam (Valve)</strong></td><td><span class="stat stat-orange">Push</span></td><td>Game content pre-distributed globally before launch; delta patching reduces re-push volume on updates</td><td>Game installs can be 50–100+ GB; cold-start would be catastrophic on launch day with millions of concurrent users</td></tr>
+        <tr><td><strong>GitHub Releases</strong></td><td><span class="stat stat-blue">Pull</span></td><td>Release artifacts cached at edge via Fastly after first hit; popular releases reach high hit rates quickly</td><td>Cold-start on first download per PoP is acceptable — artifacts don't change after release</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- S11: TRADE-OFFS -->
+<section id="s11">
+  <h2 class="section-title"><span class="num">§11</span> ⚖️ Trade-offs</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>✅ Benefit</th><th>❌ Cost / Limitation</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><span class="benefit">Pull: self-managing</span> — edges populate automatically, no operator action needed</td><td>Cold-start latency for first user per PoP per content item</td></tr>
+        <tr><td><span class="benefit">Pull: storage efficient</span> — only requested content stored at each PoP</td><td>Requires correct <code>Cache-Control</code> headers; misconfigured origins defeat CDN entirely</td></tr>
+        <tr><td><span class="benefit">Pull: handles unpredictable demand geography naturally</span></td><td>Cannot guarantee global cache warmth before a traffic spike (e.g., product launch)</td></tr>
+        <tr><td><span class="benefit">Push: zero cold-start</span> — all users get cached response from first request</td><td>Operator must manage full content lifecycle: upload, update, delete</td></tr>
+        <tr><td><span class="benefit">Push: predictable, controlled edge state</span></td><td>Storage cost = files × PoP count — expensive for many or large files</td></tr>
+        <tr><td><span class="benefit">Push: ideal for high-demand planned events</span> (e.g., game launches)</td><td>Wasteful if content is not requested at all PoPs — unused edge storage still billed</td></tr>
+        <tr><td><span class="benefit">Hybrid: optimizes for each content type</span></td><td>Operational complexity of managing two CDN delivery models simultaneously</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- S12: INTERVIEW APPLICATION -->
+<section id="s12">
+  <h2 class="section-title"><span class="num">§12</span> 🎯 Interview Application</h2>
+
+  <h3>When an interviewer asks / says:</h3>
+  <ul style="list-style:disc;padding-left:20px;margin-bottom:16px;font-size:14px;line-height:1.7;">
+    <li>"How would you serve static assets globally with low latency?"</li>
+    <li>"You're launching a new game — how do you ensure players download the client fast worldwide?"</li>
+    <li>"Our homepage CSS/JS takes 2s to load for users in Asia. What do you do?"</li>
+    <li>"How would you handle a massive simultaneous traffic spike on a new product launch?"</li>
+  </ul>
+
+  <h3>What you say / do:</h3>
+  <p>During high-level design, when proposing a CDN layer, immediately distinguish which model applies to the specific content type. For static web assets: <em>"We'd use Pull CDN with long TTLs and versioned filenames — deploy updates with a new hash, no manual purge needed."</em> For large binary distributions: <em>"We'd use Push CDN to pre-load content at all major PoPs before the launch — we can't afford first-request origin latency when millions of users hit simultaneously."</em></p>
+
+  <div class="tradeoff-box">
+    "If we choose Pull CDN, we get automatic edge population and storage efficiency, but we pay with cold-start latency for the first request per PoP and a dependency on correct Cache-Control headers. For this system — which has unpredictable demand geography and content that changes frequently — Pull is the right call because the cold-start penalty is rare and manageable."
+  </div>
+</section>
+
+<!-- S13: MISCONCEPTIONS -->
+<section id="s13">
+  <h2 class="section-title"><span class="num">§13</span> ⚠️ Common Misconceptions &amp; Gotchas</h2>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> CDN always caches content — just put assets behind a CDN and they'll be served from the edge.</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Pull CDN only caches if the origin returns a cacheable <code>Cache-Control</code> header. An origin responding with <code>Cache-Control: no-store</code> or no cache header is not cached at all — every request hits origin regardless of CDN presence. Always verify origin response headers.</div></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> Push CDN is always better because there's no cold start.</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Push CDN multiplies storage cost by the number of PoPs. For thousands of small, frequently updated files (e.g., user avatars, article thumbnails), Push is operationally infeasible and expensive. Pull handles large-scale dynamic content libraries far more efficiently.</div></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> Cache invalidation in Pull CDN is instant — issue a purge and all users get fresh content immediately.</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> CDN purge APIs propagate globally in 1–10 seconds (not instant), and at scale purge APIs are rate-limited and charged per path. Versioned URLs are more reliable for guaranteed freshness because they don't rely on purge propagation timing.</div></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> Pull and Push CDN are mutually exclusive — you pick one per CDN account.</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Most production systems use both simultaneously within the same CDN account — Pull for regularly updated web assets, Push for large static binaries. Most CDN providers support hybrid configurations on the same distribution.</div></div>
+  </div>
+</section>
+
+<!-- S14: RELATIONSHIPS -->
+<section id="s14">
+  <h2 class="section-title"><span class="num">§14</span> 🔗 Relationships to Other Concepts</h2>
+  <div class="connections">
+    <div class="conn-card">
+      <div class="conn-icon">⬆️</div>
+      <div>
+        <div class="conn-label">Builds On</div>
+        <strong>6.1 CDN Architecture — PoPs and Edge Servers</strong> — Pull/Push are the two content population models built on top of the PoP infrastructure covered in 6.1. Without understanding how PoPs are organized and how requests are routed to them, the pull-miss-to-origin flow doesn't make sense.
+      </div>
+    </div>
+    <div class="conn-card">
+      <div class="conn-icon">⬇️</div>
+      <div>
+        <div class="conn-label">Enables</div>
+        <strong>6.3 Cache Invalidation at the Edge</strong> — The invalidation challenges in 6.3 (TTL, versioned URLs, purge APIs, stale-while-revalidate) are entirely motivated by Pull CDN's staleness problem. Push CDN sidesteps most of these challenges since you control content explicitly.
+      </div>
+    </div>
+    <div class="conn-card">
+      <div class="conn-icon">⚡</div>
+      <div>
+        <div class="conn-label">Tension With</div>
+        <strong>6.5 CDN for Static vs. Dynamic Content</strong> — The Pull vs. Push decision maps directly to the static vs. dynamic split. Static content (Pull-friendly with long TTL) vs. dynamic/personalized content (CDN bypass or very short TTL Pull) is the same trade-off at a different framing. Also tension with <strong>5.2–5.3 Write-Through and Write-Back Caching</strong> — CDN TTL behavior mirrors these caching write strategies at the network layer.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- S15: QUIZ -->
+<section id="s15">
+  <h2 class="section-title"><span class="num">§15</span> 🧪 Self-Check Quiz</h2>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">1</div>
+      <div class="qtext">What is the difference between Pull CDN and Push CDN? Explain both in two sentences each.</div>
+      <div class="quiz-toggle">▼ hint</div>
+    </div>
+    <div class="quiz-hint">💡 Think through your answer before expanding — if you hesitate, revisit §5 Core Definition.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">2</div>
+      <div class="qtext">A social media platform serves user-uploaded profile photos — millions of unique images, updated occasionally. Which CDN model would you use and why?</div>
+      <div class="quiz-toggle">▼ hint</div>
+    </div>
+    <div class="quiz-hint">💡 Consider: file count, update frequency, and storage economics. Revisit §6 Core Concepts if unsure.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">3</div>
+      <div class="qtext">What is the cold-start problem in Pull CDN, and what two strategies can mitigate it (without switching to Push CDN)?</div>
+      <div class="quiz-toggle">▼ hint</div>
+    </div>
+    <div class="quiz-hint">💡 Think about what happens on the very first request per PoP. Revisit §9 Mechanics if unsure.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">4</div>
+      <div class="qtext">Name a real system that uses Push CDN and explain specifically why Pull CDN would be a poor fit for that use case.</div>
+      <div class="quiz-toggle">▼ hint</div>
+    </div>
+    <div class="quiz-hint">💡 Consider file size, demand predictability, and the consequence of cold-start. Revisit §10 Real-World Examples.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">5</div>
+      <div class="qtext">A developer sets <code>Cache-Control: no-store</code> on all API responses but wraps the API behind CloudFront. Are API responses cached? What's the implication for CDN cache hit rate?</div>
+      <div class="quiz-toggle">▼ hint</div>
+    </div>
+    <div class="quiz-hint">💡 This is the most common CDN misconfiguration gotcha. Revisit §13 Misconceptions if unsure.</div>
+  </div>
+</section>
+
+<!-- S16: FURTHER READING -->
+<section id="s16">
+  <h2 class="section-title"><span class="num">§16</span> 📚 Further Reading</h2>
+  <ul class="reading-list">
+    <li><div class="cb" onclick="toggleRead(this)"></div><div class="rtext"><strong>Cloudflare Learning Center — "What is a CDN?"</strong><br><a href="https://www.cloudflare.com/learning/cdn/what-is-a-cdn/" target="_blank">cloudflare.com/learning/cdn</a> — accessible overview of both Pull and Push mechanics</div></li>
+    <li><div class="cb" onclick="toggleRead(this)"></div><div class="rtext"><strong>AWS CloudFront Developer Guide — Managing Cache Expiration</strong><br><a href="https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/Expiration.html" target="_blank">docs.aws.amazon.com</a> — real-world Pull CDN TTL and invalidation configuration</div></li>
+    <li><div class="cb" onclick="toggleRead(this)"></div><div class="rtext"><strong>Fastly Blog — "Cache freshness and invalidation"</strong><br><a href="https://developer.fastly.com/learning/concepts/cache-freshness/" target="_blank">developer.fastly.com</a> — strong treatment of TTL, surrogate keys, and purge strategies</div></li>
+    <li><div class="cb" onclick="toggleRead(this)"></div><div class="rtext"><strong>ByteByteGo — "How does CDN work?"</strong><br><a href="https://blog.bytebytego.com" target="_blank">blog.bytebytego.com</a> — visual walkthrough of request flows for both models</div></li>
+    <li><div class="cb" onclick="toggleRead(this)"></div><div class="rtext"><strong>Akamai NetStorage Technical Guide</strong><br><a href="https://techdocs.akamai.com/netstorage" target="_blank">techdocs.akamai.com/netstorage</a> — reference implementation of a production Push CDN product</div></li>
+  </ul>
+</section>
+
+<!-- S17: MY NOTES -->
+<section id="s17">
+  <h2 class="section-title"><span class="num">§17</span> ✍️ My Notes</h2>
+  <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">Personal observations, things that confused me, analogies that helped.</p>
+  <textarea class="notes-area" placeholder="Add your own notes here — things that clicked, diagrams you sketched, interview stories..."></textarea>
+</section>
+
+</article>
+</main>
+
+<script>
+  function toggle(cb) {
+    const li = cb.closest('li');
+    li.classList.toggle('checked');
+    saveState();
+  }
+  function toggleRead(cb) {
+    const li = cb.closest('li');
+    li.classList.toggle('checked');
+    saveState();
+  }
+  function togglePhase(header) {
+    header.closest('.phase-card').classList.toggle('open');
+  }
+  function toggleQuiz(qEl) {
+    qEl.closest('.quiz-item').classList.toggle('open');
+  }
+  function saveState() {
+    const state = {};
+    document.querySelectorAll('.checklist li, .reading-list li').forEach((li, i) => {
+      state['cb_' + i] = li.classList.contains('checked');
+    });
+    try { localStorage.setItem('topic_6.2_state', JSON.stringify(state)); } catch(e){}
+  }
+  function loadState() {
+    try {
+      const state = JSON.parse(localStorage.getItem('topic_6.2_state') || '{}');
+      document.querySelectorAll('.checklist li, .reading-list li').forEach((li, i) => {
+        if (state['cb_' + i]) li.classList.add('checked');
+      });
+    } catch(e){}
+  }
+  loadState();
+
+  // Active ToC highlight
+  const sections = document.querySelectorAll('section[id]');
+  const tocLinks = document.querySelectorAll('#toc nav a');
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        tocLinks.forEach(a => a.classList.remove('active'));
+        const active = document.querySelector(`#toc nav a[href="#${e.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+  sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>
