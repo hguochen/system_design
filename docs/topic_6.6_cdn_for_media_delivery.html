@@ -1,0 +1,1072 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6.6 CDN for Media Delivery (Images, Video)</title>
+<style>
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface-alt: #f3f2ef;
+    --border: #e5e3de; --text: #1a1917; --text-muted: #6b6861;
+    --accent: #2563eb; --accent-light: #dbeafe;
+    --green: #16a34a; --green-light: #dcfce7;
+    --red: #dc2626; --red-light: #fee2e2;
+    --yellow: #d97706; --yellow-light: #fef3c7;
+    --purple: #7c3aed; --purple-light: #ede9fe;
+    --orange: #ea580c; --orange-light: #ffedd5;
+    --teal: #0d9488; --teal-light: #ccfbf1;
+    --code-bg: #1e1e2e; --code-text: #cdd6f4;
+    --sidebar-w: 240px; --content-max: 820px;
+    font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; }
+  #toc { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0 48px; z-index: 100; }
+  #toc-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  #toc-header .phase-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-bottom: 6px; }
+  #toc-header h2 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  #toc nav a { display: block; padding: 5px 16px 5px 20px; font-size: 12.5px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+  main { margin-left: var(--sidebar-w); padding: 48px 48px 96px; max-width: calc(var(--sidebar-w) + var(--content-max) + 96px); width: 100%; }
+  article { max-width: var(--content-max); }
+  .doc-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 2px solid var(--border); }
+  .doc-header .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+  .tag-phase { background: var(--accent-light); color: var(--accent); }
+  .tag-topic { background: var(--purple-light); color: var(--purple); }
+  .tag-date  { background: var(--surface-alt);  color: var(--text-muted); }
+  .doc-header h1 { font-size: 30px; font-weight: 800; line-height: 1.25; letter-spacing: -.02em; color: var(--text); }
+  section { margin-bottom: 52px; scroll-margin-top: 32px; }
+  h2.section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -.01em; }
+  h2.section-title .num { font-size: 11px; font-weight: 800; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; letter-spacing: .04em; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 24px 0 10px; }
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+  code { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-family: "SF Mono","Fira Code",Menlo,monospace; font-size: 12.5px; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 14px; border-left: 3px solid; }
+  .callout-goal  { background: var(--accent-light); border-color: var(--accent); color: #1e40af; }
+  .callout-tip   { background: var(--yellow-light); border-color: var(--yellow); color: #92400e; }
+  .callout-warn  { background: var(--red-light); border-color: var(--red); color: #7f1d1d; }
+  .callout-quote { background: var(--surface-alt); border-color: var(--border); color: var(--text-muted); font-style: italic; }
+  .callout-teal  { background: var(--teal-light); border-color: var(--teal); color: #134e4a; }
+  .cheatsheet { background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 24px 28px; font-family: "SF Mono","Fira Code","Cascadia Code",Menlo,monospace; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-x: auto; margin-top: 16px; }
+  .cheatsheet .label { color: #cba6f7; font-weight: 700; letter-spacing: .08em; display: block; margin-top: 18px; margin-bottom: 4px; border-bottom: 1px solid #313244; padding-bottom: 3px; }
+  .cheatsheet .label:first-child { margin-top: 0; }
+  .diagram-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 16px 14px; margin: 20px 0 28px; overflow-x: auto; }
+  .diagram-wrap .diagram-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); margin-bottom: 12px; }
+  .diagram-wrap p.caption { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 10px; margin-bottom: 0; font-style: italic; }
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; font-size: 14.5px; line-height: 1.55; }
+  .checklist li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 2px; background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .checklist li.checked .cb { background: var(--green); border-color: var(--green); }
+  .checklist li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .checklist li.checked .text { color: var(--text-muted); text-decoration: line-through; }
+  .phase-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
+  .phase-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; cursor: pointer; user-select: none; background: var(--surface-alt); }
+  .phase-header:hover { background: var(--border); }
+  .phase-label { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+  .phase-badge { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 2px 8px; border-radius: 20px; }
+  .ph1 { background: #dbeafe; color: #1d4ed8; } .ph2 { background: #fce7f3; color: #9d174d; }
+  .ph3 { background: #d1fae5; color: #065f46; } .ph4 { background: #fef3c7; color: #92400e; }
+  .phase-chevron { font-size: 12px; color: var(--text-muted); transition: transform .2s; }
+  .phase-card.open .phase-chevron { transform: rotate(180deg); }
+  .phase-body { display: none; padding: 16px 20px 20px; }
+  .phase-card.open .phase-body { display: block; }
+  .phase-goal { font-size: 12.5px; color: var(--text-muted); font-style: italic; margin-bottom: 12px; }
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: var(--surface-alt); padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.5; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+  .misconception { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .misconception .wrong { background: var(--red-light); padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; }
+  .misconception .right { padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; color: #065f46; background: var(--green-light); }
+  .misconception .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .quiz-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .quiz-q { padding: 14px 18px; font-size: 14.5px; font-weight: 600; cursor: pointer; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .quiz-q:hover { background: var(--surface-alt); }
+  .quiz-num { flex-shrink: 0; width: 24px; height: 24px; background: var(--accent); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; margin-top: 1px; }
+  .quiz-q .qtext { flex: 1; }
+  .quiz-toggle { font-size: 11px; color: var(--text-muted); flex-shrink: 0; margin-top: 3px; }
+  .quiz-hint { display: none; padding: 10px 18px 14px; font-size: 13px; color: #92400e; background: var(--yellow-light); border-top: 1px solid var(--border); }
+  .quiz-item.open .quiz-hint { display: block; }
+  .reading-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .reading-list li { display: flex; align-items: flex-start; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; font-size: 14px; }
+  .reading-list li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 1px; cursor: pointer; background: var(--surface); display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .reading-list li.checked .cb { background: var(--green); border-color: var(--green); }
+  .reading-list li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .reading-list li.checked .rtext { color: var(--text-muted); text-decoration: line-through; }
+  .notes-area { width: 100%; min-height: 160px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: inherit; font-size: 14px; color: var(--text); resize: vertical; line-height: 1.6; }
+  .notes-area:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .focus-list { list-style: none; display: flex; flex-direction: column; gap: 14px; }
+  .focus-list li { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14.5px; line-height: 1.6; }
+  .focus-list li strong { color: var(--accent); display: block; margin-bottom: 4px; }
+  .connections { display: flex; flex-direction: column; gap: 12px; }
+  .conn-card { display: flex; align-items: flex-start; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14px; }
+  .conn-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .conn-label { font-weight: 700; margin-bottom: 3px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .tradeoff-box { background: var(--surface-alt); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 14px 18px; font-size: 14px; font-style: italic; color: var(--text); margin-top: 14px; }
+  .tier-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 16px 0; }
+  .tier-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; font-size: 14px; }
+  .tier-card h4 { font-size: 13px; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .tier-card .stat { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 2px 7px; border-radius: 4px; }
+  .stat-blue { background: var(--accent-light); color: var(--accent); }
+  .stat-orange { background: var(--orange-light); color: var(--orange); }
+  .stat-green { background: var(--green-light); color: var(--green); }
+  .stat-red { background: var(--red-light); color: var(--red); }
+  @media (max-width: 900px) { #toc { display: none; } main { margin-left: 0; padding: 24px 20px 60px; } .tier-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<aside id="toc">
+  <div id="toc-header">
+    <span class="phase-tag">Phase B · Topic 6</span>
+    <h2>6.6 CDN for Media Delivery</h2>
+  </div>
+  <nav>
+    <a href="#s0">🗺️ Overview</a>
+    <a href="#s1">🎯 Goal</a>
+    <a href="#s2">✅ Mastery Criteria</a>
+    <a href="#s3">🗓️ Study Phases</a>
+    <a href="#s4">📋 Cheatsheet</a>
+    <a href="#s5">🧠 Core Definition</a>
+    <a href="#s6">📦 Core Concepts</a>
+    <a href="#s7">🔍 First Principles</a>
+    <a href="#s8">🗺️ Mental Models</a>
+    <a href="#s9">⚙️ How It Works</a>
+    <a href="#s10">🏭 Real-World Examples</a>
+    <a href="#s11">⚖️ Trade-offs</a>
+    <a href="#s12">🎯 Interview Application</a>
+    <a href="#s13">⚠️ Misconceptions</a>
+    <a href="#s14">🔗 Relationships</a>
+    <a href="#s15">🧪 Self-Check Quiz</a>
+    <a href="#s16">📚 Further Reading</a>
+    <a href="#s17">✍️ My Notes</a>
+  </nav>
+</aside>
+
+<main>
+<article>
+
+<!-- HEADER -->
+<div class="doc-header">
+  <div class="meta">
+    <span class="tag tag-phase">⚡ Phase B — Scalability</span>
+    <span class="tag tag-topic">🌍 Topic 6 — CDN</span>
+    <span class="tag tag-date">📅 2026-07-06</span>
+  </div>
+  <h1>6.6 CDN for Media Delivery<br><span style="font-weight:400;color:var(--text-muted);font-size:22px;">Images &amp; Video</span></h1>
+</div>
+
+<!-- S0: OVERVIEW -->
+<section id="s0">
+  <h2 class="section-title"><span class="num">§0</span> 🗺️ Topic Overview</h2>
+  <p>Media delivery is where CDNs stop being a "nice latency optimization" and become the load-bearing wall of the architecture. Images and video dominate the byte volume of most consumer systems — a single 1080p stream is ~5 Mbps, and a viral image can be requested billions of times. The challenge is twofold: <strong>images</strong> must be transformed into many variants and cached at high hit rates; <strong>video</strong> must be encoded into a ladder of bitrates, chunked into segments, and streamed adaptively so playback survives changing network conditions. Master this by understanding HLS/DASH adaptive bitrate streaming, edge image transformation, and origin shielding for large objects.</p>
+
+  <ul class="focus-list" style="margin-top:18px;">
+    <li><strong>1. Why media is different from static assets</strong> — A CSS file is a few KB and identical for everyone; a video is gigabytes with dozens of renditions consumed as a stream. Delivery model, cache strategy, and origin protection all differ.</li>
+    <li><strong>2. Adaptive Bitrate Streaming (HLS &amp; DASH)</strong> — The key mechanism. Video is split into 2–10s segments, each encoded at multiple bitrates; the player fetches a manifest and switches renditions per-segment based on measured bandwidth. Every segment is a cacheable HTTP object.</li>
+    <li><strong>3. Image transformation &amp; on-the-fly variants</strong> — Resize, crop, and reformat (WebP/AVIF) at the edge on first request, then cache keyed by transform params. "Transform once, serve many" — and constrain variants to protect hit rate.</li>
+    <li><strong>4. Origin shielding &amp; cache hierarchy</strong> — Media misses are expensive. A shield tier consolidates misses so origin sees one fetch per object, not one per PoP. This is multi-level caching (5.8) applied to media.</li>
+    <li><strong>5. VOD vs. live, cost &amp; DRM</strong> — VOD is fully cacheable; live needs real-time segmenting and low-latency variants. Signed URLs / token auth protect paid content at the edge without killing cacheability.</li>
+  </ul>
+</section>
+
+<!-- S1: GOAL -->
+<section id="s1">
+  <h2 class="section-title"><span class="num">§1</span> 🎯 Goal of This Subtopic</h2>
+  <div class="callout callout-goal">
+    After studying this, you should be able to design an end-to-end image delivery pipeline (upload → storage → edge transform → cached variants), explain adaptive bitrate streaming from first principles, choose the right origin-protection strategy for large media, distinguish VOD from live pipelines, and secure premium media at the edge without destroying cacheability.
+  </div>
+</section>
+
+<!-- S2: MASTERY -->
+<section id="s2">
+  <h2 class="section-title"><span class="num">§2</span> ✅ What Mastery Looks Like</h2>
+  <ul class="checklist" id="mastery-list">
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can walk through the full HLS/DASH playback flow: manifest → rendition list → segment fetch → throughput measurement → per-segment bitrate switch</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can explain why video is delivered as short HTTP segments rather than one file, and how that maps onto CDN caching</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can design an image transformation pipeline and reason about the cache-key / variant explosion trade-off (device, format, size)</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can explain origin shielding for media and quantify why it matters when a 4 GB object is requested across 200 PoPs</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can contrast VOD vs. live pipelines, including where transcoding sits and the latency implications</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can describe how signed URLs / token auth protect premium media at the edge while preserving cacheability</span></li>
+  </ul>
+  <div class="callout callout-tip" style="margin-top:18px;">💡 <strong>Rule of thumb:</strong> If you can teach it to someone else and field their follow-up questions, you've mastered it.</div>
+</section>
+
+<!-- S3: STUDY PHASES -->
+<section id="s3">
+  <h2 class="section-title"><span class="num">§3</span> 🗓️ Study Phases to Achieve Mastery</h2>
+
+  <div class="phase-card open">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph1">Phase 1</span> Acquire 📖</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Read deeply enough that you could explain the concept without the doc.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text"><strong>ByteByteGo — "How Netflix / YouTube stream video"</strong> — <a href="https://blog.bytebytego.com/" target="_blank">blog.bytebytego.com</a> — focus on ABR and segment delivery</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text"><strong>Cloudflare Learning — HLS vs DASH</strong> — <a href="https://www.cloudflare.com/learning/video/what-is-http-live-streaming/" target="_blank">cloudflare.com</a> — segments, manifests, ABR</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text"><strong>Netflix Open Connect</strong> — <a href="https://openconnect.netflix.com/en/" target="_blank">openconnect.netflix.com</a> — CDN appliances inside ISPs</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Read Sections 4–9 of this doc carefully — don't skim</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Re-read the Cheatsheet (§4) and recite it from memory after</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph2">Phase 2</span> Consolidate ✍️</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Verify you can reproduce knowledge in your own words without looking.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Close the doc — write out the Core Definition from memory, then compare</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Explain First Principles out loud: why does media need a different delivery model than static assets?</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Reconstruct the HLS playback flow step by step from memory</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Restate each Trade-off row in your own words — if you can't explain the cost, you don't own it</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph3">Phase 3</span> Apply 🔧</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Connect to real systems and simulate interview scenarios.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Go through Real-World Examples (§10) — verify each claim and add notes to §17</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Practice Interview Application (§12) out loud — say the trigger phrases and your response as if live</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Work through Misconceptions (§13) — explain WHY each misconception is wrong</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Trace Relationships (§14) — explain each connection without looking</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph4">Phase 4</span> Validate 🧪</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Confirm you actually own it, not just recognize it.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Answer every Self-Check Quiz question (§15) out loud without notes</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Recite the Cheatsheet (§4) from memory — if you can't, re-do Phase 2</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Tick off mastery criteria in §2 — only check a box if you can demonstrate on demand</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Teach this concept to an imaginary interviewer for 2 minutes without hesitation</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- S4: CHEATSHEET -->
+<section id="s4">
+  <h2 class="section-title"><span class="num">§4</span> 📋 Cheatsheet</h2>
+  <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+
+  <!-- Radial Mindmap SVG -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">🧠 Concept Mindmap</div>
+    <svg viewBox="0 0 820 480" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:820px;display:block;margin:0 auto;">
+      <rect width="820" height="480" fill="#fafafa" rx="8"/>
+      <!-- Connector lines -->
+      <line x1="410" y1="240" x2="175" y2="100" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="645" y2="100" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="100" y2="280" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="720" y2="280" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="175" y2="400" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="645" y2="400" stroke="#aaa" stroke-width="1.5"/>
+      <!-- Central -->
+      <ellipse cx="410" cy="240" rx="105" ry="44" fill="#a5d8ff" stroke="#1971c2" stroke-width="2"/>
+      <text x="410" y="234" text-anchor="middle" dominant-baseline="middle" font-family="Arial,sans-serif" font-size="14" font-weight="bold" fill="#1a1917">CDN Media</text>
+      <text x="410" y="252" text-anchor="middle" dominant-baseline="middle" font-family="Arial,sans-serif" font-size="14" font-weight="bold" fill="#1a1917">Delivery</text>
+      <!-- Images -->
+      <rect x="88" y="66" width="174" height="62" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="175" y="88" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Image Delivery</text>
+      <text x="175" y="104" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#333">Edge transform + cache</text>
+      <text x="175" y="119" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#333">WebP/AVIF · presets</text>
+      <!-- Video ABR -->
+      <rect x="558" y="66" width="174" height="62" rx="8" fill="#ffd8a8" stroke="#e67700" stroke-width="1.5"/>
+      <text x="645" y="88" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Video — ABR</text>
+      <text x="645" y="104" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#333">HLS / DASH · segments</text>
+      <text x="645" y="119" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#333">bitrate ladder</text>
+      <!-- Segmentation -->
+      <rect x="20" y="248" width="160" height="64" rx="8" fill="#c3fae8" stroke="#0ca678" stroke-width="1.5"/>
+      <text x="100" y="268" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Manifest + Segments</text>
+      <text x="100" y="284" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">.m3u8 / .mpd</text>
+      <text x="100" y="298" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">2–10s HTTP chunks</text>
+      <text x="100" y="312" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">each cacheable</text>
+      <!-- Origin Shield -->
+      <rect x="640" y="248" width="160" height="64" rx="8" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.5"/>
+      <text x="720" y="268" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Origin Shield</text>
+      <text x="720" y="284" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">tier between edge+origin</text>
+      <text x="720" y="298" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">N misses → 1 fetch</text>
+      <text x="720" y="312" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">= 5.8 multi-level</text>
+      <!-- Gotchas -->
+      <rect x="88" y="372" width="174" height="58" rx="8" fill="#ffe3e3" stroke="#c92a2a" stroke-width="1.5"/>
+      <text x="175" y="393" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Gotchas</text>
+      <text x="175" y="409" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Manifest short TTL</text>
+      <text x="175" y="423" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Segments long TTL</text>
+      <!-- Real Systems -->
+      <rect x="558" y="372" width="174" height="58" rx="8" fill="#b2f2bb" stroke="#2f9e44" stroke-width="1.5"/>
+      <text x="645" y="393" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Real Systems</text>
+      <text x="645" y="409" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Netflix Open Connect</text>
+      <text x="645" y="423" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">YouTube · Cloudinary</text>
+    </svg>
+    <p class="caption">Radial mindmap: six major clusters around the CDN media delivery core concept</p>
+  </div>
+
+  <!-- Decision Map -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">🗺️ Media Delivery Decision Map</div>
+    <svg viewBox="0 0 720 700" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:720px;display:block;margin:0 auto;" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+      <rect width="720" height="700" fill="#fafafa" rx="8"/>
+
+      <!-- START -->
+      <rect x="270" y="14" width="180" height="38" rx="19" fill="#1a1917"/>
+      <text x="360" y="37" text-anchor="middle" font-size="12" font-weight="600" fill="#fff">Serving media at scale?</text>
+
+      <line x1="360" y1="52" x2="360" y2="74" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+
+      <!-- Q1 -->
+      <rect x="230" y="74" width="260" height="44" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="360" y="93" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">Is it image or video?</text>
+      <text x="360" y="109" text-anchor="middle" font-size="11" fill="#6b6861">(byte volume dominates traffic)</text>
+      <!-- Image left -->
+      <line x1="230" y1="96" x2="128" y2="96" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="180" y="88" text-anchor="middle" font-size="10" fill="#6b6861">Image</text>
+      <rect x="14" y="74" width="114" height="60" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="71" y="94" text-anchor="middle" font-size="11" font-weight="700" fill="#1e40af">Edge transform</text>
+      <text x="71" y="109" text-anchor="middle" font-size="10" fill="#1e40af">resize + WebP/AVIF</text>
+      <text x="71" y="123" text-anchor="middle" font-size="10" fill="#1e40af">cache per variant</text>
+      <!-- Video down -->
+      <line x1="360" y1="118" x2="360" y2="140" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="372" y="133" font-size="10" fill="#6b6861">Video</text>
+
+      <!-- Q2 -->
+      <rect x="230" y="140" width="260" height="44" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="360" y="159" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">Transcode → bitrate ladder</text>
+      <text x="360" y="175" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">+ segment into chunks</text>
+      <line x1="360" y1="184" x2="360" y2="206" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+
+      <!-- Q3 -->
+      <rect x="245" y="206" width="230" height="44" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="360" y="225" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">VOD or Live?</text>
+      <text x="360" y="241" text-anchor="middle" font-size="11" fill="#6b6861">(pre-processed vs. real-time)</text>
+      <!-- Live right -->
+      <line x1="475" y1="228" x2="590" y2="228" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="532" y="220" text-anchor="middle" font-size="10" fill="#6b6861">Live</text>
+      <rect x="592" y="206" width="116" height="60" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+      <text x="650" y="226" text-anchor="middle" font-size="11" font-weight="700" fill="#92400e">Real-time seg.</text>
+      <text x="650" y="241" text-anchor="middle" font-size="10" fill="#92400e">LL-HLS ~1s chunks</text>
+      <text x="650" y="255" text-anchor="middle" font-size="10" fill="#92400e">manifest no-cache</text>
+      <!-- VOD down -->
+      <line x1="360" y1="250" x2="360" y2="272" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="372" y="265" font-size="10" fill="#6b6861">VOD</text>
+
+      <!-- Q4 -->
+      <rect x="230" y="272" width="260" height="44" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="360" y="291" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">Cache segments long TTL,</text>
+      <text x="360" y="307" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">manifest moderate TTL</text>
+      <line x1="360" y1="316" x2="360" y2="338" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+
+      <!-- Q5 -->
+      <rect x="215" y="338" width="290" height="44" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="360" y="357" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">Cold object hitting origin</text>
+      <text x="360" y="373" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">from many PoPs?</text>
+      <!-- No right -->
+      <line x1="505" y1="360" x2="590" y2="360" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="547" y="352" text-anchor="middle" font-size="10" fill="#6b6861">No</text>
+      <rect x="592" y="338" width="116" height="44" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+      <text x="650" y="357" text-anchor="middle" font-size="11" font-weight="700" fill="#065f46">Edge cache</text>
+      <text x="650" y="373" text-anchor="middle" font-size="10" fill="#065f46">sufficient</text>
+      <!-- Yes down -->
+      <line x1="360" y1="382" x2="360" y2="408" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="372" y="399" font-size="10" fill="#6b6861">Yes</text>
+
+      <!-- OUTCOME -->
+      <rect x="195" y="408" width="330" height="60" rx="10" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+      <text x="360" y="430" text-anchor="middle" font-size="14" font-weight="800" fill="#5b21b6">Add Origin Shield</text>
+      <text x="360" y="448" text-anchor="middle" font-size="11" fill="#5b21b6">Tier-1 cache collapses N PoP misses</text>
+      <text x="360" y="463" text-anchor="middle" font-size="11" fill="#5b21b6">into a single origin fetch (= 5.8)</text>
+
+      <!-- Warning 1 -->
+      <rect x="195" y="482" width="330" height="42" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+      <text x="360" y="499" text-anchor="middle" font-size="11" font-weight="700" fill="#92400e">⚠️ Manifest TTL ≠ Segment TTL</text>
+      <text x="360" y="515" text-anchor="middle" font-size="11" fill="#92400e">Stale manifest freezes playback</text>
+
+      <!-- Warning 2 -->
+      <rect x="195" y="534" width="330" height="42" rx="8" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5"/>
+      <text x="360" y="551" text-anchor="middle" font-size="11" font-weight="700" fill="#7f1d1d">⚠️ Constrain image variants</text>
+      <text x="360" y="567" text-anchor="middle" font-size="11" fill="#7f1d1d">Arbitrary sizes shatter hit rate</text>
+
+      <!-- Legend -->
+      <rect x="195" y="590" width="330" height="96" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="360" y="610" text-anchor="middle" font-size="11" font-weight="700" fill="#6b6861">LEGEND</text>
+      <rect x="216" y="620" width="12" height="12" rx="2" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="235" y="631" font-size="10" fill="#1e40af">Image path</text>
+      <rect x="316" y="620" width="12" height="12" rx="2" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+      <text x="335" y="631" font-size="10" fill="#92400e">Live</text>
+      <rect x="386" y="620" width="12" height="12" rx="2" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.5"/>
+      <text x="405" y="631" font-size="10" fill="#5b21b6">Shield</text>
+      <rect x="466" y="620" width="12" height="12" rx="2" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+      <text x="485" y="631" font-size="10" fill="#065f46">Edge OK</text>
+      <text x="216" y="660" font-size="10" fill="#6b6861">Segments are immutable → cache aggressively. Manifests change → short TTL.</text>
+      <text x="216" y="675" font-size="10" fill="#6b6861">The client, not the server, picks the bitrate per segment.</text>
+
+      <defs>
+        <marker id="dm-arr" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+          <path d="M0,0 L0,7 L7,3.5 z" fill="#bbb"/>
+        </marker>
+      </defs>
+    </svg>
+    <p class="caption">Image vs. video branches; video splits into VOD/live and gates on origin shielding</p>
+  </div>
+
+  <div class="cheatsheet">
+<span class="label">§ 1  WHY IT EXISTS</span>Media (images + video) is the overwhelming majority of internet bytes. A single 4K
+stream is ~15–25 Mbps; a viral image is requested billions of times. Serving these from
+origin storage would saturate it instantly and give far-region users unwatchable
+buffering. CDNs solve this by caching media at the edge AND by making video cacheable
+at all — via segmentation. The trick: turn a giant stream into thousands of small,
+individually cacheable HTTP objects, and transform images into per-device variants.
+
+<span class="label">§ 2  IMAGE DELIVERY</span>- Upload once to origin (object store: S3/GCS).
+- Edge transforms on first request: resize, crop, compress, reformat (JPEG→WebP/AVIF).
+- Result cached at edge keyed by transform params (width, format, quality, DPR).
+- "Transform once, serve many." Variant explosion is the enemy of hit rate —
+  constrain the allowed transform set (named presets), don't allow arbitrary sizes.
+- Serve format via content negotiation (Accept header) or device detection.
+
+<span class="label">§ 3  VIDEO DELIVERY — ADAPTIVE BITRATE (ABR)</span>- Transcode source into a ladder of renditions (240p / 480p / 720p / 1080p / 4K).
+- Segment each rendition into short chunks (2–10s): HLS .ts/fMP4 or DASH.
+- Manifest/playlist (HLS .m3u8, DASH .mpd) lists renditions + segment URLs.
+- Player: fetch manifest → start low → measure throughput per segment →
+  switch UP/DOWN rendition at the next segment boundary. Smooth, no re-buffer.
+- Every segment is a normal cacheable HTTP GET → CDN caches them like static files.
+
+<span class="label">§ 4  ORIGIN SHIELDING (multi-level caching for media)</span>- Problem: a cold object requested across 200 PoPs = 200 origin fetches of a huge file.
+- Fix: a shield / tier-1 PoP sits between edge and origin. Edge misses go to shield;
+  shield fetches origin ONCE, fans out to all edges. Origin sees 1 fetch, not 200.
+- This is 5.8 multi-level caching applied at the network layer.
+
+<span class="label">§ 5  VOD vs. LIVE</span>VOD:  content pre-transcoded + pre-segmented, fully cacheable, near-100% hit rate.
+LIVE: segments produced in real time; low-latency HLS/DASH (LL-HLS) shrinks segment/
+      chunk size to cut glass-to-glass delay; edge caches each segment for its short life.
+
+<span class="label">§ 6  SECURITY / PAID CONTENT</span>- Signed URLs / signed cookies / token auth validated AT the edge → only authorized
+  users fetch. Keep the cache key independent of the token so caching still works.
+- DRM (Widevine/FairPlay/PlayReady) encrypts segments; license served separately.
+- Hotlink protection via Referer/token to stop bandwidth theft.
+
+<span class="label">§ 7  INTERVIEW TRIGGERS</span>→ "Design an image hosting / photo-sharing service" (Instagram, Imgur)
+→ "Design a video streaming platform" (YouTube, Netflix, TikTok)
+→ "How do you serve 4K video to users worldwide without buffering?"
+→ "How do you resize images for mobile vs. desktop efficiently?"
+
+<span class="label">§ 8  NUMBERS & GOTCHA</span>Segment length:   2–10s typical; LL-HLS ~1s or sub-second chunks
+Bitrate ladder:   ~5–8 renditions from ~200 Kbps (240p) to 15–25 Mbps (4K)
+1080p bitrate:    ~5 Mbps H.264;  4K ~15–25 Mbps
+Image formats:    AVIF &lt; WebP &lt; JPEG in size; AVIF ~50% smaller than JPEG
+GOTCHA: Manifests must have SHORT TTL (or be uncached for live), but SEGMENTS get LONG
+  TTL — they're immutable. Caching a stale manifest breaks playback; treating segments
+  as dynamic destroys your hit rate. Different TTLs for manifest vs. segments is the
+  classic mistake candidates miss.
+  </div>
+</section>
+
+<!-- S5: CORE DEFINITION -->
+<section id="s5">
+  <h2 class="section-title"><span class="num">§5</span> 🧠 Core Definition</h2>
+  <div class="callout callout-teal" style="font-size:16px;font-weight:600;line-height:1.6;">
+    CDN media delivery is the practice of distributing images and video to globally dispersed users by caching them at edge locations — where images are transformed into device-appropriate variants at the edge, and video is transcoded into a ladder of bitrates and split into short, individually cacheable HTTP segments that a client streams adaptively based on its current network conditions.
+  </div>
+
+  <!-- Image vs Video comparison -->
+  <div class="tier-grid" style="margin-top:20px;">
+    <div class="tier-card">
+      <h4>🖼️ Images <span class="stat stat-blue">transform + cache</span></h4>
+      <p style="font-size:13px;margin-bottom:6px;">One <strong>master</strong> in object storage → edge generates per-device variants (resize, crop, WebP/AVIF) on first request, cached by transform params.</p>
+      <p style="font-size:13px;margin-bottom:0;color:var(--red);">⚠️ Variant explosion kills hit rate — constrain to named presets.</p>
+    </div>
+    <div class="tier-card">
+      <h4>🎬 Video <span class="stat stat-orange">ABR segments</span></h4>
+      <p style="font-size:13px;margin-bottom:6px;">Transcoded into a <strong>bitrate ladder</strong>, split into 2–10s segments listed by a manifest; player switches quality per segment.</p>
+      <p style="font-size:13px;margin-bottom:0;color:var(--green);">✅ Every segment is an immutable HTTP object → caches like any static file.</p>
+    </div>
+  </div>
+</section>
+
+<!-- S6: CORE CONCEPTS -->
+<section id="s6">
+  <h2 class="section-title"><span class="num">§6</span> 📦 Core Concepts</h2>
+
+  <h3>Adaptive Bitrate Streaming (ABR)</h3>
+  <p>The client, not the server, decides quality. The video is pre-encoded at multiple bitrates ("the ladder"), each split into aligned short segments. The player continuously measures how fast segments arrive and picks the highest rendition it can sustain, switching at segment boundaries. This is why a stream downgrades to 480p on a train and jumps back to 1080p on Wi-Fi without stopping. <strong>HLS</strong> (Apple) and <strong>MPEG-DASH</strong> are the two dominant ABR protocols; both deliver over plain HTTP.</p>
+
+  <h3>Segmentation and the Manifest</h3>
+  <p>A stream is delivered as (1) a <strong>manifest/playlist</strong> — HLS <code>.m3u8</code> or DASH <code>.mpd</code> — describing available renditions and listing segment URLs, and (2) the <strong>segments</strong> themselves (2–10s each, <code>.ts</code> or fragmented-MP4). The manifest is small and may change (especially for live); segments are immutable once produced. This separation is the heart of why video is CDN-friendly: each segment is just a static file the edge can cache.</p>
+
+  <!-- ABR ladder + segment grid diagram -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">📊 Bitrate Ladder × Time-Aligned Segments</div>
+    <svg viewBox="0 0 760 300" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:760px;display:block;margin:0 auto;">
+      <rect width="760" height="300" fill="#fafafa" rx="8"/>
+      <!-- Axis labels -->
+      <text x="18" y="150" font-family="Arial,sans-serif" font-size="11" fill="#666" transform="rotate(-90,18,150)" text-anchor="middle">Bitrate / Quality →</text>
+      <text x="400" y="292" font-family="Arial,sans-serif" font-size="11" fill="#666" text-anchor="middle">Time (segments, ~4s each) →</text>
+
+      <!-- Rows (renditions) -->
+      <!-- 4K -->
+      <text x="90" y="52" text-anchor="end" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#dc2626">4K · 20Mbps</text>
+      <!-- 1080p -->
+      <text x="90" y="92" text-anchor="end" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#e67700">1080p · 5Mbps</text>
+      <!-- 720p -->
+      <text x="90" y="132" text-anchor="end" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#0ca678">720p · 2.5Mbps</text>
+      <!-- 480p -->
+      <text x="90" y="172" text-anchor="end" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#3b5bdb">480p · 1Mbps</text>
+      <!-- 240p -->
+      <text x="90" y="212" text-anchor="end" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#6b21a8">240p · 0.3Mbps</text>
+
+      <!-- Segment grid: 6 columns × 5 rows -->
+      <!-- helper: x = 100 + col*105, width 100; y = row*40+38, height 28 -->
+      <!-- Row 4K -->
+      <rect x="100" y="38" width="100" height="28" rx="4" fill="#fee2e2" stroke="#dc2626" stroke-width="1"/>
+      <rect x="205" y="38" width="100" height="28" rx="4" fill="#fee2e2" stroke="#dc2626" stroke-width="1"/>
+      <rect x="310" y="38" width="100" height="28" rx="4" fill="#fee2e2" stroke="#dc2626" stroke-width="1"/>
+      <rect x="415" y="38" width="100" height="28" rx="4" fill="#fee2e2" stroke="#dc2626" stroke-width="1"/>
+      <rect x="520" y="38" width="100" height="28" rx="4" fill="#fee2e2" stroke="#dc2626" stroke-width="1"/>
+      <rect x="625" y="38" width="100" height="28" rx="4" fill="#fee2e2" stroke="#dc2626" stroke-width="1"/>
+      <!-- Row 1080p -->
+      <rect x="100" y="78" width="100" height="28" rx="4" fill="#ffedd5" stroke="#e67700" stroke-width="1"/>
+      <rect x="205" y="78" width="100" height="28" rx="4" fill="#ffedd5" stroke="#e67700" stroke-width="1"/>
+      <rect x="310" y="78" width="100" height="28" rx="4" fill="#ffedd5" stroke="#e67700" stroke-width="1"/>
+      <rect x="415" y="78" width="100" height="28" rx="4" fill="#ffedd5" stroke="#e67700" stroke-width="1"/>
+      <rect x="520" y="78" width="100" height="28" rx="4" fill="#ffedd5" stroke="#e67700" stroke-width="1"/>
+      <rect x="625" y="78" width="100" height="28" rx="4" fill="#ffedd5" stroke="#e67700" stroke-width="1"/>
+      <!-- Row 720p -->
+      <rect x="100" y="118" width="100" height="28" rx="4" fill="#ccfbf1" stroke="#0ca678" stroke-width="1"/>
+      <rect x="205" y="118" width="100" height="28" rx="4" fill="#ccfbf1" stroke="#0ca678" stroke-width="1"/>
+      <rect x="310" y="118" width="100" height="28" rx="4" fill="#ccfbf1" stroke="#0ca678" stroke-width="1"/>
+      <rect x="415" y="118" width="100" height="28" rx="4" fill="#ccfbf1" stroke="#0ca678" stroke-width="1"/>
+      <rect x="520" y="118" width="100" height="28" rx="4" fill="#ccfbf1" stroke="#0ca678" stroke-width="1"/>
+      <rect x="625" y="118" width="100" height="28" rx="4" fill="#ccfbf1" stroke="#0ca678" stroke-width="1"/>
+      <!-- Row 480p -->
+      <rect x="100" y="158" width="100" height="28" rx="4" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1"/>
+      <rect x="205" y="158" width="100" height="28" rx="4" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1"/>
+      <rect x="310" y="158" width="100" height="28" rx="4" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1"/>
+      <rect x="415" y="158" width="100" height="28" rx="4" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1"/>
+      <rect x="520" y="158" width="100" height="28" rx="4" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1"/>
+      <rect x="625" y="158" width="100" height="28" rx="4" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1"/>
+      <!-- Row 240p -->
+      <rect x="100" y="198" width="100" height="28" rx="4" fill="#ede9fe" stroke="#6b21a8" stroke-width="1"/>
+      <rect x="205" y="198" width="100" height="28" rx="4" fill="#ede9fe" stroke="#6b21a8" stroke-width="1"/>
+      <rect x="310" y="198" width="100" height="28" rx="4" fill="#ede9fe" stroke="#6b21a8" stroke-width="1"/>
+      <rect x="415" y="198" width="100" height="28" rx="4" fill="#ede9fe" stroke="#6b21a8" stroke-width="1"/>
+      <rect x="520" y="198" width="100" height="28" rx="4" fill="#ede9fe" stroke="#6b21a8" stroke-width="1"/>
+      <rect x="625" y="198" width="100" height="28" rx="4" fill="#ede9fe" stroke="#6b21a8" stroke-width="1"/>
+
+      <!-- Player's chosen path (adaptive) highlighted -->
+      <rect x="100" y="198" width="100" height="28" rx="4" fill="none" stroke="#111" stroke-width="2.5"/>
+      <rect x="205" y="158" width="100" height="28" rx="4" fill="none" stroke="#111" stroke-width="2.5"/>
+      <rect x="310" y="118" width="100" height="28" rx="4" fill="none" stroke="#111" stroke-width="2.5"/>
+      <rect x="415" y="78" width="100" height="28" rx="4" fill="none" stroke="#111" stroke-width="2.5"/>
+      <rect x="520" y="78" width="100" height="28" rx="4" fill="none" stroke="#111" stroke-width="2.5"/>
+      <rect x="625" y="118" width="100" height="28" rx="4" fill="none" stroke="#111" stroke-width="2.5"/>
+      <!-- Path connectors -->
+      <line x1="200" y1="212" x2="205" y2="172" stroke="#111" stroke-width="2" stroke-dasharray="3,2"/>
+      <line x1="305" y1="172" x2="310" y2="132" stroke="#111" stroke-width="2" stroke-dasharray="3,2"/>
+      <line x1="410" y1="132" x2="415" y2="92" stroke="#111" stroke-width="2" stroke-dasharray="3,2"/>
+      <line x1="620" y1="92" x2="625" y2="132" stroke="#111" stroke-width="2" stroke-dasharray="3,2"/>
+
+      <text x="112" y="216" font-family="Arial,sans-serif" font-size="9" fill="#111" font-weight="bold">start low</text>
+      <text x="360" y="250" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#111" font-weight="bold">⬛ Bold outline = the segments this player actually fetched (adaptive path)</text>
+      <text x="360" y="268" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#666">Bandwidth ramps up → climb the ladder; at seg 6 bandwidth dips → drop back to 720p</text>
+    </svg>
+    <p class="caption">Renditions are time-aligned, so the player can switch quality at any segment boundary seamlessly</p>
+  </div>
+
+  <h3>Image Transformation Pipeline</h3>
+  <p>Rather than storing every crop/size/format up front, image CDNs store one high-quality master and generate variants on demand. A request like <code>image.jpg?w=400&amp;format=webp</code> triggers an edge transform (resize + reformat), and the output is cached keyed by those parameters. Subsequent identical requests are pure cache hits. The design tension is <strong>variant explosion</strong> — allowing arbitrary widths shatters your hit rate, so production systems constrain to named presets or a small set of breakpoints.</p>
+
+  <h3>Origin Shield / Tiered Cache</h3>
+  <p>For large media, a cache miss is very expensive (multi-GB transfer). An origin shield is a designated intermediate cache tier that all edge PoPs consult before hitting origin. It collapses N edge misses for the same object into a single origin fetch, protecting the storage tier and cutting egress cost. This is multi-level caching (5.8) at the CDN scale.</p>
+
+  <h3>VOD vs. Live</h3>
+  <p><strong>Video-on-demand</strong> is pre-processed: transcoded, segmented, and fully cacheable ahead of time, so hit rates approach 100%. <strong>Live</strong> produces segments in real time; the pipeline transcodes and segments on the fly, manifests update continuously, and latency ("glass-to-glass") becomes a first-class concern — addressed by low-latency variants (LL-HLS, LL-DASH) using shorter segments and chunked transfer.</p>
+</section>
+
+<!-- S7: FIRST PRINCIPLES -->
+<section id="s7">
+  <h2 class="section-title"><span class="num">§7</span> 🔍 First Principles — Why Does This Exist?</h2>
+  <p>Two physical realities force media into a specialized delivery model. First, <strong>bytes</strong>: media dominates traffic volume by orders of magnitude. Text and markup are kilobytes; a two-hour movie in 4K is tens of gigabytes, and popular content is requested at planetary scale. Serving that from a central origin would saturate the origin's disks and network long before CPU, and every far-away user would pay hundreds of milliseconds of round-trip latency plus congestion. Caching media at the edge is the only physically and economically viable answer.</p>
+  <p>Second, <strong>the network is variable and video is continuous</strong>. Early video delivery streamed one fixed-bitrate file; if the user's bandwidth dropped below that bitrate, playback stalled and buffered. The insight of adaptive bitrate streaming was to stop treating video as one object and instead as a sequence of small, independently-fetched segments, each available at several qualities. Now the client reacts to bandwidth in real time — dropping quality to keep playing rather than freezing. Crucially, this also made video <em>cacheable</em>: because segments are ordinary immutable HTTP objects, the entire CDN machinery built for static files suddenly works for video. Images have a parallel story — the explosion of device sizes and modern formats (WebP, AVIF) made pre-generating every variant impractical, so transformation moved to the edge: computed once per variant, then cached.</p>
+</section>
+
+<!-- S8: MENTAL MODELS -->
+<section id="s8">
+  <h2 class="section-title"><span class="num">§8</span> 🗺️ Mental Models</h2>
+
+  <h3>Model 1: Video as a Flipbook of Clips</h3>
+  <p>Don't think of a stream as a river; think of it as a flipbook of short clips. Each page (segment) is a self-contained few-second file, and for each page you can choose a high-res or low-res version. The player flips pages one at a time, and before turning each page it glances at how fast the last few pages downloaded and picks the resolution accordingly. Because every page is just a file, the CDN caches pages exactly like it caches images. <em>Where it breaks down:</em> live streaming, where pages are drawn moments before you flip to them — now the flipbook is being written just ahead of your reading, and latency matters.</p>
+
+  <h3>Model 2: Image Transforms as a Short-Order Kitchen</h3>
+  <p>The origin object store is the pantry holding raw ingredients (master images). The edge is a short-order cook: the first time someone orders "400px WebP," the cook prepares it fresh (transform) and keeps a plate under a warmer (cache). Everyone who orders the identical dish afterward gets the warmed plate instantly. <em>Where it breaks down:</em> if every customer orders a slightly different size, the cook is always cooking from scratch and the warmer is useless — the argument for a fixed menu (named presets) instead of arbitrary transforms.</p>
+
+  <h3>Model 3: Origin Shield as a Wholesale Buyer</h3>
+  <p>Imagine 200 corner shops (edge PoPs) that each want to sell the same rare product. Without coordination, all 200 phone the distant factory (origin) — 200 shipments. With an origin shield, they all order from one regional wholesaler; the wholesaler places a single factory order and distributes to all 200 shops. The factory (your storage tier) sees one request instead of 200. <em>Where it breaks down:</em> the wholesaler is now a potential regional bottleneck — real CDNs use a tier of shields, not one.</p>
+</section>
+
+<!-- S9: HOW IT WORKS -->
+<section id="s9">
+  <h2 class="section-title"><span class="num">§9</span> ⚙️ How It Works — Mechanics</h2>
+
+  <!-- HLS Playback Flow Diagram -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">🎬 HLS/DASH Playback Flow (ABR in action)</div>
+    <svg viewBox="0 0 760 240" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:760px;display:block;margin:0 auto;">
+      <rect width="760" height="240" fill="#fafafa" rx="8"/>
+
+      <!-- Step 1: Fetch manifest -->
+      <rect x="20" y="90" width="120" height="60" rx="8" fill="#c3fae8" stroke="#0ca678" stroke-width="1.5"/>
+      <text x="80" y="112" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#064e3b">① Fetch manifest</text>
+      <text x="80" y="127" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#064e3b">.m3u8 / .mpd</text>
+      <text x="80" y="140" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#064e3b">→ rendition list</text>
+
+      <line x1="140" y1="120" x2="168" y2="120" stroke="#666" stroke-width="1.5" marker-end="url(#arr9)"/>
+
+      <!-- Step 2: Start low -->
+      <rect x="170" y="90" width="120" height="60" rx="8" fill="#ede9fe" stroke="#6b21a8" stroke-width="1.5"/>
+      <text x="230" y="112" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#4c1d95">② Request seg 1</text>
+      <text x="230" y="127" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#4c1d95">at low bitrate</text>
+      <text x="230" y="140" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#4c1d95">(fast startup)</text>
+
+      <line x1="290" y1="120" x2="318" y2="120" stroke="#666" stroke-width="1.5" marker-end="url(#arr9)"/>
+
+      <!-- Step 3: Measure -->
+      <rect x="320" y="90" width="130" height="60" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="385" y="108" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#1e40af">③ Measure</text>
+      <text x="385" y="123" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#1e40af">throughput +</text>
+      <text x="385" y="136" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#1e40af">buffer level</text>
+
+      <!-- Step 4: Decide up/down -->
+      <line x1="450" y1="105" x2="478" y2="80" stroke="#16a34a" stroke-width="1.5" marker-end="url(#arr9g)"/>
+      <line x1="450" y1="135" x2="478" y2="160" stroke="#dc2626" stroke-width="1.5" marker-end="url(#arr9r)"/>
+      <rect x="480" y="52" width="120" height="44" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+      <text x="540" y="72" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#065f46">④a Step UP</text>
+      <text x="540" y="86" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#065f46">bandwidth healthy</text>
+      <rect x="480" y="144" width="120" height="44" rx="8" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5"/>
+      <text x="540" y="164" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#7f1d1d">④b Step DOWN</text>
+      <text x="540" y="178" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#7f1d1d">buffer draining</text>
+
+      <!-- Step 5: Loop next segment -->
+      <line x1="600" y1="74" x2="640" y2="74" stroke="#666" stroke-width="1.5" marker-end="url(#arr9)"/>
+      <line x1="600" y1="166" x2="640" y2="166" stroke="#666" stroke-width="1.5" marker-end="url(#arr9)"/>
+      <rect x="642" y="90" width="100" height="60" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+      <text x="692" y="110" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#92400e">⑤ Next seg</text>
+      <text x="692" y="125" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#92400e">at chosen</text>
+      <text x="692" y="138" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#92400e">rendition</text>
+
+      <!-- loop back arrow -->
+      <path d="M692,150 L692,210 L385,210 L385,152" fill="none" stroke="#999" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr9)"/>
+      <text x="500" y="205" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#666" font-style="italic">repeat per segment — each is a cacheable HTTP GET at the edge</text>
+
+      <text x="380" y="28" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">The client drives quality — the server only offers the ladder</text>
+
+      <defs>
+        <marker id="arr9" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L0,8 L8,4 z" fill="#666"/></marker>
+        <marker id="arr9g" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L0,8 L8,4 z" fill="#16a34a"/></marker>
+        <marker id="arr9r" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L0,8 L8,4 z" fill="#dc2626"/></marker>
+      </defs>
+    </svg>
+    <p class="caption">Fetch manifest → start low → measure per segment → switch up/down at the boundary → repeat</p>
+  </div>
+
+  <h3>Image Request Path (transform + cache)</h3>
+  <p>Client requests <code>photo.jpg?w=400&amp;format=auto</code> (or the CDN infers format from the <code>Accept</code> header). The edge checks its cache keyed by (object, width, format, quality, DPR) — on hit, return immediately. On miss, the edge (or an origin-side transform service) fetches the master, resizes/crops/re-encodes to the requested variant, stores the result with a long TTL, and returns it. All subsequent identical requests are cache hits; new variants pay the transform cost once each.</p>
+
+  <h3>Video VOD Ingest (offline, before anyone watches)</h3>
+  <p>Source uploaded to origin → transcoder produces a <strong>bitrate ladder</strong> (240p @ ~300 Kbps up to 4K @ ~20 Mbps, plus audio tracks) → each rendition is <strong>segmented</strong> into aligned 2–10s chunks → a <strong>manifest</strong> (<code>.m3u8</code>/<code>.mpd</code>) is written listing renditions and segment URLs. Segments + manifest land in origin storage, ready to be pulled into the CDN on first request.</p>
+
+  <!-- Origin Shield Diagram -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">🛡️ Origin Shield — Collapsing Cold-Object Misses</div>
+    <svg viewBox="0 0 760 260" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:760px;display:block;margin:0 auto;">
+      <rect width="760" height="260" fill="#fafafa" rx="8"/>
+
+      <!-- WITHOUT shield (left) -->
+      <text x="190" y="26" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#dc2626">❌ Without Shield</text>
+      <!-- Origin -->
+      <rect x="140" y="40" width="100" height="36" rx="6" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5"/>
+      <text x="190" y="63" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#7f1d1d">Origin (4GB)</text>
+      <!-- Edges -->
+      <rect x="40" y="150" width="70" height="34" rx="6" fill="#dbeafe" stroke="#2563eb" stroke-width="1.2"/>
+      <text x="75" y="171" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#1e40af">PoP 1</text>
+      <rect x="120" y="150" width="70" height="34" rx="6" fill="#dbeafe" stroke="#2563eb" stroke-width="1.2"/>
+      <text x="155" y="171" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#1e40af">PoP 2</text>
+      <rect x="200" y="150" width="70" height="34" rx="6" fill="#dbeafe" stroke="#2563eb" stroke-width="1.2"/>
+      <text x="235" y="171" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#1e40af">PoP 3</text>
+      <!-- N arrows to origin -->
+      <line x1="75" y1="150" x2="165" y2="76" stroke="#dc2626" stroke-width="1.3" marker-end="url(#arrs)"/>
+      <line x1="155" y1="150" x2="185" y2="76" stroke="#dc2626" stroke-width="1.3" marker-end="url(#arrs)"/>
+      <line x1="235" y1="150" x2="210" y2="76" stroke="#dc2626" stroke-width="1.3" marker-end="url(#arrs)"/>
+      <text x="190" y="212" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#7f1d1d" font-weight="bold">200 PoPs = 200 × 4GB fetches</text>
+      <text x="190" y="228" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#7f1d1d">origin egress + load explode</text>
+
+      <!-- Divider -->
+      <line x1="380" y1="30" x2="380" y2="240" stroke="#e5e3de" stroke-width="1.5" stroke-dasharray="5,3"/>
+
+      <!-- WITH shield (right) -->
+      <text x="570" y="26" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#16a34a">✅ With Origin Shield</text>
+      <!-- Origin -->
+      <rect x="520" y="40" width="100" height="36" rx="6" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+      <text x="570" y="63" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#065f46">Origin (4GB)</text>
+      <!-- Shield -->
+      <rect x="510" y="98" width="120" height="34" rx="6" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.5"/>
+      <text x="570" y="119" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#5b21b6">Shield (tier-1)</text>
+      <!-- Edges -->
+      <rect x="430" y="150" width="70" height="34" rx="6" fill="#dbeafe" stroke="#2563eb" stroke-width="1.2"/>
+      <text x="465" y="171" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#1e40af">PoP 1</text>
+      <rect x="510" y="150" width="70" height="34" rx="6" fill="#dbeafe" stroke="#2563eb" stroke-width="1.2"/>
+      <text x="545" y="171" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#1e40af">PoP 2</text>
+      <rect x="590" y="150" width="70" height="34" rx="6" fill="#dbeafe" stroke="#2563eb" stroke-width="1.2"/>
+      <text x="625" y="171" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#1e40af">PoP 3</text>
+      <!-- edges to shield -->
+      <line x1="465" y1="150" x2="545" y2="132" stroke="#7c3aed" stroke-width="1.3" marker-end="url(#arrp)"/>
+      <line x1="545" y1="150" x2="565" y2="132" stroke="#7c3aed" stroke-width="1.3" marker-end="url(#arrp)"/>
+      <line x1="625" y1="150" x2="595" y2="132" stroke="#7c3aed" stroke-width="1.3" marker-end="url(#arrp)"/>
+      <!-- shield to origin single -->
+      <line x1="570" y1="98" x2="570" y2="76" stroke="#16a34a" stroke-width="2.5" marker-end="url(#arrg)"/>
+      <text x="570" y="212" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#065f46" font-weight="bold">Origin sees 1 × 4GB fetch</text>
+      <text x="570" y="228" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#065f46">shield fans out to all edges</text>
+
+      <defs>
+        <marker id="arrs" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto"><path d="M0,0 L0,7 L7,3.5 z" fill="#dc2626"/></marker>
+        <marker id="arrp" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto"><path d="M0,0 L0,7 L7,3.5 z" fill="#7c3aed"/></marker>
+        <marker id="arrg" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto"><path d="M0,0 L0,7 L7,3.5 z" fill="#16a34a"/></marker>
+      </defs>
+    </svg>
+    <p class="caption">The shield deduplicates misses (request collapsing) so the storage tier is fetched once, not per-PoP</p>
+  </div>
+
+  <h3>Manifest vs. Segment TTL (the critical detail)</h3>
+  <p><strong>Segments</strong> are immutable → long/near-infinite TTL, cache aggressively. <strong>VOD manifest</strong> → moderate TTL (rarely changes). <strong>Live manifest</strong> → very short TTL or no-cache, because it updates every few seconds as new segments are produced. Getting these backwards is a classic failure: a stale manifest freezes playback; uncached segments melt the origin.</p>
+
+  <div class="callout callout-warn">
+    ⚠️ <strong>Live latency:</strong> A live encoder/packager produces segments in real time. Low-latency modes (LL-HLS / LL-DASH) use ~1s or sub-second <em>partial</em> segments plus chunked transfer to cut glass-to-glass delay from ~30s down to 2–5s — at the cost of lower cache efficiency and tighter timing.
+  </div>
+</section>
+
+<!-- S10: REAL-WORLD EXAMPLES -->
+<section id="s10">
+  <h2 class="section-title"><span class="num">§10</span> 🏭 Real-World System Examples</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>System</th><th>How Media Delivery Applies</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Netflix Open Connect</strong></td>
+          <td>Ships its own CDN appliances (OCAs) into ISP networks; VOD is pre-transcoded into ABR ladders and pre-positioned inside the ISP, so segments serve from within the user's own provider</td>
+          <td>Content pushed to appliances during off-peak hours; near-100% VOD cache hit inside the ISP</td>
+        </tr>
+        <tr>
+          <td><strong>YouTube</strong></td>
+          <td>Massive transcoding pipeline builds ABR ladders (incl. VP9/AV1) per upload; DASH delivery; Google's edge CDN caches segments globally</td>
+          <td>AV1/VP9 cut bitrate; per-segment switching is visible in the "Stats for nerds" overlay</td>
+        </tr>
+        <tr>
+          <td><strong>Cloudinary / imgix / Cloudflare Images</strong></td>
+          <td>On-the-fly image transformation at the edge: URL params (<code>w</code>, <code>h</code>, <code>format</code>, <code>quality</code>) produce cached variants; auto WebP/AVIF via content negotiation</td>
+          <td>Classic "transform once, serve many"; presets constrain variant explosion</td>
+        </tr>
+        <tr>
+          <td><strong>TikTok / Instagram Reels</strong></td>
+          <td>Short-form VOD pre-transcoded to ABR; aggressive edge caching + prefetch of the next video's first segments so scrolling feels instant</td>
+          <td>Prefetch + tiny startup segments optimize perceived latency</td>
+        </tr>
+        <tr>
+          <td><strong>Twitch (live)</strong></td>
+          <td>Real-time ingest → live transcode → LL-HLS segments; short segment lengths for low latency; manifests update continuously and are near-uncacheable while segments cache briefly</td>
+          <td>Demonstrates the live pipeline and the manifest/segment TTL split</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- S11: TRADE-OFFS -->
+<section id="s11">
+  <h2 class="section-title"><span class="num">§11</span> ⚖️ Trade-offs</h2>
+
+  <!-- VOD vs Live comparison diagram -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">⚖️ VOD vs. Live — Key Dimensions</div>
+    <svg viewBox="0 0 720 200" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:720px;display:block;margin:0 auto;">
+      <rect width="720" height="200" fill="#fafafa" rx="8"/>
+      <text x="180" y="28" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="bold" fill="#2563eb">VOD (on-demand)</text>
+      <text x="540" y="28" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="bold" fill="#e67700">Live streaming</text>
+      <line x1="360" y1="8" x2="360" y2="195" stroke="#e5e3de" stroke-width="1.5" stroke-dasharray="5,3"/>
+
+      <text x="20" y="60" font-family="Arial,sans-serif" font-size="11" fill="#666" font-weight="bold">Transcoding</text>
+      <text x="20" y="90" font-family="Arial,sans-serif" font-size="11" fill="#666" font-weight="bold">Cache hit rate</text>
+      <text x="20" y="120" font-family="Arial,sans-serif" font-size="11" fill="#666" font-weight="bold">Manifest TTL</text>
+      <text x="20" y="150" font-family="Arial,sans-serif" font-size="11" fill="#666" font-weight="bold">Latency concern</text>
+      <text x="20" y="180" font-family="Arial,sans-serif" font-size="11" fill="#666" font-weight="bold">Segment length</text>
+
+      <!-- VOD values -->
+      <rect x="130" y="46" width="200" height="18" rx="3" fill="#dcfce7"/><text x="230" y="59" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#065f46">Offline, ahead of time</text>
+      <rect x="130" y="76" width="200" height="18" rx="3" fill="#dcfce7"/><text x="230" y="89" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#065f46">Near 100%</text>
+      <rect x="130" y="106" width="200" height="18" rx="3" fill="#dcfce7"/><text x="230" y="119" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#065f46">Moderate (stable)</text>
+      <rect x="130" y="136" width="200" height="18" rx="3" fill="#dcfce7"/><text x="230" y="149" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#065f46">Low priority</text>
+      <rect x="130" y="166" width="200" height="18" rx="3" fill="#dcfce7"/><text x="230" y="179" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#065f46">4–10s (efficient)</text>
+
+      <!-- Live values -->
+      <rect x="385" y="46" width="300" height="18" rx="3" fill="#ffedd5"/><text x="535" y="59" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#7c2d12">Real-time, on the fly</text>
+      <rect x="385" y="76" width="300" height="18" rx="3" fill="#ffedd5"/><text x="535" y="89" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#7c2d12">Lower — short-lived segments</text>
+      <rect x="385" y="106" width="300" height="18" rx="3" fill="#fee2e2"/><text x="535" y="119" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#7f1d1d">Very short / no-cache</text>
+      <rect x="385" y="136" width="300" height="18" rx="3" fill="#fee2e2"/><text x="535" y="149" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#7f1d1d">Critical (glass-to-glass)</text>
+      <rect x="385" y="166" width="300" height="18" rx="3" fill="#ffedd5"/><text x="535" y="179" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#7c2d12">~1s / sub-second (LL-HLS)</text>
+    </svg>
+    <p class="caption">Green = advantage, orange = acceptable, red = cost/limitation</p>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>✅ Benefit</th><th>❌ Cost / Limitation</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="benefit">Segmentation makes video cacheable and enables seamless quality switching</td>
+          <td class="cost">Transcoding into a full bitrate ladder is CPU-expensive and multiplies storage (one source → many renditions × many segments)</td>
+        </tr>
+        <tr>
+          <td class="benefit">Edge image transforms serve perfectly-sized assets without pre-generating every variant</td>
+          <td class="cost">Variant explosion destroys hit rate if arbitrary transforms are allowed; requires disciplined preset / cache-key design</td>
+        </tr>
+        <tr>
+          <td class="benefit">Origin shielding collapses N PoP misses into 1 origin fetch, protecting storage</td>
+          <td class="cost">Adds a cache tier and a potential regional bottleneck; slightly higher latency on cold pulls (extra hop through shield)</td>
+        </tr>
+        <tr>
+          <td class="benefit">ABR keeps playback alive on poor networks by degrading quality instead of stalling</td>
+          <td class="cost">Quality oscillation and startup-latency tuning are hard; aggressive switching looks janky, conservative switching wastes bandwidth</td>
+        </tr>
+        <tr>
+          <td class="benefit">Signed URLs / DRM secure paid content at the edge</td>
+          <td class="cost">Auth/DRM adds complexity and can hurt cacheability if the cache key isn't decoupled from the token; DRM licensing is operationally heavy</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- S12: INTERVIEW APPLICATION -->
+<section id="s12">
+  <h2 class="section-title"><span class="num">§12</span> 🎯 Interview Application</h2>
+
+  <h3>Trigger Phrases</h3>
+  <ul style="margin-left:20px;margin-bottom:16px;font-size:14.5px;line-height:1.8;">
+    <li>"Design a video streaming service like YouTube / Netflix"</li>
+    <li>"Design an image hosting or photo-sharing platform (Instagram, Imgur)"</li>
+    <li>"How would you serve 4K video worldwide without buffering?"</li>
+    <li>"How do you efficiently deliver images sized for both mobile and desktop?"</li>
+  </ul>
+
+  <h3>What You Say / Do</h3>
+  <p>Bring this up during high-level design of the delivery/read path, right after placing object storage for the media. For video: "I'd transcode each upload into an adaptive bitrate ladder, segment each rendition into ~4-second chunks, and write an HLS/DASH manifest. The player streams adaptively, and because every segment is an immutable HTTP object, my CDN caches them with a long TTL — I only keep the manifest short-TTL. I'd add an origin shield so a cold title doesn't hammer storage across every PoP." For images: "I'd store one master and transform to device-specific variants at the edge, caching each variant keyed by size and format, and constrain to named presets to protect hit rate." Then proactively raise the manifest-vs-segment TTL split and origin shielding to show depth.</p>
+
+  <div class="tradeoff-box">
+    💬 <strong>Trade-off statement (memorize this):</strong><br><br>
+    "By transcoding into an ABR ladder and delivering short cacheable segments, we get resilient global playback and near-100% CDN offload for VOD — at the cost of heavy upfront transcoding compute and multiplied storage. For a VOD-heavy product that's clearly worth it; for a live product I'd accept lower cache efficiency and add low-latency HLS to keep glass-to-glass delay acceptable."
+  </div>
+</section>
+
+<!-- S13: MISCONCEPTIONS -->
+<section id="s13">
+  <h2 class="section-title"><span class="num">§13</span> ⚠️ Common Misconceptions &amp; Gotchas</h2>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> Video is streamed as one continuous file straight from the server.</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Modern streaming delivers many short, independent HTTP segments (2–10s each) at multiple bitrates. The client reassembles and adaptively switches quality per segment. This segmentation is exactly what lets a CDN cache video like any static file.</div></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> You should cache the manifest and segments the same way.</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Segments are immutable → long TTL. Manifests change (especially for live) → short or no TTL. Caching a stale live manifest freezes playback; treating segments as dynamic destroys hit rate. Different TTLs is mandatory.</div></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> Adaptive bitrate means the server picks the quality based on the user's device.</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> The <em>client</em> picks. The player measures real-time throughput and buffer health and requests the rendition it can sustain, switching at segment boundaries. The server just offers the ladder.</div></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> Generate every image size and format up front and store them all.</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> That's a combinatorial explosion (sizes × formats × crops × DPR). Production systems store one master and transform on demand at the edge, caching each variant — and constrain the allowed variants to protect hit rate.</div></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> Signed URLs make content uncacheable because every URL is unique.</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Only if you design the cache key badly. The CDN validates the token/signature but keys the cache on the underlying object path (not the token), so authorized requests still hit a shared cached object.</div></div>
+  </div>
+</section>
+
+<!-- S14: RELATIONSHIPS -->
+<section id="s14">
+  <h2 class="section-title"><span class="num">§14</span> 🔗 Relationships to Other Concepts</h2>
+  <div class="connections">
+    <div class="conn-card">
+      <div class="conn-icon">🧱</div>
+      <div>
+        <div class="conn-label">Builds On</div>
+        <strong>6.5 CDN for Static Assets vs. Dynamic Content</strong> — media is the extreme case of "large cacheable static content," so knowing what's cacheable is the prerequisite. Also builds on <strong>5.8 Multi-Level Caching</strong> — origin shielding is literally multi-level caching applied at the CDN layer.
+      </div>
+    </div>
+    <div class="conn-card">
+      <div class="conn-icon">🔓</div>
+      <div>
+        <div class="conn-label">Enables</div>
+        <strong>YouTube / Netflix / Instagram archetypes (Phase H)</strong> — you can't design those without the media delivery pipeline. Also enables <strong>6.7 CDN as DDoS Mitigation</strong>, since the same edge that absorbs media traffic absorbs attack traffic.
+      </div>
+    </div>
+    <div class="conn-card">
+      <div class="conn-icon">⚡</div>
+      <div>
+        <div class="conn-label">Tension With</div>
+        <strong>6.3 Cache Invalidation at the Edge</strong> — media wants aggressive long TTLs for hit rate, which fights the need to update content. Resolved via versioned / immutable URLs: you never invalidate, you just publish a new path.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- S15: QUIZ -->
+<section id="s15">
+  <h2 class="section-title"><span class="num">§15</span> 🧪 Self-Check Quiz</h2>
+  <div class="callout callout-quote">Can you answer these without looking? If not, you haven't internalized it yet. Click to reveal the hint.</div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">1</div>
+      <div class="qtext">Why is video delivered as short segments at multiple bitrates rather than as a single file, and how does that interact with the CDN?</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 Single-bitrate files stall when bandwidth drops. Segmenting into 2–10s chunks at multiple bitrates lets the client switch quality per segment to keep playing — and because each segment is an immutable HTTP object, the CDN caches it like any static file. Revisit §6 and §9 if you hesitated.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">2</div>
+      <div class="qtext">You're designing an image service. A PM wants to allow arbitrary width/height query params. What's the risk, and how do you mitigate it?</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 Variant explosion: every unique size/format is a distinct cache key, so hit rate collapses and the edge is constantly transforming from scratch. Mitigate by constraining to named presets / a small set of breakpoints (and snapping requested widths to the nearest allowed value). Revisit §6 (Image Transformation) and §13.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">3</div>
+      <div class="qtext">In HLS/DASH, what decides which bitrate the user gets at any given moment, and when does the switch happen?</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 The client decides — not the server. The player measures per-segment throughput and buffer level, then picks the highest sustainable rendition, switching at the next segment boundary (renditions are time-aligned so switches are seamless). Revisit §6 (ABR) and §13.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">4</div>
+      <div class="qtext">A brand-new movie is requested from 200 edge PoPs within seconds. Without origin shielding, what happens to your storage tier, and how does shielding fix it?</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 Without a shield, all 200 PoPs miss and each pulls the multi-GB object from origin → 200× egress and load spike (a thundering herd on origin storage). A shield/tier-1 cache deduplicates: it fetches origin once (request collapsing) and fans out to all edges. Origin sees one fetch. Revisit §6 (Origin Shield) and §9.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">5</div>
+      <div class="qtext">You cache the manifest and the segments with the same long TTL on a live stream. What breaks, and what's the correct TTL strategy?</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 The live manifest updates every few seconds as new segments are produced; a stale cached manifest points players at old segments and freezes playback. Correct strategy: manifest = very short TTL / no-cache; segments = long TTL (they're immutable). Revisit §9 (Manifest vs. segment TTL).</div>
+  </div>
+</section>
+
+<!-- S16: FURTHER READING -->
+<section id="s16">
+  <h2 class="section-title"><span class="num">§16</span> 📚 Further Reading</h2>
+  <ul class="reading-list">
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>Cloudflare Learning — HTTP Live Streaming (HLS) &amp; HLS vs DASH</strong> — <a href="https://www.cloudflare.com/learning/video/what-is-http-live-streaming/" target="_blank">cloudflare.com</a> — clear primer on segments, manifests, and ABR</div></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>Netflix Open Connect</strong> — <a href="https://openconnect.netflix.com/en/" target="_blank">openconnect.netflix.com</a> — how Netflix pushes its CDN into ISPs and pre-positions VOD</div></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>ByteByteGo — "How does Netflix work" / video streaming</strong> — <a href="https://blog.bytebytego.com/" target="_blank">blog.bytebytego.com</a> — system-design-level overview of the streaming pipeline</div></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>Apple — HLS Authoring Spec &amp; Low-Latency HLS</strong> — <a href="https://developer.apple.com/documentation/http-live-streaming" target="_blank">developer.apple.com</a> — the canonical HLS reference incl. LL-HLS</div></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>imgix / Cloudinary transformation docs</strong> — <a href="https://docs.imgix.com/" target="_blank">docs.imgix.com</a> — real image transform params, presets, and cache-key design</div></li>
+  </ul>
+</section>
+
+<!-- S17: MY NOTES -->
+<section id="s17">
+  <h2 class="section-title"><span class="num">§17</span> ✍️ My Notes</h2>
+  <div class="callout callout-quote">Personal observations, things that confused me, analogies that helped. This section is yours.</div>
+  <textarea class="notes-area" placeholder="Add your personal notes here — analogies that clicked, interview stories, things that confused you..."></textarea>
+</section>
+
+</article>
+</main>
+
+<script>
+// TOC active state
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('#toc nav a');
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(a => a.classList.remove('active'));
+      const a = document.querySelector(`#toc nav a[href="#${e.target.id}"]`);
+      if (a) a.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+sections.forEach(s => obs.observe(s));
+
+// Checklist toggle
+function toggle(cb) {
+  const li = cb.closest('li');
+  li.classList.toggle('checked');
+}
+
+// Phase card toggle
+function togglePhase(header) {
+  header.closest('.phase-card').classList.toggle('open');
+}
+
+// Quiz toggle
+function toggleQuiz(q) {
+  const item = q.closest('.quiz-item');
+  item.classList.toggle('open');
+  q.querySelector('.quiz-toggle').textContent = item.classList.contains('open') ? '▲ Hide' : '▼ Hint';
+}
+
+// Reading list toggle
+function toggleReading(cb) {
+  const li = cb.closest('li');
+  li.classList.toggle('checked');
+}
+
+// Notes auto-save (in-memory only)
+const notesArea = document.querySelector('.notes-area');
+const NOTES_KEY = 'notes_6_6';
+if (localStorage.getItem(NOTES_KEY)) notesArea.value = localStorage.getItem(NOTES_KEY);
+notesArea.addEventListener('input', () => {
+  try { localStorage.setItem(NOTES_KEY, notesArea.value); } catch(e) {}
+});
+</script>
+</body>
+</html>

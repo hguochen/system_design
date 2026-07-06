@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6.5 CDN for Static Assets vs. Dynamic Content</title>
+<style>
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface-alt: #f3f2ef;
+    --border: #e5e3de; --text: #1a1917; --text-muted: #6b6861;
+    --accent: #2563eb; --accent-light: #dbeafe;
+    --green: #16a34a; --green-light: #dcfce7;
+    --red: #dc2626; --red-light: #fee2e2;
+    --yellow: #d97706; --yellow-light: #fef3c7;
+    --purple: #7c3aed; --purple-light: #ede9fe;
+    --orange: #ea580c; --orange-light: #ffedd5;
+    --teal: #0d9488; --teal-light: #ccfbf1;
+    --code-bg: #1e1e2e; --code-text: #cdd6f4;
+    --sidebar-w: 240px; --content-max: 820px;
+    font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; }
+  #toc { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0 48px; z-index: 100; }
+  #toc-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  #toc-header .phase-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-bottom: 6px; }
+  #toc-header h2 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  #toc nav a { display: block; padding: 5px 16px 5px 20px; font-size: 12.5px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+  main { margin-left: var(--sidebar-w); padding: 48px 48px 96px; max-width: calc(var(--sidebar-w) + var(--content-max) + 96px); width: 100%; }
+  article { max-width: var(--content-max); }
+  .doc-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 2px solid var(--border); }
+  .doc-header .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+  .tag-phase { background: var(--accent-light); color: var(--accent); }
+  .tag-topic { background: var(--purple-light); color: var(--purple); }
+  .tag-date  { background: var(--surface-alt);  color: var(--text-muted); }
+  .doc-header h1 { font-size: 30px; font-weight: 800; line-height: 1.25; letter-spacing: -.02em; color: var(--text); }
+  section { margin-bottom: 52px; scroll-margin-top: 32px; }
+  h2.section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -.01em; }
+  h2.section-title .num { font-size: 11px; font-weight: 800; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; letter-spacing: .04em; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 24px 0 10px; }
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+  code { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-family: "SF Mono","Fira Code",Menlo,monospace; font-size: 12.5px; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 14px; border-left: 3px solid; }
+  .callout-goal  { background: var(--accent-light); border-color: var(--accent); color: #1e40af; }
+  .callout-tip   { background: var(--yellow-light); border-color: var(--yellow); color: #92400e; }
+  .callout-warn  { background: var(--red-light); border-color: var(--red); color: #7f1d1d; }
+  .callout-quote { background: var(--surface-alt); border-color: var(--border); color: var(--text-muted); font-style: italic; }
+  .callout-teal  { background: var(--teal-light); border-color: var(--teal); color: #134e4a; }
+  .cheatsheet { background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 24px 28px; font-family: "SF Mono","Fira Code","Cascadia Code",Menlo,monospace; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-x: auto; margin-top: 16px; }
+  .cheatsheet .label { color: #cba6f7; font-weight: 700; letter-spacing: .08em; display: block; margin-top: 18px; margin-bottom: 4px; border-bottom: 1px solid #313244; padding-bottom: 3px; }
+  .cheatsheet .label:first-child { margin-top: 0; }
+  .diagram-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 16px 14px; margin: 20px 0 28px; overflow-x: auto; }
+  .diagram-wrap .diagram-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); margin-bottom: 12px; }
+  .diagram-wrap p.caption { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 10px; margin-bottom: 0; font-style: italic; }
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; font-size: 14.5px; line-height: 1.55; }
+  .checklist li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 2px; background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .checklist li.checked .cb { background: var(--green); border-color: var(--green); }
+  .checklist li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .checklist li.checked .text { color: var(--text-muted); text-decoration: line-through; }
+  .phase-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
+  .phase-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; cursor: pointer; user-select: none; background: var(--surface-alt); }
+  .phase-header:hover { background: var(--border); }
+  .phase-label { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+  .phase-badge { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 2px 8px; border-radius: 20px; }
+  .ph1 { background: #dbeafe; color: #1d4ed8; } .ph2 { background: #fce7f3; color: #9d174d; }
+  .ph3 { background: #d1fae5; color: #065f46; } .ph4 { background: #fef3c7; color: #92400e; }
+  .phase-chevron { font-size: 12px; color: var(--text-muted); transition: transform .2s; }
+  .phase-card.open .phase-chevron { transform: rotate(180deg); }
+  .phase-body { display: none; padding: 16px 20px 20px; }
+  .phase-card.open .phase-body { display: block; }
+  .phase-goal { font-size: 12.5px; color: var(--text-muted); font-style: italic; margin-bottom: 12px; }
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: var(--surface-alt); padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.5; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+  .misconception { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .misconception .wrong { background: var(--red-light); padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; }
+  .misconception .right { padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; color: #065f46; background: var(--green-light); }
+  .misconception .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .quiz-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .quiz-q { padding: 14px 18px; font-size: 14.5px; font-weight: 600; cursor: pointer; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .quiz-q:hover { background: var(--surface-alt); }
+  .quiz-num { flex-shrink: 0; width: 24px; height: 24px; background: var(--accent); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; margin-top: 1px; }
+  .quiz-q .qtext { flex: 1; }
+  .quiz-toggle { font-size: 11px; color: var(--text-muted); flex-shrink: 0; margin-top: 3px; }
+  .quiz-hint { display: none; padding: 10px 18px 14px; font-size: 13px; color: #92400e; background: var(--yellow-light); border-top: 1px solid var(--border); }
+  .quiz-item.open .quiz-hint { display: block; }
+  .reading-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .reading-list li { display: flex; align-items: flex-start; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; font-size: 14px; }
+  .reading-list li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 1px; cursor: pointer; background: var(--surface); display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .reading-list li.checked .cb { background: var(--green); border-color: var(--green); }
+  .reading-list li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .reading-list li.checked .rtext { color: var(--text-muted); text-decoration: line-through; }
+  .notes-area { width: 100%; min-height: 160px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: inherit; font-size: 14px; color: var(--text); resize: vertical; line-height: 1.6; }
+  .notes-area:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .focus-list { list-style: none; display: flex; flex-direction: column; gap: 14px; }
+  .focus-list li { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14.5px; line-height: 1.6; }
+  .focus-list li strong { color: var(--accent); display: block; margin-bottom: 4px; }
+  .connections { display: flex; flex-direction: column; gap: 12px; }
+  .conn-card { display: flex; align-items: flex-start; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14px; }
+  .conn-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .conn-label { font-weight: 700; margin-bottom: 3px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .tradeoff-box { background: var(--surface-alt); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 14px 18px; font-size: 14px; font-style: italic; color: var(--text); margin-top: 14px; }
+  .tier-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 16px 0; }
+  .tier-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; font-size: 14px; }
+  .tier-card h4 { font-size: 13px; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .tier-card .stat { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 2px 7px; border-radius: 4px; }
+  .stat-blue { background: var(--accent-light); color: var(--accent); }
+  .stat-orange { background: var(--orange-light); color: var(--orange); }
+  .stat-green { background: var(--green-light); color: var(--green); }
+  .stat-red { background: var(--red-light); color: var(--red); }
+  @media (max-width: 900px) { #toc { display: none; } main { margin-left: 0; padding: 24px 20px 60px; } .tier-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<aside id="toc">
+  <div id="toc-header">
+    <span class="phase-tag">Phase B · Topic 6</span>
+    <h2>6.5 Static vs. Dynamic Content</h2>
+  </div>
+  <nav>
+    <a href="#s0">🗺️ Overview</a>
+    <a href="#s1">🎯 Goal</a>
+    <a href="#s2">✅ Mastery Criteria</a>
+    <a href="#s3">🗓️ Study Phases</a>
+    <a href="#s4">📋 Cheatsheet</a>
+    <a href="#s5">🧠 Core Definition</a>
+    <a href="#s6">📦 Core Concepts</a>
+    <a href="#s7">🔍 First Principles</a>
+    <a href="#s8">🗺️ Mental Models</a>
+    <a href="#s9">⚙️ How It Works</a>
+    <a href="#s10">🏭 Real-World Examples</a>
+    <a href="#s11">⚖️ Trade-offs</a>
+    <a href="#s12">🎯 Interview Application</a>
+    <a href="#s13">⚠️ Misconceptions</a>
+    <a href="#s14">🔗 Relationships</a>
+    <a href="#s15">🧪 Self-Check Quiz</a>
+    <a href="#s16">📚 Further Reading</a>
+    <a href="#s17">✍️ My Notes</a>
+  </nav>
+</aside>
+
+<main>
+<article>
+
+<!-- HEADER -->
+<div class="doc-header">
+  <div class="meta">
+    <span class="tag tag-phase">⚡ Phase B — Scalability</span>
+    <span class="tag tag-topic">🌍 Topic 6 — CDN</span>
+    <span class="tag tag-date">📅 2026-07-05</span>
+  </div>
+  <h1>6.5 CDN for Static Assets vs. Dynamic Content<br><span style="font-weight:400;color:var(--text-muted);font-size:22px;">Cache what's reusable, accelerate what isn't</span></h1>
+</div>
+
+<!-- S0: OVERVIEW -->
+<section id="s0">
+  <h2 class="section-title"><span class="num">§0</span> 🗺️ Topic Overview</h2>
+  <p>Not all content is equally CDN-friendly. <strong>Static assets</strong> — CSS, JS bundles, images, fonts, video segments — are identical for every user and change rarely, so they can be cached at the edge with long TTLs and served entirely from a nearby PoP without touching origin. <strong>Dynamic content</strong> — personalized dashboards, API responses, authenticated pages — is generated per-request and can't be cached under a shared key. The core skill is placing any content on the <strong>cacheability spectrum</strong> and choosing the right tool: long-TTL caching for static, micro-caching for semi-dynamic, and <strong>dynamic content acceleration (DCA)</strong> — which speeds delivery <em>without caching the body</em> — for the truly personalized.</p>
+
+  <ul class="focus-list" style="margin-top:18px;">
+    <li><strong>1. The cacheability spectrum</strong> — Content is a gradient: fully static → semi-dynamic → personalized → real-time. Placing any content on this gradient is the interview skill.</li>
+    <li><strong>2. Static caching mechanics</strong> — <code>Cache-Control</code>, <code>immutable</code>, and versioned/fingerprinted URLs. Know why <code>max-age=31536000, immutable</code> is safe on a hashed bundle.</li>
+    <li><strong>3. Dynamic content acceleration (DCA)</strong> — A CDN helps uncacheable content even when it caches nothing: edge TLS termination, warm origin connections, and backbone routing.</li>
+    <li><strong>4. Micro-caching &amp; edge assembly</strong> — Caching semi-dynamic content for even 1 second collapses origin load. ESI / edge compute assemble static shell + dynamic holes.</li>
+    <li><strong>5. What breaks caching</strong> — Cookies, <code>Vary</code>, query strings, and personalization tokens fragment or defeat the cache. Know how the cache key is built.</li>
+  </ul>
+</section>
+
+<!-- S1: GOAL -->
+<section id="s1">
+  <h2 class="section-title"><span class="num">§1</span> 🎯 Goal of This Subtopic</h2>
+  <div class="callout callout-goal">
+    After studying this, you should be able to classify any piece of content as static, semi-dynamic, personalized, or real-time; specify the caching strategy per type (TTL, cache key, invalidation, headers); explain <em>why a CDN accelerates dynamic content it never caches</em>; design cache-busting via versioned URLs; and know when micro-caching or edge compute is the right tool.
+  </div>
+</section>
+
+<!-- S2: MASTERY -->
+<section id="s2">
+  <h2 class="section-title"><span class="num">§2</span> ✅ What Mastery Looks Like</h2>
+  <ul class="checklist" id="mastery-list">
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can place any content type (product image, user feed, stock ticker, marketing homepage) on the static→dynamic spectrum and defend it</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can explain how a CDN reduces latency for a fully personalized, uncacheable API response (DCA: edge TLS, connection reuse, route optimization)</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can design cache-busting with versioned/fingerprinted URLs and explain why <code>max-age=31536000, immutable</code> is safe on them</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can explain micro-caching (1–10s TTL) and quantify the origin-load reduction under high concurrency</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can name what breaks edge caching (cookies, <code>Vary</code>, query strings, <code>Set-Cookie</code>) and how to normalize the cache key</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can describe edge assembly (ESI / edge compute) for pages that mix a static shell with dynamic fragments</span></li>
+  </ul>
+  <div class="callout callout-tip" style="margin-top:18px;">💡 <strong>Rule of thumb:</strong> If you can teach it to someone else and field their follow-up questions, you've mastered it.</div>
+</section>
+
+<!-- S3: STUDY PHASES -->
+<section id="s3">
+  <h2 class="section-title"><span class="num">§3</span> 🗓️ Study Phases to Achieve Mastery</h2>
+
+  <div class="phase-card open">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph1">Phase 1</span> Acquire 📖</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Read deeply enough that you could explain the concept without the doc.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text"><strong>Cloudflare Learning — static vs dynamic content / Argo</strong> — <a href="https://www.cloudflare.com/learning/cdn/serve-static-content/" target="_blank">cloudflare.com</a> — clean explanation of DCA and edge caching</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text"><strong>MDN — HTTP Caching</strong> — <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching" target="_blank">developer.mozilla.org</a> — <code>Cache-Control</code>, <code>immutable</code>, <code>Vary</code>, validation</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text"><strong>AWS CloudFront — cache policies &amp; behaviors</strong> — <a href="https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/cache-key-understand-cache-policy.html" target="_blank">docs.aws.amazon.com</a></span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Read Sections 5–9 of this doc carefully — don't skim</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Re-read the Cheatsheet (§4) and recite it from memory after</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph2">Phase 2</span> Consolidate ✍️</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Verify you can reproduce knowledge in your own words without looking.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Close the doc — write out the 4-tier cacheability spectrum from memory, then compare</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Explain why DCA helps uncacheable content out loud without notes</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Reconstruct the static request path vs. dynamic (DCA) request path step by step</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Restate each Trade-off row in your own words — if you can't explain the cost, you don't own it</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph3">Phase 3</span> Apply 🔧</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Connect to real systems and simulate interview scenarios.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Go through Real-World Examples (§10) — verify each claim and add notes to §17</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Practice Interview Application (§12) out loud — say the trigger phrases and your response</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Work through Misconceptions (§13) — explain WHY each is wrong</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Trace Relationships (§14) — explain each connection without looking</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph4">Phase 4</span> Validate 🧪</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Confirm you actually own it, not just recognize it.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Answer every Self-Check Quiz question (§15) out loud without notes</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Recite the Cheatsheet (§4) from memory — if you can't, re-do Phase 2</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Tick off mastery criteria in §2 — only check a box if you can demonstrate on demand</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Teach this concept to an imaginary interviewer for 2 minutes without hesitation</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- S4: CHEATSHEET -->
+<section id="s4">
+  <h2 class="section-title"><span class="num">§4</span> 📋 Cheatsheet</h2>
+  <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+
+  <!-- Radial Mindmap SVG -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">🧠 Concept Mindmap — Static vs. Dynamic Content</div>
+    <svg viewBox="0 0 820 480" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:820px;display:block;margin:0 auto;">
+      <rect width="820" height="480" fill="#fafafa" rx="8"/>
+      <!-- Connector lines -->
+      <line x1="410" y1="240" x2="175" y2="100" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="645" y2="100" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="100" y2="280" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="720" y2="280" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="175" y2="400" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="645" y2="400" stroke="#aaa" stroke-width="1.5"/>
+      <!-- Central -->
+      <ellipse cx="410" cy="240" rx="104" ry="44" fill="#a5d8ff" stroke="#1971c2" stroke-width="2"/>
+      <text x="410" y="234" text-anchor="middle" dominant-baseline="middle" font-family="Arial,sans-serif" font-size="14" font-weight="bold" fill="#1a1917">Static vs.</text>
+      <text x="410" y="252" text-anchor="middle" dominant-baseline="middle" font-family="Arial,sans-serif" font-size="14" font-weight="bold" fill="#1a1917">Dynamic Content</text>
+      <!-- Static -->
+      <rect x="88" y="66" width="174" height="62" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="175" y="88" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">STATIC — cache body</text>
+      <text x="175" y="104" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">CSS/JS/img/font/video</text>
+      <text x="175" y="118" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">max-age=1yr, immutable</text>
+      <!-- Dynamic -->
+      <rect x="558" y="66" width="174" height="62" rx="8" fill="#ffd8a8" stroke="#e67700" stroke-width="1.5"/>
+      <text x="645" y="88" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">DYNAMIC — accelerate</text>
+      <text x="645" y="104" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">per-user / per-request</text>
+      <text x="645" y="118" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">body not cached</text>
+      <!-- DCA -->
+      <rect x="20" y="248" width="160" height="66" rx="8" fill="#c3fae8" stroke="#0ca678" stroke-width="1.5"/>
+      <text x="100" y="268" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">DCA (no cache)</text>
+      <text x="100" y="284" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Edge TLS termination</text>
+      <text x="100" y="298" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Warm origin keep-alive</text>
+      <text x="100" y="312" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Backbone routing</text>
+      <!-- Micro-cache -->
+      <rect x="640" y="248" width="160" height="66" rx="8" fill="#fff3bf" stroke="#f08c00" stroke-width="1.5"/>
+      <text x="720" y="268" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Micro-caching</text>
+      <text x="720" y="284" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Semi-dynamic pages</text>
+      <text x="720" y="298" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">TTL 1–10s</text>
+      <text x="720" y="312" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Collapses origin load</text>
+      <!-- Invalidation -->
+      <rect x="88" y="374" width="174" height="60" rx="8" fill="#b2f2bb" stroke="#2f9e44" stroke-width="1.5"/>
+      <text x="175" y="396" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Invalidation</text>
+      <text x="175" y="412" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Versioned URLs (hash)</text>
+      <text x="175" y="426" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">New content = new URL</text>
+      <!-- Gotchas -->
+      <rect x="558" y="374" width="174" height="60" rx="8" fill="#ffc9c9" stroke="#c92a2a" stroke-width="1.5"/>
+      <text x="645" y="396" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Cache Breakers</text>
+      <text x="645" y="412" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Cookies / Vary / query</text>
+      <text x="645" y="426" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Personalized = leak risk</text>
+    </svg>
+    <p class="caption">Radial mindmap: six clusters around the static-vs-dynamic content decision</p>
+  </div>
+
+  <!-- Cacheability Spectrum SVG -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">🎚️ The Cacheability Spectrum</div>
+    <svg viewBox="0 0 820 300" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:820px;display:block;margin:0 auto;" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+      <rect width="820" height="300" fill="#fafafa" rx="8"/>
+      <!-- gradient bar -->
+      <defs>
+        <linearGradient id="spec" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="#3b5bdb"/>
+          <stop offset="35%" stop-color="#0ca678"/>
+          <stop offset="70%" stop-color="#f08c00"/>
+          <stop offset="100%" stop-color="#c92a2a"/>
+        </linearGradient>
+      </defs>
+      <rect x="40" y="52" width="740" height="16" rx="8" fill="url(#spec)"/>
+      <text x="40" y="42" font-size="11" font-weight="700" fill="#3b5bdb">CACHE FOREVER</text>
+      <text x="780" y="42" font-size="11" font-weight="700" fill="#c92a2a" text-anchor="end">CACHE NEVER</text>
+      <!-- tick markers -->
+      <circle cx="115" cy="60" r="6" fill="#3b5bdb"/>
+      <circle cx="340" cy="60" r="6" fill="#0ca678"/>
+      <circle cx="560" cy="60" r="6" fill="#f08c00"/>
+      <circle cx="745" cy="60" r="6" fill="#c92a2a"/>
+
+      <!-- Tier 1 -->
+      <rect x="30" y="92" width="180" height="150" rx="10" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="120" y="116" text-anchor="middle" font-size="13" font-weight="bold" fill="#1a1917">FULLY STATIC</text>
+      <text x="120" y="140" text-anchor="middle" font-size="10.5" fill="#333">Hashed JS/CSS bundles,</text>
+      <text x="120" y="156" text-anchor="middle" font-size="10.5" fill="#333">images, fonts, video segs</text>
+      <text x="120" y="184" text-anchor="middle" font-size="11" font-weight="700" fill="#3b5bdb">Strategy:</text>
+      <text x="120" y="202" text-anchor="middle" font-size="10.5" fill="#333">max-age=1yr, immutable</text>
+      <text x="120" y="222" text-anchor="middle" font-size="10.5" fill="#333">Cache the BODY at edge</text>
+
+      <!-- Tier 2 -->
+      <rect x="222" y="92" width="180" height="150" rx="10" fill="#c3fae8" stroke="#0ca678" stroke-width="1.5"/>
+      <text x="312" y="116" text-anchor="middle" font-size="13" font-weight="bold" fill="#1a1917">SEMI-DYNAMIC</text>
+      <text x="312" y="140" text-anchor="middle" font-size="10.5" fill="#333">News homepage, product</text>
+      <text x="312" y="156" text-anchor="middle" font-size="10.5" fill="#333">listing, trending feed</text>
+      <text x="312" y="184" text-anchor="middle" font-size="11" font-weight="700" fill="#0ca678">Strategy:</text>
+      <text x="312" y="202" text-anchor="middle" font-size="10.5" fill="#333">Micro-cache 1–10s</text>
+      <text x="312" y="222" text-anchor="middle" font-size="10.5" fill="#333">Collapses origin load</text>
+
+      <!-- Tier 3 -->
+      <rect x="414" y="92" width="180" height="150" rx="10" fill="#ffe8cc" stroke="#f08c00" stroke-width="1.5"/>
+      <text x="504" y="116" text-anchor="middle" font-size="13" font-weight="bold" fill="#1a1917">PERSONALIZED</text>
+      <text x="504" y="140" text-anchor="middle" font-size="10.5" fill="#333">Dashboard, cart, auth'd</text>
+      <text x="504" y="156" text-anchor="middle" font-size="10.5" fill="#333">API responses</text>
+      <text x="504" y="184" text-anchor="middle" font-size="11" font-weight="700" fill="#e8590c">Strategy:</text>
+      <text x="504" y="202" text-anchor="middle" font-size="10.5" fill="#333">DCA only / edge assemble</text>
+      <text x="504" y="222" text-anchor="middle" font-size="10.5" fill="#333">Accelerate, cache nothing</text>
+
+      <!-- Tier 4 -->
+      <rect x="606" y="92" width="184" height="150" rx="10" fill="#ffc9c9" stroke="#c92a2a" stroke-width="1.5"/>
+      <text x="698" y="116" text-anchor="middle" font-size="13" font-weight="bold" fill="#1a1917">REAL-TIME</text>
+      <text x="698" y="140" text-anchor="middle" font-size="10.5" fill="#333">Live prices, chat,</text>
+      <text x="698" y="156" text-anchor="middle" font-size="10.5" fill="#333">presence, streams</text>
+      <text x="698" y="184" text-anchor="middle" font-size="11" font-weight="700" fill="#c92a2a">Strategy:</text>
+      <text x="698" y="202" text-anchor="middle" font-size="10.5" fill="#333">Bypass CDN cache;</text>
+      <text x="698" y="222" text-anchor="middle" font-size="10.5" fill="#333">TLS termination only</text>
+
+      <text x="410" y="272" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">More dynamic → shorter TTL. At the extreme, TTL = 0 and you accelerate delivery instead of caching.</text>
+    </svg>
+    <p class="caption">The spectrum is a dimmer, not a switch — read the strategy off how dynamic the content is</p>
+  </div>
+
+  <div class="cheatsheet">
+<span class="label">§ 1  WHY IT EXISTS</span>Static assets (CSS/JS/images/fonts/video) are identical for every user and change
+rarely — cache them at the edge with long TTLs, served from a nearby PoP, never
+touching origin. Dynamic content (dashboards, API responses) is generated per-request
+and can't be cached the same way. But a CDN STILL accelerates dynamic content without
+caching it — by terminating TLS/TCP at the edge, reusing warm origin connections, and
+routing over an optimized backbone. The topic is matching each content type to the right
+CDN strategy, not treating "CDN = static files only."
+
+<span class="label">§ 2  THE CACHEABILITY SPECTRUM</span>FULLY STATIC   — hashed JS/CSS bundles, images, fonts, video segments.
+                 Cache-Control: max-age=31536000, immutable. TTL ≈ 1 year.
+SEMI-DYNAMIC   — news homepage, product listing, trending feed. Same for many users
+                 for a short window → MICRO-CACHE 1–10s. Huge origin-load collapse.
+PERSONALIZED   — user dashboard, cart, authenticated API. Body uncacheable →
+                 DCA only (accelerate delivery, cache nothing) or edge-assemble.
+REAL-TIME      — live prices, chat, presence. Bypass CDN cache; use it only for
+                 TLS termination / routing.
+
+<span class="label">§ 3  THE 3 KEY DISTINCTIONS</span>1. Static = cache the BODY at edge (origin offload + latency win).
+   Dynamic = accelerate DELIVERY, cache nothing (latency win, NO offload).
+2. Static invalidation is solved by VERSIONED URLs (content hash in filename) →
+   new content = new URL = never serve stale; old URL just expires naturally.
+   Dynamic freshness = short TTL (micro-cache) or explicit purge.
+3. What breaks caching: cookies, Set-Cookie, Vary, and raw query strings fragment
+   or defeat the cache. Normalize the cache key; strip tracking params.
+
+<span class="label">§ 4  USE / AVOID</span>Use long-TTL edge cache:  immutable, versioned static assets (max-age=1yr, immutable).
+Use micro-caching:        semi-dynamic pages hit by many users; 1–10s TTL absorbs spikes.
+Use DCA (no cache):       personalized/authenticated content — win latency via edge TLS,
+                          connection reuse, route optimization.
+Use edge compute/ESI:     page = static shell + a few dynamic holes; assemble at edge.
+Avoid caching:            per-user private data under a shared key (LEAK!), real-time
+                          data, anything with Set-Cookie on the response.
+Avoid short TTL on static: wastes revalidation round-trips; use versioned URLs + long TTL.
+
+<span class="label">§ 5  INTERVIEW TRIGGERS</span>→ "How do you serve static assets to a global user base with low latency?"
+→ "Can a CDN help with API responses / personalized content, or only static files?"
+→ "Our news homepage gets millions of hits at once — how do we protect the origin?"
+→ "How do you handle cache invalidation for your JS/CSS on deploy?"
+
+<span class="label">§ 6  FTAC</span>F  "I split content by cacheability. Static assets are identical per user, so I cache
+   them at the edge with a ~1-year TTL. Dynamic content is per-user, so the CDN can't
+   cache the body — but it still cuts latency by terminating TLS at the edge and
+   reusing warm connections to origin (dynamic content acceleration)."
+T  "Static edge caching gives both origin offload and low latency; cost is invalidation,
+   solved by versioned URLs. DCA gives latency for dynamic content but NO origin offload
+   — every request still hits origin, just faster."
+A  "Assuming static assets are fingerprinted at build time and the homepage is the same
+   for anonymous users for a few seconds —"
+C  "Long-TTL immutable cache on hashed assets; micro-cache the anonymous homepage ~5s;
+   route authenticated API calls through the CDN for DCA but mark them no-store."
+
+<span class="label">§ 7  NUMBERS &amp; GOTCHA</span>Static TTL:      max-age=31536000 (1 year) + immutable on versioned assets.
+Micro-cache TTL: 1–10s — at 10k rps a 1s cache = ≤1 origin hit/sec/key (~99.99% offload)
+                 while content stays "fresh within 1 second."
+DCA offload:     0% (body never cached) — the win is LATENCY (edge TLS + warm keep-alive
+                 + backbone routing), not origin protection.
+GOTCHA: Caching a personalized response under a URL-only cache key leaks one user's
+  private data to another user. Never cache responses with Set-Cookie or per-user data
+  unless the cache key includes identity AND you intend a private cache. Default
+  authenticated content to no-store; opt IN to caching deliberately.
+  </div>
+</section>
+
+<!-- S5: CORE DEFINITION -->
+<section id="s5">
+  <h2 class="section-title"><span class="num">§5</span> 🧠 Core Definition</h2>
+  <div class="callout callout-teal" style="font-size:16px;font-weight:600;line-height:1.6;">
+    Serving content through a CDN by classifying it along a cacheability spectrum: static assets (identical for all users) are cached at edge PoPs with long TTLs for both origin offload and low latency, while dynamic content (generated per-request) is either micro-cached for short windows, assembled at the edge, or delivered via dynamic content acceleration — which reduces latency through edge TLS termination, connection reuse, and route optimization <em>without caching the response body</em>.
+  </div>
+
+  <!-- Static vs Dynamic path comparison -->
+  <div class="tier-grid" style="margin-top:20px;">
+    <div class="tier-card" style="border-color:#3b5bdb;">
+      <h4>📦 Static asset <span class="stat stat-blue">CACHE BODY</span></h4>
+      <p style="font-size:13px;color:var(--text-muted);">Cache the response at the edge. Most requests never reach origin — you win <strong>latency AND offload</strong>. Freshness handled by versioned URLs.</p>
+    </div>
+    <div class="tier-card" style="border-color:#ea580c;">
+      <h4>⚡ Dynamic content <span class="stat stat-orange">ACCELERATE</span></h4>
+      <p style="font-size:13px;color:var(--text-muted);">Cache nothing; optimize the transport. Origin generates every response, but the round-trip is far faster. You win <strong>latency only, no offload</strong>.</p>
+    </div>
+  </div>
+</section>
+
+<!-- S6: CORE CONCEPTS -->
+<section id="s6">
+  <h2 class="section-title"><span class="num">§6</span> 📦 Core Concepts</h2>
+
+  <h3>Static Assets</h3>
+  <p>Content that is byte-for-byte identical for every user and changes only on deploy — JS/CSS bundles, images, icons, fonts, and video segments. Because it's shared and stable, it's the ideal CDN payload: cache it once at each PoP with a long TTL (<code>max-age=31536000, immutable</code>) and virtually every request is served from the edge. Freshness is handled not by short TTLs but by <strong>versioned URLs</strong>, so a change produces a brand-new URL rather than requiring invalidation.</p>
+
+  <h3>Dynamic Content</h3>
+  <p>Content generated per-request, often personalized or time-sensitive — a logged-in user's dashboard, cart, search results, or a real-time API response. The body differs per user or per moment, so it can't be cached under a shared key. The naive conclusion ("CDNs are useless here") is wrong: CDNs still add value through acceleration, edge compute, or short-window micro-caching.</p>
+
+  <h3>Dynamic Content Acceleration (DCA)</h3>
+  <p>Using a CDN to speed up uncacheable content by optimizing the <em>transport</em>, not the <em>cache</em>. The edge PoP terminates the user's TLS/TCP handshake nearby (saving multiple RTTs), maintains warm keep-alive connections to origin, and routes over the CDN's optimized private backbone instead of the public internet (Cloudflare Argo, Akamai SureRoute). The origin still generates every response, but the round-trip is dramatically faster. <strong>DCA gives latency wins with zero origin offload.</strong></p>
+
+  <h3>Micro-caching</h3>
+  <p>Caching semi-dynamic content for a very short TTL (typically 1–10 seconds). Content like a news homepage is the same for many anonymous users within any given second. Caching it for even 1 second means origin generates it at most once per second per key regardless of traffic — collapsing thousands of requests per second into a trickle while keeping content "fresh within one second." The trade-off is a bounded staleness window equal to the TTL.</p>
+
+  <h3>Cache Key &amp; Cacheability Breakers</h3>
+  <p>The cache key determines what counts as "the same" response — by default the URL (host + path + query). Personalization signals — cookies, <code>Authorization</code> headers, <code>Vary</code> headers, and query-string parameters — either fragment the cache (a separate entry per variation, killing hit rate) or, worse, cause private data to be cached under a shared key (a security leak). Cache-key normalization (stripping tracking params, ignoring irrelevant cookies) is central to making dynamic content cacheable safely.</p>
+
+  <h3>Versioned URLs (Cache-Busting / Fingerprinting)</h3>
+  <p>Embedding a content hash in an asset's filename (<code>app.9f3c2a.js</code>). Because the URL changes whenever the content changes, you can cache each version forever (<code>immutable</code>) with no invalidation logic: a deploy references new URLs, old URLs age out naturally, and users never see a stale mix. This is why static invalidation is essentially a solved problem — you don't invalidate, you re-version.</p>
+</section>
+
+<!-- S7: FIRST PRINCIPLES -->
+<section id="s7">
+  <h2 class="section-title"><span class="num">§7</span> 🔍 First Principles — Why Does This Exist?</h2>
+  <p>A CDN's superpower is serving cached copies from a nearby PoP — but that only works when the copy is <em>reusable</em>. Static assets are perfectly reusable: one file serves every user, so caching it near users solves both latency and scale. The problem is that most valuable content on modern sites is <em>not</em> reusable — it's personalized, authenticated, or real-time. If CDNs could only handle static files, they'd serve logos and stylesheets while every meaningful request still made the full round-trip to a distant origin.</p>
+  <p>Two forces pushed CDNs beyond static caching. First, <strong>latency physics</strong>: a user in Singapore hitting a US origin pays ~200ms per round-trip, and TLS setup alone is multiple round-trips. Even without caching the response, terminating the connection at a nearby edge and multiplexing over a warm backbone connection turns 4–5 slow public-internet round-trips into 1 slow trip plus several fast local ones — hence DCA. Second, the <strong>"semi-dynamic" reality</strong>: enormous amounts of traffic hit content that is technically dynamic but effectively identical for many users over short windows (a homepage, a product page, a trending feed). Micro-caching exploits that: a 1-second cache is invisible to users but reduces origin load by orders of magnitude. This subtopic exists because the naive static-vs-dynamic binary leaves most of the performance and scale opportunity on the table.</p>
+</section>
+
+<!-- S8: MENTAL MODELS -->
+<section id="s8">
+  <h2 class="section-title"><span class="num">§8</span> 🗺️ Mental Models</h2>
+
+  <h3>Model 1: The Cacheability Spectrum (a dimmer, not a switch)</h3>
+  <p>Don't think "static vs. dynamic" as a binary — think of a dimmer from fully-static to real-time. Fully static → cache forever. Semi-dynamic → micro-cache seconds. Personalized → accelerate but don't cache. Real-time → bypass. The interview skill is placing content on this dimmer and reading off the strategy. It maps cleanly onto TTL length: more dynamic = shorter TTL, until TTL = 0 (DCA only). It breaks down when content is <em>partly</em> personalized — that's where edge assembly comes in, and you decompose the page rather than dim a single knob.</p>
+
+  <h3>Model 2: Cache the Body vs. Accelerate the Pipe</h3>
+  <p>A CDN pulls two independent levers. Lever one caches the <strong>response body</strong> at the edge (only for reusable content; gives offload + latency). Lever two optimizes the <strong>transport pipe</strong> — edge TLS termination, warm origin connections, backbone routing — which works for <em>any</em> content and gives latency but no offload. Static content pulls both levers; dynamic content pulls only the second. This prevents the classic mistake of thinking a CDN does nothing for uncacheable content. It breaks down if you forget lever two costs money per request with no origin relief — DCA is not free scale.</p>
+
+  <h3>Model 3: The Newsstand vs. The Print Shop</h3>
+  <p>A static asset is like identical newspapers at a newsstand on every corner — anyone grabs one instantly, and the press (origin) is idle. A personalized dashboard is a custom-printed document: it must go back to the print shop every time, but you can still put the shop's <em>intake counter</em> on every corner (edge TLS termination) and use express couriers on private roads (backbone routing) so the trip is fast. Micro-caching is the newsstand restocking every few seconds. It makes offload-vs-acceleration visceral; it breaks down for edge compute, where the corner stand itself does some printing (Workers/Lambda@Edge).</p>
+</section>
+
+<!-- S9: HOW IT WORKS -->
+<section id="s9">
+  <h2 class="section-title"><span class="num">§9</span> ⚙️ How It Works — Mechanics</h2>
+
+  <!-- Request path diagram -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">🔀 Static (cache body) vs. Dynamic (DCA) request paths</div>
+    <svg viewBox="0 0 820 360" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:820px;display:block;margin:0 auto;" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+      <rect width="820" height="360" fill="#fafafa" rx="8"/>
+      <defs>
+        <marker id="arr" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+          <path d="M0,0 L7,3 L0,6 Z" fill="#888"/>
+        </marker>
+        <marker id="arrg" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+          <path d="M0,0 L7,3 L0,6 Z" fill="#2f9e44"/>
+        </marker>
+        <marker id="arro" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+          <path d="M0,0 L7,3 L0,6 Z" fill="#e8590c"/>
+        </marker>
+      </defs>
+
+      <!-- columns headers -->
+      <text x="80" y="30" font-size="12" font-weight="700" fill="#1a1917">USER</text>
+      <text x="360" y="30" font-size="12" font-weight="700" fill="#1a1917">EDGE PoP (nearby)</text>
+      <text x="690" y="30" font-size="12" font-weight="700" fill="#1a1917">ORIGIN (far)</text>
+
+      <!-- nodes -->
+      <rect x="30" y="60" width="110" height="240" rx="10" fill="#eef2ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="85" y="185" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">Browser</text>
+
+      <rect x="300" y="60" width="150" height="240" rx="10" fill="#e6fcf5" stroke="#0ca678" stroke-width="1.5"/>
+      <text x="375" y="82" text-anchor="middle" font-size="11" font-weight="700" fill="#0ca678">Edge cache + TLS</text>
+
+      <rect x="640" y="60" width="150" height="240" rx="10" fill="#fff4e6" stroke="#e8590c" stroke-width="1.5"/>
+      <text x="715" y="185" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">App / DB</text>
+
+      <!-- STATIC path (top) -->
+      <text x="220" y="112" text-anchor="middle" font-size="10.5" font-weight="700" fill="#2f9e44">STATIC</text>
+      <line x1="140" y1="125" x2="298" y2="125" stroke="#2f9e44" stroke-width="2" marker-end="url(#arrg)"/>
+      <text x="220" y="120" text-anchor="middle" font-size="9.5" fill="#333">GET app.9f3c2a.js</text>
+      <line x1="298" y1="150" x2="142" y2="150" stroke="#2f9e44" stroke-width="2" marker-end="url(#arrg)"/>
+      <text x="220" y="145" text-anchor="middle" font-size="9.5" fill="#2f9e44">HIT → served from edge</text>
+      <text x="375" y="120" text-anchor="middle" font-size="9.5" fill="#333">cache HIT</text>
+      <text x="375" y="134" text-anchor="middle" font-size="9.5" fill="#888">(origin idle)</text>
+
+      <!-- divider -->
+      <line x1="30" y1="180" x2="790" y2="180" stroke="#ddd" stroke-width="1" stroke-dasharray="4 4"/>
+
+      <!-- DYNAMIC path (bottom) -->
+      <text x="220" y="222" text-anchor="middle" font-size="10.5" font-weight="700" fill="#e8590c">DYNAMIC (DCA)</text>
+      <line x1="140" y1="238" x2="298" y2="238" stroke="#e8590c" stroke-width="2" marker-end="url(#arro)"/>
+      <text x="220" y="233" text-anchor="middle" font-size="9.5" fill="#333">GET /me/feed  (TLS ends here)</text>
+      <line x1="450" y1="252" x2="638" y2="252" stroke="#e8590c" stroke-width="2" marker-end="url(#arro)"/>
+      <text x="544" y="247" text-anchor="middle" font-size="9.5" fill="#333">warm keep-alive over backbone</text>
+      <line x1="638" y1="276" x2="452" y2="276" stroke="#888" stroke-width="2" marker-end="url(#arr)"/>
+      <text x="544" y="271" text-anchor="middle" font-size="9.5" fill="#888">personalized response</text>
+      <line x1="298" y1="290" x2="142" y2="290" stroke="#888" stroke-width="2" marker-end="url(#arr)"/>
+      <text x="220" y="285" text-anchor="middle" font-size="9.5" fill="#888">streamed back (no cache)</text>
+      <text x="375" y="238" text-anchor="middle" font-size="9.5" fill="#e8590c">no-store</text>
+    </svg>
+    <p class="caption">Static: request dies at the edge on a hit. Dynamic: edge terminates TLS and forwards over a fast warm pipe — origin still does the work.</p>
+  </div>
+
+  <h3>Static asset request (cache the body — happy path)</h3>
+  <p>Browser requests <code>https://cdn.site.com/app.9f3c2a.js</code> → anycast routes to the nearest PoP → PoP checks its edge cache for that URL key. <strong>Hit</strong> → return immediately from edge (single short RTT, no origin contact); the <code>immutable</code> header means the browser also caches locally and won't re-request. <strong>Miss</strong> (cold PoP) → PoP fetches from origin (or a tiered/shield parent), stores it, serves it; all subsequent users at that PoP get the hit. Because the URL is content-hashed, the cached copy is safe to keep for a year.</p>
+
+  <h3>Personalized/dynamic request (accelerate the pipe — DCA path)</h3>
+  <p>Browser requests <code>https://api.site.com/me/feed</code> with an auth cookie → anycast routes to the nearest PoP, which terminates TLS locally (the multi-RTT handshake happens over ~5ms instead of ~200ms) → response is marked <code>private, no-store</code> so the PoP does <strong>not</strong> serve from cache → PoP forwards over a <strong>warm keep-alive connection</strong> across the optimized backbone → origin generates the personalized response and the PoP streams it back. Nothing is cached, but the user saved several long round-trips.</p>
+
+  <h3>Semi-dynamic request (micro-cache)</h3>
+  <p>Many anonymous users request <code>https://site.com/</code> within the same second → PoP has a micro-cache entry with <code>max-age=5</code> → the first request after expiry goes to origin and the response is cached for 5s → every other request in that window is served from edge. At 10k rps, origin sees ~1 request per 5s per PoP instead of 10k — a ~99.99% reduction — while content is never more than 5s stale. <strong>Edge case — stampede on expiry:</strong> concurrent requests could all miss at once; mitigate with <code>stale-while-revalidate</code> (serve stale while one request refreshes in the background) and request coalescing at the edge.</p>
+
+  <h3>Edge assembly (mixed page)</h3>
+  <p>A product page = static shell (layout, header, footer — cacheable) + dynamic holes (price, stock, "recommended for you"). Using ESI or an edge function (Workers, Lambda@Edge), the PoP serves the cached shell and fetches/injects only the dynamic fragments, or computes them at the edge. Result: most of the page is edge-served; only small dynamic pieces round-trip to origin.</p>
+
+  <div class="callout callout-tip" style="margin-top:18px;">💡 <strong>Headers to remember:</strong> <code>max-age=31536000, immutable</code> (static, versioned) · <code>no-store</code>/<code>private</code> (personalized) · <code>s-maxage=5, stale-while-revalidate=30</code> (micro-cache) · <code>Vary: Accept-Encoding</code> fine, <code>Vary: Cookie</code> usually catastrophic for hit rate.</div>
+</section>
+
+<!-- S10: REAL-WORLD -->
+<section id="s10">
+  <h2 class="section-title"><span class="num">§10</span> 🏭 Real-World System Examples</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>System</th><th>How This Concept Applies</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Cloudflare</strong> (Argo + Workers)</td><td>Static cached at edge via <code>Cache Everything</code> rules; <strong>Argo Smart Routing</strong> provides DCA over a private backbone; <strong>Workers</strong> do edge assembly/compute</td><td>Argo advertises ~30% latency cuts for uncacheable content by routing around congestion — pure DCA, no caching</td></tr>
+        <tr><td><strong>Akamai</strong> (DSA / Ion)</td><td><strong>Dynamic Site Accelerator</strong> pioneered DCA: <strong>SureRoute</strong> finds optimal overlay paths, plus edge TLS termination and TCP optimizations for uncacheable content</td><td>Akamai built the category — "dynamic content" acceleration without caching the body</td></tr>
+        <tr><td><strong>AWS CloudFront</strong></td><td>Per-path <strong>cache behaviors</strong>: static <code>/assets/*</code> gets long TTL; <code>/api/*</code> is no-cache but still benefits from edge TLS + keep-alive; <strong>Lambda@Edge / CloudFront Functions</strong> for edge compute</td><td>Cache policies control which headers/cookies/query strings enter the cache key</td></tr>
+        <tr><td><strong>Fastly</strong></td><td>Instant purge + <strong>VCL</strong> make aggressive <strong>micro-caching</strong> of semi-dynamic content practical (news, e-commerce); <code>stale-while-revalidate</code> widely used</td><td>Sub-150ms global purge lets teams cache dynamic-ish content confidently</td></tr>
+        <tr><td><strong>Netflix / YouTube</strong> (video)</td><td>Video is chunked into small <strong>static segments</strong> (HLS/DASH <code>.ts</code>/<code>.m4s</code>) each with a stable URL → highly cacheable at edge; manifest/personalization stays dynamic</td><td>Turning "dynamic-feeling" streaming into cacheable static segments is the core CDN trick for video</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- S11: TRADE-OFFS -->
+<section id="s11">
+  <h2 class="section-title"><span class="num">§11</span> ⚖️ Trade-offs</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>✅ Benefit</th><th>❌ Cost / Limitation</th></tr></thead>
+      <tbody>
+        <tr><td class="benefit">Long-TTL static edge caching gives both low latency and near-total origin offload</td><td class="cost">Requires versioned URLs and a fingerprinting build pipeline; wrong headers (short TTL) waste the benefit</td></tr>
+        <tr><td class="benefit">DCA accelerates personalized content the CDN can't cache</td><td class="cost">Zero origin offload — every request still hits origin; you pay CDN egress/compute for latency only, not scale relief</td></tr>
+        <tr><td class="benefit">Micro-caching collapses origin load for semi-dynamic pages by orders of magnitude</td><td class="cost">Introduces a bounded staleness window (the TTL); wrong for strictly real-time or per-user content</td></tr>
+        <tr><td class="benefit">Edge assembly (ESI/Workers) caches the static shell while keeping dynamic holes fresh</td><td class="cost">Added complexity and a new place for bugs; edge compute has cost, cold-starts, and debugging challenges</td></tr>
+        <tr><td class="benefit">Normalizing cache keys (stripping cookies/params) raises hit rate</td><td class="cost">Aggressive normalization can cache the wrong variant or leak personalized data under a shared key — a correctness/security risk</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- S12: INTERVIEW APPLICATION -->
+<section id="s12">
+  <h2 class="section-title"><span class="num">§12</span> 🎯 Interview Application</h2>
+
+  <h3>When an interviewer asks / says:</h3>
+  <ul class="checklist">
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">"How do you serve static assets (images, JS, CSS) to a global audience with low latency?"</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">"Can a CDN help with dynamic or personalized content, or is it only for static files?"</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">"Our homepage gets a massive traffic spike — how do you protect the origin?"</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">"How do you handle cache invalidation for your frontend assets on every deploy?"</span></li>
+  </ul>
+
+  <h3>What you say / do:</h3>
+  <p>In the high-level design or a caching deep-dive, split content by cacheability: "Static assets are identical per user, so I'll fingerprint them at build time and cache them at the edge with a one-year immutable TTL — invalidation is handled by versioned URLs. For the anonymous homepage I'd micro-cache for a few seconds to absorb spikes. For authenticated API responses I can't cache the body, but I'll still route them through the CDN for dynamic acceleration — edge TLS termination and warm origin connections cut the round-trip significantly."</p>
+
+  <div class="tradeoff-box">
+    "Caching static assets at the edge buys me both latency and origin offload, at the cost of an asset-versioning pipeline — which I solve with content-hashed URLs. Routing dynamic content through the CDN buys me latency via acceleration, but zero origin offload: every request still hits origin, just faster. So I cache what's reusable and accelerate what isn't."
+  </div>
+</section>
+
+<!-- S13: MISCONCEPTIONS -->
+<section id="s13">
+  <h2 class="section-title"><span class="num">§13</span> ⚠️ Common Misconceptions &amp; Gotchas</h2>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><span><strong>Misconception:</strong> CDNs are only for static files; dynamic content can't benefit.</span></div>
+    <div class="right"><span class="icon">✅</span><span><strong>Reality:</strong> CDNs accelerate uncacheable dynamic content through DCA — edge TLS termination, warm keep-alive connections to origin, and optimized backbone routing. The body is never cached, but latency drops substantially. Naming DCA is exactly the nuance interviewers probe for.</span></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><span><strong>Misconception:</strong> You invalidate static assets by purging the CDN on every deploy.</span></div>
+    <div class="right"><span class="icon">✅</span><span><strong>Reality:</strong> With versioned/fingerprinted URLs you rarely purge at all. New content = new URL, so you deploy HTML referencing the new URLs; old URLs age out naturally. Purge is a fallback for mistakes, not the primary mechanism.</span></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><span><strong>Misconception:</strong> Micro-caching a few seconds isn't worth the staleness.</span></div>
+    <div class="right"><span class="icon">✅</span><span><strong>Reality:</strong> Under high concurrency, a 1-second cache turns thousands of origin requests per second into one — a ~99.9%+ offload — while keeping content "fresh within a second." For anonymous, high-traffic pages this is one of the highest-leverage optimizations available.</span></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><span><strong>Misconception:</strong> You can just cache API responses at the edge to scale reads.</span></div>
+    <div class="right"><span class="icon">✅</span><span><strong>Reality:</strong> Only if the response isn't personalized <em>or</em> the cache key includes identity and you intend a private cache. Caching a personalized response under a URL-only key leaks one user's data to another — a serious security bug. Default authenticated content to <code>no-store</code>; opt into caching deliberately.</span></div>
+  </div>
+</section>
+
+<!-- S14: RELATIONSHIPS -->
+<section id="s14">
+  <h2 class="section-title"><span class="num">§14</span> 🔗 Relationships to Other Concepts</h2>
+  <div class="connections">
+    <div class="conn-card">
+      <span class="conn-icon">⬅️</span>
+      <div><div class="conn-label">Builds On</div><strong>6.1 CDN architecture (PoPs/edge servers)</strong> — you must know where edge caches live before deciding what to put in them; and <strong>6.3 Cache invalidation at the edge</strong> — versioned URLs and purge are the invalidation tools applied here per content type.</div>
+    </div>
+    <div class="conn-card">
+      <span class="conn-icon">➡️</span>
+      <div><div class="conn-label">Enables</div><strong>6.6 CDN for media delivery</strong> — video is the ultimate "make dynamic content static" case (chunked segments with stable URLs); and <strong>6.7 CDN as DDoS mitigation</strong> — edge caching and edge termination let the CDN absorb floods before they reach origin.</div>
+    </div>
+    <div class="conn-card">
+      <span class="conn-icon">⚡</span>
+      <div><div class="conn-label">Tension With</div><strong>5.5 Cache consistency and invalidation</strong> — every edge cache is another tier that can serve stale data; the more you cache dynamic-ish content (micro-caching), the more you trade freshness for offload — the same consistency-vs-performance tension as application-tier caching.</div>
+    </div>
+  </div>
+</section>
+
+<!-- S15: SELF-CHECK QUIZ -->
+<section id="s15">
+  <h2 class="section-title"><span class="num">§15</span> 🧪 Self-Check Quiz</h2>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)"><span class="quiz-num">1</span><span class="qtext">Define the difference between static assets and dynamic content in CDN terms, and explain why one is cacheable at the edge and the other typically isn't.</span><span class="quiz-toggle">▼ Hint</span></div>
+    <div class="quiz-hint">💡 Think through your answer before expanding — if you hesitate, revisit §6. Static = identical per user, reusable → cache the body at edge. Dynamic = per-request/personalized → no shared reusable copy.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)"><span class="quiz-num">2</span><span class="qtext">A user in Sydney hits an authenticated, personalized API served from a US origin. The response cannot be cached. How does routing it through a CDN still reduce latency?</span><span class="quiz-toggle">▼ Hint</span></div>
+    <div class="quiz-hint">💡 Revisit §6 (DCA) and §9. DCA: edge terminates TLS nearby (saves multi-RTT handshake), reuses a warm keep-alive connection to origin, and routes over an optimized backbone — origin still generates it, but the pipe is fast.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)"><span class="quiz-num">3</span><span class="qtext">Your homepage is anonymous and gets 20,000 requests/second during a spike. Design a CDN strategy that protects the origin without serving badly stale content, and quantify the origin load.</span><span class="quiz-toggle">▼ Hint</span></div>
+    <div class="quiz-hint">💡 Revisit §9 (micro-caching). Micro-cache the anonymous homepage with e.g. <code>s-maxage=1–5</code>; origin sees ~1 gen/interval/PoP (~99.99% offload) with staleness ≤ TTL; add <code>stale-while-revalidate</code> to avoid stampede on expiry.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)"><span class="quiz-num">4</span><span class="qtext">Name a real production system/technique that accelerates dynamic content without caching the body, and explain the mechanism.</span><span class="quiz-toggle">▼ Hint</span></div>
+    <div class="quiz-hint">💡 Revisit §10. Cloudflare Argo Smart Routing or Akamai DSA/SureRoute: overlay/backbone routing around congestion + edge TLS termination + TCP optimization — latency win, zero caching.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)"><span class="quiz-num">5</span><span class="qtext">You decide to cache an API response at the edge to reduce read load. What is the single most dangerous failure mode, and how do you prevent it?</span><span class="quiz-toggle">▼ Hint</span></div>
+    <div class="quiz-hint">💡 Revisit §13. Danger: caching a personalized response under a URL-only key leaks one user's data to another. Prevent by defaulting authenticated content to <code>no-store</code>; only cache when the key includes identity and you intend a private cache; never cache responses with <code>Set-Cookie</code>.</div>
+  </div>
+</section>
+
+<!-- S16: FURTHER READING -->
+<section id="s16">
+  <h2 class="section-title"><span class="num">§16</span> 📚 Further Reading</h2>
+  <ul class="reading-list">
+    <li><div class="cb" onclick="toggleReading(this)"></div><span class="rtext"><strong>Cloudflare Learning — serve static vs dynamic / Argo</strong> — <a href="https://www.cloudflare.com/learning/cdn/serve-static-content/" target="_blank">cloudflare.com</a> — clean explanation of DCA and edge caching</span></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><span class="rtext"><strong>MDN — HTTP Caching</strong> — <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching" target="_blank">developer.mozilla.org</a> — authoritative on <code>Cache-Control</code>, <code>immutable</code>, <code>Vary</code>, <code>stale-while-revalidate</code></span></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><span class="rtext"><strong>AWS CloudFront — cache policies &amp; behaviors</strong> — <a href="https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/cache-key-understand-cache-policy.html" target="_blank">docs.aws.amazon.com</a> — how cache keys, headers, cookies, query strings interact</span></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><span class="rtext"><strong>Fastly — micro-caching / stale-while-revalidate</strong> — <a href="https://developer.fastly.com/" target="_blank">developer.fastly.com</a> — practical micro-caching patterns for dynamic content</span></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><span class="rtext"><strong>Akamai — Dynamic Site Accelerator / SureRoute</strong> — the origin of DCA as a category; search Akamai's technical docs</span></li>
+  </ul>
+</section>
+
+<!-- S17: MY NOTES -->
+<section id="s17">
+  <h2 class="section-title"><span class="num">§17</span> ✍️ My Notes</h2>
+  <div class="callout callout-quote">Personal observations, things that confused me, analogies that helped. (Auto-saves in your browser.)</div>
+  <textarea class="notes-area" placeholder="Write your notes here..."></textarea>
+</section>
+
+</article>
+</main>
+
+<script>
+// TOC active state
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('#toc nav a');
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(a => a.classList.remove('active'));
+      const a = document.querySelector(`#toc nav a[href="#${e.target.id}"]`);
+      if (a) a.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+sections.forEach(s => obs.observe(s));
+
+// Checklist toggle
+function toggle(cb) {
+  const li = cb.closest('li');
+  li.classList.toggle('checked');
+}
+
+// Phase card toggle
+function togglePhase(header) {
+  header.closest('.phase-card').classList.toggle('open');
+}
+
+// Quiz toggle
+function toggleQuiz(q) {
+  const item = q.closest('.quiz-item');
+  item.classList.toggle('open');
+  q.querySelector('.quiz-toggle').textContent = item.classList.contains('open') ? '▲ Hide' : '▼ Hint';
+}
+
+// Reading list toggle
+function toggleReading(cb) {
+  const li = cb.closest('li');
+  li.classList.toggle('checked');
+}
+
+// Notes auto-save (in-memory only)
+const notesArea = document.querySelector('.notes-area');
+const NOTES_KEY = 'notes_6_5';
+if (localStorage.getItem(NOTES_KEY)) notesArea.value = localStorage.getItem(NOTES_KEY);
+notesArea.addEventListener('input', () => {
+  try { localStorage.setItem(NOTES_KEY, notesArea.value); } catch(e) {}
+});
+</script>
+</body>
+</html>

@@ -36,12 +36,12 @@ After studying this, you should be able to design a complete edge-invalidation s
 
 > *Concrete, testable proof that you own this concept — not just familiarity.*
 
-- [ ] Can name the three edge-invalidation strategies (TTL, versioned URLs, active purge) and choose the right one for static assets vs. HTML vs. API responses
-- [ ] Can explain the difference between `max-age`, `s-maxage`, `stale-while-revalidate`, and `immutable`, and say which cache each targets
-- [ ] Can describe how a `304 Not Modified` revalidation works with ETag / Last-Modified and why it saves bandwidth
-- [ ] Can explain why active purge is not globally instant and why "purge everything" risks a thundering herd on the origin
-- [ ] Can explain why purging the CDN does not refresh content already cached in users' browsers, and how versioned URLs solve this
-- [ ] Can design tag-based (surrogate key) invalidation to purge a group of related objects with a single call
+- [x] Can name the three edge-invalidation strategies (TTL, versioned URLs, active purge) and choose the right one for static assets vs. HTML vs. API responses
+- [x] Can explain the difference between `max-age`, `s-maxage`, `stale-while-revalidate`, and `immutable`, and say which cache each targets
+- [x] Can describe how a `304 Not Modified` revalidation works with ETag / Last-Modified and why it saves bandwidth
+- [x] Can explain why active purge is not globally instant and why "purge everything" risks a thundering herd on the origin
+- [x] Can explain why purging the CDN does not refresh content already cached in users' browsers, and how versioned URLs solve this
+- [x] Can design tag-based (surrogate key) invalidation to purge a group of related objects with a single call
 
 > 💡 **Rule of thumb:** If you can teach it to someone else and field their follow-up questions, you've mastered it.
 
@@ -432,3 +432,58 @@ Instead:
 
 > *Personal observations, things that confused me, analogies that helped.*
 
+6.3  CACHE INVALIDATION AT THE EDGE — CHEAT SHEET
+
+§1  WHY IT EXISTS
+A CDN caches copies at hundreds of PoPs to cut latency + offload origin, but a
+copy goes stale the instant origin changes. No atomic "delete everywhere" — each
+PoP is independent. Invalidation = choosing HOW each object refreshes:
+passively (TTL), by renaming (versioned URL), or actively (purge).
+Core tension: freshness vs. propagation — can't have both maxed at planet scale.
+
+§2  THE THREE STRATEGIES  (match to content type)
+TTL-based (passive)  s-maxage=N; expires on a clock. → scheduled/predictable content.
+Versioned URL        fingerprint filename (app.<hash>.js); new content = new URL,
+                     cache forever (immutable). → static assets you can rename.
+Active purge (push)  API tells every PoP to drop it; soft vs hard; by URL / tag /
+                     everything. → dynamic content with stable URLs (HTML/API).
+
+§3  CACHE-CONTROL — KNOW WHICH LAYER  ★
+max-age=N                browser (private) TTL          → BROWSER knob
+s-maxage=N               CDN/shared TTL; overrides max-age at CDN → CDN knob
+immutable                browser SKIPS revalidation while fresh → BROWSER
+stale-while-revalidate=N serve stale while refreshing bg → ANY cache
+stale-if-error=N         serve stale if origin errors → resilience
+no-cache = may cache but MUST revalidate;  no-store = never cache anywhere
+Surrogate-Control        CDN-only; stripped before client
+
+§4  REVALIDATION (304 / ETag)  ★ why cheap
+On expiry, edge sends conditional GET: If-None-Match: "<etag>".
+  304 Not Modified → HEADERS ONLY, no body → refresh TTL, reuse cached body (CHEAP)
+  200 OK + new body + new validators → replace object
+ETag = content fingerprint (strong, exact).  Last-Modified = timestamp (weak, 1s).
+Prefer ETag when content can change within a second / mtime unreliable.
+
+§5  PURGE — LIMITS & MITIGATION
+Not globally instant: fans out PoP-by-PoP → brief purged/not-purged inconsistency.
+Purge-everything → all PoPs miss same hot keys at once → synchronized concurrent
+  origin fetches → THUNDERING HERD (worse than no CDN).
+Tag / surrogate key: ORIGIN sets Surrogate-Key header on each response; CDN indexes
+  tag→objects; purge the TAG once → all related pages drop (covers URLs you forgot).
+Protect origin: targeted/tag purge · SOFT purge (serve stale while revalidating) ·
+  origin SHIELD + request coalescing (single-flight) · pre-warm / ramp.
+
+§6  BROWSER-CACHE BOUNDARY  ★
+Purge affects the CDN ONLY — never browser caches. A user holding max-age content
+keeps it until their own TTL expires. Fix: VERSIONED URLs (new URL the browser
+never cached → forced fresh fetch). Split knobs: short/no browser TTL (no-cache) +
+long purgeable s-maxage at the CDN.
+
+§7  PURGE-AFTER-WRITE ORDERING (+ numbers)  ★
+Order: write → confirm change is READABLE at origin (past commit AND replica lag)
+  → THEN purge. "Committed on primary" ≠ readable → repopulate re-caches stale.
+In-flight race: a miss that started before the purge can write old data back after
+  → re-purge after a delay, or version the content.
+Numbers: immutable = max-age=31536000, immutable (1yr). Purge propagation:
+  Fastly ~150ms · Cloudflare ~s · Akamai ~5s · CloudFront s–min.
+  304 = headers only. Purge-everything on hot path = origin stampede.
