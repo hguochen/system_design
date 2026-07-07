@@ -335,22 +335,59 @@ Bring this up during high-level design of the delivery/read path, right after yo
 1. Why is video delivered as short segments at multiple bitrates rather than as a single file, and how does that interact with the CDN?
 
    > 💡 *Think through your answer before expanding — if you hesitate, revisit Section 6 and Section 9.*
+Segmentation exists for TWO reasons (not just "easy caching"):
+1. ENABLES ABR — a single fixed-bitrate file can't adapt; if bandwidth drops
+   below that bitrate, playback STALLS. Segments at multiple bitrates let the
+   client switch quality per segment.
+2. GRANULAR CACHING — edge caches hot opening segments, drops cold endings.
+   One monolithic file = all-or-nothing.
+CDN interaction: each segment is an IMMUTABLE STATIC HTTP object (plain GET),
+cached at the edge exactly like an image/JS file → high hit rate, origin
+served once per object (once total behind a shield).
 
 2. You're designing an image service. A product manager wants to allow arbitrary width/height query params. What's the risk, and how do you mitigate it?
 
    > 💡 *Think through your answer before expanding — if you hesitate, revisit Section 6 (Image Transformation) and Section 13.*
+Risk: VARIANT EXPLOSION. Every unique w/h combo = a unique cache key → a flood
+of near-duplicate cold entries → hit rate collapses AND the edge constantly
+transcodes from the master. Wastes cache + compute budget.
+Fix: constrain to NAMED PRESETS / fixed breakpoints; SNAP each request UP to
+the nearest satisfying breakpoint (140→240, 900→1080). Arbitrary values can
+never mint a new cache object.
 
 3. In HLS/DASH, what decides which bitrate the user gets at any given moment, and when does the switch happen?
 
    > 💡 *Think through your answer before expanding — if you hesitate, revisit Section 6 (ABR) and Section 13.*
+The CLIENT decides — not the server (server only offers the ladder).
+Two inputs: (1) measured segment THROUGHPUT, (2) BUFFER occupancy.
+  down-switch trigger = throughput < rendition bitrate (buffer draining).
+WHEN: only at SEGMENT BOUNDARIES — possible because renditions are time-aligned
+and each segment starts with an IDR keyframe (self-decodable), so any rendition's
+seg N can cleanly follow any rendition's seg N-1.
 
 4. A brand-new movie is released and requested from 200 edge PoPs within seconds. Without origin shielding, what happens to your storage tier, and how does shielding fix it?
 
    > 💡 *Think through your answer before expanding — if you hesitate, revisit Section 6 (Origin Shield) and Section 9.*
+Without shield: each of ~200 PoPs misses and fetches the object from origin →
+~200 × multi-GB fetches + 200 origin connections = storage/egress overload.
+(Origin load is bounded by PoP count, NOT client count.)
+With shield: a tier-1 cache between edge and origin coalesces the misses
+(request coalescing / single-flight) → origin serves the object ONCE, the shield
+caches it and fans out to all PoPs → 200 fetches collapse to 1.
+= 5.8 multi-level caching at the network layer (edge=L1, shield=L2).
 
 5. You cache the manifest and the segments with the same long TTL on a live stream. What breaks, and what's the correct TTL strategy?
 
    > 💡 *Think through your answer before expanding — if you hesitate, revisit Section 9 (Manifest vs. segment TTL).*
+What breaks: the live manifest is a ROLLING WINDOW, rewritten every few seconds.
+Cache it long → players keep reading a STALE manifest, never discover new
+segments → playback FREEZES at the window's edge.
+Correct strategy — DIFFERENT TTLs:
+  MANIFEST → short / no-cache   (it mutates constantly)
+  SEGMENTS → LONG TTL           (immutable once produced — cache aggressively)
+Segments stop being requested once they age out of the window (demand
+disappears on its own), so you don't need a short TTL to expire them — a short
+segment TTL would just cause wasteful re-fetches.
 
 ---
 
@@ -369,3 +406,50 @@ Bring this up during high-level design of the delivery/read path, right after yo
 ## 17. ✍️ My Notes
 
 > *Personal observations, things that confused me, analogies that helped.*
+
+# 6.6 CDN for Media Delivery — Closed-Book Cheat Sheet
+
+> Media (images + video) = majority of internet bytes. Serving from origin would overload/crash it and give far users unwatchable latency. CDN media delivery caches media at the edge and — for video — makes it cacheable at all via segmentation.
+
+---
+
+## 🖼️ IMAGE DELIVERY
+- **Master** stored once in **origin object storage** (S3/GCS) — never pushed to PoPs.
+- Edge **transforms on first request** (resize/crop/reformat → WebP/AVIF), then **caches the variant**. "Transform once, serve many."
+- Cache **keyed on transform params** (path + width + format + quality + DPR).
+- **Variant explosion** = arbitrary sizes → unique key per request → hit rate collapses + edge constantly transcoding.
+  → **Fix:** bucketize to named presets; **snap** each request up to nearest breakpoint (140→240, 900→1080).
+
+## 🎬 VIDEO DELIVERY — ABR
+- Transcode source into a **bitrate ladder** (240p→4K).
+- **Segment** each rendition into 2–10s chunks.
+- **Manifest** = master playlist (rendition list) + media playlist (segment URLs).
+- **Client-driven ABR:** start at lowest rung (fast startup) → measure **throughput + buffer level** → switch up/down.
+  - Down-switch trigger = throughput < rendition bitrate (segment downloads slower than it plays → buffer drains).
+- **Switch only at segment boundaries** — works because renditions are **time-aligned** + each segment **starts with an IDR keyframe** (self-decodable). Without it: splicing renditions = decoder garbage.
+- Every segment = **immutable static HTTP object** (plain GET) → caches like any static file.
+
+## ❓ WHY SEGMENT AT ALL (vs one big MP4)
+1. **Enables ABR** — a single fixed-bitrate file can't adapt; bandwidth drop → stall/buffer.
+2. **Granular caching** — cache hot opening segments, drop cold endings (low hit rate). One monolithic file = all-or-nothing.
+
+## 🛡️ ORIGIN SHIELD
+- Cold object requested across ~200 PoPs → **200 × fetches** hit origin. Shield tier collapses to **1**.
+- Concurrent cold misses → shield does **request coalescing / single-flight** (naive shield = 200 fetches).
+- **= 5.8 multi-level caching** at network layer: edge = L1, shield = L2, origin = backing store.
+
+## 📺 VOD vs LIVE
+| | VOD | LIVE |
+|---|---|---|
+| Transcode/segment | offline, once, upfront | real-time, continuous |
+| Manifest | **static** (has `#EXT-X-ENDLIST`) | **rolling window** (no ENDLIST) |
+| Cache hit rate | ~100% | lower — no long-tail reuse |
+| Latency | not a concern | critical (glass-to-glass) → **LL-HLS** shrinks segment/part size |
+
+- **⚠️ THE GOTCHA:** manifest = **short/no-cache TTL**; segments = **long TTL**. Stale manifest freezes playback; uncached segments melt origin.
+- Live herd on each new segment survives via: **manifest = the gate** (can't request a segment not yet listed) + per-tier coalescing + smeared polling.
+
+## 🔐 EDGE SECURITY
+- **Signed URL / token** → controls **who can fetch**. Validated **cryptographically at the edge** (no origin round-trip). Cache **keyed on object path, NOT the token** → million unique URLs → one cached object.
+- **DRM** (Widevine/FairPlay/PlayReady) → controls **what you can do with the bytes** (encrypted segments, license served separately; stops an authorized user ripping/copying).
+- **Transport (HTTPS/TLS) ≠ content (DRM/AES) encryption.** HTTPS guards the pipe; DRM guards the payload. Use both for premium.
