@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.2 Hash Partitioning</title>
+<style>
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface-alt: #f3f2ef;
+    --border: #e5e3de; --text: #1a1917; --text-muted: #6b6861;
+    --accent: #2563eb; --accent-light: #dbeafe;
+    --green: #16a34a; --green-light: #dcfce7;
+    --red: #dc2626; --red-light: #fee2e2;
+    --yellow: #d97706; --yellow-light: #fef3c7;
+    --purple: #7c3aed; --purple-light: #ede9fe;
+    --orange: #ea580c; --orange-light: #ffedd5;
+    --teal: #0d9488; --teal-light: #ccfbf1;
+    --code-bg: #1e1e2e; --code-text: #cdd6f4;
+    --sidebar-w: 240px; --content-max: 820px;
+    font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; }
+  #toc { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0 48px; z-index: 100; }
+  #toc-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  #toc-header .phase-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-bottom: 6px; }
+  #toc-header h2 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  #toc nav a { display: block; padding: 5px 16px 5px 20px; font-size: 12.5px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+  main { margin-left: var(--sidebar-w); padding: 48px 48px 96px; max-width: calc(var(--sidebar-w) + var(--content-max) + 96px); width: 100%; }
+  article { max-width: var(--content-max); }
+  .doc-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 2px solid var(--border); }
+  .doc-header .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+  .tag-phase { background: var(--accent-light); color: var(--accent); }
+  .tag-topic { background: var(--purple-light); color: var(--purple); }
+  .tag-date  { background: var(--surface-alt);  color: var(--text-muted); }
+  .doc-header h1 { font-size: 30px; font-weight: 800; line-height: 1.25; letter-spacing: -.02em; color: var(--text); }
+  section { margin-bottom: 52px; scroll-margin-top: 32px; }
+  h2.section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -.01em; }
+  h2.section-title .num { font-size: 11px; font-weight: 800; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; letter-spacing: .04em; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 24px 0 10px; }
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+  code { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-family: "SF Mono","Fira Code",Menlo,monospace; font-size: 12.5px; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 14px; border-left: 3px solid; }
+  .callout-goal  { background: var(--accent-light); border-color: var(--accent); color: #1e40af; }
+  .callout-tip   { background: var(--yellow-light); border-color: var(--yellow); color: #92400e; }
+  .callout-warn  { background: var(--red-light); border-color: var(--red); color: #7f1d1d; }
+  .callout-quote { background: var(--surface-alt); border-color: var(--border); color: var(--text-muted); font-style: italic; }
+  .callout-teal  { background: var(--teal-light); border-color: var(--teal); color: #134e4a; }
+  .cheatsheet { background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 24px 28px; font-family: "SF Mono","Fira Code","Cascadia Code",Menlo,monospace; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-x: auto; margin-top: 16px; }
+  .cheatsheet .label { color: #cba6f7; font-weight: 700; letter-spacing: .08em; display: block; margin-top: 18px; margin-bottom: 4px; border-bottom: 1px solid #313244; padding-bottom: 3px; }
+  .cheatsheet .label:first-child { margin-top: 0; }
+  .diagram-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 16px 14px; margin: 20px 0 28px; overflow-x: auto; }
+  .diagram-wrap .diagram-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); margin-bottom: 12px; }
+  .diagram-wrap p.caption { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 10px; margin-bottom: 0; font-style: italic; }
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; font-size: 14.5px; line-height: 1.55; }
+  .checklist li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 2px; background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .checklist li.checked .cb { background: var(--green); border-color: var(--green); }
+  .checklist li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .checklist li.checked .text { color: var(--text-muted); text-decoration: line-through; }
+  .phase-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
+  .phase-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; cursor: pointer; user-select: none; background: var(--surface-alt); }
+  .phase-header:hover { background: var(--border); }
+  .phase-label { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+  .phase-badge { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 2px 8px; border-radius: 20px; }
+  .ph1 { background: #dbeafe; color: #1d4ed8; } .ph2 { background: #fce7f3; color: #9d174d; }
+  .ph3 { background: #d1fae5; color: #065f46; } .ph4 { background: #fef3c7; color: #92400e; }
+  .phase-chevron { font-size: 12px; color: var(--text-muted); transition: transform .2s; }
+  .phase-card.open .phase-chevron { transform: rotate(180deg); }
+  .phase-body { display: none; padding: 16px 20px 20px; }
+  .phase-card.open .phase-body { display: block; }
+  .phase-goal { font-size: 12.5px; color: var(--text-muted); font-style: italic; margin-bottom: 12px; }
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: var(--surface-alt); padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.5; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+  .misconception { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .misconception .wrong { background: var(--red-light); padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; }
+  .misconception .right { padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; color: #065f46; background: var(--green-light); }
+  .misconception .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .quiz-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .quiz-q { padding: 14px 18px; font-size: 14.5px; font-weight: 600; cursor: pointer; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .quiz-q:hover { background: var(--surface-alt); }
+  .quiz-num { flex-shrink: 0; width: 24px; height: 24px; background: var(--accent); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; margin-top: 1px; }
+  .quiz-q .qtext { flex: 1; }
+  .quiz-toggle { font-size: 11px; color: var(--text-muted); flex-shrink: 0; margin-top: 3px; }
+  .quiz-hint { display: none; padding: 10px 18px 14px; font-size: 13px; color: #92400e; background: var(--yellow-light); border-top: 1px solid var(--border); }
+  .quiz-item.open .quiz-hint { display: block; }
+  .reading-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .reading-list li { display: flex; align-items: flex-start; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; font-size: 14px; }
+  .reading-list li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 1px; cursor: pointer; background: var(--surface); display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .reading-list li.checked .cb { background: var(--green); border-color: var(--green); }
+  .reading-list li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .reading-list li.checked .rtext { color: var(--text-muted); text-decoration: line-through; }
+  .notes-area { width: 100%; min-height: 160px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: inherit; font-size: 14px; color: var(--text); resize: vertical; line-height: 1.6; }
+  .notes-area:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .focus-list { list-style: none; display: flex; flex-direction: column; gap: 14px; }
+  .focus-list li { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14.5px; line-height: 1.6; }
+  .focus-list li strong { color: var(--accent); display: block; margin-bottom: 4px; }
+  .connections { display: flex; flex-direction: column; gap: 12px; }
+  .conn-card { display: flex; align-items: flex-start; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14px; }
+  .conn-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .conn-label { font-weight: 700; margin-bottom: 3px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .tradeoff-box { background: var(--surface-alt); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 14px 18px; font-size: 14px; font-style: italic; color: var(--text); margin-top: 14px; }
+  .tier-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 16px 0; }
+  .tier-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; font-size: 14px; }
+  .tier-card h4 { font-size: 13px; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .tier-card .stat { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 2px 7px; border-radius: 4px; }
+  .stat-blue { background: var(--accent-light); color: var(--accent); }
+  .stat-orange { background: var(--orange-light); color: var(--orange); }
+  .stat-green { background: var(--green-light); color: var(--green); }
+  .stat-red { background: var(--red-light); color: var(--red); }
+  @media (max-width: 900px) { #toc { display: none; } main { margin-left: 0; padding: 24px 20px 60px; } .tier-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<aside id="toc">
+  <div id="toc-header">
+    <span class="phase-tag">Phase B · Topic 7</span>
+    <h2>7.2 Hash Partitioning</h2>
+  </div>
+  <nav>
+    <a href="#s0">🗺️ Overview</a>
+    <a href="#s1">🎯 Goal</a>
+    <a href="#s2">✅ Mastery Criteria</a>
+    <a href="#s3">🗓️ Study Phases</a>
+    <a href="#s4">📋 Cheatsheet</a>
+    <a href="#s5">🧠 Core Definition</a>
+    <a href="#s6">📦 Core Concepts</a>
+    <a href="#s7">🔍 First Principles</a>
+    <a href="#s8">🗺️ Mental Models</a>
+    <a href="#s9">⚙️ How It Works</a>
+    <a href="#s10">🏭 Real-World Examples</a>
+    <a href="#s11">⚖️ Trade-offs</a>
+    <a href="#s12">🎯 Interview Application</a>
+    <a href="#s13">⚠️ Misconceptions</a>
+    <a href="#s14">🔗 Relationships</a>
+    <a href="#s15">🧪 Self-Check Quiz</a>
+    <a href="#s16">📚 Further Reading</a>
+    <a href="#s17">✍️ My Notes</a>
+  </nav>
+</aside>
+
+<main>
+<article>
+
+<!-- HEADER -->
+<div class="doc-header">
+  <div class="meta">
+    <span class="tag tag-phase">⚡ Phase B — Scalability</span>
+    <span class="tag tag-topic">🔀 Topic 7 — Data Partitioning / Sharding</span>
+    <span class="tag tag-date">📅 2026-07-13</span>
+  </div>
+  <h1>7.2 Hash Partitioning<br><span style="font-weight:400;color:var(--text-muted);font-size:22px;">Even distribution by hashing the key — and the mod N trap</span></h1>
+</div>
+
+<!-- S0: OVERVIEW -->
+<section id="s0">
+  <h2 class="section-title"><span class="num">§0</span> 🗺️ Topic Overview</h2>
+  <p>Hash partitioning is the mechanism for deciding <em>which</em> shard a row lives on: run its partition key through a hash function and map the result to a partition. Where 7.1 told you <em>whether</em> to split rows horizontally, 7.2 answers <em>how to assign</em> them. The whole point of hashing is <strong>uniform, uncoordinated placement</strong> — <code>hash(key)</code> scatters keys pseudo-randomly, so load spreads evenly with no central lookup table and no human curation. The price is that hashing <strong>destroys ordering</strong>: two adjacent keys land on unrelated shards, which kills range queries and makes hashing the natural rival of range partitioning (7.3).</p>
+
+  <ul class="focus-list" style="margin-top:18px;">
+    <li><strong>1. The two-step mapping</strong> — hash the key → map the hash to a partition. Naive map is <code>hash(key) mod N</code>. Keep the two steps distinct; the mapping step is where consistent hashing later differs.</li>
+    <li><strong>2. Why it distributes load</strong> — a uniform hash turns any key distribution, even monotonic auto-increment IDs, into a flat random spread. This is the one reason to choose hashing over range.</li>
+    <li><strong>3. What hashing costs</strong> — ordering is gone. Range scans, prefix queries, and "next N rows" all become scatter-gather across every shard.</li>
+    <li><strong>4. The <code>mod N</code> rebalancing bomb</strong> — adding one node changes <code>N</code>, which changes <code>hash(key) mod N</code> for almost every key → near-total reshuffle. This is the failure consistent hashing (7.4) exists to fix. Most tested idea here.</li>
+    <li><strong>5. Hashing does NOT fix single-key hotspots</strong> — hashing spreads many keys evenly; it cannot spread one hot key, which deterministically hashes to a single partition.</li>
+  </ul>
+</section>
+
+<!-- S1: GOAL -->
+<section id="s1">
+  <h2 class="section-title"><span class="num">§1</span> 🎯 Goal of This Subtopic</h2>
+  <div class="callout callout-goal">
+    After studying this, you should be able to specify a hash-partitioning scheme end to end: choose a partition key, apply a hash function, map to partitions, and route a read and a write to the correct shard. You should be able to justify hashing over range partitioning in terms of load distribution, explain precisely why <code>hash(key) mod N</code> makes adding capacity catastrophic, and pre-empt the two failure modes interviewers always chase — lost range-query locality and single-key hot partitions that hashing cannot solve.
+  </div>
+</section>
+
+<!-- S2: MASTERY -->
+<section id="s2">
+  <h2 class="section-title"><span class="num">§2</span> ✅ What Mastery Looks Like</h2>
+  <ul class="checklist" id="mastery-list">
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can define hash partitioning in one sentence and describe the two-step mapping (hash the key → map hash to partition)</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can explain <em>why</em> hashing produces even load regardless of the input key distribution, and what property the hash function must have</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can trace a read and a write to the owning shard, computing <code>hash(key) mod N</code> for a concrete key</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can explain the <code>mod N</code> rebalancing problem: why adding one node remaps almost all keys, and why it motivates consistent hashing</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can explain why hash partitioning kills range queries and turns them into scatter-gather</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can explain why hashing does NOT solve a single hot key, and distinguish key skew from partition skew</span></li>
+  </ul>
+  <div class="callout callout-tip" style="margin-top:18px;">💡 <strong>Rule of thumb:</strong> If you can teach it to someone else and field their follow-up questions, you've mastered it.</div>
+</section>
+
+<!-- S3: STUDY PHASES -->
+<section id="s3">
+  <h2 class="section-title"><span class="num">§3</span> 🗓️ Study Phases to Achieve Mastery</h2>
+
+  <div class="phase-card open">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph1">Phase 1</span> Acquire 📖</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Read deeply enough that you could explain the concept without the doc.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text"><strong>DDIA Chapter 6 — "Partitioning by Hash of Key"</strong> (Kleppmann) — the definitive treatment; contrast hash vs. key-range partitioning</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text"><strong>DynamoDB Developer Guide — "Partitions and data distribution"</strong> — <a href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.Partitions.html" target="_blank">docs.aws.amazon.com</a></span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text"><strong>Cassandra — "How data is distributed" (Murmur3Partitioner)</strong> — hash → token ring</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Read Sections 5–9 of this doc carefully — don't skim</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Re-read the Cheatsheet (§4) and recite it from memory after</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph2">Phase 2</span> Consolidate ✍️</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Verify you can reproduce knowledge in your own words without looking.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Close the doc — write out the Core Definition and the two-step mapping from memory, then compare</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Explain First Principles out loud: what was painful about range/manual assignment that hashing fixed?</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Reconstruct the <code>mod N</code> rebalancing problem step by step with a concrete example</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Restate each Trade-off row in your own words — if you can't explain the cost, you don't own it</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph3">Phase 3</span> Apply 🔧</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Connect to real systems and simulate interview scenarios.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Go through Real-World Examples (§10) — verify each claim and add notes to §17</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Practice Interview Application (§12) out loud — say the trigger phrases and your response as if live</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Work through Misconceptions (§13) — explain WHY each misconception is wrong</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Trace Relationships (§14) — explain each connection without looking</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph4">Phase 4</span> Validate 🧪</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Confirm you actually own it, not just recognize it.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Answer every Self-Check Quiz question (§15) out loud without notes</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Recite the Cheatsheet (§4) from memory — if you can't, re-do Phase 2</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Tick off mastery criteria in §2 — only check a box if you can demonstrate on demand</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Teach this concept to an imaginary interviewer for 2 minutes without hesitation</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- S4: CHEATSHEET -->
+<section id="s4">
+  <h2 class="section-title"><span class="num">§4</span> 📋 Cheatsheet</h2>
+  <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+
+  <!-- Radial Mindmap SVG -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">🧠 Concept Mindmap</div>
+    <svg viewBox="0 0 820 480" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:820px;display:block;margin:0 auto;">
+      <rect width="820" height="480" fill="#fafafa" rx="8"/>
+      <!-- Connector lines -->
+      <line x1="410" y1="240" x2="175" y2="97" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="645" y2="97" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="100" y2="280" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="720" y2="280" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="175" y2="401" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="645" y2="401" stroke="#aaa" stroke-width="1.5"/>
+      <!-- Central -->
+      <ellipse cx="410" cy="240" rx="100" ry="42" fill="#a5d8ff" stroke="#1971c2" stroke-width="2"/>
+      <text x="410" y="234" text-anchor="middle" dominant-baseline="middle" font-family="Arial,sans-serif" font-size="14" font-weight="bold" fill="#1a1917">Hash</text>
+      <text x="410" y="252" text-anchor="middle" dominant-baseline="middle" font-family="Arial,sans-serif" font-size="14" font-weight="bold" fill="#1a1917">Partitioning</text>
+      <!-- Two-step mapping -->
+      <rect x="88" y="66" width="174" height="62" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="175" y="86" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Two-Step Mapping</text>
+      <text x="175" y="102" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">1. h = hash(key)</text>
+      <text x="175" y="117" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">2. p = h mod N</text>
+      <!-- Why: even load -->
+      <rect x="558" y="66" width="174" height="62" rx="8" fill="#b2f2bb" stroke="#2f9e44" stroke-width="1.5"/>
+      <text x="645" y="86" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Why: Even Load</text>
+      <text x="645" y="102" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">Uniform hash spreads</text>
+      <text x="645" y="117" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">even monotonic keys</text>
+      <!-- Cost: no ordering -->
+      <rect x="20" y="248" width="164" height="64" rx="8" fill="#ffc9c9" stroke="#c92a2a" stroke-width="1.5"/>
+      <text x="102" y="268" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Cost: No Order</text>
+      <text x="102" y="284" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Range query →</text>
+      <text x="102" y="298" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">scatter-gather</text>
+      <text x="102" y="311" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">across all shards</text>
+      <!-- mod N trap -->
+      <rect x="636" y="248" width="164" height="64" rx="8" fill="#ffe3e3" stroke="#c92a2a" stroke-width="1.5"/>
+      <text x="718" y="268" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">mod N Trap</text>
+      <text x="718" y="284" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Add node → N changes</text>
+      <text x="718" y="298" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">→ ~all keys remap</text>
+      <text x="718" y="311" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">→ use 7.4</text>
+      <!-- Hot key -->
+      <rect x="88" y="372" width="174" height="60" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+      <text x="175" y="393" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">⚠️ Not Hotspot-Proof</text>
+      <text x="175" y="409" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">One hot key → one shard</text>
+      <text x="175" y="423" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Key skew ≠ solved</text>
+      <!-- Real systems -->
+      <rect x="558" y="372" width="174" height="60" rx="8" fill="#c3fae8" stroke="#0ca678" stroke-width="1.5"/>
+      <text x="645" y="393" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Real Systems</text>
+      <text x="645" y="409" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">DynamoDB · Cassandra</text>
+      <text x="645" y="423" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Redis slots · Kafka</text>
+    </svg>
+    <p class="caption">Radial mindmap: six clusters around the hash partitioning core concept</p>
+  </div>
+
+  <!-- Decision Map SVG -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">🗺️ Hash vs. Range Partitioning Decision Map</div>
+    <svg viewBox="0 0 720 560" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:720px;display:block;margin:0 auto;" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+      <rect width="720" height="560" fill="#fafafa" rx="8"/>
+
+      <!-- START -->
+      <rect x="255" y="14" width="210" height="38" rx="19" fill="#1a1917"/>
+      <text x="360" y="37" text-anchor="middle" font-size="12" font-weight="600" fill="#fff">Shard rows across nodes? (7.1)</text>
+      <line x1="360" y1="52" x2="360" y2="74" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="372" y="68" font-size="10" fill="#6b6861">Yes</text>
+
+      <!-- Q1: dominant query -->
+      <rect x="185" y="74" width="350" height="44" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="360" y="93" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">What is the DOMINANT query on</text>
+      <text x="360" y="109" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">the partition key?</text>
+
+      <!-- branch: point lookups (left/down to hash) -->
+      <line x1="360" y1="118" x2="360" y2="150" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="372" y="140" font-size="10" fill="#6b6861">Point lookups</text>
+
+      <!-- HASH outcome -->
+      <rect x="150" y="150" width="420" height="60" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+      <text x="360" y="172" text-anchor="middle" font-size="14" font-weight="800" fill="#1e40af">✅ HASH PARTITIONING</text>
+      <text x="360" y="190" text-anchor="middle" font-size="11" fill="#1e40af">partition = hash(key) mod N   (or hash → token ring)</text>
+      <text x="360" y="204" text-anchor="middle" font-size="11" fill="#1e40af">Even load · no sequential hotspot · no lookup table</text>
+
+      <!-- Hash warnings -->
+      <line x1="360" y1="210" x2="360" y2="228" stroke="#bbb" stroke-width="1.5"/>
+      <rect x="150" y="228" width="420" height="40" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+      <text x="360" y="245" text-anchor="middle" font-size="11" font-weight="700" fill="#92400e">⚠️ Range queries → scatter-gather across ALL shards</text>
+      <text x="360" y="260" text-anchor="middle" font-size="11" fill="#92400e">Adjacent keys land on unrelated shards</text>
+
+      <rect x="150" y="276" width="420" height="40" rx="8" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5"/>
+      <text x="360" y="293" text-anchor="middle" font-size="11" font-weight="700" fill="#7f1d1d">⚠️ Plain mod N remaps ~ALL keys when N changes</text>
+      <text x="360" y="308" text-anchor="middle" font-size="11" fill="#7f1d1d">→ use consistent hashing (7.4)</text>
+
+      <!-- Right branch: range -->
+      <line x1="535" y1="96" x2="640" y2="96" stroke="#bbb" stroke-width="1.5"/>
+      <line x1="640" y1="96" x2="640" y2="340" stroke="#bbb" stroke-width="1.5"/>
+      <line x1="640" y1="340" x2="575" y2="340" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="600" y="88" text-anchor="middle" font-size="10" fill="#6b6861">Range scans</text>
+
+      <rect x="150" y="330" width="420" height="56" rx="10" fill="#ffd8a8" stroke="#e67700" stroke-width="2"/>
+      <text x="360" y="352" text-anchor="middle" font-size="14" font-weight="800" fill="#7c2d12">RANGE PARTITIONING (7.3)</text>
+      <text x="360" y="370" text-anchor="middle" font-size="11" fill="#7c2d12">Keeps ordering · range query hits 1 contiguous shard</text>
+      <text x="360" y="382" text-anchor="middle" font-size="10" fill="#7c2d12">⚠️ Sequential keys → hot last shard</text>
+
+      <!-- Both branch -->
+      <line x1="360" y1="316" x2="360" y2="404" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="430" y="400" text-anchor="middle" font-size="10" fill="#6b6861">Need both point + range?</text>
+      <rect x="150" y="404" width="420" height="50" rx="10" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.5"/>
+      <text x="360" y="424" text-anchor="middle" font-size="12" font-weight="700" fill="#5b21b6">Compromise</text>
+      <text x="360" y="440" text-anchor="middle" font-size="10.5" fill="#5b21b6">Compound key (hash prefix, range within) OR separate ordered index / OLAP store</text>
+
+      <!-- Remember box -->
+      <rect x="150" y="470" width="420" height="72" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="360" y="490" text-anchor="middle" font-size="11" font-weight="700" fill="#6b6861">REMEMBER</text>
+      <text x="360" y="510" text-anchor="middle" font-size="11" fill="#1a1917">Hashing spreads MANY keys evenly.</text>
+      <text x="360" y="526" text-anchor="middle" font-size="11" fill="#1a1917">It does NOT spread ONE hot key → that key hashes to a single partition.</text>
+      <text x="360" y="539" text-anchor="middle" font-size="10" fill="#6b6861">Fix single-key skew separately (7.6)</text>
+
+      <defs>
+        <marker id="dm-arr" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+          <path d="M0,0 L0,7 L7,3.5 z" fill="#bbb"/>
+        </marker>
+      </defs>
+    </svg>
+    <p class="caption">Choose by dominant query pattern: point lookups → hash; ordered/range scans → range</p>
+  </div>
+
+  <div class="cheatsheet">
+<span class="label">§ 1  WHY IT EXISTS</span>Horizontal sharding (7.1) needs a rule to assign each row to a shard. Two bad options:
+manual assignment (a lookup table that grows and must be maintained) and range
+assignment (sequential keys pile onto the newest shard → hotspot). Hashing solves both:
+run the partition key through a uniform hash function and keys scatter pseudo-randomly
+across shards. No lookup table (placement is computed, not stored) and no sequential
+hotspot (a monotonic input becomes a flat random spread). Even distribution with zero
+coordination is the entire value proposition.
+
+<span class="label">§ 2  THE TWO-STEP MAPPING</span>STEP 1  hash the key:     h = hash(partition_key)   // uniform, deterministic
+STEP 2  map to partition: p = h mod N               // naive; N = shard count
+                          (better: place h on a token ring — consistent hashing 7.4)
+Read/write WITH key: compute p → route to that one shard (+ replicas). ~1 hop.
+Hash function needs UNIFORMITY + DETERMINISM, not cryptographic strength.
+  Common: MurmurHash, xxHash, CRC. (Avoid Java String.hashCode — poorly distributed.)
+
+<span class="label">§ 3  WHAT HASHING COSTS (vs range)</span>Ordering is DESTROYED: adjacent keys (user_1000, user_1001) land on unrelated shards.
+  → Range queries / ordered scans / prefix lookups = SCATTER-GATHER across all N shards,
+    bounded by the slowest shard. If the dominant query is a range, DON'T hash.
+Point lookups stay cheap (1 shard); ranges become expensive. Choose by query pattern.
+
+<span class="label">§ 4  THE mod N REBALANCING BOMB (most tested)</span>partition = hash(key) mod N depends on N. Change N (add/remove a node) → the modulus
+changes → hash(key) mod N changes for ALMOST EVERY key → near-total data reshuffle.
+  Example: 4 → 5 nodes remaps ~80% of keys. Catastrophic at scale.
+FIX: consistent hashing (7.4) — adding a node moves only ~1/N of keys, not ~all.
+
+<span class="label">§ 5  HASHING ≠ HOTSPOT-PROOF (key skew vs partition skew)</span>Hashing evens out load ONLY when load is spread across MANY distinct keys.
+A single hot key (celebrity, viral product) hashes to ONE partition → that partition is
+hot no matter how good the hash. Hashing cannot split one key.
+  Also: low-cardinality keys (country, boolean) → few distinct hashes → skew.
+Distinguish: KEY skew = one value too popular; PARTITION skew = uneven value→shard map.
+
+<span class="label">§ 6  USE / AVOID</span>Use HASH:   dominant access is point lookup by a high-cardinality key; you want even
+            load and no manual placement; sequential keys would otherwise hotspot.
+Use RANGE:  dominant access is ordered/range scans; you can tolerate hotspot mitigation.
+Avoid HASH: range queries dominate; OR a single key carries a huge share of traffic
+            (fix separately); OR you use plain mod N and expect to rescale often.
+
+<span class="label">§ 7  INTERVIEW TRIGGERS + FTAC</span>Triggers: "How do you decide which shard a row goes to?" / "How do you spread load
+  evenly?" / "What happens when you add a shard?" / "Why not just mod the ID by N?"
+F  "I need to place each row on a shard. Hashing the partition key gives even,
+   coordination-free distribution — but it destroys ordering."
+T  "Hash buys uniform load and no sequential hotspot; it costs range-query locality
+   (scatter-gather) and, with plain mod N, a full reshuffle when N changes."
+A  "Assuming reads are point lookups by user_id and there's no single dominant hot key —"
+C  "I'd hash user_id (MurmurHash) onto a consistent-hash ring so adds move only ~1/N of
+   keys, replicate each shard, and push range/analytics queries to a separate store."
+
+<span class="label">§ 8  NUMBERS & GOTCHA</span>mod N reshuffle:  4→5 nodes remaps ~80% of keys; consistent hashing moves only ~1/N.
+Redis Cluster:    CRC16(key) mod 16384 fixed hash slots (slots move, not the formula).
+Cassandra:        Murmur3 → 64-bit token ring; DynamoDB hashes the partition key.
+Hash fn:          uniform + fast (MurmurHash/xxHash), NOT cryptographic (too slow).
+GOTCHA: candidates say "hashing removes hot partitions." FALSE — it removes hotspots
+  from sequential/skewed key RANGES, but a single high-traffic KEY still lands on one
+  partition. And plain hash(key) mod N is a trap: fine until the first rescale, then it
+  remaps almost everything. Reach for consistent hashing before you're asked.
+  </div>
+</section>
+
+<!-- S5: CORE DEFINITION -->
+<section id="s5">
+  <h2 class="section-title"><span class="num">§5</span> 🧠 Core Definition</h2>
+  <div class="callout callout-teal" style="font-size:16px;font-weight:600;line-height:1.6;">
+    Hash partitioning assigns each row to a shard by applying a hash function to its partition key and mapping the resulting hash value to a partition (classically <code>partition = hash(key) mod N</code>, or better, by placing the hash on a token ring) — producing an even, computed, coordination-free distribution of keys across shards at the cost of destroying key ordering.
+  </div>
+
+  <div class="tier-grid" style="margin-top:20px;">
+    <div class="tier-card">
+      <h4>🔵 Hash Partitioning <span class="stat stat-blue">even load</span></h4>
+      <p style="font-size:13px;margin-bottom:6px;">Placement = <code>hash(key)</code> → partition. Scatters keys pseudo-randomly.</p>
+      <p style="font-size:13px;margin-bottom:0;color:var(--green);">✅ Uniform load, no sequential hotspot, no lookup table. <span style="color:var(--red);">⚠️ No range locality.</span></p>
+    </div>
+    <div class="tier-card">
+      <h4>🟠 Range Partitioning (7.3) <span class="stat stat-orange">ordered</span></h4>
+      <p style="font-size:13px;margin-bottom:6px;">Placement by key ranges (0–1M, 1M–2M …). Preserves ordering.</p>
+      <p style="font-size:13px;margin-bottom:0;color:var(--green);">✅ Cheap range scans. <span style="color:var(--red);">⚠️ Sequential keys → hot last shard.</span></p>
+    </div>
+  </div>
+</section>
+
+<!-- S6: CORE CONCEPTS -->
+<section id="s6">
+  <h2 class="section-title"><span class="num">§6</span> 📦 Core Concepts</h2>
+
+  <h3>The Hash Function</h3>
+  <p>A deterministic function mapping a partition key to a fixed-range integer, chosen so that any input distribution produces a near-uniform spread of outputs. The critical properties are <strong>uniformity</strong> (outputs evenly fill the range, so shards get equal shares) and <strong>determinism</strong> (the same key always hashes to the same value, so routing is reproducible without a lookup table). Cryptographic strength is <em>not</em> required — production systems use fast non-cryptographic hashes like MurmurHash, xxHash, or CRC. A poor choice (e.g., Java's <code>String.hashCode</code>, which clusters) produces uneven partitions.</p>
+
+  <h3>The Two-Step Mapping (hash → partition)</h3>
+  <p>Placement is always two steps: first <code>h = hash(key)</code>, then map <code>h</code> to one of <code>N</code> partitions. The naive mapping is <code>h mod N</code>. Keeping these steps separate matters because consistent hashing (7.4) keeps step 1 identical and only changes step 2 (map the hash onto a ring of positions instead of taking it mod N) — which is what fixes the rebalancing problem.</p>
+
+  <h3>Uniform Load Distribution</h3>
+  <p>The reason to hash at all. Because a good hash scrambles inputs, even a pathological key distribution — monotonically increasing IDs, timestamps, sequential order numbers — comes out as a flat random spread. This eliminates the "all new writes hit the newest shard" hotspot that plagues range partitioning, without anyone hand-balancing shards.</p>
+
+  <h3>The <code>mod N</code> Rebalancing Problem</h3>
+  <p>The defining weakness of naive hash partitioning. Because the partition is <code>hash(key) mod N</code>, the assignment depends on <code>N</code>. Change <code>N</code> by adding or removing a node and the modulus changes, so <code>hash(key) mod N</code> changes for <em>almost every key</em> — forcing a near-total reshuffle of data across the cluster. This is why plain <code>mod N</code> is unsuitable for elastic clusters and why consistent hashing exists.</p>
+
+  <h3>Key Skew vs. Partition Skew</h3>
+  <p>Two distinct failure modes. <strong>Partition skew</strong> is uneven key→shard mapping (too few distinct hash values, e.g., a low-cardinality key like <code>country</code>) — a hashing/key-choice problem. <strong>Key skew</strong> is a single key carrying a disproportionate share of traffic (a celebrity user, a viral product). Hashing fixes neither perfectly: it assumes load is spread across many keys, and it deterministically sends one key to one partition, so a single hot key remains hot regardless of hash quality (handled in 7.6).</p>
+</section>
+
+<!-- S7: FIRST PRINCIPLES -->
+<section id="s7">
+  <h2 class="section-title"><span class="num">§7</span> 🔍 First Principles — Why Does This Exist?</h2>
+  <p>Once you've decided to shard rows horizontally (7.1), you face an unavoidable question: given a row, which shard owns it? The answer must be cheap to compute, must spread data evenly so no node is overloaded, and ideally must require no central coordinator on every request. The naive answers all fail. A <strong>lookup table</strong> ("key → shard") works but becomes a bottleneck and a single point of failure, and it grows with the data. <strong>Range assignment</strong> (shard 1 gets IDs 0–1M, shard 2 gets 1M–2M) preserves ordering but creates a brutal hotspot: because most systems generate keys monotonically (auto-increment IDs, timestamps, snowflake IDs), <em>every new write lands on the last shard</em> while earlier shards go cold.</p>
+  <p>Hashing is the insight that a good hash function is a <strong>coordination-free load spreader</strong>. Run the key through it and you get a pseudo-random position that is (a) computed on the fly with no stored table, (b) identical every time for the same key, and (c) uniformly distributed even if the input keys are sequential or clustered. That converts placement into pure arithmetic and turns a monotonic write stream into an evenly balanced one. The remaining wrinkle — that the simplest mapping, <code>mod N</code>, breaks when the cluster resizes — is precisely the gap consistent hashing was invented to close, which is why 7.2 sets up 7.4.</p>
+
+  <!-- Range hotspot vs hash spread diagram -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">📊 Sequential Keys — Range (hotspot) vs Hash (even)</div>
+    <svg viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:720px;display:block;margin:0 auto;">
+      <rect width="720" height="250" fill="#fafafa" rx="8"/>
+      <text x="20" y="28" font-family="Arial,sans-serif" font-size="12" fill="#666">Incoming writes: monotonic IDs 1001, 1002, 1003, 1004, 1005, 1006 …</text>
+
+      <!-- RANGE side -->
+      <text x="180" y="58" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="bold" fill="#e67700">RANGE partitioning</text>
+      <!-- shards -->
+      <rect x="40" y="130" width="70" height="30" rx="4" fill="#f3f2ef" stroke="#ccc"/>
+      <text x="75" y="150" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#999">Shard 0</text>
+      <rect x="120" y="130" width="70" height="30" rx="4" fill="#f3f2ef" stroke="#ccc"/>
+      <text x="155" y="150" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#999">Shard 1</text>
+      <rect x="200" y="130" width="70" height="30" rx="4" fill="#f3f2ef" stroke="#ccc"/>
+      <text x="235" y="150" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#999">Shard 2</text>
+      <!-- all load on shard 3 -->
+      <rect x="280" y="80" width="70" height="80" rx="4" fill="#fee2e2" stroke="#dc2626" stroke-width="2"/>
+      <text x="315" y="118" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" font-weight="bold" fill="#7f1d1d">Shard 3</text>
+      <text x="315" y="134" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" fill="#7f1d1d">1001–1006</text>
+      <!-- arrows all to shard3 -->
+      <line x1="315" y1="66" x2="315" y2="78" stroke="#dc2626" stroke-width="2" marker-end="url(#fp-arr)"/>
+      <text x="315" y="185" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" font-weight="bold" fill="#dc2626">🔥 hot last shard</text>
+      <text x="315" y="200" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" fill="#666">earlier shards idle</text>
+
+      <!-- divider -->
+      <line x1="380" y1="45" x2="380" y2="215" stroke="#e5e3de" stroke-width="1.5" stroke-dasharray="5,3"/>
+
+      <!-- HASH side -->
+      <text x="545" y="58" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="bold" fill="#2563eb">HASH partitioning</text>
+      <rect x="410" y="110" width="66" height="50" rx="4" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="443" y="132" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#1e40af">Shard 0</text>
+      <text x="443" y="147" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" fill="#1e40af">1003,1006</text>
+      <rect x="484" y="110" width="66" height="50" rx="4" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="517" y="132" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#1e40af">Shard 1</text>
+      <text x="517" y="147" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" fill="#1e40af">1001,1004</text>
+      <rect x="558" y="110" width="66" height="50" rx="4" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="591" y="132" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#1e40af">Shard 2</text>
+      <text x="591" y="147" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" fill="#1e40af">1002,1005</text>
+      <rect x="632" y="110" width="66" height="50" rx="4" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="665" y="132" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#1e40af">Shard 3</text>
+      <text x="665" y="147" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" fill="#1e40af">(next…)</text>
+      <text x="554" y="185" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" font-weight="bold" fill="#16a34a">✓ even spread</text>
+      <text x="554" y="200" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" fill="#666">hash scrambles adjacency</text>
+
+      <defs>
+        <marker id="fp-arr" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+          <path d="M0,0 L0,8 L8,4 z" fill="#dc2626"/>
+        </marker>
+      </defs>
+    </svg>
+    <p class="caption">Same monotonic key stream: range piles onto the newest shard; hash spreads it evenly</p>
+  </div>
+</section>
+
+<!-- S8: MENTAL MODELS -->
+<section id="s8">
+  <h2 class="section-title"><span class="num">§8</span> 🗺️ Mental Models</h2>
+
+  <h3>Model 1: The Coat-Check Ticket</h3>
+  <p>When you hand your coat to a coat check, they don't file it by your name (which clumps all the "S" surnames); they give you a hash — a numbered ticket — and store the coat in the slot matching that number. Retrieval is pure computation: ticket → slot, no searching, no ordering. Hash partitioning is the same: the key's hash <em>is</em> the ticket, and the slot is the shard. It works because numbers spread evenly regardless of how names cluster. <em>Where it breaks down:</em> if the cloakroom adds slots (more shards), every ticket's slot number changes under <code>mod N</code> — you'd re-file every coat. That's the rebalancing problem made physical.</p>
+
+  <h3>Model 2: Shuffling a Deck vs. Sorting It</h3>
+  <p>Range partitioning is a <em>sorted</em> deck: cards in order, so "give me the 10 through King of hearts" is one contiguous grab — but every new card gets added to the same end (hotspot). Hash partitioning <em>shuffles</em> the deck: any card is equally likely to be anywhere, so dealing evenly across N hands is trivial and no hand fills first — but "give me the hearts in order" now means searching every hand (scatter-gather). The model captures the core trade instantly: shuffling buys balance and costs order; sorting buys order and costs balance. <em>Where it breaks down:</em> real hashing is deterministic, not random — the "shuffle" is fixed per key, which is what makes lookups reproducible.</p>
+
+  <h3>Model 3: The Modulus Trap Frame</h3>
+  <p>When you hear "shard by <code>id % number_of_servers</code>," a mental alarm should fire: <em>what happens the day we add a server?</em> Picture keys 0–11 across 3 servers (<code>% 3</code>): key 7 → server 1. Add a fourth server (<code>% 4</code>): key 7 → server 3. Nearly every key moved. This frame — "does the placement formula depend on N?" — instantly tells you whether a scheme is elastic. If yes (plain mod N), it's a trap; if the formula is N-independent (consistent hashing's ring, Redis's fixed slot count), it's safe. <em>Where it breaks down:</em> it's a diagnostic, not a design — knowing mod N is bad is only useful if you then reach for the ring.</p>
+</section>
+
+<!-- S9: HOW IT WORKS -->
+<section id="s9">
+  <h2 class="section-title"><span class="num">§9</span> ⚙️ How It Works — Mechanics</h2>
+
+  <!-- Placement flow diagram -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">⚙️ Placement Flow — key → hash → shard</div>
+    <svg viewBox="0 0 760 170" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:760px;display:block;margin:0 auto;">
+      <rect width="760" height="170" fill="#fafafa" rx="8"/>
+      <!-- key -->
+      <rect x="20" y="65" width="120" height="50" rx="8" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.5"/>
+      <text x="80" y="86" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#4c1d95">Partition key</text>
+      <text x="80" y="102" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#4c1d95">user_id = 12345</text>
+      <line x1="140" y1="90" x2="172" y2="90" stroke="#666" stroke-width="1.5" marker-end="url(#hw-arr)"/>
+      <!-- hash -->
+      <rect x="174" y="65" width="140" height="50" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="244" y="86" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#1e40af">h = hash(key)</text>
+      <text x="244" y="102" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#1e40af">MurmurHash → 3829174…</text>
+      <line x1="314" y1="90" x2="346" y2="90" stroke="#666" stroke-width="1.5" marker-end="url(#hw-arr)"/>
+      <!-- mod N -->
+      <rect x="348" y="65" width="140" height="50" rx="8" fill="#c3fae8" stroke="#0ca678" stroke-width="1.5"/>
+      <text x="418" y="86" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#064e3b">p = h mod N</text>
+      <text x="418" y="102" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#064e3b">3829174 mod 4 = 2</text>
+      <!-- fanout to shard 2 -->
+      <line x1="488" y1="90" x2="520" y2="90" stroke="#666" stroke-width="1.5" marker-end="url(#hw-arr)"/>
+      <!-- shards -->
+      <rect x="600" y="20" width="130" height="26" rx="5" fill="#f3f2ef" stroke="#ccc"/>
+      <text x="665" y="37" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#999">Shard 0</text>
+      <rect x="600" y="52" width="130" height="26" rx="5" fill="#f3f2ef" stroke="#ccc"/>
+      <text x="665" y="69" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#999">Shard 1</text>
+      <rect x="600" y="84" width="130" height="26" rx="5" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+      <text x="665" y="101" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" font-weight="bold" fill="#065f46">Shard 2 ✓ (+ replicas)</text>
+      <rect x="600" y="116" width="130" height="26" rx="5" fill="#f3f2ef" stroke="#ccc"/>
+      <text x="665" y="133" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#999">Shard 3</text>
+      <line x1="522" y1="90" x2="596" y2="97" stroke="#16a34a" stroke-width="1.5" marker-end="url(#hw-arr2)"/>
+      <text x="418" y="140" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#666">Same 3 steps for read and write — 1 hop, no lookup table</text>
+
+      <defs>
+        <marker id="hw-arr" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L0,8 L8,4 z" fill="#666"/></marker>
+        <marker id="hw-arr2" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L0,8 L8,4 z" fill="#16a34a"/></marker>
+      </defs>
+    </svg>
+    <p class="caption">Point lookup / write: hash the key, mod by shard count, route to that one shard</p>
+  </div>
+
+  <h3>Point Read &amp; Write (happy path)</h3>
+  <p>A read or write keyed by the partition key computes <code>hash(key) mod N</code> to find the owning shard, then routes there (writes go to the primary and replicate; reads may hit a replica). Because different keys hash to different values, writes spread evenly across all shards and aggregate write throughput scales with shard count. This single-shard, single-hop path is hashing's sweet spot.</p>
+
+  <h3>Range Query (the failure mode)</h3>
+  <p>A query over a range or order (<code>WHERE user_id BETWEEN 10000 AND 20000</code>, or <code>ORDER BY created_at LIMIT 50</code>) cannot be localized, because hashing scattered adjacent keys across unrelated shards. The router must <strong>scatter-gather</strong>: fan the query to all N shards, each scans its slice, the coordinator merges/sorts. Latency is bounded by the slowest shard and cost grows with N. This is why hashing is wrong when ranges dominate.</p>
+
+  <!-- mod N catastrophe diagram -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">💣 The mod N Rebalancing Catastrophe — add 1 node, remap ~all keys</div>
+    <svg viewBox="0 0 720 240" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:720px;display:block;margin:0 auto;">
+      <rect width="720" height="240" fill="#fafafa" rx="8"/>
+      <!-- Before -->
+      <text x="180" y="30" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="bold" fill="#1a1917">Before: N = 4  (key hash → hash mod 4)</text>
+      <!-- key rows -->
+      <text x="40" y="60" font-family="Arial,sans-serif" font-size="11" fill="#666">hash=100 → 100 mod 4 = <tspan font-weight="bold" fill="#2563eb">0</tspan></text>
+      <text x="40" y="82" font-family="Arial,sans-serif" font-size="11" fill="#666">hash=101 → 101 mod 4 = <tspan font-weight="bold" fill="#2563eb">1</tspan></text>
+      <text x="40" y="104" font-family="Arial,sans-serif" font-size="11" fill="#666">hash=102 → 102 mod 4 = <tspan font-weight="bold" fill="#2563eb">2</tspan></text>
+      <text x="40" y="126" font-family="Arial,sans-serif" font-size="11" fill="#666">hash=103 → 103 mod 4 = <tspan font-weight="bold" fill="#2563eb">3</tspan></text>
+      <text x="40" y="148" font-family="Arial,sans-serif" font-size="11" fill="#666">hash=104 → 104 mod 4 = <tspan font-weight="bold" fill="#2563eb">0</tspan></text>
+
+      <!-- divider -->
+      <line x1="360" y1="40" x2="360" y2="210" stroke="#e5e3de" stroke-width="1.5" stroke-dasharray="5,3"/>
+
+      <!-- After -->
+      <text x="545" y="30" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="bold" fill="#1a1917">After: N = 5  (add one node → mod 5)</text>
+      <text x="400" y="60" font-family="Arial,sans-serif" font-size="11" fill="#666">hash=100 → 100 mod 5 = <tspan font-weight="bold" fill="#16a34a">0</tspan>  <tspan fill="#16a34a">same</tspan></text>
+      <text x="400" y="82" font-family="Arial,sans-serif" font-size="11" fill="#666">hash=101 → 101 mod 5 = <tspan font-weight="bold" fill="#dc2626">1→1</tspan> <tspan fill="#dc2626">moved*</tspan></text>
+      <text x="400" y="104" font-family="Arial,sans-serif" font-size="11" fill="#666">hash=102 → 102 mod 5 = <tspan font-weight="bold" fill="#dc2626">2→2</tspan> <tspan fill="#dc2626">moved*</tspan></text>
+      <text x="400" y="126" font-family="Arial,sans-serif" font-size="11" fill="#666">hash=103 → 103 mod 5 = <tspan font-weight="bold" fill="#dc2626">3</tspan>  <tspan fill="#dc2626">moved</tspan></text>
+      <text x="400" y="148" font-family="Arial,sans-serif" font-size="11" fill="#666">hash=104 → 104 mod 5 = <tspan font-weight="bold" fill="#dc2626">4</tspan>  <tspan fill="#dc2626">moved</tspan></text>
+
+      <rect x="40" y="180" width="640" height="44" rx="8" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5"/>
+      <text x="360" y="199" text-anchor="middle" font-family="Arial,sans-serif" font-size="11.5" font-weight="bold" fill="#7f1d1d">Going 4 → 5 nodes remaps ≈ 1 − 1/N ≈ 80% of ALL keys → massive migration + cache-invalidation storm</text>
+      <text x="360" y="215" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#7f1d1d">Fix: consistent hashing (7.4) moves only ~1/N of keys when a node is added</text>
+    </svg>
+    <p class="caption">Because the formula depends on N, changing N reshuffles nearly the whole cluster</p>
+  </div>
+
+  <div class="callout callout-warn">
+    ⚠️ <strong>Why consistent hashing fixes it (preview of 7.4):</strong> instead of <code>mod N</code>, place both keys and nodes on a fixed ring of positions (0 … 2³²−1) by hashing them. A key belongs to the first node clockwise from its position. Adding a node only steals the keys between it and its predecessor — about <code>1/N</code> of keys — leaving everything else untouched. Redis Cluster achieves the same N-independence with a fixed 16384-slot space: rescaling moves <em>slots</em> between nodes, never changing the hashing formula.
+  </div>
+
+  <h3>Key Parameters to Reason About</h3>
+  <p><strong>Hash function:</strong> uniform + fast, not cryptographic — poor distribution causes partition skew. <strong>Partition-key cardinality:</strong> must be high; low-cardinality keys produce few distinct hashes → skew. <strong>Mapping scheme:</strong> plain <code>mod N</code> (simple, not elastic) vs. consistent hashing / fixed hash slots (elastic).</p>
+</section>
+
+<!-- S10: REAL-WORLD EXAMPLES -->
+<section id="s10">
+  <h2 class="section-title"><span class="num">§10</span> 🏭 Real-World System Examples</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>System</th><th>How Hash Partitioning Applies</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Amazon DynamoDB</strong></td>
+          <td>The <strong>partition key</strong> is hashed to determine which internal partition stores the item; even distribution across partitions underpins DynamoDB's scaling and throughput model</td>
+          <td>A single hot partition key still throttles (key skew); adaptive capacity + write-sharding suffixes / high-cardinality keys are the mitigation</td>
+        </tr>
+        <tr>
+          <td><strong>Apache Cassandra</strong></td>
+          <td>A <strong>partitioner</strong> (default <code>Murmur3Partitioner</code>) hashes the partition key into a 64-bit token, placing rows on a token ring — consistent hashing with virtual nodes</td>
+          <td>Range queries on partition keys aren't efficient; clustering keys give ordering <em>within</em> a partition, not across</td>
+        </tr>
+        <tr>
+          <td><strong>Redis Cluster</strong></td>
+          <td>Keys map via <code>CRC16(key) mod 16384</code> to one of <strong>16384 fixed hash slots</strong>; slots are distributed across nodes</td>
+          <td>The formula is N-independent by design — rescaling moves <em>slots</em>, not the rule; hash tags <code>{...}</code> force related keys into the same slot</td>
+        </tr>
+        <tr>
+          <td><strong>Apache Kafka (producer)</strong></td>
+          <td>Default partitioner sends a record to <code>hash(key) mod partition_count</code> so all records with the same key land on the same partition (per-key ordering)</td>
+          <td>Changing partition count breaks the key→partition mapping — a classic <code>mod N</code> gotcha for Kafka operators</td>
+        </tr>
+        <tr>
+          <td><strong>Memcached (client-side)</strong></td>
+          <td>Clients hash the key to choose a server; naive <code>mod N</code> clients reshuffle almost all keys when a server is added/removed</td>
+          <td>This exact pain popularized consistent hashing (Ketama) in memcached clients</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- S11: TRADE-OFFS -->
+<section id="s11">
+  <h2 class="section-title"><span class="num">§11</span> ⚖️ Trade-offs</h2>
+
+  <!-- Hash vs Range comparison diagram -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">⚖️ Hash vs Range Partitioning — Key Dimensions</div>
+    <svg viewBox="0 0 720 200" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:720px;display:block;margin:0 auto;">
+      <rect width="720" height="200" fill="#fafafa" rx="8"/>
+      <text x="230" y="28" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="bold" fill="#2563eb">HASH</text>
+      <text x="540" y="28" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="bold" fill="#e67700">RANGE</text>
+      <line x1="360" y1="8" x2="360" y2="195" stroke="#e5e3de" stroke-width="1.5" stroke-dasharray="5,3"/>
+
+      <text x="20" y="60" font-family="Arial,sans-serif" font-size="11" fill="#666" font-weight="bold">Load balance</text>
+      <text x="20" y="90" font-family="Arial,sans-serif" font-size="11" fill="#666" font-weight="bold">Range queries</text>
+      <text x="20" y="120" font-family="Arial,sans-serif" font-size="11" fill="#666" font-weight="bold">Sequential keys</text>
+      <text x="20" y="150" font-family="Arial,sans-serif" font-size="11" fill="#666" font-weight="bold">Point lookups</text>
+      <text x="20" y="180" font-family="Arial,sans-serif" font-size="11" fill="#666" font-weight="bold">Rescale (plain)</text>
+
+      <!-- HASH values -->
+      <rect x="140" y="46" width="200" height="18" rx="3" fill="#dcfce7"/><text x="240" y="59" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#065f46">Even (uniform)</text>
+      <rect x="140" y="76" width="200" height="18" rx="3" fill="#fee2e2"/><text x="240" y="89" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#7f1d1d">Scatter-gather (bad)</text>
+      <rect x="140" y="106" width="200" height="18" rx="3" fill="#dcfce7"/><text x="240" y="119" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#065f46">No hotspot</text>
+      <rect x="140" y="136" width="200" height="18" rx="3" fill="#dcfce7"/><text x="240" y="149" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#065f46">1 shard, 1 hop</text>
+      <rect x="140" y="166" width="200" height="18" rx="3" fill="#fee2e2"/><text x="240" y="179" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#7f1d1d">mod N remaps ~all</text>
+
+      <!-- RANGE values -->
+      <rect x="385" y="46" width="200" height="18" rx="3" fill="#ffd8a8"/><text x="485" y="59" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#7c2d12">Can skew</text>
+      <rect x="385" y="76" width="200" height="18" rx="3" fill="#dcfce7"/><text x="485" y="89" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#065f46">Contiguous (good)</text>
+      <rect x="385" y="106" width="200" height="18" rx="3" fill="#fee2e2"/><text x="485" y="119" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#7f1d1d">Hot last shard</text>
+      <rect x="385" y="136" width="200" height="18" rx="3" fill="#dcfce7"/><text x="485" y="149" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#065f46">1 shard, 1 hop</text>
+      <rect x="385" y="166" width="200" height="18" rx="3" fill="#ffd8a8"/><text x="485" y="179" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#7c2d12">Split ranges</text>
+    </svg>
+    <p class="caption">Green = advantage, orange = acceptable/mixed, red = cost/limitation</p>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>✅ Benefit</th><th>❌ Cost / Limitation</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="benefit">Even, uniform load even for monotonic/sequential keys — no "newest shard" hotspot</td>
+          <td class="cost">Ordering destroyed: range/ordered/prefix queries become scatter-gather across all shards</td>
+        </tr>
+        <tr>
+          <td class="benefit">Coordination-free placement — shard is computed from the key, no lookup table to store or bottleneck</td>
+          <td class="cost">A single hot key still lands on one partition; hashing does not solve key skew</td>
+        </tr>
+        <tr>
+          <td class="benefit">Simple to implement and reason about (<code>hash(key) mod N</code>)</td>
+          <td class="cost">Plain <code>mod N</code> remaps ~all keys when N changes; needs consistent hashing to be elastic</td>
+        </tr>
+        <tr>
+          <td class="benefit">Point lookups by key are single-shard, single-hop</td>
+          <td class="cost">Requires a high-cardinality, well-distributed key; low-cardinality keys cause partition skew</td>
+        </tr>
+        <tr>
+          <td class="benefit">Works identically for any key type once hashed (strings, UUIDs, composite keys)</td>
+          <td class="cost">"Next N in order" is no longer cheap — you must maintain a separate ordered index/store</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- S12: INTERVIEW APPLICATION -->
+<section id="s12">
+  <h2 class="section-title"><span class="num">§12</span> 🎯 Interview Application</h2>
+
+  <h3>Trigger Phrases</h3>
+  <ul style="margin-left:20px;margin-bottom:16px;font-size:14.5px;line-height:1.8;">
+    <li>"How do you decide which shard a given row goes to?"</li>
+    <li>"How do you make sure load is spread evenly across shards?"</li>
+    <li>"You suggested <code>user_id % number_of_servers</code> — what happens when we add a server?"</li>
+    <li>"Why hash instead of range partition? This key is monotonically increasing — how do you avoid a hotspot?"</li>
+  </ul>
+
+  <h3>What You Say / Do</h3>
+  <p>Introduce hashing in the data-partitioning phase, and lead with the trade-off, not the mechanism: "I'd hash the partition key so load spreads evenly — that avoids the sequential-write hotspot you'd get from range partitioning. The cost is losing ordering, so any range or ordered query becomes scatter-gather; I'd handle those from a separate index or OLAP store." Then pre-empt the two things the interviewer is waiting for: (1) don't use plain <code>mod N</code> — "I'd use consistent hashing so adding a node moves only ~1/N of keys instead of reshuffling everything," and (2) hashing doesn't fix a single hot key — "if one key is disproportionately hot, I'd write-shard it with a suffix or cache it, separately from the hashing scheme."</p>
+
+  <div class="tradeoff-box">
+    💬 <strong>Trade-off statement (memorize this):</strong><br><br>
+    "Hash partitioning buys me even load distribution and coordination-free placement, but it destroys key ordering — so range queries become scatter-gather across all shards. For this system, since the dominant access is point lookups by <code>user_id</code> and keys are monotonically generated, hashing is the right call over range partitioning. I'd map via consistent hashing rather than <code>mod N</code> so scaling only moves ~1/N of keys, and I'd handle single hot keys separately since hashing sends one key to exactly one partition."
+  </div>
+</section>
+
+<!-- S13: MISCONCEPTIONS -->
+<section id="s13">
+  <h2 class="section-title"><span class="num">§13</span> ⚠️ Common Misconceptions &amp; Gotchas</h2>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> Hash partitioning eliminates hot partitions.</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> It eliminates hotspots caused by <em>sequential or clustered key ranges</em> (all new IDs hitting the newest shard). It does <strong>not</strong> eliminate a hotspot caused by a single high-traffic <em>key</em> — that key deterministically hashes to one partition, so that partition is hot no matter how good the hash. Key skew is a separate problem (7.6).</div></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> <code>hash(key) mod N</code> is a fine long-term sharding scheme.</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> It works until the first time you change <code>N</code>. Because the mapping depends on the modulus, adding or removing one node remaps <em>almost every key</em> (~<code>1 − 1/N</code>), forcing a near-total data migration. Elastic clusters must use consistent hashing (or a fixed slot space like Redis's 16384 slots) instead.</div></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> Hash partitioning lets you do range queries as long as you keep an index.</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Hashing itself provides <em>no</em> range locality — adjacent keys are scattered across unrelated shards, so a range query is inherently scatter-gather on the hashed table. You can support ranges only by maintaining a <em>separate</em> ordered structure (a range-partitioned secondary index or an OLAP store) — extra machinery, not a property of hashing.</div></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> Any hash function will do — even <code>String.hashCode()</code>.</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> The hash must be <em>uniform</em>. Weak hashes (Java's <code>String.hashCode</code>, naive sums) cluster outputs and produce partition skew — some shards overloaded, others idle. Production systems deliberately use uniform, fast, non-cryptographic hashes (MurmurHash, xxHash, CRC, Murmur3).</div></div>
+  </div>
+</section>
+
+<!-- S14: RELATIONSHIPS -->
+<section id="s14">
+  <h2 class="section-title"><span class="num">§14</span> 🔗 Relationships to Other Concepts</h2>
+  <div class="connections">
+    <div class="conn-card">
+      <div class="conn-icon">🧱</div>
+      <div>
+        <div class="conn-label">Builds On</div>
+        <strong>7.1 Horizontal Partitioning</strong> — hashing is one of the two <em>mechanisms</em> for assigning rows to horizontal shards, and it depends on the partition-key concept from 7.1 (a good hash is only as good as the cardinality/distribution of the key you feed it).
+      </div>
+    </div>
+    <div class="conn-card">
+      <div class="conn-icon">🔓</div>
+      <div>
+        <div class="conn-label">Enables</div>
+        <strong>7.4 Consistent Hashing</strong> — the direct fix for this subtopic's <code>mod N</code> rebalancing problem; <strong>7.5 Rebalancing</strong> — hashing determines how much data moves when nodes change; also underpins hash-based routing in caching (5.7 hot key, 5.8 multi-level) and load balancing (4.2 IP hash).
+      </div>
+    </div>
+    <div class="conn-card">
+      <div class="conn-icon">⚡</div>
+      <div>
+        <div class="conn-label">Tension With</div>
+        <strong>7.3 Range Partitioning</strong> — the direct rival: hash gives even load but no range locality; range gives locality but risks sequential hotspots. You pick based on the dominant query pattern. Also in tension with <strong>7.6 Hot Partitions</strong>, since hashing cannot resolve a single hot key.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- S15: QUIZ -->
+<section id="s15">
+  <h2 class="section-title"><span class="num">§15</span> 🧪 Self-Check Quiz</h2>
+  <div class="callout callout-quote">Can you answer these without looking? If not, you haven't internalized it yet. Click to reveal the hint.</div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">1</div>
+      <div class="qtext">Define hash partitioning in one sentence and describe the two-step mapping from a key to a shard.</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 Assign each row to a shard by hashing its partition key and mapping the hash to a partition (even, computed, coordination-free placement). Two steps: (1) <code>h = hash(key)</code> — uniform, deterministic; (2) map <code>h</code> to a partition — naively <code>p = h mod N</code>, or place <code>h</code> on a token ring (consistent hashing). Revisit §5 if you hesitated.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">2</div>
+      <div class="qtext">Why does hashing produce even load even when the input keys are monotonically increasing IDs, and what single property must the hash function have?</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 A uniform hash scrambles inputs so a sequential stream comes out as a flat pseudo-random spread — consecutive IDs land on unrelated shards instead of piling on the newest. The required property is UNIFORMITY (determinism is also needed for routing, but uniformity delivers even load). Cryptographic strength is not needed. Revisit §6–§7.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">3</div>
+      <div class="qtext">You shard with <code>hash(key) mod 4</code> and add a fifth node. What happens, and why is it a problem?</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 The modulus changes 4→5, so <code>hash(key) mod N</code> changes for ~<code>1 − 1/N</code> ≈ 80% of keys → near-total data migration + cache-invalidation storm. It's a problem because scaling should be cheap; plain mod N makes it catastrophic. Fix: consistent hashing moves only ~1/N of keys. Revisit §9 (mod N catastrophe).</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">4</div>
+      <div class="qtext">Name a real system that uses hash partitioning and describe the routing consequence of its scheme.</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 Redis Cluster: <code>CRC16(key) mod 16384</code> maps to one of 16384 fixed hash slots distributed across nodes. Because the slot count (modulus) is fixed, rescaling moves SLOTS between nodes rather than changing the formula — avoiding the mod N reshuffle. (Alternatives: Cassandra → Murmur3 token ring; DynamoDB hashes the partition key; Kafka → <code>hash(key) mod partitions</code>.) Revisit §10.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">5</div>
+      <div class="qtext">A candidate says "we'll hash the key, so we'll never have a hot partition." A celebrity user with 50M followers is on the system. What's wrong?</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 Hashing spreads MANY keys evenly, but a SINGLE key deterministically hashes to ONE partition. The celebrity's key lands on one shard and concentrates traffic there — a hot partition hashing can't prevent. Hashing removes hotspots from sequential/clustered key ranges, not from one disproportionately popular key (key skew). Fix separately (7.6): write-shard the hot key with a suffix, cache it, or replicate it — not a better hash. Revisit §6 and §13.</div>
+  </div>
+</section>
+
+<!-- S16: FURTHER READING -->
+<section id="s16">
+  <h2 class="section-title"><span class="num">§16</span> 📚 Further Reading</h2>
+  <ul class="reading-list">
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>DDIA — Chapter 6, "Partitioning by Hash of Key"</strong> (Kleppmann) — the definitive treatment; contrast hash vs. key-range and note the loss of range-query support</div></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>DynamoDB — "Partitions and data distribution"</strong> — <a href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.Partitions.html" target="_blank">docs.aws.amazon.com</a> — how the partition key hash places items and why cardinality matters</div></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>Cassandra — "How data is distributed" (Murmur3Partitioner)</strong> — <a href="https://cassandra.apache.org/doc/latest/cassandra/architecture/dynamo.html" target="_blank">cassandra.apache.org</a> — hashing the partition key to a token ring</div></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>Redis — "Cluster specification: hash slots"</strong> — <a href="https://redis.io/docs/reference/cluster-spec/" target="_blank">redis.io</a> — CRC16 mod 16384 fixed-slot hashing and hash tags</div></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>ByteByteGo — "Consistent Hashing"</strong> — <a href="https://blog.bytebytego.com/p/consistent-hashing" target="_blank">blog.bytebytego.com</a> — sets up why <code>mod N</code> fails and motivates 7.4</div></li>
+  </ul>
+</section>
+
+<!-- S17: MY NOTES -->
+<section id="s17">
+  <h2 class="section-title"><span class="num">§17</span> ✍️ My Notes</h2>
+  <div class="callout callout-quote">Personal observations, things that confused me, analogies that helped. This section is yours.</div>
+  <textarea class="notes-area" placeholder="Add your personal notes here — analogies that clicked, interview stories, things that confused you..."></textarea>
+</section>
+
+</article>
+</main>
+
+<script>
+// TOC active state
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('#toc nav a');
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(a => a.classList.remove('active'));
+      const a = document.querySelector(`#toc nav a[href="#${e.target.id}"]`);
+      if (a) a.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+sections.forEach(s => obs.observe(s));
+
+// Checklist toggle
+function toggle(cb) { cb.closest('li').classList.toggle('checked'); }
+// Phase card toggle
+function togglePhase(header) { header.closest('.phase-card').classList.toggle('open'); }
+// Quiz toggle
+function toggleQuiz(q) {
+  const item = q.closest('.quiz-item');
+  item.classList.toggle('open');
+  q.querySelector('.quiz-toggle').textContent = item.classList.contains('open') ? '▲ Hide' : '▼ Hint';
+}
+// Reading list toggle
+function toggleReading(cb) { cb.closest('li').classList.toggle('checked'); }
+
+// Notes auto-save (in-memory / localStorage)
+const notesArea = document.querySelector('.notes-area');
+const NOTES_KEY = 'notes_7_2';
+try { if (localStorage.getItem(NOTES_KEY)) notesArea.value = localStorage.getItem(NOTES_KEY); } catch(e) {}
+notesArea.addEventListener('input', () => {
+  try { localStorage.setItem(NOTES_KEY, notesArea.value); } catch(e) {}
+});
+</script>
+</body>
+</html>

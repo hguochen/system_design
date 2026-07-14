@@ -1,0 +1,1018 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.1 Horizontal Partitioning vs. Vertical Partitioning</title>
+<style>
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface-alt: #f3f2ef;
+    --border: #e5e3de; --text: #1a1917; --text-muted: #6b6861;
+    --accent: #2563eb; --accent-light: #dbeafe;
+    --green: #16a34a; --green-light: #dcfce7;
+    --red: #dc2626; --red-light: #fee2e2;
+    --yellow: #d97706; --yellow-light: #fef3c7;
+    --purple: #7c3aed; --purple-light: #ede9fe;
+    --orange: #ea580c; --orange-light: #ffedd5;
+    --teal: #0d9488; --teal-light: #ccfbf1;
+    --code-bg: #1e1e2e; --code-text: #cdd6f4;
+    --sidebar-w: 240px; --content-max: 820px;
+    font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; }
+  #toc { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0 48px; z-index: 100; }
+  #toc-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  #toc-header .phase-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-bottom: 6px; }
+  #toc-header h2 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  #toc nav a { display: block; padding: 5px 16px 5px 20px; font-size: 12.5px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+  main { margin-left: var(--sidebar-w); padding: 48px 48px 96px; max-width: calc(var(--sidebar-w) + var(--content-max) + 96px); width: 100%; }
+  article { max-width: var(--content-max); }
+  .doc-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 2px solid var(--border); }
+  .doc-header .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+  .tag-phase { background: var(--accent-light); color: var(--accent); }
+  .tag-topic { background: var(--purple-light); color: var(--purple); }
+  .tag-date  { background: var(--surface-alt);  color: var(--text-muted); }
+  .doc-header h1 { font-size: 30px; font-weight: 800; line-height: 1.25; letter-spacing: -.02em; color: var(--text); }
+  section { margin-bottom: 52px; scroll-margin-top: 32px; }
+  h2.section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -.01em; }
+  h2.section-title .num { font-size: 11px; font-weight: 800; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; letter-spacing: .04em; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 24px 0 10px; }
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+  code { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-family: "SF Mono","Fira Code",Menlo,monospace; font-size: 12.5px; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 14px; border-left: 3px solid; }
+  .callout-goal  { background: var(--accent-light); border-color: var(--accent); color: #1e40af; }
+  .callout-tip   { background: var(--yellow-light); border-color: var(--yellow); color: #92400e; }
+  .callout-warn  { background: var(--red-light); border-color: var(--red); color: #7f1d1d; }
+  .callout-quote { background: var(--surface-alt); border-color: var(--border); color: var(--text-muted); font-style: italic; }
+  .callout-teal  { background: var(--teal-light); border-color: var(--teal); color: #134e4a; }
+  .cheatsheet { background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 24px 28px; font-family: "SF Mono","Fira Code","Cascadia Code",Menlo,monospace; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-x: auto; margin-top: 16px; }
+  .cheatsheet .label { color: #cba6f7; font-weight: 700; letter-spacing: .08em; display: block; margin-top: 18px; margin-bottom: 4px; border-bottom: 1px solid #313244; padding-bottom: 3px; }
+  .cheatsheet .label:first-child { margin-top: 0; }
+  .diagram-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 16px 14px; margin: 20px 0 28px; overflow-x: auto; }
+  .diagram-wrap .diagram-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); margin-bottom: 12px; }
+  .diagram-wrap p.caption { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 10px; margin-bottom: 0; font-style: italic; }
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; font-size: 14.5px; line-height: 1.55; }
+  .checklist li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 2px; background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .checklist li.checked .cb { background: var(--green); border-color: var(--green); }
+  .checklist li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .checklist li.checked .text { color: var(--text-muted); text-decoration: line-through; }
+  .phase-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
+  .phase-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; cursor: pointer; user-select: none; background: var(--surface-alt); }
+  .phase-header:hover { background: var(--border); }
+  .phase-label { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+  .phase-badge { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 2px 8px; border-radius: 20px; }
+  .ph1 { background: #dbeafe; color: #1d4ed8; } .ph2 { background: #fce7f3; color: #9d174d; }
+  .ph3 { background: #d1fae5; color: #065f46; } .ph4 { background: #fef3c7; color: #92400e; }
+  .phase-chevron { font-size: 12px; color: var(--text-muted); transition: transform .2s; }
+  .phase-card.open .phase-chevron { transform: rotate(180deg); }
+  .phase-body { display: none; padding: 16px 20px 20px; }
+  .phase-card.open .phase-body { display: block; }
+  .phase-goal { font-size: 12.5px; color: var(--text-muted); font-style: italic; margin-bottom: 12px; }
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: var(--surface-alt); padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.5; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+  .misconception { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .misconception .wrong { background: var(--red-light); padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; }
+  .misconception .right { padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; color: #065f46; background: var(--green-light); }
+  .misconception .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .quiz-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .quiz-q { padding: 14px 18px; font-size: 14.5px; font-weight: 600; cursor: pointer; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .quiz-q:hover { background: var(--surface-alt); }
+  .quiz-num { flex-shrink: 0; width: 24px; height: 24px; background: var(--accent); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; margin-top: 1px; }
+  .quiz-q .qtext { flex: 1; }
+  .quiz-toggle { font-size: 11px; color: var(--text-muted); flex-shrink: 0; margin-top: 3px; }
+  .quiz-hint { display: none; padding: 10px 18px 14px; font-size: 13px; color: #92400e; background: var(--yellow-light); border-top: 1px solid var(--border); }
+  .quiz-item.open .quiz-hint { display: block; }
+  .reading-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .reading-list li { display: flex; align-items: flex-start; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; font-size: 14px; }
+  .reading-list li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 1px; cursor: pointer; background: var(--surface); display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .reading-list li.checked .cb { background: var(--green); border-color: var(--green); }
+  .reading-list li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .reading-list li.checked .rtext { color: var(--text-muted); text-decoration: line-through; }
+  .notes-area { width: 100%; min-height: 160px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: inherit; font-size: 14px; color: var(--text); resize: vertical; line-height: 1.6; }
+  .notes-area:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .focus-list { list-style: none; display: flex; flex-direction: column; gap: 14px; }
+  .focus-list li { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14.5px; line-height: 1.6; }
+  .focus-list li strong { color: var(--accent); display: block; margin-bottom: 4px; }
+  .connections { display: flex; flex-direction: column; gap: 12px; }
+  .conn-card { display: flex; align-items: flex-start; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14px; }
+  .conn-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .conn-label { font-weight: 700; margin-bottom: 3px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .tradeoff-box { background: var(--surface-alt); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 14px 18px; font-size: 14px; font-style: italic; color: var(--text); margin-top: 14px; }
+  .tier-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 16px 0; }
+  .tier-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; font-size: 14px; }
+  .tier-card h4 { font-size: 13px; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .tier-card .stat { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 2px 7px; border-radius: 4px; }
+  .stat-blue { background: var(--accent-light); color: var(--accent); }
+  .stat-orange { background: var(--orange-light); color: var(--orange); }
+  .stat-green { background: var(--green-light); color: var(--green); }
+  .stat-red { background: var(--red-light); color: var(--red); }
+  @media (max-width: 900px) { #toc { display: none; } main { margin-left: 0; padding: 24px 20px 60px; } .tier-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<aside id="toc">
+  <div id="toc-header">
+    <span class="phase-tag">Phase B · Topic 7</span>
+    <h2>7.1 Horizontal vs. Vertical Partitioning</h2>
+  </div>
+  <nav>
+    <a href="#s0">🗺️ Overview</a>
+    <a href="#s1">🎯 Goal</a>
+    <a href="#s2">✅ Mastery Criteria</a>
+    <a href="#s3">🗓️ Study Phases</a>
+    <a href="#s4">📋 Cheatsheet</a>
+    <a href="#s5">🧠 Core Definition</a>
+    <a href="#s6">📦 Core Concepts</a>
+    <a href="#s7">🔍 First Principles</a>
+    <a href="#s8">🗺️ Mental Models</a>
+    <a href="#s9">⚙️ How It Works</a>
+    <a href="#s10">🏭 Real-World Examples</a>
+    <a href="#s11">⚖️ Trade-offs</a>
+    <a href="#s12">🎯 Interview Application</a>
+    <a href="#s13">⚠️ Misconceptions</a>
+    <a href="#s14">🔗 Relationships</a>
+    <a href="#s15">🧪 Self-Check Quiz</a>
+    <a href="#s16">📚 Further Reading</a>
+    <a href="#s17">✍️ My Notes</a>
+  </nav>
+</aside>
+
+<main>
+<article>
+
+<!-- HEADER -->
+<div class="doc-header">
+  <div class="meta">
+    <span class="tag tag-phase">⚡ Phase B — Scalability</span>
+    <span class="tag tag-topic">🔀 Topic 7 — Data Partitioning / Sharding</span>
+    <span class="tag tag-date">📅 2026-07-12</span>
+  </div>
+  <h1>7.1 Horizontal vs. Vertical Partitioning<br><span style="font-weight:400;color:var(--text-muted);font-size:22px;">Splitting rows vs. splitting columns</span></h1>
+</div>
+
+<!-- S0: OVERVIEW -->
+<section id="s0">
+  <h2 class="section-title"><span class="num">§0</span> 🗺️ Topic Overview</h2>
+  <p>Partitioning is how you split one logical dataset across many physical stores so no single machine has to hold all the data or serve all the traffic. There are two orthogonal axes. <strong>Horizontal partitioning (sharding)</strong> splits <em>rows</em> — every shard has the identical schema but a disjoint subset of rows. <strong>Vertical partitioning</strong> splits <em>columns/tables</em> — the same entities are divided so different attributes live in different stores. They are not competitors; mature systems apply both. Mastering this subtopic means looking at an access pattern and saying precisely which axis to cut along, why, and what it costs.</p>
+
+  <ul class="focus-list" style="margin-top:18px;">
+    <li><strong>1. The rows-vs-columns distinction</strong> — Horizontal = same schema, different rows. Vertical = same entities, different columns. State it crisply or everything downstream is fuzzy.</li>
+    <li><strong>2. What problem each axis solves</strong> — Horizontal relieves volume &amp; write throughput. Vertical relieves row width &amp; hot/cold access-pattern mismatch.</li>
+    <li><strong>3. The query-locality consequence</strong> — Horizontal is cheap only when the query carries the partition key; otherwise scatter-gather. Vertical is cheap only when a query's columns live on one partition; otherwise a cross-store join.</li>
+    <li><strong>4. When you combine them</strong> — At scale: vertically decompose into tables/services first, then horizontally shard whichever table outgrows one node — then replicate each shard.</li>
+    <li><strong>5. Interview framing</strong> — "Scale writes / too many rows" → horizontal. "60 columns but reads touch 5 / blob stored inline" → vertical. Recognize the triggers.</li>
+  </ul>
+</section>
+
+<!-- S1: GOAL -->
+<section id="s1">
+  <h2 class="section-title"><span class="num">§1</span> 🎯 Goal of This Subtopic</h2>
+  <div class="callout callout-goal">
+    After studying this, you should be able to look at any data model and access pattern and decide whether to partition horizontally, vertically, both, or not at all — and justify it by the specific pressure being relieved (row count / write QPS vs. row width / access-pattern mismatch). You should be able to draw each scheme, trace how a read and a write route under each, and name the failure mode each introduces (cross-shard scatter-gather vs. cross-partition joins).
+  </div>
+</section>
+
+<!-- S2: MASTERY -->
+<section id="s2">
+  <h2 class="section-title"><span class="num">§2</span> ✅ What Mastery Looks Like</h2>
+  <ul class="checklist" id="mastery-list">
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can define horizontal and vertical partitioning in one sentence each and state the rows-vs-columns distinction without hesitation</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can map a given scaling pain (too many rows, too much write QPS, rows too wide, hot+cold columns mixed) to the correct partitioning axis</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can trace how a single read and write route under horizontal partitioning, and what happens when a query lacks the partition key</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can explain why vertical partitioning turns some single-row reads into cross-store joins, and when that trade is worth it</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can describe a realistic progression where a system applies vertical then horizontal partitioning as it grows</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can distinguish partitioning from replication and explain how the two compose (each shard is itself replicated)</span></li>
+  </ul>
+  <div class="callout callout-tip" style="margin-top:18px;">💡 <strong>Rule of thumb:</strong> If you can teach it to someone else and field their follow-up questions, you've mastered it.</div>
+</section>
+
+<!-- S3: STUDY PHASES -->
+<section id="s3">
+  <h2 class="section-title"><span class="num">§3</span> 🗓️ Study Phases to Achieve Mastery</h2>
+
+  <div class="phase-card open">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph1">Phase 1</span> Acquire 📖</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Read deeply enough that you could explain the concept without the doc.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text"><strong>DDIA Chapter 6 — Partitioning</strong> (Kleppmann) — the definitive treatment; focus on the partitioning/replication interplay and secondary-index partitioning</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text"><strong>ByteByteGo "Database Sharding Explained"</strong> — <a href="https://blog.bytebytego.com/p/database-sharding" target="_blank">blog.bytebytego.com</a> — accessible visual walkthrough of horizontal sharding and routing</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text"><strong>Instagram Engineering — "Sharding &amp; IDs at Instagram"</strong> — <a href="https://instagram-engineering.com/sharding-ids-at-instagram-1cf5a71e5a5c" target="_blank">instagram-engineering.com</a> — real-world horizontal sharding of Postgres</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Read Sections 5–9 of this doc carefully — don't skim</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Re-read the Cheatsheet (§4) and recite it from memory after</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph2">Phase 2</span> Consolidate ✍️</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Verify you can reproduce knowledge in your own words without looking.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Close the doc — write out the Core Definition of both schemes from memory, then compare</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Explain First Principles out loud: what problem forced partitioning to exist, and why are there two axes?</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Reconstruct the read/write routing under each scheme step by step from memory</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Restate each Trade-off row in your own words — if you can't explain the cost, you don't own it</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph3">Phase 3</span> Apply 🔧</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Connect to real systems and simulate interview scenarios.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Go through Real-World Examples (§10) — verify each claim and add notes to §17</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Practice Interview Application (§12) out loud — say the trigger phrases and your response as if live</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Work through Misconceptions (§13) — explain WHY each is wrong, not just that it is</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Trace Relationships (§14) — explain each connection without looking</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph4">Phase 4</span> Validate 🧪</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Confirm you actually own it, not just recognize it.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Answer every Self-Check Quiz question (§15) out loud without notes</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Recite the Cheatsheet (§4) from memory — if you can't, re-do Phase 2</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Tick off mastery criteria in §2 — only check a box if you can demonstrate on demand</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Teach this concept to an imaginary interviewer for 2 minutes without hesitation</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- S4: CHEATSHEET -->
+<section id="s4">
+  <h2 class="section-title"><span class="num">§4</span> 📋 Cheatsheet</h2>
+  <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+
+  <!-- Radial Mindmap SVG -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">🧠 Concept Mindmap</div>
+    <svg viewBox="0 0 820 480" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:820px;display:block;margin:0 auto;">
+      <rect width="820" height="480" fill="#fafafa" rx="8"/>
+      <!-- Connector lines -->
+      <line x1="410" y1="240" x2="175" y2="100" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="645" y2="100" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="100" y2="280" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="720" y2="280" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="175" y2="400" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="645" y2="400" stroke="#aaa" stroke-width="1.5"/>
+      <!-- Central -->
+      <ellipse cx="410" cy="240" rx="100" ry="42" fill="#a5d8ff" stroke="#1971c2" stroke-width="2"/>
+      <text x="410" y="234" text-anchor="middle" dominant-baseline="middle" font-family="Arial,sans-serif" font-size="14" font-weight="bold" fill="#1a1917">Data</text>
+      <text x="410" y="252" text-anchor="middle" dominant-baseline="middle" font-family="Arial,sans-serif" font-size="14" font-weight="bold" fill="#1a1917">Partitioning</text>
+      <!-- Horizontal -->
+      <rect x="88" y="66" width="174" height="62" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="175" y="88" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Horizontal (Sharding)</text>
+      <text x="175" y="104" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#333">Split ROWS · same schema</text>
+      <text x="175" y="119" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#333">Relieves volume + QPS</text>
+      <!-- Vertical -->
+      <rect x="558" y="66" width="174" height="62" rx="8" fill="#ffd8a8" stroke="#e67700" stroke-width="1.5"/>
+      <text x="645" y="88" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Vertical</text>
+      <text x="645" y="104" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#333">Split COLUMNS/tables</text>
+      <text x="645" y="119" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#333">Relieves row width</text>
+      <!-- Partition Key -->
+      <rect x="20" y="248" width="160" height="64" rx="8" fill="#c3fae8" stroke="#0ca678" stroke-width="1.5"/>
+      <text x="100" y="268" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Partition Key</text>
+      <text x="100" y="284" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">High cardinality</text>
+      <text x="100" y="298" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Even distribution</text>
+      <text x="100" y="312" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Aligns w/ queries</text>
+      <!-- Cross-partition ops -->
+      <rect x="640" y="248" width="160" height="64" rx="8" fill="#ffc9c9" stroke="#c92a2a" stroke-width="1.5"/>
+      <text x="720" y="268" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Cross-Partition</text>
+      <text x="720" y="284" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">H: scatter-gather</text>
+      <text x="720" y="298" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">V: cross-store join</text>
+      <text x="720" y="312" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Avoid on hot path</text>
+      <!-- vs Replication -->
+      <rect x="88" y="372" width="174" height="58" rx="8" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.5"/>
+      <text x="175" y="393" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">≠ Replication</text>
+      <text x="175" y="409" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Partition = disjoint data</text>
+      <text x="175" y="423" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Replica each shard for HA</text>
+      <!-- Real Systems -->
+      <rect x="558" y="372" width="174" height="58" rx="8" fill="#b2f2bb" stroke="#2f9e44" stroke-width="1.5"/>
+      <text x="645" y="393" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Real Systems</text>
+      <text x="645" y="409" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Instagram / Vitess (H)</text>
+      <text x="645" y="423" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Blob→S3, hot/cold (V)</text>
+    </svg>
+    <p class="caption">Radial mindmap: six clusters around the data partitioning core concept</p>
+  </div>
+
+  <!-- Decision Map -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">🗺️ Partitioning Axis Decision Map</div>
+    <svg viewBox="0 0 720 560" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:720px;display:block;margin:0 auto;" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+      <rect width="720" height="560" fill="#fafafa" rx="8"/>
+
+      <!-- START -->
+      <rect x="250" y="14" width="220" height="38" rx="19" fill="#1a1917"/>
+      <text x="360" y="37" text-anchor="middle" font-size="12" font-weight="600" fill="#fff">Is a single node struggling?</text>
+      <line x1="360" y1="52" x2="360" y2="74" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+
+      <!-- Q1 result: No -->
+      <line x1="250" y1="33" x2="130" y2="33" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="188" y="25" text-anchor="middle" font-size="10" fill="#6b6861">No</text>
+      <rect x="14" y="14" width="120" height="44" rx="8" fill="#f3f2ef" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="74" y="33" text-anchor="middle" font-size="11" fill="#6b6861">Don't partition</text>
+      <text x="74" y="48" text-anchor="middle" font-size="10" fill="#6b6861">(complexity tax)</text>
+
+      <!-- Pressure question -->
+      <rect x="230" y="74" width="260" height="44" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="360" y="93" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">Yes — what is the pressure?</text>
+      <text x="360" y="109" text-anchor="middle" font-size="11" fill="#6b6861">(diagnose the axis)</text>
+
+      <!-- Branch left: rows/QPS -->
+      <line x1="260" y1="118" x2="180" y2="150" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <line x1="460" y1="118" x2="540" y2="150" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+
+      <!-- Left condition -->
+      <rect x="30" y="150" width="300" height="58" rx="8" fill="#fff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="180" y="172" text-anchor="middle" font-size="11" font-weight="700" fill="#1e40af">Too many ROWS / write QPS /</text>
+      <text x="180" y="189" text-anchor="middle" font-size="11" font-weight="700" fill="#1e40af">table &gt; single-node disk</text>
+      <text x="180" y="204" text-anchor="middle" font-size="10" fill="#6b6861">→ a VOLUME problem</text>
+      <line x1="180" y1="208" x2="180" y2="230" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+
+      <!-- Right condition -->
+      <rect x="390" y="150" width="300" height="58" rx="8" fill="#fff" stroke="#e67700" stroke-width="1.5"/>
+      <text x="540" y="169" text-anchor="middle" font-size="11" font-weight="700" fill="#9a3412">Rows too WIDE / hot+cold mixed /</text>
+      <text x="540" y="185" text-anchor="middle" font-size="11" font-weight="700" fill="#9a3412">big blobs inline / diff access</text>
+      <text x="540" y="201" text-anchor="middle" font-size="10" fill="#6b6861">→ a WIDTH problem</text>
+      <line x1="540" y1="208" x2="540" y2="230" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+
+      <!-- Left outcome: horizontal -->
+      <rect x="30" y="230" width="300" height="74" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+      <text x="180" y="252" text-anchor="middle" font-size="13" font-weight="800" fill="#1e40af">HORIZONTAL (Sharding)</text>
+      <text x="180" y="270" text-anchor="middle" font-size="10.5" fill="#1e40af">Same schema, disjoint rows across N shards.</text>
+      <text x="180" y="285" text-anchor="middle" font-size="10.5" fill="#1e40af">Route by partition key (hash / range).</text>
+      <text x="180" y="300" text-anchor="middle" font-size="10.5" fill="#1e40af">Scales capacity + writes linearly.</text>
+
+      <!-- Right outcome: vertical -->
+      <rect x="390" y="230" width="300" height="74" rx="10" fill="#ffedd5" stroke="#ea580c" stroke-width="2"/>
+      <text x="540" y="252" text-anchor="middle" font-size="13" font-weight="800" fill="#9a3412">VERTICAL</text>
+      <text x="540" y="270" text-anchor="middle" font-size="10.5" fill="#9a3412">Same entities, split columns/tables.</text>
+      <text x="540" y="285" text-anchor="middle" font-size="10.5" fill="#9a3412">Hot narrow cols fast; cold/wide elsewhere.</text>
+      <text x="540" y="300" text-anchor="middle" font-size="10.5" fill="#9a3412">Lean, cache-friendly hot path.</text>
+
+      <!-- Warnings -->
+      <rect x="30" y="316" width="300" height="40" rx="8" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5"/>
+      <text x="180" y="333" text-anchor="middle" font-size="10.5" font-weight="700" fill="#7f1d1d">⚠️ Query without partition key</text>
+      <text x="180" y="349" text-anchor="middle" font-size="10.5" fill="#7f1d1d">→ scatter-gather across ALL shards</text>
+
+      <rect x="390" y="316" width="300" height="40" rx="8" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5"/>
+      <text x="540" y="333" text-anchor="middle" font-size="10.5" font-weight="700" fill="#7f1d1d">⚠️ Query needs both column groups</text>
+      <text x="540" y="349" text-anchor="middle" font-size="10.5" fill="#7f1d1d">→ cross-store join</text>
+
+      <!-- Converge to BOTH -->
+      <line x1="180" y1="356" x2="180" y2="382" stroke="#bbb" stroke-width="1.5"/>
+      <line x1="540" y1="356" x2="540" y2="382" stroke="#bbb" stroke-width="1.5"/>
+      <line x1="180" y1="382" x2="360" y2="382" stroke="#bbb" stroke-width="1.5"/>
+      <line x1="540" y1="382" x2="360" y2="382" stroke="#bbb" stroke-width="1.5"/>
+      <line x1="360" y1="382" x2="360" y2="404" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+
+      <rect x="150" y="404" width="420" height="60" rx="10" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+      <text x="360" y="425" text-anchor="middle" font-size="12.5" font-weight="800" fill="#5b21b6">BOTH (typical at scale)</text>
+      <text x="360" y="443" text-anchor="middle" font-size="10.5" fill="#5b21b6">Vertically decompose into tables/services first →</text>
+      <text x="360" y="458" text-anchor="middle" font-size="10.5" fill="#5b21b6">then horizontally shard whichever outgrows one node.</text>
+
+      <line x1="360" y1="464" x2="360" y2="486" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <rect x="150" y="486" width="420" height="40" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+      <text x="360" y="503" text-anchor="middle" font-size="10.5" font-weight="700" fill="#92400e">⚠️ Partitioning ≠ availability</text>
+      <text x="360" y="519" text-anchor="middle" font-size="10.5" fill="#92400e">Replicate EACH shard/partition, or it's a SPOF for its slice.</text>
+
+      <!-- Legend -->
+      <text x="30" y="546" font-size="10" fill="#6b6861">Diagnose: is it MANY rows (→ horizontal) or WIDE rows (→ vertical)? At scale, usually both.</text>
+
+      <defs>
+        <marker id="dm-arr" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+          <path d="M0,0 L0,7 L7,3.5 z" fill="#bbb"/>
+        </marker>
+      </defs>
+    </svg>
+    <p class="caption">Diagnose the axis by the pressure — volume cuts rows, width cuts columns; at scale you do both, then replicate</p>
+  </div>
+
+  <div class="cheatsheet">
+<span class="label">§ 1  WHY IT EXISTS</span>One machine has finite disk, RAM, CPU, and IOPS. A dataset or workload that exceeds any
+of those must be split across machines — that split is partitioning. Two independent things
+can exceed a node: the NUMBER of rows / write throughput (relieved by cutting rows =
+horizontal) and the WIDTH of rows or a hot/cold column mismatch (relieved by cutting
+columns = vertical). Partitioning is the ONLY way to scale a dataset beyond the biggest
+single box. Replication scales reads + availability but NOT capacity — you still need
+partitioning for capacity.
+
+<span class="label">§ 2  THE TWO AXES</span>HORIZONTAL (Sharding): split by ROW. Each shard = identical schema, disjoint rows.
+                       users 1–1M on shard A, 1M–2M on shard B. Relieves volume + QPS.
+                       Routing: partition key → hash or range → shard.
+VERTICAL:              split by COLUMN / TABLE. Same entities, different attributes per
+                       store. Hot fields (name, status) on store X; cold/wide fields
+                       (bio, avatar blob, audit log) on store Y. Relieves width + mismatch.
+Mnemonic: Horizontal = more of the SAME rows elsewhere (cut sideways).
+          Vertical   = different COLUMNS elsewhere (cut lengthwise).
+
+<span class="label">§ 3  THE 3 KEY DISTINCTIONS</span>1. Disjoint vs. copied: in BOTH schemes the data on each node is DISJOINT (no overlap).
+   That's what makes it partitioning, not replication. Replication = same data copied.
+2. Query locality: horizontal is cheap ONLY if the query carries the partition key
+   (single-shard). Vertical is cheap ONLY if the query's columns all live on one store.
+   Break either → you pay a cross-node cost.
+3. What each scales: horizontal scales capacity AND write throughput ~linearly with
+   shard count. Vertical isolates access patterns / hardware per column group — it does
+   NOT multiply write throughput of a single hot column set.
+
+<span class="label">§ 4  USE / AVOID</span>Use HORIZONTAL: row count or write QPS exceeds one node; good high-cardinality, evenly-
+                distributed partition key; queries are keyed.
+Use VERTICAL:   table very wide; hot columns read constantly while large/cold columns
+                bloat every row; columns differ in access pattern, engine fit, or security.
+Use BOTH:       large scale — vertically decompose, then shard the ones that outgrow a node.
+AVOID entirely: a single (replicated) node still fits data + load. Don't pay routing /
+                rebalancing / cross-partition complexity early.
+
+<span class="label">§ 5  INTERVIEW TRIGGERS</span>→ "This table has billions of rows / won't fit on one machine."
+→ "Write throughput is saturating the primary."
+→ "The row is 60 columns wide but the hot path reads only 4."
+→ "We store avatars / documents inline in the profile row."
+→ "How would you shard this? What's your partition key?"
+
+<span class="label">§ 6  FTAC</span>F  "One node can't hold this dataset or serve this write rate, so I must partition. Which
+   axis — bounded by row count/QPS, or by row width and mixed hot/cold access?"
+T  "Horizontal scales capacity + writes linearly but only if queries carry the partition
+   key — else scatter-gather. Vertical isolates hot from cold columns but turns cross-
+   column reads into a join."
+A  "Assuming most reads are keyed by user_id and the table is uniformly wide, this is a
+   volume problem, not a width problem —"
+C  "Horizontally shard by user_id (hash), each shard replicated for availability. Cross-
+   user analytics goes to a separate OLAP store, not scatter-gather across shards."
+
+<span class="label">§ 7  NUMBERS &amp; GOTCHA</span>Rule of thumb: a single tuned RDBMS node handles ~single-digit TB and low-thousands of
+               write QPS before sharding is warranted (varies widely).
+Shard count:   shards ≈ max( ceil(data / per_shard_capacity),
+                              ceil(peak_write_qps / per_shard_write_capacity) ).
+Vertical split: move &gt;~few-KB columns (blobs, JSON) out of the hot row to keep it small.
+GOTCHA: Partitioning is NOT replication and gives NO availability by itself. Each partition
+  is a SPOF for its slice until you also replicate it. And a low-cardinality or skewed
+  partition key (country, boolean, monotonic ts) creates hot shards — the KEY choice
+  matters more than hash-vs-range.
+  </div>
+</section>
+
+<!-- S5: CORE DEFINITION -->
+<section id="s5">
+  <h2 class="section-title"><span class="num">§5</span> 🧠 Core Definition</h2>
+  <div class="callout callout-teal" style="font-size:16px;font-weight:600;line-height:1.6;">
+    Horizontal partitioning (sharding) splits a table by <strong>rows</strong> — every partition shares the identical schema but stores a disjoint subset of rows, chosen by a partition key. Vertical partitioning splits a table by <strong>columns</strong> — the same logical entities are divided so different attributes (columns or sub-tables) live in different stores, typically separating frequently-accessed narrow columns from rarely-accessed wide or bulky ones.
+  </div>
+
+  <!-- Cut-the-spreadsheet diagram -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">✂️ Cutting the Same Table Two Ways</div>
+    <svg viewBox="0 0 760 300" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:760px;display:block;margin:0 auto;">
+      <rect width="760" height="300" fill="#fafafa" rx="8"/>
+
+      <!-- LEFT: Horizontal -->
+      <text x="185" y="28" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="bold" fill="#2563eb">HORIZONTAL — split ROWS</text>
+      <!-- table grid, 4 cols x 4 rows -->
+      <!-- header -->
+      <rect x="60" y="44" width="250" height="22" fill="#e5e3de" stroke="#fff"/>
+      <text x="185" y="59" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#555">id | name | status | bio</text>
+      <!-- shard A rows -->
+      <rect x="60" y="66" width="250" height="46" fill="#dbeafe" stroke="#2563eb" stroke-width="1"/>
+      <text x="185" y="84" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#1e40af">rows 1–1M</text>
+      <text x="185" y="100" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" fill="#1e40af">→ Shard A (all columns)</text>
+      <!-- shard B rows -->
+      <rect x="60" y="114" width="250" height="46" fill="#bfdbfe" stroke="#2563eb" stroke-width="1"/>
+      <text x="185" y="132" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#1e40af">rows 1M–2M</text>
+      <text x="185" y="148" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" fill="#1e40af">→ Shard B (all columns)</text>
+      <!-- shard C rows -->
+      <rect x="60" y="162" width="250" height="46" fill="#93c5fd" stroke="#2563eb" stroke-width="1"/>
+      <text x="185" y="180" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#1e40af">rows 2M–3M</text>
+      <text x="185" y="196" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" fill="#1e40af">→ Shard C (all columns)</text>
+      <text x="185" y="232" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#666">Same schema · disjoint rows</text>
+      <text x="185" y="248" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#666">Relieves: row count + write QPS</text>
+
+      <!-- Divider -->
+      <line x1="380" y1="40" x2="380" y2="270" stroke="#e5e3de" stroke-width="1.5" stroke-dasharray="5,3"/>
+
+      <!-- RIGHT: Vertical -->
+      <text x="575" y="28" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="bold" fill="#ea580c">VERTICAL — split COLUMNS</text>
+      <!-- header -->
+      <rect x="450" y="44" width="250" height="22" fill="#e5e3de" stroke="#fff"/>
+      <text x="575" y="59" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#555">id | name | status | bio | avatar</text>
+      <!-- hot cols -->
+      <rect x="450" y="66" width="150" height="142" fill="#ffedd5" stroke="#ea580c" stroke-width="1"/>
+      <text x="525" y="130" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#9a3412" font-weight="bold">id,name,status</text>
+      <text x="525" y="146" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" fill="#9a3412">Store X (hot, narrow)</text>
+      <!-- cold cols -->
+      <rect x="600" y="66" width="100" height="142" fill="#fed7aa" stroke="#ea580c" stroke-width="1"/>
+      <text x="650" y="130" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#9a3412" font-weight="bold">bio, avatar</text>
+      <text x="650" y="146" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" fill="#9a3412">Store Y</text>
+      <text x="650" y="160" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" fill="#9a3412">(cold/blob)</text>
+      <text x="575" y="232" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#666">Same entities · disjoint columns</text>
+      <text x="575" y="248" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#666">Relieves: row width + hot/cold mix</text>
+    </svg>
+    <p class="caption">Same table, two cuts: horizontal tears off blocks of rows; vertical slices off groups of columns</p>
+  </div>
+
+  <div class="tier-grid" style="margin-top:20px;">
+    <div class="tier-card">
+      <h4>🔵 Horizontal (Sharding) <span class="stat stat-blue">split rows</span></h4>
+      <p style="font-size:13px;margin-bottom:6px;">Each shard = <strong>identical schema, disjoint rows</strong>. Routed by a partition key. Grows capacity + write throughput ~linearly with shard count.</p>
+      <p style="font-size:13px;margin-bottom:0;color:var(--red);">⚠️ Queries without the partition key → scatter-gather across all shards.</p>
+    </div>
+    <div class="tier-card">
+      <h4>🟠 Vertical <span class="stat stat-orange">split columns</span></h4>
+      <p style="font-size:13px;margin-bottom:6px;">Same entities, <strong>different attributes per store</strong>. Hot narrow columns stay cache-friendly; cold/bulky columns move out (often to object storage).</p>
+      <p style="font-size:13px;margin-bottom:0;color:var(--red);">⚠️ Reads spanning both column groups → cross-store join.</p>
+    </div>
+  </div>
+</section>
+
+<!-- S6: CORE CONCEPTS -->
+<section id="s6">
+  <h2 class="section-title"><span class="num">§6</span> 📦 Core Concepts</h2>
+
+  <h3>Horizontal Partitioning (Sharding)</h3>
+  <p>Splitting a dataset row-wise: each shard replicates the <em>structure</em> but holds only a disjoint slice of the <em>rows</em>. A partition key (e.g., <code>user_id</code>) plus a strategy (hash or range) decides which shard owns each row. This is the workhorse of scaling — it grows total capacity and write throughput roughly linearly with shard count, because each shard independently absorbs a fraction of the rows and writes. The catch is routing: a read must know the partition key to go straight to the owning shard; a query without it must fan out to every shard.</p>
+
+  <h3>Vertical Partitioning</h3>
+  <p>Splitting a dataset column-wise: the same entity's attributes are divided across stores. A classic example keeps <code>user_id, username, status, last_login</code> (small, hot, read on every request) in one fast table, while <code>bio, profile_image_blob, preferences_json</code> (large, cold) live in a separate store. Vertical partitioning shrinks the hot row so more of it fits in cache and each read moves less data. It also lets you match storage engine to data shape — relational store for structured hot fields, blob/object store for the avatar. The cost: any query needing columns from both sides now performs a join across stores.</p>
+
+  <h3>Partition Key (Shard Key)</h3>
+  <p>For horizontal partitioning, the column(s) whose value determines a row's home shard — <strong>the single most consequential design choice in sharding</strong>. It must be high-cardinality and evenly distributed so load spreads uniformly, and it should align with the dominant query pattern so most queries are single-shard. A poor key (low cardinality like <code>country</code>, or monotonic like a timestamp) concentrates load on one shard — a hot partition.</p>
+
+  <h3>Disjointness (Partitioning vs. Replication)</h3>
+  <p>The defining property of partitioning is that each node holds <em>different</em> data with no overlap — as opposed to replication, where each node holds a <em>copy</em> of the same data. Partitioning scales <strong>capacity</strong>; replication scales <strong>read throughput and availability</strong>. They are orthogonal and almost always combined: you shard for capacity, then replicate each shard for durability and reads.</p>
+
+  <h3>Cross-Partition Operations</h3>
+  <p>The failure mode shared by both axes. In horizontal partitioning, a query lacking the partition key (or an aggregate across all rows) becomes a <strong>scatter-gather</strong>: query every shard, merge results — slow, and as expensive as the slowest shard. In vertical partitioning, a read needing columns from two partitions becomes a <strong>cross-store join</strong> — you've reintroduced the join you were trying to avoid, now across a network. Good designs keep the common-case query within a single partition.</p>
+</section>
+
+<!-- S7: FIRST PRINCIPLES -->
+<section id="s7">
+  <h2 class="section-title"><span class="num">§7</span> 🔍 First Principles — Why Does This Exist?</h2>
+  <p>A single machine has hard ceilings: finite disk (can't store more rows than fit), finite RAM (the working set must fit or you thrash), finite CPU/IOPS (only so many writes per second before disk or lock contention saturates). For a while you push those ceilings up by buying a bigger box — vertical <em>scaling</em> of hardware. But that curve flattens: the biggest machine is finite and its cost grows super-linearly. Eventually a dataset or a write rate simply exceeds what any one node can do.</p>
+  <p>Partitioning is the answer: split the data across many commodity nodes so aggregate capacity and throughput scale with node count. The reason there are <strong>two axes</strong> is that a node can be overwhelmed in two independent ways. It can have <em>too many rows or too many writes</em> — a volume/throughput problem, solved by cutting rows across machines (horizontal). Or its rows can be <em>too wide</em>, with a few hot columns read constantly while large cold columns bloat every row and evict useful data from cache — a width/access-mismatch problem, solved by cutting columns across machines (vertical). Both are "divide the data so no node holds all of it," but they treat different diseases — which is why a mature system uses both.</p>
+
+  <!-- Ceiling / two-axis diagram -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">📈 One Node's Ceilings → Two Ways to Divide</div>
+    <svg viewBox="0 0 720 220" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:720px;display:block;margin:0 auto;">
+      <rect width="720" height="220" fill="#fafafa" rx="8"/>
+      <!-- single node -->
+      <rect x="40" y="80" width="120" height="70" rx="8" fill="#f3f2ef" stroke="#6b6861" stroke-width="1.5"/>
+      <text x="100" y="105" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">One Node</text>
+      <text x="100" y="122" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" fill="#666">disk · RAM · CPU · IOPS</text>
+      <text x="100" y="137" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" fill="#dc2626">all finite → overwhelmed</text>
+
+      <!-- arrows -->
+      <line x1="160" y1="100" x2="250" y2="60" stroke="#2563eb" stroke-width="1.8" marker-end="url(#fp-arr)"/>
+      <line x1="160" y1="130" x2="250" y2="165" stroke="#ea580c" stroke-width="1.8" marker-end="url(#fp-arr)"/>
+
+      <!-- horizontal branch -->
+      <rect x="255" y="30" width="200" height="58" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="355" y="50" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#1e40af">Too MANY rows / writes?</text>
+      <text x="355" y="66" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#1e40af">→ Horizontal: cut rows across</text>
+      <text x="355" y="80" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#1e40af">nodes (scale volume + QPS)</text>
+
+      <!-- vertical branch -->
+      <rect x="255" y="138" width="200" height="58" rx="8" fill="#ffedd5" stroke="#ea580c" stroke-width="1.5"/>
+      <text x="355" y="158" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#9a3412">Rows too WIDE / hot+cold?</text>
+      <text x="355" y="174" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#9a3412">→ Vertical: cut columns across</text>
+      <text x="355" y="188" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#9a3412">stores (scale width / cache fit)</text>
+
+      <!-- both -->
+      <line x1="455" y1="59" x2="520" y2="100" stroke="#7c3aed" stroke-width="1.8" marker-end="url(#fp-arr)"/>
+      <line x1="455" y1="167" x2="520" y2="120" stroke="#7c3aed" stroke-width="1.8" marker-end="url(#fp-arr)"/>
+      <rect x="525" y="82" width="160" height="56" rx="8" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.5"/>
+      <text x="605" y="104" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#5b21b6">At scale: BOTH</text>
+      <text x="605" y="120" text-anchor="middle" font-family="Arial,sans-serif" font-size="9.5" fill="#5b21b6">split columns, then shard,</text>
+      <text x="605" y="132" text-anchor="middle" font-family="Arial,sans-serif" font-size="9.5" fill="#5b21b6">then replicate each shard</text>
+
+      <defs>
+        <marker id="fp-arr" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+          <path d="M0,0 L0,8 L8,4 z" fill="#666"/>
+        </marker>
+      </defs>
+    </svg>
+    <p class="caption">A node is overwhelmed by row count/QPS OR by row width — each pressure maps to a different cut</p>
+  </div>
+</section>
+
+<!-- S8: MENTAL MODELS -->
+<section id="s8">
+  <h2 class="section-title"><span class="num">§8</span> 🗺️ Mental Models</h2>
+
+  <h3>Model 1: Cutting a Spreadsheet</h3>
+  <p>Picture your data as one giant spreadsheet. <strong>Horizontal partitioning cuts it with horizontal lines</strong> — you tear off blocks of rows and hand each block to a different machine; every block still has all the columns. <strong>Vertical partitioning cuts it with vertical lines</strong> — you slice off groups of columns and put each group on a different machine; every machine still has all the entities but only some of their fields. <em>Where it breaks down:</em> it shows the <em>shape</em> of the split but not routing or the join cost — the runtime consequence lives elsewhere.</p>
+
+  <h3>Model 2: The Library Analogy</h3>
+  <p>A library that outgrows one building can expand two ways. <strong>Horizontal:</strong> open a second identical building and split books by call number (A–L here, M–Z there) — same layout, different books; to find a book you must know which building (the partition key). <strong>Vertical:</strong> keep frequently-browsed items (catalog, new releases) in the fast front room and move rarely-touched archives (bound periodicals, microfilm) to a distant annex — same items conceptually, split by access frequency. A patron needing both a new release and its archived companion makes two trips (a cross-partition read). <em>Where it breaks down:</em> if you push the "same items" mapping too literally.</p>
+
+  <h3>Model 3: Volume vs. Width Diagnosis</h3>
+  <p>When you feel scaling pain, ask one diagnostic question: <em>is the problem how MANY rows, or how WIDE the rows?</em> "Many" (row count, write QPS, total bytes) → cut horizontally. "Wide" (60 columns, giant blobs inline, hot/cold mixed) → cut vertically. This turns an open-ended "how do we scale this?" into a fast, defensible decision. <em>Where it breaks down:</em> at large scale the honest answer is often "both" — the frame is a starting diagnosis, not the final architecture.</p>
+</section>
+
+<!-- S9: HOW IT WORKS -->
+<section id="s9">
+  <h2 class="section-title"><span class="num">§9</span> ⚙️ How It Works — Mechanics</h2>
+
+  <!-- Routing diagram: single-shard vs scatter-gather -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">🧭 Horizontal Routing — Single-Shard vs. Scatter-Gather</div>
+    <svg viewBox="0 0 760 260" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:760px;display:block;margin:0 auto;">
+      <rect width="760" height="260" fill="#fafafa" rx="8"/>
+
+      <!-- LEFT: single-shard -->
+      <text x="185" y="26" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#16a34a">✓ Query HAS partition key</text>
+      <rect x="120" y="38" width="130" height="34" rx="6" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+      <text x="185" y="59" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#065f46">WHERE user_id=12345</text>
+      <!-- router -->
+      <rect x="130" y="90" width="110" height="30" rx="6" fill="#e0e7ff" stroke="#4f46e5" stroke-width="1.5"/>
+      <text x="185" y="110" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#3730a3">Router: hash→Shard B</text>
+      <line x1="185" y1="72" x2="185" y2="90" stroke="#666" stroke-width="1.5" marker-end="url(#rt-arr)"/>
+      <!-- shards -->
+      <rect x="70" y="150" width="66" height="44" rx="6" fill="#f3f2ef" stroke="#ccc" stroke-width="1"/>
+      <text x="103" y="176" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#aaa">Shard A</text>
+      <rect x="152" y="150" width="66" height="44" rx="6" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+      <text x="185" y="170" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" font-weight="bold" fill="#1e40af">Shard B</text>
+      <text x="185" y="184" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" fill="#16a34a">HIT</text>
+      <rect x="234" y="150" width="66" height="44" rx="6" fill="#f3f2ef" stroke="#ccc" stroke-width="1"/>
+      <text x="267" y="176" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#aaa">Shard C</text>
+      <line x1="185" y1="120" x2="185" y2="150" stroke="#2563eb" stroke-width="1.8" marker-end="url(#rt-arr)"/>
+      <text x="185" y="222" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#16a34a">1 hop · fast</text>
+      <text x="185" y="238" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" fill="#666">≈ single-node query</text>
+
+      <!-- Divider -->
+      <line x1="380" y1="20" x2="380" y2="248" stroke="#e5e3de" stroke-width="1.5" stroke-dasharray="5,3"/>
+
+      <!-- RIGHT: scatter-gather -->
+      <text x="575" y="26" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#dc2626">✗ Query LACKS partition key</text>
+      <rect x="500" y="38" width="150" height="34" rx="6" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5"/>
+      <text x="575" y="59" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#7f1d1d">WHERE country='JP'</text>
+      <rect x="515" y="90" width="120" height="30" rx="6" fill="#e0e7ff" stroke="#4f46e5" stroke-width="1.5"/>
+      <text x="575" y="110" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#3730a3">Router: fan out to ALL</text>
+      <line x1="575" y1="72" x2="575" y2="90" stroke="#666" stroke-width="1.5" marker-end="url(#rt-arr)"/>
+      <!-- shards all hit -->
+      <rect x="460" y="150" width="66" height="44" rx="6" fill="#ffe3e3" stroke="#dc2626" stroke-width="1.5"/>
+      <text x="493" y="170" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#7f1d1d">Shard A</text>
+      <text x="493" y="184" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" fill="#7f1d1d">scan</text>
+      <rect x="542" y="150" width="66" height="44" rx="6" fill="#ffe3e3" stroke="#dc2626" stroke-width="1.5"/>
+      <text x="575" y="170" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#7f1d1d">Shard B</text>
+      <text x="575" y="184" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" fill="#7f1d1d">scan</text>
+      <rect x="624" y="150" width="66" height="44" rx="6" fill="#ffe3e3" stroke="#dc2626" stroke-width="1.5"/>
+      <text x="657" y="170" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#7f1d1d">Shard C</text>
+      <text x="657" y="184" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" fill="#7f1d1d">scan</text>
+      <line x1="545" y1="120" x2="493" y2="150" stroke="#dc2626" stroke-width="1.5" marker-end="url(#rt-arr)"/>
+      <line x1="575" y1="120" x2="575" y2="150" stroke="#dc2626" stroke-width="1.5" marker-end="url(#rt-arr)"/>
+      <line x1="605" y1="120" x2="657" y2="150" stroke="#dc2626" stroke-width="1.5" marker-end="url(#rt-arr)"/>
+      <text x="575" y="222" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#dc2626">N hops · merge results</text>
+      <text x="575" y="238" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" fill="#666">bounded by SLOWEST shard</text>
+
+      <defs>
+        <marker id="rt-arr" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+          <path d="M0,0 L0,8 L8,4 z" fill="#666"/>
+        </marker>
+      </defs>
+    </svg>
+    <p class="caption">The partition key decides everything: with it, one hop; without it, a fan-out to every shard</p>
+  </div>
+
+  <h3>Horizontal — Read Path</h3>
+  <p><strong>Single-shard (happy case):</strong> the app issues a query keyed by the partition key (e.g., <code>WHERE user_id=12345</code>). A routing layer (client library, a proxy like Vitess/ProxySQL, or a coordinator) applies the partition function — hash or range — to compute the owning shard, sends the query to that one shard (and its read replica), and returns. Cost ≈ a single-node query. <strong>Scatter-gather (failure mode):</strong> a query lacking the partition key or aggregating across all rows can't be narrowed to one shard, so the router fans it out to all N shards in parallel, each computes a partial result, and the coordinator merges. Latency is bounded by the slowest shard and gets more expensive as you add shards — which is why the partition key must align with the dominant query pattern.</p>
+
+  <h3>Horizontal — Write Path</h3>
+  <p>Compute the shard from the partition key of the row being written, write to that shard's primary, and let the shard's own replication propagate to its replicas. Writes to different keys land on different shards, so aggregate write throughput scales with shard count — the core win.</p>
+
+  <h3>Vertical — Read &amp; Write Paths</h3>
+  <p>A hot-path read (render a user's header) touches only the narrow hot table: small, cache-friendly rows. A read needing cold columns (open the full profile) queries the second store for <code>bio, avatar</code> — a second lookup or application-level join. Writes to hot fields touch only the hot store; writes to cold fields touch only the cold store. A single logical update spanning both stores becomes a multi-store write — either accept eventual consistency between them or coordinate with a transaction/saga, the price of the split.</p>
+
+  <div class="callout callout-warn">
+    ⚠️ <strong>Partition key sizing &amp; skew:</strong> Choose a high-cardinality, evenly-distributed key that matches your queries. Size shard count as <code>shards ≈ max( ceil(data / per_shard_capacity), ceil(peak_write_qps / per_shard_write_capacity) )</code> with growth headroom. A low-cardinality or monotonic key (country, boolean, timestamp) concentrates load on one shard — a hot partition (see §7.6).
+  </div>
+</section>
+
+<!-- S10: REAL-WORLD EXAMPLES -->
+<section id="s10">
+  <h2 class="section-title"><span class="num">§10</span> 🏭 Real-World System Examples</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>System</th><th>How Partitioning Applies</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Instagram (Postgres)</strong></td>
+          <td>Horizontally shards core data by user ID using thousands of logical shards mapped onto fewer physical machines; the shard ID is encoded into the 64-bit primary key</td>
+          <td>Routing is a bit-shift on the ID — a clean illustration of partition-key-driven routing</td>
+        </tr>
+        <tr>
+          <td><strong>Vitess (YouTube / PlanetScale)</strong></td>
+          <td>Sharding middleware over MySQL: one logical database, tables horizontally partitioned across many MySQL instances, with a router that resolves single-shard vs. scatter-gather queries</td>
+          <td>Productionizes the routing layer and the scatter-gather concept; built to scale YouTube's MySQL</td>
+        </tr>
+        <tr>
+          <td><strong>e-commerce user tables</strong></td>
+          <td>Vertical partitioning of a <code>users</code> entity: hot account fields (login, status) in a fast transactional store; large/cold fields (order history, preferences, media) in separate stores or services</td>
+          <td>Classic "split hot narrow from cold wide"; often evolves into separate microservices per column group</td>
+        </tr>
+        <tr>
+          <td><strong>Any app storing files/avatars</strong></td>
+          <td>Vertical split between a relational row (metadata: <code>user_id, filename, size</code>) and an object store (S3/GCS) holding the bytes</td>
+          <td>The blob leaves the row entirely — the archetypal vertical split; keeps DB rows small</td>
+        </tr>
+        <tr>
+          <td><strong>Cassandra / DynamoDB</strong></td>
+          <td>Horizontal partitioning is first-class: the partition key hashes to a token that places rows on nodes; queries are efficient only when they specify the partition key, else a scan / secondary index</td>
+          <td>Makes the single-shard-vs-scatter trade-off an explicit part of the data-modeling API</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- S11: TRADE-OFFS -->
+<section id="s11">
+  <h2 class="section-title"><span class="num">§11</span> ⚖️ Trade-offs</h2>
+
+  <!-- Trade-off comparison diagram -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">⚖️ Horizontal vs. Vertical — Key Dimensions</div>
+    <svg viewBox="0 0 720 200" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:720px;display:block;margin:0 auto;">
+      <rect width="720" height="200" fill="#fafafa" rx="8"/>
+      <text x="180" y="28" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="bold" fill="#2563eb">Horizontal (Sharding)</text>
+      <text x="540" y="28" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="bold" fill="#ea580c">Vertical</text>
+      <line x1="360" y1="8" x2="360" y2="195" stroke="#e5e3de" stroke-width="1.5" stroke-dasharray="5,3"/>
+
+      <text x="20" y="60" font-family="Arial,sans-serif" font-size="11" fill="#666" font-weight="bold">Relieves</text>
+      <text x="20" y="90" font-family="Arial,sans-serif" font-size="11" fill="#666" font-weight="bold">Scales writes?</text>
+      <text x="20" y="120" font-family="Arial,sans-serif" font-size="11" fill="#666" font-weight="bold">Cheap when</text>
+      <text x="20" y="150" font-family="Arial,sans-serif" font-size="11" fill="#666" font-weight="bold">Costly when</text>
+      <text x="20" y="180" font-family="Arial,sans-serif" font-size="11" fill="#666" font-weight="bold">Failure mode</text>
+
+      <!-- Horizontal values -->
+      <rect x="130" y="46" width="200" height="18" rx="3" fill="#dbeafe"/><text x="230" y="59" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#1e40af">Row count + throughput</text>
+      <rect x="130" y="76" width="200" height="18" rx="3" fill="#dcfce7"/><text x="230" y="89" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#065f46">Yes — ~linearly w/ shards</text>
+      <rect x="130" y="106" width="200" height="18" rx="3" fill="#dcfce7"/><text x="230" y="119" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#065f46">Query has partition key</text>
+      <rect x="130" y="136" width="200" height="18" rx="3" fill="#fee2e2"/><text x="230" y="149" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#7f1d1d">Query lacks the key</text>
+      <rect x="130" y="166" width="200" height="18" rx="3" fill="#ffedd5"/><text x="230" y="179" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#9a3412">Scatter-gather / hot shard</text>
+
+      <!-- Vertical values -->
+      <rect x="390" y="46" width="300" height="18" rx="3" fill="#ffedd5"/><text x="540" y="59" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#9a3412">Row width + hot/cold mismatch</text>
+      <rect x="390" y="76" width="300" height="18" rx="3" fill="#fee2e2"/><text x="540" y="89" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#7f1d1d">No — isolates, doesn't multiply</text>
+      <rect x="390" y="106" width="300" height="18" rx="3" fill="#dcfce7"/><text x="540" y="119" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#065f46">Columns live on one store</text>
+      <rect x="390" y="136" width="300" height="18" rx="3" fill="#fee2e2"/><text x="540" y="149" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#7f1d1d">Read spans both stores</text>
+      <rect x="390" y="166" width="300" height="18" rx="3" fill="#ffedd5"/><text x="540" y="179" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#9a3412">Cross-store join / dual-write</text>
+    </svg>
+    <p class="caption">They relieve different pressures — horizontal multiplies throughput; vertical isolates access patterns</p>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>✅ Benefit</th><th>❌ Cost / Limitation</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="benefit">Horizontal: scales total capacity and write throughput ~linearly with shard count</td>
+          <td class="cost">Cross-shard queries (no partition key, or aggregates) become scatter-gather, bounded by the slowest shard</td>
+        </tr>
+        <tr>
+          <td class="benefit">Horizontal: each shard is smaller, so per-node indexes, backups, and working sets stay manageable</td>
+          <td class="cost">Requires a routing layer and a well-chosen partition key; a bad key creates hot shards and skew</td>
+        </tr>
+        <tr>
+          <td class="benefit">Vertical: shrinks the hot row so more fits in cache and each read moves less data</td>
+          <td class="cost">Reads spanning both partitions become cross-store joins, adding latency and code complexity</td>
+        </tr>
+        <tr>
+          <td class="benefit">Vertical: lets you match storage engine to data shape (relational hot fields, blob store for media)</td>
+          <td class="cost">A single logical update spanning partitions loses single-store transactionality (eventual consistency or sagas)</td>
+        </tr>
+        <tr>
+          <td class="benefit">Both: partitioning is the only way to hold a dataset larger than the biggest single node</td>
+          <td class="cost">Partitioning alone gives no availability — each partition is a SPOF until separately replicated; op complexity rises</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- S12: INTERVIEW APPLICATION -->
+<section id="s12">
+  <h2 class="section-title"><span class="num">§12</span> 🎯 Interview Application</h2>
+
+  <h3>Trigger Phrases</h3>
+  <ul style="margin-left:20px;margin-bottom:16px;font-size:14.5px;line-height:1.8;">
+    <li>"This table won't fit on one machine / has billions of rows — how do you scale it?"</li>
+    <li>"Write throughput is saturating the primary database."</li>
+    <li>"The row is very wide but the hot path only reads a few columns."</li>
+    <li>"You're storing large documents/images inline with the record — is that a problem?"</li>
+    <li>"What's your partition key, and what happens to queries that don't use it?"</li>
+  </ul>
+
+  <h3>What You Say / Do</h3>
+  <p>Diagnose the axis first, out loud: "Is this a volume problem — too many rows or too much write QPS — or a width problem — rows too wide with hot and cold columns mixed?" Then commit: for volume, "I'd horizontally shard by <code>&lt;key&gt;</code> so capacity and writes scale with shard count, and I'd pick the key to match the dominant query so most reads are single-shard." For width, "I'd vertically split the hot narrow columns from the cold/bulky ones — moving blobs to object storage — so the hot table stays cache-friendly." Then pre-empt the cost: name scatter-gather (horizontal) or cross-store joins (vertical) before the interviewer does, and note that each shard still needs replication for availability.</p>
+
+  <div class="tradeoff-box">
+    💬 <strong>Trade-off statement (memorize this):</strong><br><br>
+    "Horizontal sharding buys me linear capacity and write scaling, but only if queries carry the partition key — otherwise I pay scatter-gather across all shards. Vertical partitioning buys me a lean, cache-friendly hot path, but any read spanning both column groups becomes a cross-store join. For this system, since reads are almost always keyed by <code>user_id</code> and the table is uniformly accessed, this is a volume problem — I'd shard horizontally by <code>user_id</code> and push cross-user analytics to a separate OLAP store rather than scatter-gathering."
+  </div>
+</section>
+
+<!-- S13: MISCONCEPTIONS -->
+<section id="s13">
+  <h2 class="section-title"><span class="num">§13</span> ⚠️ Common Misconceptions &amp; Gotchas</h2>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> Partitioning and replication are the same thing, or partitioning gives you high availability.</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> They are orthogonal. Partitioning splits <em>different</em> data across nodes to scale capacity; replication copies the <em>same</em> data to scale reads and survive failures. A partition with no replica is a single point of failure for its slice of data. Real designs shard <em>and</em> replicate.</div></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> "Vertical partitioning" means the same as "vertical scaling."</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Vertical <em>scaling</em> means making one machine bigger (more CPU/RAM). Vertical <em>partitioning</em> means splitting a table's columns across stores. Same word, unrelated concepts — mixing them up is a classic interview stumble.</div></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> Once you shard horizontally, all queries get faster.</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Only queries carrying the partition key get faster (single-shard). Queries without it — aggregates, secondary-attribute lookups — get <em>slower</em>, because they fan out to every shard and wait on the slowest one. The partition key must match your dominant access pattern or you've hurt the common case.</div></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> The sharding <em>mechanism</em> (hash vs. range) is the main decision.</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> The <em>partition key choice</em> matters more. A low-cardinality or skewed key (country, boolean, monotonic timestamp) creates hot shards regardless of hash or range. Pick a high-cardinality, evenly-distributed key that aligns with queries first; the mechanism is secondary.</div></div>
+  </div>
+</section>
+
+<!-- S14: RELATIONSHIPS -->
+<section id="s14">
+  <h2 class="section-title"><span class="num">§14</span> 🔗 Relationships to Other Concepts</h2>
+  <div class="connections">
+    <div class="conn-card">
+      <div class="conn-icon">🧱</div>
+      <div>
+        <div class="conn-label">Builds On</div>
+        <strong>2.6 Horizontal vs. Vertical Scaling</strong> — partitioning is horizontal scaling applied to data. Also <strong>3.6 Share-Nothing Architecture</strong> — sharded nodes owning disjoint data is the canonical share-nothing design that lets partitions scale independently.
+      </div>
+    </div>
+    <div class="conn-card">
+      <div class="conn-icon">🔓</div>
+      <div>
+        <div class="conn-label">Enables</div>
+        <strong>7.2 Hash Partitioning</strong> and <strong>7.3 Range Partitioning</strong> (how to assign rows to shards), <strong>7.4 Consistent Hashing</strong> (minimizing reshard cost), <strong>7.6 Hot Partitions</strong> (the skew failure mode), and <strong>7.7 Cross-Shard Queries</strong> (the scatter-gather problem this subtopic introduces).
+      </div>
+    </div>
+    <div class="conn-card">
+      <div class="conn-icon">⚡</div>
+      <div>
+        <div class="conn-label">Tension With</div>
+        <strong>Joins &amp; transactions / strong consistency</strong> — both partitioning axes fragment data that was once co-located, so operations needing multiple partitions (cross-shard joins, multi-store transactions) become expensive or lose ACID guarantees. This is the core tension you manage when you choose to partition.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- S15: QUIZ -->
+<section id="s15">
+  <h2 class="section-title"><span class="num">§15</span> 🧪 Self-Check Quiz</h2>
+  <div class="callout callout-quote">Can you answer these without looking? If not, you haven't internalized it yet. Click to reveal the hint.</div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">1</div>
+      <div class="qtext">Define horizontal and vertical partitioning in one sentence each, and state the single distinguishing property between them.</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 Horizontal = split by ROW (identical schema, disjoint rows via a partition key). Vertical = split by COLUMN/TABLE (same entities, different attributes per store). Distinguishing property: horizontal keeps all columns and splits rows; vertical keeps all entities and splits columns. Rows vs. columns. Revisit §5.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">2</div>
+      <div class="qtext">A <code>users</code> table is 60 columns wide; the hot path reads only 4 of them, but each row also stores a 2MB inline avatar blob that's rarely read. Which partitioning axis applies, and what specifically do you do?</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 A WIDTH problem → VERTICAL. The 2MB blob bloats every row and evicts useful data from cache. Move the avatar to an object store (S3/GCS) keyed by user_id and split the hot 4 columns into a narrow users_core table. Hot path now reads small rows; the rare full-profile read pays a second lookup. Revisit §6 and §8 (Model 3).</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">3</div>
+      <div class="qtext">You horizontally shard <code>users</code> by <code>user_id</code>. A new feature needs <code>SELECT COUNT(*) FROM users WHERE country='JP'</code>. What happens, and why is it slow?</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 The query has no partition key (filters by country, not user_id), so the router can't target one shard — it scatter-gathers to ALL shards, each computes a partial count, and the coordinator sums them. Slow because latency is bounded by the SLOWEST shard and cost grows with shard count. Fix: serve such analytics from a separate OLAP store / secondary index by country. Revisit §9.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">4</div>
+      <div class="qtext">Name a real system and describe how it applies one of these axes, including the routing or join consequence.</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 Vitess over MySQL (YouTube): horizontally partitions tables across many MySQL instances behind one logical DB; its router resolves single-shard (has the key → one instance) vs. scatter-gather (fanned out and merged). Alternatives: Instagram shards Postgres by user ID; DynamoDB/Cassandra partition by key hash. Revisit §10.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">5</div>
+      <div class="qtext">A candidate says "we'll shard the table, which also makes us fault-tolerant since data is spread across nodes." What's wrong, and what's missing?</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 Wrong: partitioning is NOT replication and provides no availability. Spreading DIFFERENT data across nodes means each shard is a single point of failure for its slice — lose a shard, lose that slice. Missing: REPLICATION under each shard. Correct design shards for capacity AND replicates each shard for durability/reads. Orthogonal and combined. Revisit §6 and §13.</div>
+  </div>
+</section>
+
+<!-- S16: FURTHER READING -->
+<section id="s16">
+  <h2 class="section-title"><span class="num">§16</span> 📚 Further Reading</h2>
+  <ul class="reading-list">
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>"Designing Data-Intensive Applications" — Chapter 6, Partitioning</strong> (Martin Kleppmann) — the definitive treatment; partitioning + replication interplay and secondary-index partitioning</div></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>ByteByteGo "Database Sharding Explained"</strong> — <a href="https://blog.bytebytego.com/p/database-sharding" target="_blank">blog.bytebytego.com</a> — accessible visual walkthrough of horizontal sharding and routing</div></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>Instagram Engineering — "Sharding &amp; IDs at Instagram"</strong> — <a href="https://instagram-engineering.com/sharding-ids-at-instagram-1cf5a71e5a5c" target="_blank">instagram-engineering.com</a> — real-world horizontal sharding of Postgres with embedded shard IDs</div></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>Vitess documentation — "Sharding"</strong> — <a href="https://vitess.io/docs/concepts/sharding/" target="_blank">vitess.io</a> — how a production router handles single-shard vs. scatter-gather queries</div></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>AWS Prescriptive Guidance — data partitioning patterns</strong> — search "vertical partitioning" and "horizontal partitioning" in AWS docs for cloud-specific guidance and examples</div></li>
+  </ul>
+</section>
+
+<!-- S17: MY NOTES -->
+<section id="s17">
+  <h2 class="section-title"><span class="num">§17</span> ✍️ My Notes</h2>
+  <div class="callout callout-quote">Personal observations, things that confused me, analogies that helped. This section is yours.</div>
+  <textarea class="notes-area" placeholder="Add your personal notes here — analogies that clicked, interview stories, things that confused you..."></textarea>
+</section>
+
+</article>
+</main>
+
+<script>
+// TOC active state
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('#toc nav a');
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(a => a.classList.remove('active'));
+      const a = document.querySelector(`#toc nav a[href="#${e.target.id}"]`);
+      if (a) a.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+sections.forEach(s => obs.observe(s));
+
+// Checklist toggle
+function toggle(cb) {
+  const li = cb.closest('li');
+  li.classList.toggle('checked');
+}
+
+// Phase card toggle
+function togglePhase(header) {
+  header.closest('.phase-card').classList.toggle('open');
+}
+
+// Quiz toggle
+function toggleQuiz(q) {
+  const item = q.closest('.quiz-item');
+  item.classList.toggle('open');
+  q.querySelector('.quiz-toggle').textContent = item.classList.contains('open') ? '▲ Hide' : '▼ Hint';
+}
+
+// Reading list toggle
+function toggleReading(cb) {
+  const li = cb.closest('li');
+  li.classList.toggle('checked');
+}
+
+// Notes auto-save (in-memory only)
+const notesArea = document.querySelector('.notes-area');
+const NOTES_KEY = 'notes_7_1';
+if (localStorage.getItem(NOTES_KEY)) notesArea.value = localStorage.getItem(NOTES_KEY);
+notesArea.addEventListener('input', () => {
+  try { localStorage.setItem(NOTES_KEY, notesArea.value); } catch(e) {}
+});
+</script>
+</body>
+</html>
