@@ -1,0 +1,970 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.3 Range Partitioning</title>
+<style>
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface-alt: #f3f2ef;
+    --border: #e5e3de; --text: #1a1917; --text-muted: #6b6861;
+    --accent: #2563eb; --accent-light: #dbeafe;
+    --green: #16a34a; --green-light: #dcfce7;
+    --red: #dc2626; --red-light: #fee2e2;
+    --yellow: #d97706; --yellow-light: #fef3c7;
+    --purple: #7c3aed; --purple-light: #ede9fe;
+    --orange: #ea580c; --orange-light: #ffedd5;
+    --teal: #0d9488; --teal-light: #ccfbf1;
+    --code-bg: #1e1e2e; --code-text: #cdd6f4;
+    --sidebar-w: 240px; --content-max: 820px;
+    font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; }
+  #toc { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0 48px; z-index: 100; }
+  #toc-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  #toc-header .phase-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-bottom: 6px; }
+  #toc-header h2 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  #toc nav a { display: block; padding: 5px 16px 5px 20px; font-size: 12.5px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+  main { margin-left: var(--sidebar-w); padding: 48px 48px 96px; max-width: calc(var(--sidebar-w) + var(--content-max) + 96px); width: 100%; }
+  article { max-width: var(--content-max); }
+  .doc-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 2px solid var(--border); }
+  .doc-header .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+  .tag-phase { background: var(--accent-light); color: var(--accent); }
+  .tag-topic { background: var(--purple-light); color: var(--purple); }
+  .tag-date  { background: var(--surface-alt);  color: var(--text-muted); }
+  .doc-header h1 { font-size: 30px; font-weight: 800; line-height: 1.25; letter-spacing: -.02em; color: var(--text); }
+  section { margin-bottom: 52px; scroll-margin-top: 32px; }
+  h2.section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -.01em; }
+  h2.section-title .num { font-size: 11px; font-weight: 800; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; letter-spacing: .04em; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 24px 0 10px; }
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+  code { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-family: "SF Mono","Fira Code",Menlo,monospace; font-size: 12.5px; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 14px; border-left: 3px solid; }
+  .callout-goal  { background: var(--accent-light); border-color: var(--accent); color: #1e40af; }
+  .callout-tip   { background: var(--yellow-light); border-color: var(--yellow); color: #92400e; }
+  .callout-warn  { background: var(--red-light); border-color: var(--red); color: #7f1d1d; }
+  .callout-quote { background: var(--surface-alt); border-color: var(--border); color: var(--text-muted); font-style: italic; }
+  .callout-teal  { background: var(--teal-light); border-color: var(--teal); color: #134e4a; }
+  .cheatsheet { background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 24px 28px; font-family: "SF Mono","Fira Code","Cascadia Code",Menlo,monospace; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-x: auto; margin-top: 16px; }
+  .cheatsheet .label { color: #cba6f7; font-weight: 700; letter-spacing: .08em; display: block; margin-top: 18px; margin-bottom: 4px; border-bottom: 1px solid #313244; padding-bottom: 3px; }
+  .cheatsheet .label:first-child { margin-top: 0; }
+  .diagram-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 16px 14px; margin: 20px 0 28px; overflow-x: auto; }
+  .diagram-wrap .diagram-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); margin-bottom: 12px; }
+  .diagram-wrap p.caption { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 10px; margin-bottom: 0; font-style: italic; }
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; font-size: 14.5px; line-height: 1.55; }
+  .checklist li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 2px; background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .checklist li.checked .cb { background: var(--green); border-color: var(--green); }
+  .checklist li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .checklist li.checked .text { color: var(--text-muted); text-decoration: line-through; }
+  .phase-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
+  .phase-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; cursor: pointer; user-select: none; background: var(--surface-alt); }
+  .phase-header:hover { background: var(--border); }
+  .phase-label { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+  .phase-badge { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 2px 8px; border-radius: 20px; }
+  .ph1 { background: #dbeafe; color: #1d4ed8; } .ph2 { background: #fce7f3; color: #9d174d; }
+  .ph3 { background: #d1fae5; color: #065f46; } .ph4 { background: #fef3c7; color: #92400e; }
+  .phase-chevron { font-size: 12px; color: var(--text-muted); transition: transform .2s; }
+  .phase-card.open .phase-chevron { transform: rotate(180deg); }
+  .phase-body { display: none; padding: 16px 20px 20px; }
+  .phase-card.open .phase-body { display: block; }
+  .phase-goal { font-size: 12.5px; color: var(--text-muted); font-style: italic; margin-bottom: 12px; }
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: var(--surface-alt); padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.5; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+  .misconception { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .misconception .wrong { background: var(--red-light); padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; }
+  .misconception .right { padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; color: #065f46; background: var(--green-light); }
+  .misconception .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .quiz-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .quiz-q { padding: 14px 18px; font-size: 14.5px; font-weight: 600; cursor: pointer; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .quiz-q:hover { background: var(--surface-alt); }
+  .quiz-num { flex-shrink: 0; width: 24px; height: 24px; background: var(--accent); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; margin-top: 1px; }
+  .quiz-q .qtext { flex: 1; }
+  .quiz-toggle { font-size: 11px; color: var(--text-muted); flex-shrink: 0; margin-top: 3px; }
+  .quiz-hint { display: none; padding: 10px 18px 14px; font-size: 13px; color: #92400e; background: var(--yellow-light); border-top: 1px solid var(--border); }
+  .quiz-item.open .quiz-hint { display: block; }
+  .reading-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .reading-list li { display: flex; align-items: flex-start; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; font-size: 14px; }
+  .reading-list li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 1px; cursor: pointer; background: var(--surface); display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .reading-list li.checked .cb { background: var(--green); border-color: var(--green); }
+  .reading-list li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .reading-list li.checked .rtext { color: var(--text-muted); text-decoration: line-through; }
+  .notes-area { width: 100%; min-height: 160px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: inherit; font-size: 14px; color: var(--text); resize: vertical; line-height: 1.6; }
+  .notes-area:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .focus-list { list-style: none; display: flex; flex-direction: column; gap: 14px; }
+  .focus-list li { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14.5px; line-height: 1.6; }
+  .focus-list li strong { color: var(--accent); display: block; margin-bottom: 4px; }
+  .connections { display: flex; flex-direction: column; gap: 12px; }
+  .conn-card { display: flex; align-items: flex-start; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14px; }
+  .conn-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .conn-label { font-weight: 700; margin-bottom: 3px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .tradeoff-box { background: var(--surface-alt); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 14px 18px; font-size: 14px; font-style: italic; color: var(--text); margin-top: 14px; }
+  .tier-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 16px 0; }
+  .tier-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; font-size: 14px; }
+  .tier-card h4 { font-size: 13px; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .tier-card .stat { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 2px 7px; border-radius: 4px; }
+  .stat-blue { background: var(--accent-light); color: var(--accent); }
+  .stat-orange { background: var(--orange-light); color: var(--orange); }
+  .stat-green { background: var(--green-light); color: var(--green); }
+  .stat-red { background: var(--red-light); color: var(--red); }
+  @media (max-width: 900px) { #toc { display: none; } main { margin-left: 0; padding: 24px 20px 60px; } .tier-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<aside id="toc">
+  <div id="toc-header">
+    <span class="phase-tag">Phase B · Topic 7</span>
+    <h2>7.3 Range Partitioning</h2>
+  </div>
+  <nav>
+    <a href="#s0">🗺️ Overview</a>
+    <a href="#s1">🎯 Goal</a>
+    <a href="#s2">✅ Mastery Criteria</a>
+    <a href="#s3">🗓️ Study Phases</a>
+    <a href="#s4">📋 Cheatsheet</a>
+    <a href="#s5">🧠 Core Definition</a>
+    <a href="#s6">📦 Core Concepts</a>
+    <a href="#s7">🔍 First Principles</a>
+    <a href="#s8">🗺️ Mental Models</a>
+    <a href="#s9">⚙️ How It Works</a>
+    <a href="#s10">🏭 Real-World Examples</a>
+    <a href="#s11">⚖️ Trade-offs</a>
+    <a href="#s12">🎯 Interview Application</a>
+    <a href="#s13">⚠️ Misconceptions</a>
+    <a href="#s14">🔗 Relationships</a>
+    <a href="#s15">🧪 Self-Check Quiz</a>
+    <a href="#s16">📚 Further Reading</a>
+    <a href="#s17">✍️ My Notes</a>
+  </nav>
+</aside>
+
+<main>
+<article>
+
+<!-- HEADER -->
+<div class="doc-header">
+  <div class="meta">
+    <span class="tag tag-phase">⚡ Phase B — Scalability</span>
+    <span class="tag tag-topic">🔀 Topic 7 — Data Partitioning / Sharding</span>
+    <span class="tag tag-date">📅 2026-07-14</span>
+  </div>
+  <h1>7.3 Range Partitioning<br><span style="font-weight:400;color:var(--text-muted);font-size:22px;">Contiguous Key Ranges, Splits, and the Hot-Shard Problem</span></h1>
+</div>
+
+<!-- S0: OVERVIEW -->
+<section id="s0">
+  <h2 class="section-title"><span class="num">§0</span> 🗺️ Topic Overview</h2>
+  <p>Range partitioning splits a dataset across shards by dividing the key space into contiguous, ordered ranges — shard 1 holds keys A–F, shard 2 holds G–M, and so on. Unlike hash partitioning, which scatters keys pseudo-randomly to spread load evenly, range partitioning preserves the natural ordering of keys, so a range query like "all events between 9am and 10am" touches only the shards that overlap that range instead of fanning out to the whole cluster. The core tension is <strong>query efficiency vs. load distribution</strong>: preserving order unlocks efficient range scans, but the same property makes range partitioning acutely vulnerable to hot shards whenever the write pattern is monotonic.</p>
+
+  <ul class="focus-list" style="margin-top:18px;">
+    <li><strong>1. Why range partitioning exists at all</strong> — Hash partitioning destroys order; if the access pattern depends on scanning contiguous ranges, hashing forces a scatter-gather across every shard. Range partitioning trades load-balance guarantees for query efficiency.</li>
+    <li><strong>2. The hot-shard failure mode</strong> — The single most-tested scenario: a monotonically increasing key (timestamp, auto-increment ID) sends every new write to the same shard. Know this cold — it's the signature gotcha.</li>
+    <li><strong>3. Split point selection and rebalancing</strong> — Shards aren't fixed forever; as a shard grows, it splits at the MEDIAN key of stored data, not the key-space midpoint.</li>
+    <li><strong>4. Range vs. hash partitioning — the direct comparison</strong> — Range wins when range queries and ordered scans dominate; hash wins when point lookups dominate and even load distribution is the priority.</li>
+    <li><strong>5. Real systems that use it</strong> — Bigtable/HBase, MongoDB ranged sharding, and CockroachDB/Spanner are the canonical examples; know how each handles the hot-shard problem in practice.</li>
+  </ul>
+</section>
+
+<!-- S1: GOAL -->
+<section id="s1">
+  <h2 class="section-title"><span class="num">§1</span> 🎯 Goal of This Subtopic</h2>
+  <div class="callout callout-goal">
+    After studying this, you should be able to decide whether range partitioning is the right strategy for a given access pattern, articulate the specific hot-shard risk it introduces, and design a mitigation (key salting, composite keys, or auto-splitting) for a partition key that would otherwise be monotonic. You should also be able to compare range partitioning against hash partitioning on command, citing the concrete trade-off between range-query efficiency and load distribution.
+  </div>
+</section>
+
+<!-- S2: MASTERY -->
+<section id="s2">
+  <h2 class="section-title"><span class="num">§2</span> ✅ What Mastery Looks Like</h2>
+  <ul class="checklist" id="mastery-list">
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can explain how range partitioning maps keys to shards using ordered, contiguous boundaries — and contrast this with hash partitioning's pseudo-random distribution</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can identify why a monotonically increasing partition key creates a hot shard under range partitioning, and propose at least two mitigations</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can compare hash partitioning vs. range partitioning and select the right one given a specific access pattern (range queries vs. random key lookups)</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can explain how shard splitting works — what triggers it, how the split point is chosen, and what happens to in-flight requests during a split</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can name a real system that uses range partitioning and describe specifically how it avoids or tolerates hot shards</span></li>
+  </ul>
+  <div class="callout callout-tip" style="margin-top:18px;">💡 <strong>Rule of thumb:</strong> If you can teach it to someone else and field their follow-up questions, you've mastered it.</div>
+</section>
+
+<!-- S3: STUDY PHASES -->
+<section id="s3">
+  <h2 class="section-title"><span class="num">§3</span> 🗓️ Study Phases to Achieve Mastery</h2>
+
+  <div class="phase-card open">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph1">Phase 1</span> Acquire 📖</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Read deeply enough that you could explain the concept without the doc.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text"><strong>DDIA Chapter 6 — Partitioning</strong> (Kleppmann) — the "Partitioning by Key Range" section</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text"><strong>Google Bigtable paper (OSDI 2006)</strong> — Section 2, tablets and row-key range assignment</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text"><strong>MongoDB Ranged Sharding docs</strong> — <a href="https://www.mongodb.com/docs/manual/core/ranged-sharding/" target="_blank">mongodb.com</a></span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Read Sections 5–9 of this doc carefully — don't skim</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Re-read the Cheatsheet (§4) and recite it from memory after</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph2">Phase 2</span> Consolidate ✍️</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Verify you can reproduce knowledge in your own words without looking.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Close the doc — write out the Core Definition from memory, then compare</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Explain First Principles out loud: what was painful before range partitioning existed?</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Reconstruct the shard boundary lookup and split mechanics from memory</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Restate each Trade-off row in your own words — if you can't explain the cost, you don't own it</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph3">Phase 3</span> Apply 🔧</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Connect to real systems and simulate interview scenarios.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Go through Real-World Examples (§10) — verify each claim and add notes to §17</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Practice Interview Application (§12) out loud — say the trigger phrases and your response as if in a live interview</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Work through Misconceptions (§13) — explain WHY each misconception is wrong</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Trace Relationships (§14) — explain each connection without looking</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph4">Phase 4</span> Validate 🧪</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Confirm you actually own it, not just recognize it.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Answer every Self-Check Quiz question (§15) out loud without notes</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Recite the Cheatsheet (§4) from memory — if you can't, re-do Phase 2</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Tick off mastery criteria in §2 — only check a box if you can demonstrate on demand</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Teach this concept to an imaginary interviewer for 2 minutes without hesitation</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- S4: CHEATSHEET -->
+<section id="s4">
+  <h2 class="section-title"><span class="num">§4</span> 📋 Cheatsheet</h2>
+  <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+
+  <!-- Radial Mindmap SVG -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">🧠 Concept Mindmap</div>
+    <svg viewBox="0 0 820 480" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:820px;display:block;margin:0 auto;">
+      <rect width="820" height="480" fill="#fafafa" rx="8"/>
+      <line x1="410" y1="240" x2="175" y2="100" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="645" y2="100" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="100" y2="280" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="720" y2="280" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="175" y2="400" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="645" y2="400" stroke="#aaa" stroke-width="1.5"/>
+      <!-- Central -->
+      <ellipse cx="410" cy="240" rx="102" ry="42" fill="#a5d8ff" stroke="#1971c2" stroke-width="2"/>
+      <text x="410" y="234" text-anchor="middle" dominant-baseline="middle" font-family="Arial,sans-serif" font-size="14" font-weight="bold" fill="#1a1917">Range</text>
+      <text x="410" y="252" text-anchor="middle" dominant-baseline="middle" font-family="Arial,sans-serif" font-size="14" font-weight="bold" fill="#1a1917">Partitioning</text>
+      <!-- Ordered Key Ranges -->
+      <rect x="88" y="68" width="174" height="58" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="175" y="91" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Ordered Key Ranges</text>
+      <text x="175" y="107" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#333">Contiguous shard bounds</text>
+      <text x="175" y="120" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#333">Efficient range scans</text>
+      <!-- vs Hash -->
+      <rect x="558" y="68" width="174" height="58" rx="8" fill="#ffd8a8" stroke="#e67700" stroke-width="1.5"/>
+      <text x="645" y="91" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">vs Hash Partitioning</text>
+      <text x="645" y="107" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#333">Hash = even load, no order</text>
+      <text x="645" y="120" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#333">Range = ordered, uneven</text>
+      <!-- Real Systems -->
+      <rect x="20" y="248" width="160" height="64" rx="8" fill="#b2f2bb" stroke="#2f9e44" stroke-width="1.5"/>
+      <text x="100" y="268" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Real Systems</text>
+      <text x="100" y="284" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Bigtable / HBase</text>
+      <text x="100" y="298" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">MongoDB / CockroachDB</text>
+      <text x="100" y="312" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">DynamoDB (sort key)</text>
+      <!-- Shard Splitting -->
+      <rect x="640" y="248" width="160" height="64" rx="8" fill="#c3fae8" stroke="#0ca678" stroke-width="1.5"/>
+      <text x="720" y="268" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Shard Splitting</text>
+      <text x="720" y="284" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Trigger: size threshold</text>
+      <text x="720" y="298" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Split at MEDIAN key</text>
+      <text x="720" y="312" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Not key-space midpoint</text>
+      <!-- Hot Shard Risk -->
+      <rect x="88" y="372" width="174" height="58" rx="8" fill="#ffc9c9" stroke="#c92a2a" stroke-width="1.5"/>
+      <text x="175" y="393" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Hot Shard Risk</text>
+      <text x="175" y="409" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Monotonic keys → 1 shard</text>
+      <text x="175" y="423" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Signature gotcha</text>
+      <!-- Salting Mitigation -->
+      <rect x="558" y="372" width="174" height="58" rx="8" fill="#d0bfff" stroke="#8b5cf6" stroke-width="1.5"/>
+      <text x="645" y="393" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Salting Mitigation</text>
+      <text x="645" y="409" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Prefix / reverse key</text>
+      <text x="645" y="423" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Spread writes across N</text>
+    </svg>
+    <p class="caption">Radial mindmap: six major clusters around the range partitioning core concept</p>
+  </div>
+
+  <!-- Decision Map -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">🗺️ Range vs. Hash Partitioning Decision Map</div>
+    <svg viewBox="0 0 720 620" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:720px;display:block;margin:0 auto;" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+      <rect width="720" height="620" fill="#fafafa" rx="8"/>
+
+      <rect x="220" y="14" width="280" height="38" rx="19" fill="#1a1917"/>
+      <text x="360" y="37" text-anchor="middle" font-size="12" font-weight="600" fill="#fff">Choosing a partitioning strategy</text>
+
+      <line x1="360" y1="52" x2="360" y2="74" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+
+      <!-- Q1 -->
+      <rect x="160" y="74" width="400" height="44" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="360" y="93" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">Does the workload need range scans /</text>
+      <text x="360" y="109" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">ordered queries (e.g., "events T1–T2")?</text>
+      <line x1="160" y1="96" x2="88" y2="96" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="124" y="88" text-anchor="middle" font-size="10" fill="#6b6861">No</text>
+      <rect x="14" y="74" width="74" height="44" rx="8" fill="#ffd8a8" stroke="#e67700" stroke-width="1.5"/>
+      <text x="51" y="93" text-anchor="middle" font-size="11" font-weight="700" fill="#7c2d12">Hash</text>
+      <text x="51" y="108" text-anchor="middle" font-size="10" fill="#7c2d12">Partition</text>
+      <line x1="360" y1="118" x2="360" y2="140" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="372" y="133" font-size="10" fill="#6b6861">Yes</text>
+
+      <!-- Q2 -->
+      <rect x="160" y="140" width="400" height="44" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="360" y="159" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">Is the partition key monotonically</text>
+      <text x="360" y="175" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">increasing (timestamp, auto-increment)?</text>
+      <line x1="160" y1="162" x2="88" y2="162" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="124" y="154" text-anchor="middle" font-size="10" fill="#6b6861">No</text>
+      <rect x="14" y="140" width="74" height="44" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="51" y="159" text-anchor="middle" font-size="11" font-weight="700" fill="#1e40af">Range</text>
+      <text x="51" y="175" text-anchor="middle" font-size="10" fill="#1e40af">Safe</text>
+      <line x1="360" y1="184" x2="360" y2="206" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="372" y="199" font-size="10" fill="#6b6861">Yes</text>
+
+      <!-- Q3 -->
+      <rect x="150" y="206" width="420" height="44" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="360" y="225" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">Can you salt/prefix the key (or reverse it)</text>
+      <text x="360" y="241" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">to break monotonicity within a scoped bucket?</text>
+      <line x1="150" y1="228" x2="88" y2="228" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="119" y="220" text-anchor="middle" font-size="10" fill="#6b6861">No</text>
+      <rect x="14" y="206" width="74" height="60" rx="8" fill="#ffc9c9" stroke="#c92a2a" stroke-width="1.5"/>
+      <text x="51" y="228" text-anchor="middle" font-size="10" font-weight="700" fill="#7f1d1d">High Hot-</text>
+      <text x="51" y="242" text-anchor="middle" font-size="10" font-weight="700" fill="#7f1d1d">Shard Risk</text>
+      <text x="51" y="256" text-anchor="middle" font-size="9" fill="#7f1d1d">reconsider</text>
+      <line x1="360" y1="250" x2="360" y2="272" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="372" y="265" font-size="10" fill="#6b6861">Yes</text>
+
+      <!-- OUTCOME -->
+      <rect x="195" y="272" width="330" height="70" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+      <text x="360" y="296" text-anchor="middle" font-size="14" font-weight="800" fill="#1e40af">Range Partitioning + Salted Prefix</text>
+      <text x="360" y="315" text-anchor="middle" font-size="11" fill="#1e40af">Bucketed writes spread across N shards</text>
+      <text x="360" y="330" text-anchor="middle" font-size="11" fill="#1e40af">Ranged reads preserved within each bucket</text>
+
+      <!-- Warning 1 -->
+      <rect x="165" y="358" width="390" height="46" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+      <text x="360" y="377" text-anchor="middle" font-size="11" font-weight="700" fill="#92400e">⚠️ Auto-split thresholds must be tuned</text>
+      <text x="360" y="393" text-anchor="middle" font-size="11" fill="#92400e">Too small → split storms. Too large → long hot windows.</text>
+
+      <!-- Warning 2 -->
+      <rect x="165" y="416" width="390" height="46" rx="8" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5"/>
+      <text x="360" y="435" text-anchor="middle" font-size="11" font-weight="700" fill="#7f1d1d">⚠️ Split at the MEDIAN key, not the midpoint</text>
+      <text x="360" y="451" text-anchor="middle" font-size="11" fill="#7f1d1d">Uneven key distribution makes midpoint splits lopsided.</text>
+
+      <!-- Legend -->
+      <rect x="165" y="478" width="390" height="120" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="360" y="498" text-anchor="middle" font-size="11" font-weight="700" fill="#6b6861">LEGEND</text>
+      <rect x="186" y="508" width="12" height="12" rx="2" fill="#ffd8a8" stroke="#e67700" stroke-width="1.5"/>
+      <text x="205" y="519" font-size="10" fill="#7c2d12">Hash Partition</text>
+      <rect x="316" y="508" width="12" height="12" rx="2" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="335" y="519" font-size="10" fill="#1e40af">Range Partition</text>
+      <rect x="186" y="530" width="12" height="12" rx="2" fill="#ffc9c9" stroke="#c92a2a" stroke-width="1.5"/>
+      <text x="205" y="541" font-size="10" fill="#7f1d1d">Hot-Shard Risk</text>
+      <text x="186" y="565" font-size="10" fill="#6b6861">Gates answered top-to-bottom. First matching branch is</text>
+      <text x="186" y="580" font-size="10" fill="#6b6861">your answer. Splits always use median-by-volume, not</text>
+      <text x="186" y="595" font-size="10" fill="#6b6861">key-space midpoint, regardless of which path you take.</text>
+
+      <defs>
+        <marker id="dm-arr" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+          <path d="M0,0 L0,7 L7,3.5 z" fill="#bbb"/>
+        </marker>
+      </defs>
+    </svg>
+    <p class="caption">Three decision gates — answer top to bottom; first matching branch is your answer</p>
+  </div>
+
+  <div class="cheatsheet">
+<span class="label">§ 1  WHY IT EXISTS</span>Hash partitioning solves load distribution but destroys key order — a range query
+("all orders from March") becomes a scatter-gather across every shard. Range
+partitioning preserves the natural ordering of the key space so ordered scans and
+range queries touch only the shards that contain the relevant range, at the cost
+of even load distribution.
+
+<span class="label">§ 2  HOW IT WORKS</span>Keys are divided into contiguous, non-overlapping ranges, each owned by one shard:
+  Shard 1: keys [A, F)
+  Shard 2: keys [F, M)
+  Shard 3: keys [M, T)
+  Shard 4: keys [T, Z]
+A routing layer holds a boundary map and directs each request to the shard
+owning that key's range. As a shard grows past a size threshold (e.g., 1–4GB
+in Bigtable), it SPLITS at the median key into two shards.
+
+<span class="label">§ 3  THE HOT-SHARD PROBLEM (signature gotcha)</span>If the partition key is monotonically increasing (timestamp, auto-increment ID,
+sequential order number), ALL new writes land on the highest-range shard. Every
+other shard goes idle for writes while one shard absorbs 100% of write traffic.
+Mitigations:
+  1. Salt/prefix the key (hash-prefix + timestamp) to bucket writes across N
+     shards, then range-scan within each bucket.
+  2. Reverse the key (reversed timestamp) to scatter writes, sacrificing
+     natural chronological ordering.
+  3. Use a compound key with a well-distributed leading field (user_id then
+     timestamp) so writes for different users land on different shards.
+
+<span class="label">§ 4  USE / AVOID</span>Use range partitioning:  workload needs range scans, ordered iteration, or
+                        "everything between X and Y" queries.
+Avoid range partitioning: partition key is monotonically increasing and can't
+                        be salted/prefixed — hash partitioning is safer.
+Use auto-splitting:     shard size varies unpredictably over time.
+AVOID choosing the midpoint of the key space as the split point — always split
+  at the MEDIAN KEY by actual data volume, not by key-space midpoint.
+
+<span class="label">§ 5  INTERVIEW TRIGGERS</span>→ "We need to support range queries like 'all events in the last hour.'"
+→ "How would you shard a time-series database?"
+→ "One of our shards is getting way more write traffic than the others."
+→ "How do you handle queries that need results sorted by key?"
+
+<span class="label">§ 6  FTAC</span>F  "Range partitioning divides the key space into contiguous ordered ranges,
+   one per shard, so range queries only touch the shards that overlap the
+   query range."
+T  "It gives efficient ordered scans and avoids scatter-gather for range
+   queries, but the same ordering property means a monotonic write pattern
+   concentrates all writes on a single shard — a hot shard."
+A  "Assuming the access pattern includes range scans and write keys are not
+   strictly monotonic, or can be salted —"
+C  "Partition by key range with auto-splitting at ~1–4GB per shard, and salt
+   the write key with a low-cardinality prefix if the natural key is
+   monotonic, spreading writes across N buckets while preserving range scans
+   within a bucket."
+
+<span class="label">§ 7  NUMBERS &amp; GOTCHA</span>Typical shard split threshold: 1–4GB (Bigtable tablets), configurable per system.
+Salting cardinality: choose N ≈ number of shards you want writes spread
+  across — too high fragments range scans, too low doesn't fix the hot shard.
+GOTCHA: Splitting at the key-space MIDPOINT (not the median by data volume)
+  produces lopsided shards when data isn't uniformly distributed — e.g.,
+  splitting "A–Z" at "M" when 90% of keys start with "A–C" leaves one shard
+  nearly empty and the other still overloaded. Always split by median key of
+  actual stored data, not alphabetic/numeric midpoint.
+  </div>
+</section>
+
+<!-- S5: CORE DEFINITION -->
+<section id="s5">
+  <h2 class="section-title"><span class="num">§5</span> 🧠 Core Definition</h2>
+  <div class="callout callout-teal" style="font-size:16px;font-weight:600;line-height:1.6;">
+    Range partitioning is a sharding strategy that assigns each shard a contiguous, ordered range of the key space, so that data with nearby keys is co-located on the same shard — enabling efficient range scans at the cost of uneven load distribution when writes are concentrated in a narrow part of the key range.
+  </div>
+
+  <!-- Range vs Hash comparison -->
+  <div class="tier-grid" style="margin-top:20px;">
+    <div class="tier-card">
+      <h4>🔵 Range Partitioning <span class="stat stat-blue">Ordered</span></h4>
+      <p style="font-size:13px;margin-bottom:6px;">Shards own contiguous key ranges. Range scans and ordered iteration touch only 1–2 shards. Examples: Bigtable, HBase, MongoDB ranged sharding, CockroachDB.</p>
+      <p style="font-size:13px;margin-bottom:0;color:var(--red);">⚠️ Monotonic keys create severe hot-shard risk.</p>
+    </div>
+    <div class="tier-card">
+      <h4>🟠 Hash Partitioning <span class="stat stat-orange">Scattered</span></h4>
+      <p style="font-size:13px;margin-bottom:6px;">Keys hashed to shards, spreading load evenly regardless of write pattern. Examples: DynamoDB (partition key), Cassandra, most consistent-hashing systems.</p>
+      <p style="font-size:13px;margin-bottom:0;color:var(--green);">✅ No hot-shard risk from monotonic keys, but range queries require scatter-gather.</p>
+    </div>
+  </div>
+</section>
+
+<!-- S6: CORE CONCEPTS -->
+<section id="s6">
+  <h2 class="section-title"><span class="num">§6</span> 📦 Core Concepts</h2>
+
+  <h3>Key Range / Shard Boundary</h3>
+  <p>Each shard owns a contiguous half-open interval of the key space, e.g., <code>[A, F)</code> meaning keys starting with A through E. A routing component (a config service, coordinator, or client-side metadata cache) maintains the boundary map and directs each read/write to the shard whose range contains the key. Bigtable calls this the METADATA table; CockroachDB calls it the range descriptor.</p>
+
+  <!-- Shard Boundary / Range Scan Diagram -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">📊 Shard Boundary Map &amp; Range Scan</div>
+    <svg viewBox="0 0 780 220" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:780px;display:block;margin:0 auto;">
+      <rect width="780" height="220" fill="#fafafa" rx="8"/>
+      <text x="390" y="24" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Key Space: A ────────────────────────────────────────► Z</text>
+
+      <rect x="30" y="40" width="170" height="50" rx="6" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="115" y="60" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1e40af">Shard 1</text>
+      <text x="115" y="76" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#1e40af">[A, F)</text>
+
+      <rect x="205" y="40" width="170" height="50" rx="6" fill="#ffd8a8" stroke="#e67700" stroke-width="1.5"/>
+      <text x="290" y="60" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#7c2d12">Shard 2</text>
+      <text x="290" y="76" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#7c2d12">[F, M)</text>
+
+      <rect x="380" y="40" width="170" height="50" rx="6" fill="#d0bfff" stroke="#8b5cf6" stroke-width="1.5"/>
+      <text x="465" y="60" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#4c1d95">Shard 3</text>
+      <text x="465" y="76" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#4c1d95">[M, T)</text>
+
+      <rect x="555" y="40" width="170" height="50" rx="6" fill="#b2f2bb" stroke="#2f9e44" stroke-width="1.5"/>
+      <text x="640" y="60" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#14532d"> Shard 4</text>
+      <text x="640" y="76" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#14532d">[T, Z]</text>
+
+      <!-- Query range highlight -->
+      <rect x="245" y="112" width="270" height="34" rx="6" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="4,3"/>
+      <text x="380" y="134" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#7f1d1d">Query: keys "H" to "P"</text>
+
+      <line x1="290" y1="112" x2="290" y2="90" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="3,2"/>
+      <line x1="465" y1="112" x2="465" y2="90" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="3,2"/>
+
+      <text x="380" y="172" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" fill="#1a1917">→ Router touches only Shard 2 and Shard 3 (2 of 4 shards)</text>
+      <text x="380" y="192" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#666">Hash partitioning would require querying all 4 shards for the same request</text>
+    </svg>
+    <p class="caption">A range query only touches the shards whose boundaries overlap the requested range</p>
+  </div>
+
+  <h3>Range Scan</h3>
+  <p>A query that reads all keys within a contiguous interval, e.g., "all orders between 2026-01-01 and 2026-01-31." Because range partitioning preserves key order, a range scan touches only the shards whose ranges overlap the query interval — often just one or two shards — instead of fanning out to the entire cluster as hash partitioning would require.</p>
+
+  <h3>Shard Splitting</h3>
+  <p>As a shard accumulates data and crosses a size threshold (commonly 1–4GB in systems like Bigtable), it is split into two shards at a chosen split point. The split point should be the MEDIAN KEY of the actual stored data (not the midpoint of the theoretical key space) so both resulting shards end up roughly equal in size, since real-world key distributions are rarely uniform.</p>
+
+  <h3>Monotonic Key / Hot Shard</h3>
+  <p>A monotonic key (auto-increment ID, timestamp, sequence number) always increases, so every new write's key falls after all previously written keys — meaning every new write lands on the same (rightmost) shard. This concentrates 100% of write throughput onto one shard while every other shard is idle for writes — the defining failure mode of range partitioning.</p>
+
+  <h3>Key Salting / Prefixing</h3>
+  <p>A mitigation for monotonic keys: prepend a low-cardinality, well-distributed prefix (e.g., a hash of the user ID mod N) to the natural key before partitioning. Writes now spread across N buckets/shards. Range scans across the entire dataset now require querying all N buckets, but scans within a bucket (e.g., one user's timeline) remain efficient — the trade-off is scoped rather than eliminated.</p>
+</section>
+
+<!-- S7: FIRST PRINCIPLES -->
+<section id="s7">
+  <h2 class="section-title"><span class="num">§7</span> 🔍 First Principles — Why Does This Exist?</h2>
+  <p>Once a dataset outgrows a single machine, it must be split across nodes — but the splitting strategy has consequences for query patterns. Hash partitioning was the first instinct for many systems because it distributes load evenly and requires no coordination on boundaries: hash the key, mod by shard count, done. But hashing intentionally destroys the ordering relationship between keys — key "2026-01-01" and key "2026-01-02" end up on completely unrelated shards. For any workload that needs to read a contiguous range of data, hash partitioning forces a scatter-gather: query every shard and merge results client-side, even though the caller only wanted a narrow slice of data.</p>
+  <p>Range partitioning was invented to preserve locality of reference for ordered data. By keeping shard assignment aligned with the natural order of the key space, a range query becomes a targeted operation against a small number of shards instead of a full-cluster fan-out. The cost of this choice is that the even-load guarantee hash partitioning offered for free is now something you must engineer explicitly — auto-splitting, load-aware rebalancing, and key design (salting monotonic keys) all exist specifically to claw back the load-balance properties that ordering sacrifices.</p>
+
+  <!-- Hot Shard Diagram -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">🔥 The Hot-Shard Problem — Monotonic Key Write Pattern</div>
+    <svg viewBox="0 0 760 220" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:760px;display:block;margin:0 auto;">
+      <rect width="760" height="220" fill="#fafafa" rx="8"/>
+      <text x="380" y="22" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Writes keyed by timestamp (monotonically increasing)</text>
+
+      <rect x="40" y="50" width="150" height="60" rx="6" fill="#f3f2ef" stroke="#ccc" stroke-width="1.5"/>
+      <text x="115" y="74" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" fill="#999">Shard 1</text>
+      <text x="115" y="90" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#aaa">idle — 0 writes/s</text>
+
+      <rect x="215" y="50" width="150" height="60" rx="6" fill="#f3f2ef" stroke="#ccc" stroke-width="1.5"/>
+      <text x="290" y="74" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" fill="#999">Shard 2</text>
+      <text x="290" y="90" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#aaa">idle — 0 writes/s</text>
+
+      <rect x="390" y="50" width="150" height="60" rx="6" fill="#f3f2ef" stroke="#ccc" stroke-width="1.5"/>
+      <text x="465" y="74" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" fill="#999">Shard 3</text>
+      <text x="465" y="90" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#aaa">idle — 0 writes/s</text>
+
+      <rect x="565" y="50" width="150" height="60" rx="6" fill="#ffc9c9" stroke="#c92a2a" stroke-width="2"/>
+      <text x="640" y="74" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#7f1d1d">Shard 4</text>
+      <text x="640" y="90" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#7f1d1d">100% writes/s 🔥</text>
+
+      <!-- Arrow showing all writes going to shard 4 -->
+      <line x1="380" y1="140" x2="620" y2="140" stroke="#dc2626" stroke-width="2.5" marker-end="url(#hs-arr)"/>
+      <text x="500" y="132" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#dc2626">ALL new writes (newest timestamp)</text>
+
+      <rect x="200" y="160" width="400" height="42" rx="6" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+      <text x="400" y="178" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="700" fill="#92400e">Fix: salt key with hash(id) % N prefix</text>
+      <text x="400" y="194" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#92400e">Distributes writes across all N shards</text>
+
+      <defs>
+        <marker id="hs-arr" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+          <path d="M0,0 L0,8 L8,4 z" fill="#dc2626"/>
+        </marker>
+      </defs>
+    </svg>
+    <p class="caption">Every new write lands on the shard covering the highest key range — the signature range-partitioning gotcha</p>
+  </div>
+</section>
+
+<!-- S8: MENTAL MODELS -->
+<section id="s8">
+  <h2 class="section-title"><span class="num">§8</span> 🗺️ Mental Models</h2>
+
+  <h3>Model 1: The Library Shelving Analogy</h3>
+  <p>Range partitioning is like a library that shelves books alphabetically by author surname across multiple rooms: Room 1 holds A–F, Room 2 holds G–M, and so on. If you want "everything by an author whose name starts with C," you walk straight to Room 1 — you don't search every room. But if a wildly popular author whose name starts with "Z" gets released every week, Room 6 becomes overcrowded while Room 1 sits quiet. <em>Where it breaks down:</em> a library can't easily "split Room 1 into 1a and 1b" mid-operation the way a range-partitioned database dynamically re-splits a shard.</p>
+
+  <h3>Model 2: The Sorted Array vs. Hash Table Frame</h3>
+  <p>Think of the entire cluster as one giant sorted array (range partitioning) versus one giant hash table (hash partitioning). A sorted array gives O(log n + k) range queries but degrades badly under skewed insertions at one end — like repeatedly appending to an array. A hash table gives O(1) average point lookups and naturally distributes inserts, but has no concept of "next key." This model works well for reasoning about Big-O trade-offs quickly; it breaks down because a distributed shard isn't literally a single sorted array — physical shard boundaries and network hops matter in ways an in-memory array doesn't capture.</p>
+
+  <h3>Model 3: The Highway On-Ramp Bottleneck</h3>
+  <p>Imagine a highway divided into ordered mile-marker sections, each maintained by a different regional crew (shard). If all new traffic (writes) always enters at mile marker 100 — think a timestamp-keyed log — then the crew responsible for mile marker 100 is perpetually overwhelmed while crews at mile markers 0–99 have nothing new to do. The fix mirrors key salting: build multiple on-ramps (buckets) that feed into the same corridor at staggered points, spreading incoming traffic across several crews instead of funneling it into one.</p>
+</section>
+
+<!-- S9: HOW IT WORKS -->
+<section id="s9">
+  <h2 class="section-title"><span class="num">§9</span> ⚙️ How It Works — Mechanics</h2>
+
+  <p><strong>Read/write path (happy case):</strong> A client or coordinator computes the operation's key, then a routing layer consults the boundary/metadata map — an ordered list of <code>(range_start, range_end, shard_id)</code> tuples — via binary search to find the owning shard. A point lookup is a single-shard operation; a range query <code>[K1, K2]</code> identifies all shards whose range overlaps and queries only those, merging results in key order.</p>
+
+  <!-- Shard Split Diagram -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">✂️ Shard Splitting — Median Key vs. Midpoint</div>
+    <svg viewBox="0 0 760 280" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:760px;display:block;margin:0 auto;">
+      <rect width="760" height="280" fill="#fafafa" rx="8"/>
+
+      <text x="200" y="24" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#c92a2a">❌ Wrong: Split at Key-Space Midpoint</text>
+      <rect x="40" y="40" width="320" height="50" rx="6" fill="#ffc9c9" stroke="#c92a2a" stroke-width="1.5"/>
+      <text x="200" y="60" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#7f1d1d">Shard "A–Z" — 90% of data is "A–C"</text>
+      <line x1="200" y1="90" x2="200" y2="105" stroke="#c92a2a" stroke-width="1.5" stroke-dasharray="3,2"/>
+      <text x="200" y="103" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#7f1d1d">split at "M"</text>
+      <rect x="40" y="115" width="150" height="46" rx="6" fill="#ffc9c9" stroke="#c92a2a" stroke-width="2"/>
+      <text x="115" y="135" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#7f1d1d">"A–M" — 90% data</text>
+      <text x="115" y="150" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#7f1d1d">still overloaded 🔥</text>
+      <rect x="210" y="115" width="150" height="46" rx="6" fill="#f3f2ef" stroke="#ccc" stroke-width="1.5"/>
+      <text x="285" y="135" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#999">"M–Z" — 10% data</text>
+      <text x="285" y="150" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#999">nearly empty</text>
+
+      <line x1="400" y1="90" x2="400" y2="190" stroke="#e5e3de" stroke-width="1.5" stroke-dasharray="4,3"/>
+
+      <text x="580" y="24" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#2f9e44">✅ Right: Split at Median Key by Volume</text>
+      <rect x="420" y="40" width="320" height="50" rx="6" fill="#b2f2bb" stroke="#2f9e44" stroke-width="1.5"/>
+      <text x="580" y="60" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#14532d">Shard "A–Z" — 90% of data is "A–C"</text>
+      <line x1="580" y1="90" x2="580" y2="105" stroke="#2f9e44" stroke-width="1.5" stroke-dasharray="3,2"/>
+      <text x="580" y="103" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#14532d">split at "B4" (median)</text>
+      <rect x="420" y="115" width="150" height="46" rx="6" fill="#b2f2bb" stroke="#2f9e44" stroke-width="1.5"/>
+      <text x="495" y="135" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#14532d">"A–B4" — 50% data</text>
+      <text x="495" y="150" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#14532d">balanced ✓</text>
+      <rect x="590" y="115" width="150" height="46" rx="6" fill="#b2f2bb" stroke="#2f9e44" stroke-width="1.5"/>
+      <text x="665" y="135" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#14532d">"B4–Z" — 50% data</text>
+      <text x="665" y="150" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#14532d">balanced ✓</text>
+
+      <rect x="80" y="200" width="600" height="60" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="380" y="222" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="700" fill="#1a1917">Rule: always split by MEDIAN KEY of stored data volume</text>
+      <text x="380" y="240" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#6b6861">not the arithmetic midpoint of the key-space alphabet/range</text>
+    </svg>
+    <p class="caption">Splitting at the alphabetic midpoint ignores real data distribution; median-by-volume keeps both halves balanced</p>
+  </div>
+
+  <h3>TTL / Split Threshold</h3>
+  <p>Each shard tracks its data size (or row count) against a configured threshold (e.g., 1–4GB per Bigtable tablet). When exceeded, the split point is chosen as the MEDIAN KEY among the shard's actual stored data. The metadata/boundary map is updated atomically to reflect the new two-range assignment. In-flight requests during a split are typically handled via a brief redirect/retry: the router detects a stale boundary map (via a version number or "not the owner" response) and re-fetches the updated map.</p>
+
+  <h3>Handling the Monotonic-Key Case</h3>
+  <p>If the partition key is monotonically increasing, every new write's key sorts after all existing keys, so it always lands on the shard owning the highest range. Mitigations: <strong>salting</strong> (prepend an N-way distributed prefix before partitioning — range scans over a single user's data remain efficient, scoped to one bucket); <strong>reversal</strong> (store a bit-reversed or inverted timestamp, scattering insert order while sacrificing natural chronological ordering); and <strong>load-aware auto-splitting</strong> (split not just on size but on request-rate/QPS to a shard, proactively splitting a hot range even if it isn't large).</p>
+</section>
+
+<!-- S10: REAL-WORLD EXAMPLES -->
+<section id="s10">
+  <h2 class="section-title"><span class="num">§10</span> 🏭 Real-World System Examples</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>System</th><th>How Range Partitioning Applies</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Google Bigtable</strong></td>
+          <td>Rows are range-partitioned into "tablets," auto-split at a size threshold and reassigned across tablet servers</td>
+          <td>The canonical range-partitioning system; row-key design (e.g., reversing a monotonic timestamp) is explicitly recommended in Google's docs to avoid hot tablets</td>
+        </tr>
+        <tr>
+          <td><strong>HBase</strong></td>
+          <td>Directly modeled on Bigtable — regions are range-partitioned by row key and auto-split by size</td>
+          <td>Region hotspotting from sequential row keys (timestamps) is a well-documented HBase anti-pattern with the same salting fix</td>
+        </tr>
+        <tr>
+          <td><strong>MongoDB (ranged sharding)</strong></td>
+          <td>Chunks are contiguous ranges of the shard key; the balancer migrates chunks between shards to keep size roughly even</td>
+          <td>MongoDB explicitly warns against monotonically increasing shard keys and offers "hashed sharding" as an alternative</td>
+        </tr>
+        <tr>
+          <td><strong>CockroachDB / Spanner</strong></td>
+          <td>Data is range-partitioned into fixed-size "ranges" (~512MB in Spanner-derived systems) auto-split and rebalanced via Raft consensus per range</td>
+          <td>Both use range partitioning as default because both are built for strongly consistent, globally ordered transactions where key ordering matters</td>
+        </tr>
+        <tr>
+          <td><strong>DynamoDB (with sort keys)</strong></td>
+          <td>Within a single partition (hash of the partition key), items are range-partitioned by the sort key, enabling efficient range queries scoped to one partition key</td>
+          <td>A hybrid: hash partitioning across partition keys, range partitioning within each partition — the composite-key mitigation pattern in production</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- S11: TRADE-OFFS -->
+<section id="s11">
+  <h2 class="section-title"><span class="num">§11</span> ⚖️ Trade-offs</h2>
+
+  <!-- Trade-off comparison diagram -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">⚖️ Range vs. Hash Partitioning — Key Dimensions</div>
+    <svg viewBox="0 0 720 200" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:720px;display:block;margin:0 auto;">
+      <rect width="720" height="200" fill="#fafafa" rx="8"/>
+
+      <text x="180" y="28" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="bold" fill="#e67700">Hash Partitioning</text>
+      <text x="540" y="28" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="bold" fill="#2563eb">Range Partitioning</text>
+      <line x1="360" y1="8" x2="360" y2="195" stroke="#e5e3de" stroke-width="1.5" stroke-dasharray="5,3"/>
+
+      <text x="20" y="60" font-family="Arial,sans-serif" font-size="11" fill="#666" font-weight="bold">Load distribution</text>
+      <text x="20" y="90" font-family="Arial,sans-serif" font-size="11" fill="#666" font-weight="bold">Range queries</text>
+      <text x="20" y="120" font-family="Arial,sans-serif" font-size="11" fill="#666" font-weight="bold">Monotonic key risk</text>
+      <text x="20" y="150" font-family="Arial,sans-serif" font-size="11" fill="#666" font-weight="bold">Rebalancing</text>
+      <text x="20" y="180" font-family="Arial,sans-serif" font-size="11" fill="#666" font-weight="bold">Data locality</text>
+
+      <rect x="130" y="46" width="200" height="18" rx="3" fill="#dcfce7" stroke="none"/>
+      <text x="230" y="59" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#065f46">Even by construction</text>
+      <rect x="130" y="76" width="200" height="18" rx="3" fill="#fee2e2" stroke="none"/>
+      <text x="230" y="89" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#7f1d1d">Scatter-gather, all shards</text>
+      <rect x="130" y="106" width="200" height="18" rx="3" fill="#dcfce7" stroke="none"/>
+      <text x="230" y="119" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#065f46">None — hash scatters keys</text>
+      <rect x="130" y="136" width="200" height="18" rx="3" fill="#ffd8a8" stroke="none"/>
+      <text x="230" y="149" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#7c2d12">Consistent hashing helps</text>
+      <rect x="130" y="166" width="200" height="18" rx="3" fill="#fee2e2" stroke="none"/>
+      <text x="230" y="179" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#7f1d1d">None — keys scattered</text>
+
+      <rect x="385" y="46" width="300" height="18" rx="3" fill="#ffd8a8" stroke="none"/>
+      <text x="535" y="59" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#7c2d12">Requires active splitting/rebalancing</text>
+      <rect x="385" y="76" width="300" height="18" rx="3" fill="#dcfce7" stroke="none"/>
+      <text x="535" y="89" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#065f46">Efficient — 1–2 shards touched</text>
+      <rect x="385" y="106" width="300" height="18" rx="3" fill="#fee2e2" stroke="none"/>
+      <text x="535" y="119" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#7f1d1d">Severe — hot rightmost shard</text>
+      <rect x="385" y="136" width="300" height="18" rx="3" fill="#ffd8a8" stroke="none"/>
+      <text x="535" y="149" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#7c2d12">Split/merge operational overhead</text>
+      <rect x="385" y="166" width="300" height="18" rx="3" fill="#dcfce7" stroke="none"/>
+      <text x="535" y="179" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#065f46">Strong — nearby keys co-located</text>
+    </svg>
+    <p class="caption">Green = advantage, orange = acceptable, red = cost/limitation</p>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>✅ Benefit</th><th>❌ Cost / Limitation</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="benefit">Range queries and ordered scans touch only the relevant shard(s) instead of the whole cluster</td>
+          <td class="cost">Monotonically increasing keys create a severe hot-shard problem — one shard absorbs all writes</td>
+        </tr>
+        <tr>
+          <td class="benefit">Natural support for pagination, sorted iteration, and "next N items" queries without extra indexing</td>
+          <td class="cost">Load distribution is not automatic — requires active shard splitting and rebalancing to stay balanced</td>
+        </tr>
+        <tr>
+          <td class="benefit">Predictable, debuggable data locality — you can reason about "where does key X live" from the boundary map alone</td>
+          <td class="cost">Split operations add operational complexity: choosing split points, migrating data, updating routing atomically</td>
+        </tr>
+        <tr>
+          <td class="benefit">Composable with salting/prefixing to selectively regain load distribution where needed</td>
+          <td class="cost">Salting sacrifices global ordering — full-range scans across all buckets require merging</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- S12: INTERVIEW APPLICATION -->
+<section id="s12">
+  <h2 class="section-title"><span class="num">§12</span> 🎯 Interview Application</h2>
+
+  <h3>Trigger Phrases</h3>
+  <ul style="margin-left:20px;margin-bottom:16px;font-size:14.5px;line-height:1.8;">
+    <li>"The system needs to support queries like 'all events in the last hour' or 'all orders in March'"</li>
+    <li>"How would you shard a time-series or log-based dataset?"</li>
+    <li>"We noticed one of our shards is much hotter than the others — why might that happen?"</li>
+    <li>"How do you support pagination or sorted results across a sharded dataset?"</li>
+  </ul>
+
+  <h3>What You Say / Do</h3>
+  <p>In the data model / partitioning section of the design, introduce range partitioning when the access pattern includes ordered scans or range queries. Say something like: "Since we need to query events by time window, I'd range-partition by timestamp so a query for a given hour only touches one or two shards. The risk is that a raw timestamp key is monotonic, so I'd salt it with a low-cardinality prefix — hash of device ID mod N — to spread writes across N shards while keeping per-device time-range scans efficient within each bucket."</p>
+
+  <div class="tradeoff-box">
+    💬 <strong>Trade-off statement (memorize this):</strong><br><br>
+    "If we range-partition by timestamp, we get efficient range scans for time-window queries, but we risk concentrating all writes on the newest shard since timestamps are monotonic. For this system, I'd salt the key with a device or shard-bucket prefix to spread writes across N shards, accepting that a full cross-bucket chronological scan now requires merging N ranges instead of reading one."
+  </div>
+</section>
+
+<!-- S13: MISCONCEPTIONS -->
+<section id="s13">
+  <h2 class="section-title"><span class="num">§13</span> ⚠️ Common Misconceptions &amp; Gotchas</h2>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> Range partitioning always gives worse load distribution than hash partitioning, so it should be avoided.</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Range partitioning gives worse load distribution only when the write pattern is skewed toward one part of the key space (most commonly, monotonic keys). For uniformly distributed key spaces with heavy range-query needs, range partitioning is strictly better than hash partitioning — you get both reasonable load balance AND efficient range scans.</div></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> Splitting a hot shard in half will always fix a hot-shard problem.</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> If the hot shard's hotness comes from a monotonically increasing key, splitting it in half only delays the problem — the new "highest" half-shard immediately becomes the new hot shard as writes continue to increase. Splitting solves size imbalance, not write-pattern-driven hot shards; that requires salting or key redesign.</div></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> The split point for a shard should be the midpoint of its key range (e.g., splitting "A–Z" at "M").</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> The split point should be the median key by actual stored data volume. If 90% of your data starts with "A–C," splitting "A–Z" at "M" leaves one shard nearly empty and the other still overloaded — you must split based on where the data actually is, not where the alphabet happens to sit.</div></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> Once you salt a monotonic key, you lose the ability to do range queries entirely.</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> You lose global ordering across the full key space, but range queries scoped to a single salt bucket (e.g., one user's or one device's timeline) remain efficient. Cross-bucket range queries require querying all N buckets and merging, which is more expensive but still far cheaper than the pre-partitioning full scan.</div></div>
+  </div>
+</section>
+
+<!-- S14: RELATIONSHIPS -->
+<section id="s14">
+  <h2 class="section-title"><span class="num">§14</span> 🔗 Relationships to Other Concepts</h2>
+  <div class="connections">
+    <div class="conn-card">
+      <div class="conn-icon">🧱</div>
+      <div>
+        <div class="conn-label">Builds On</div>
+        <strong>7.1 Horizontal vs. Vertical Partitioning</strong> — range partitioning is one specific strategy for implementing horizontal partitioning. Also builds on <strong>7.2 Hash Partitioning</strong> — understanding hash partitioning's even-distribution property is the direct contrast that makes range partitioning's trade-offs legible.
+      </div>
+    </div>
+    <div class="conn-card">
+      <div class="conn-icon">🔓</div>
+      <div>
+        <div class="conn-label">Enables</div>
+        <strong>7.5 Rebalancing (adding/removing nodes)</strong> — shard splitting mechanics introduced here are the foundation for how range-partitioned systems rebalance. Also enables <strong>7.6 Hot Partitions — detection and mitigation</strong> — the monotonic-key hot-shard problem introduced here is the primary case study for that later subtopic.
+      </div>
+    </div>
+    <div class="conn-card">
+      <div class="conn-icon">⚡</div>
+      <div>
+        <div class="conn-label">Tension With</div>
+        <strong>7.2 Hash Partitioning</strong> — the two strategies are direct alternatives representing opposite points on the query-efficiency vs. load-distribution spectrum; choosing one is a genuine either/or decision (or a hybrid, as DynamoDB demonstrates with hash partition key + range sort key).
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- S15: QUIZ -->
+<section id="s15">
+  <h2 class="section-title"><span class="num">§15</span> 🧪 Self-Check Quiz</h2>
+  <div class="callout callout-quote">Can you answer these without looking? If not, you haven't internalized it yet. Click to reveal the hint.</div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">1</div>
+      <div class="qtext">What is range partitioning, and how does it differ from hash partitioning in how it maps keys to shards?</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 Range partitioning assigns contiguous, ordered key ranges to shards; hash partitioning pseudo-randomly scatters keys via a hash function. The former preserves order (efficient range scans, uneven load risk); the latter destroys order (even load, scatter-gather for range queries). Revisit §5–§6 if unsure.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">2</div>
+      <div class="qtext">Your team is designing a time-series metrics store where the primary access pattern is "give me all data points for sensor X between time T1 and T2." Would you choose range partitioning or hash partitioning, and why?</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 Range partitioning — the access pattern is a range scan. But a naive timestamp key would create a hot shard, so use a compound key (sensor_id + timestamp) or salted prefix so writes for different sensors spread across shards while per-sensor time-range scans stay efficient. Revisit §12.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">3</div>
+      <div class="qtext">What specific risk does range partitioning introduce when the partition key is an auto-incrementing order ID, and name two concrete mitigations.</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 Hot shard risk — every new write lands on the shard owning the highest key range since order IDs always increase. Mitigations: (1) salt/prefix the key with a low-cardinality distributed value, (2) reverse the key to scatter insert order, (3) use a compound key with a well-distributed leading field. Revisit §6 and §9.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">4</div>
+      <div class="qtext">Name a real production system that uses range partitioning and describe specifically how it handles shard growth over time.</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 Google Bigtable: rows are range-partitioned into tablets; when a tablet exceeds a size threshold (1–4GB), it auto-splits at the median key and the two resulting tablets are reassigned across tablet servers. Google's own docs recommend reversing monotonic timestamp keys to avoid hot tablets. Revisit §10.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">5</div>
+      <div class="qtext">You split a shard covering key range "A–Z" exactly at "M" because that seemed like the natural midpoint. Two weeks later, the "A–M" shard is still overloaded while "N–Z" is nearly empty. What went wrong, and how should the split have been performed?</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 The split used the key-space midpoint ("M") instead of the median key by actual data volume. If most real data starts with "A–C," an alphabetic-midpoint split leaves one shard overloaded and the other nearly empty. The correct approach: choose the split point based on where the median record actually falls in the stored data, not the theoretical middle of the key alphabet. Revisit §9 and §13.</div>
+  </div>
+</section>
+
+<!-- S16: FURTHER READING -->
+<section id="s16">
+  <h2 class="section-title"><span class="num">§16</span> 📚 Further Reading</h2>
+  <ul class="reading-list">
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>"Designing Data-Intensive Applications" Chapter 6 — Partitioning</strong> (Martin Kleppmann) — the "Partitioning by Key Range" section covers this subtopic and its hot-spot risks directly</div></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>Google Bigtable paper (OSDI 2006)</strong> — <a href="https://static.googleusercontent.com/media/research.google.com/en//archive/bigtable-osdi06.pdf" target="_blank">research.google.com</a> — Section 2 covers tablets, splitting, and row-key design</div></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>MongoDB Ranged Sharding docs</strong> — <a href="https://www.mongodb.com/docs/manual/core/ranged-sharding/" target="_blank">mongodb.com</a> — practical guidance on shard key selection and monotonic key pitfalls</div></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>AWS "Choosing the Right DynamoDB Partition Key"</strong> — AWS Database Blog — illustrates the hybrid hash + range (sort key) pattern in a widely used production system</div></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>CockroachDB Architecture docs — "Range Splits"</strong> — <a href="https://www.cockroachlabs.com/docs/stable/architecture/distribution-layer" target="_blank">cockroachlabs.com</a> — modern take on automatic range splitting and rebalancing</div></li>
+  </ul>
+</section>
+
+<!-- S17: MY NOTES -->
+<section id="s17">
+  <h2 class="section-title"><span class="num">§17</span> ✍️ My Notes</h2>
+  <div class="callout callout-quote">Personal observations, things that confused me, analogies that helped. This section is yours.</div>
+  <textarea class="notes-area" placeholder="Add your personal notes here — analogies that clicked, interview stories, things that confused you..."></textarea>
+</section>
+
+</article>
+</main>
+
+<script>
+// TOC active state
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('#toc nav a');
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(a => a.classList.remove('active'));
+      const a = document.querySelector(`#toc nav a[href="#${e.target.id}"]`);
+      if (a) a.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+sections.forEach(s => obs.observe(s));
+
+// Checklist toggle
+function toggle(cb) {
+  const li = cb.closest('li');
+  li.classList.toggle('checked');
+}
+
+// Phase card toggle
+function togglePhase(header) {
+  header.closest('.phase-card').classList.toggle('open');
+}
+
+// Quiz toggle
+function toggleQuiz(q) {
+  const item = q.closest('.quiz-item');
+  item.classList.toggle('open');
+  q.querySelector('.quiz-toggle').textContent = item.classList.contains('open') ? '▲ Hide' : '▼ Hint';
+}
+
+// Reading list toggle
+function toggleReading(cb) {
+  const li = cb.closest('li');
+  li.classList.toggle('checked');
+}
+
+// Notes auto-save (in-memory only)
+const notesArea = document.querySelector('.notes-area');
+const NOTES_KEY = 'notes_7_3';
+if (localStorage.getItem(NOTES_KEY)) notesArea.value = localStorage.getItem(NOTES_KEY);
+notesArea.addEventListener('input', () => {
+  try { localStorage.setItem(NOTES_KEY, notesArea.value); } catch(e) {}
+});
+</script>
+</body>
+</html>

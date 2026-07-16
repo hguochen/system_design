@@ -36,12 +36,12 @@ After studying this, you should be able to take any sharded design and specify a
 
 > *Concrete, testable proof that you own this concept — not just familiarity.*
 
-- [ ] Can define hash partitioning in one sentence and describe the two-step mapping (hash the key → map hash to partition)
-- [ ] Can explain *why* hashing produces even load distribution regardless of the input key distribution, and what property the hash function must have
-- [ ] Can trace a read and a write to the owning shard, computing `hash(key) mod N` for a concrete key
-- [ ] Can explain the `mod N` rebalancing problem: why adding one node remaps almost all keys, and why this motivates consistent hashing
-- [ ] Can explain why hash partitioning kills range queries and turns them into scatter-gather
-- [ ] Can explain why hashing does NOT solve a single hot key, and distinguish key skew from partition skew
+- [x] Can define hash partitioning in one sentence and describe the two-step mapping (hash the key → map hash to partition)
+- [x] Can explain *why* hashing produces even load distribution regardless of the input key distribution, and what property the hash function must have
+- [x] Can trace a read and a write to the owning shard, computing `hash(key) mod N` for a concrete key
+- [x] Can explain the `mod N` rebalancing problem: why adding one node remaps almost all keys, and why this motivates consistent hashing
+- [x] Can explain why hash partitioning kills range queries and turns them into scatter-gather
+- [x] Can explain why hashing does NOT solve a single hot key, and distinguish key skew from partition skew
 
 > 💡 **Rule of thumb:** If you can teach it to someone else and field their follow-up questions, you've mastered it.
 
@@ -219,7 +219,7 @@ The reason to hash at all. Because a good hash scrambles inputs, even a patholog
 The defining weakness of naive hash partitioning. Because the partition is `hash(key) mod N`, the assignment depends on `N`. Change `N` by adding or removing a node and the modulus changes, so `hash(key) mod N` changes for *almost every key* — forcing a near-total reshuffle of data across the cluster. This is why plain `mod N` is unsuitable for elastic clusters and why consistent hashing exists.
 
 ### Key Skew vs. Partition Skew
-Two distinct failure modes. **Partition skew** is uneven key→shard mapping (too few distinct hash values, e.g., a low-cardinality key like `country`) — a hashing/key-choice problem. **Key skew** is a single key carrying a disproportionate share of traffic (a celebrity user, a viral product). Hashing fixes neither perfectly: it assumes load is spread across many keys, and it deterministically sends one key to one partition, so a single hot key remains hot regardless of hash quality (handled in 7.6).
+Two distinct failure modes. **Partition skew** (the standard term is **data skew**) is uneven key→shard mapping — some shards hold far more keys/load than others — caused by a **low-cardinality *and* unevenly-popular** key (e.g., `country`, where most users cluster into a handful of values, so a huge fraction hashes onto one shard) or a weak hash function. **Key skew** (the standard term is **load skew** / access skew) is a single key carrying a disproportionate share of traffic (a celebrity user, a viral product). Hashing fixes neither perfectly: it assumes load is spread across many keys, and it deterministically sends one key to one partition, so a single hot key remains hot regardless of hash quality (handled in 7.6). Note the two modes aren't perfectly orthogonal — low-cardinality partition skew is essentially key skew at the *value* level (a popular value behaves like a hot key).
 
 ---
 
@@ -425,3 +425,66 @@ caching it, or replicating it — not a better hash.
 ## 17. ✍️ My Notes
 
 > *Personal observations, things that confused me, analogies that helped.*
+
+CRITERION 1 — MODEL ANSWER
+Definition (one-liner):
+  "Hash partitioning assigns each row to a shard by hashing its partition key,
+   giving even, computed-on-the-fly placement (no lookup table) — at the cost
+   of destroying key ordering."
+Two-step mapping:
+  1. h = hash(partition_key)   → uniform value (key: high cardinality + even distribution)
+  2. p = h mod N               → shard index; store the row on shard p
+
+CRITERION 2 — MODEL ANSWER
+Why even load (even for sequential keys):
+  A good hash has NO correlation between input adjacency and output (avalanche):
+  1000 and 1001 produce unrelated, spread-out values. Across many keys the outputs
+  fill the range uniformly → each shard gets ~equal share. Sequential structure
+  in the INPUT is destroyed, so no "newest shard" hotspot.
+Property split:
+  Uniformity   → even load (outputs evenly fill the range)
+  Determinism  → reproducible routing, no lookup table (same key → same shard)
+
+CRITERION 3 — MODEL ANSWER
+Route: hash("user:77") = 930418 → 930418 mod 8 = 2 → shard 2
+Write: request → hash → mod 8 → shard 2's PRIMARY → replicate to shard 2's replicas
+       (async = fast, small loss window; sync/quorum = durable, slower)
+Read:  request → hash → mod 8 → shard 2 (primary or a replica) → return. 1 shard, 1 hop.
+Principle: partitioning → capacity + throughput; replication under each shard → durability + availability.
+
+CRITERION 4 — MODEL ANSWER
+mod N problem:
+  Placement = hash(key) mod N depends on N. Add a shard (4→5) → modulus changes →
+  hash(key) mod N changes for ~(N−1)/N of keys (≈80%). e.g. hash=22: 22 mod 4 = 2,
+  22 mod 5 = 2 → stays (the lucky minority); most keys land on a new shard → mass migration.
+Consistent hashing fix:
+  Hash BOTH keys and nodes onto a ring; a key belongs to the next node clockwise.
+  Adding a node drops it at one point and it only steals the arc behind it → ~1/N keys move,
+  not ~all.
+
+CRITERION 5 — MODEL ANSWER
+Why range → scatter-gather:
+  Hashing scattered adjacent user_ids across unrelated shards (no ordered storage),
+  so the router can't localize BETWEEN 1000 AND 2000 to any subset. It must fan out
+  to ALL shards, each scans locally, coordinator merges.
+Latency: bounded by the SLOWEST shard; cost also grows with shard count.
+Fix: serve ranges from a separate ordered index / OLAP store, or use range partitioning (7.3).
+
+CRITERION 6 — MODEL ANSWER
+Why hashing doesn't help: hashing spreads MANY keys uniformly, but determinism sends
+  one user_id to exactly one shard. A better hash can't split a single key.
+Key skew:       one key carries a disproportionate share of traffic (celebrity, viral item).
+Partition skew: uneven key→SHARD mapping — some shards hold far more keys/load
+                (low-cardinality or unevenly-popular key, e.g. country; or a weak hash).
+Celebrity case = KEY skew. Fix lives in 7.6 (write-sharding, caching, replication) — not hashing.
+
+STRESS-TEST — MODEL ANSWER
+1. Consistent hashing does NOT fix the hot key. It only bounds rebalancing to ~1/N on
+   resize; determinism still pins one key to one shard. Different problem.
+2. Fix: write-shard the hot key — append a suffix (celebrity_id#0..#M), so it hashes
+   across M shards. (Random/rotating suffix general; semantic suffix like country only
+   if reads know it.)
+3. New problem: reads for that key can no longer be 1 hop — must query all M sub-keys
+   and merge → scatter-gather (read amplification). If applied to EVERY user, every read
+   pays that fan-out. So apply ONLY to hot keys → now you must DETECT hot keys and keep
+   routing state. Trade: write hotspot → read fan-out + tracking complexity.
