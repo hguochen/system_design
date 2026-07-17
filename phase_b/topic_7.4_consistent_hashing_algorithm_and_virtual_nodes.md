@@ -427,3 +427,105 @@ Introduce consistent hashing in the data-partitioning or routing section. Say so
 ## 17. ✍️ My Notes
 
 > *Personal observations, things that confused me, analogies that helped.*
+
+MODEL ANSWER — Criterion 1
+
+hash(key) % N ties the destination node to N (the divisor). Change N — add or
+remove a node — and the modulus changes for almost every key, so ~N/(N+1) of all
+keys now resolve to a different node (4→5 nodes ≈ 80% move).
+
+Consistent hashing breaks that dependency: it hashes BOTH keys and nodes onto a
+shared ring and assigns each key to its clockwise successor. Ownership is defined
+by ring geometry, not by N, so a membership change disturbs only the local arc —
+~K/N keys (≈ 1/N of the data) move; everything else stays put.
+
+Why it's dangerous for a cache: remapping ~N/(N+1) of keys means almost the entire
+cache is instantly cold. Hit rate collapses, and the flood of simultaneous misses
+stampedes the origin DB — a thundering herd — right when you were trying to scale.
+
+MODEL ANSWER — Criterion 2
+
+Setup: hash both keys and nodes with the same function onto the ring.
+
+Lookup: hash the key to a ring position, then binary-search the sorted ring for
+the smallest node position ≥ the key (wrap to the first node if past the end).
+That clockwise successor owns the key. O(log N).
+
+Add node t: place t on the ring. Let p be t's predecessor. The keys in arc (p, t]
+— previously owned by t's clockwise successor — now move to t. That one successor
+is the only donor; every other key stays put.
+
+Remove node t: delete t from the ring. The keys t owned pass to t's clockwise
+successor (they merge into that node's arc). Only t's keys move; nothing else does.
+
+MODEL ANSWER — Criterion 3
+
+Plain ring, two problems:
+
+1. Load imbalance — with few, randomly placed nodes, arc sizes vary widely, so
+   some nodes own 2–3× their fair share of the keyspace. Vnodes give each physical
+   node many small arcs scattered around the ring; by the law of large numbers the
+   arcs average out, so load evens (variance ~1/√V).
+
+2. Non-graceful failover — with one point per node, a dead node dumps its ENTIRE
+   arc onto the single next clockwise neighbor, which can overload and cascade.
+   With vnodes, the dead node's many arcs each pass to a DIFFERENT successor, so
+   its load spreads across many nodes instead of crushing one.
+
+Bonus: capacity weighting — assign a more powerful machine more vnodes so it owns
+proportionally more of the ring.
+
+MODEL ANSWER — Criterion 4
+
+You can't crank V arbitrarily high because vnodes aren't free. As V rises, load
+smooths (variance ~1/√V), but you pay in metadata:
+  - larger ring / routing table to store and binary-search per lookup
+  - more gossip and membership metadata to propagate cluster-wide
+  - slower rebalancing, repair, and streaming — N·V token boundaries to reconcile
+
+So there's a sweet spot.
+  - Dynamo (paper): ~100–200 tokens per node
+  - Cassandra: num_tokens default 16 today, was 256 historically — lowered
+    precisely because 256 made repair/streaming too heavy
+
+MODEL ANSWER — Criterion 5
+
+Replication factor N = total copies (coordinator included). For a key:
+  1. Find its coordinator = the clockwise successor that owns the key's arc.
+  2. Walk clockwise and copy to the next N-1 DISTINCT PHYSICAL nodes.
+     RF=3 → coordinator + 2 more distinct nodes = 3 copies.
+This ordered set is Dynamo's "preference list."
+
+Subtle bug: pick by PHYSICAL node, not vnode/token. Consecutive tokens clockwise
+can belong to the same machine — if you don't skip duplicates, "3 replicas" can
+land on 1 box, so a single failure loses everything. Production systems extend
+this to distinct racks/AZs (Cassandra NetworkTopologyStrategy).
+
+Real systems: Amazon Dynamo/DynamoDB, Cassandra, Riak.
+
+MODEL ANSWER — Criterion 6
+
+Reach for it when: node count changes over time (autoscaling, failures, churn),
+mass remap is expensive/dangerous (cache miss storm, huge data movement), and you
+want cheap incremental rebalancing. Add vnodes when nodes are few/heterogeneous or
+you need graceful failover.
+
+One-line trade-off (say this out loud):
+"Consistent hashing with virtual nodes gives cheap, incremental rebalancing —
+only ~K/N keys move on a change — plus even load and graceful failover, at the
+cost of a larger routing table/ring metadata; and it balances keyspace, not
+traffic, so a hot key still needs replication or key-splitting."
+
+MODEL ANSWER — Adversarial Gate
+
+Diagnosis: hot KEY. The ring balances keyspace, not access frequency, so a
+perfectly balanced ring still routes all traffic for one popular key to its single
+owner node. Vnodes don't help — they subdivide the keyspace, not the traffic to one key.
+
+Fix — classify first:
+  - Read-hot key (one popular item, mostly GETs): can't split one logical value.
+    Serve from replicas (read any of the N copies) and/or cache it (in-process /
+    CDN) so most reads never reach the owner.
+  - Write-hot key (one counter/row flooded with writes): split/salt into K sub-keys
+    (counter:0..K-1), write to a random sub-key, sum on read — extra read latency
+    is the cost.
