@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.5 Rebalancing — Adding and Removing Nodes</title>
+<style>
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface-alt: #f3f2ef;
+    --border: #e5e3de; --text: #1a1917; --text-muted: #6b6861;
+    --accent: #2563eb; --accent-light: #dbeafe;
+    --green: #16a34a; --green-light: #dcfce7;
+    --red: #dc2626; --red-light: #fee2e2;
+    --yellow: #d97706; --yellow-light: #fef3c7;
+    --purple: #7c3aed; --purple-light: #ede9fe;
+    --orange: #ea580c; --orange-light: #ffedd5;
+    --teal: #0d9488; --teal-light: #ccfbf1;
+    --code-bg: #1e1e2e; --code-text: #cdd6f4;
+    --sidebar-w: 240px; --content-max: 820px;
+    font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; }
+  #toc { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0 48px; z-index: 100; }
+  #toc-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  #toc-header .phase-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-bottom: 6px; }
+  #toc-header h2 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  #toc nav a { display: block; padding: 5px 16px 5px 20px; font-size: 12.5px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+  main { margin-left: var(--sidebar-w); padding: 48px 48px 96px; max-width: calc(var(--sidebar-w) + var(--content-max) + 96px); width: 100%; }
+  article { max-width: var(--content-max); }
+  .doc-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 2px solid var(--border); }
+  .doc-header .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+  .tag-phase { background: var(--accent-light); color: var(--accent); }
+  .tag-topic { background: var(--purple-light); color: var(--purple); }
+  .tag-date  { background: var(--surface-alt);  color: var(--text-muted); }
+  .doc-header h1 { font-size: 30px; font-weight: 800; line-height: 1.25; letter-spacing: -.02em; color: var(--text); }
+  section { margin-bottom: 52px; scroll-margin-top: 32px; }
+  h2.section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -.01em; }
+  h2.section-title .num { font-size: 11px; font-weight: 800; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; letter-spacing: .04em; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 24px 0 10px; }
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+  code { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-family: "SF Mono","Fira Code",Menlo,monospace; font-size: 12.5px; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 14px; border-left: 3px solid; }
+  .callout-goal  { background: var(--accent-light); border-color: var(--accent); color: #1e40af; }
+  .callout-tip   { background: var(--yellow-light); border-color: var(--yellow); color: #92400e; }
+  .callout-warn  { background: var(--red-light); border-color: var(--red); color: #7f1d1d; }
+  .callout-quote { background: var(--surface-alt); border-color: var(--border); color: var(--text-muted); font-style: italic; }
+  .callout-teal  { background: var(--teal-light); border-color: var(--teal); color: #134e4a; }
+  .cheatsheet { background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 24px 28px; font-family: "SF Mono","Fira Code","Cascadia Code",Menlo,monospace; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-x: auto; margin-top: 16px; }
+  .cheatsheet .label { color: #cba6f7; font-weight: 700; letter-spacing: .08em; display: block; margin-top: 18px; margin-bottom: 4px; border-bottom: 1px solid #313244; padding-bottom: 3px; }
+  .cheatsheet .label:first-child { margin-top: 0; }
+  .diagram-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 16px 14px; margin: 20px 0 28px; overflow-x: auto; }
+  .diagram-wrap .diagram-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); margin-bottom: 12px; }
+  .diagram-wrap p.caption { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 10px; margin-bottom: 0; font-style: italic; }
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; font-size: 14.5px; line-height: 1.55; }
+  .checklist li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 2px; background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .checklist li.checked .cb { background: var(--green); border-color: var(--green); }
+  .checklist li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .checklist li.checked .text { color: var(--text-muted); text-decoration: line-through; }
+  .phase-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
+  .phase-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; cursor: pointer; user-select: none; background: var(--surface-alt); }
+  .phase-header:hover { background: var(--border); }
+  .phase-label { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+  .phase-badge { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 2px 8px; border-radius: 20px; }
+  .ph1 { background: #dbeafe; color: #1d4ed8; } .ph2 { background: #fce7f3; color: #9d174d; }
+  .ph3 { background: #d1fae5; color: #065f46; } .ph4 { background: #fef3c7; color: #92400e; }
+  .phase-chevron { font-size: 12px; color: var(--text-muted); transition: transform .2s; }
+  .phase-card.open .phase-chevron { transform: rotate(180deg); }
+  .phase-body { display: none; padding: 16px 20px 20px; }
+  .phase-card.open .phase-body { display: block; }
+  .phase-goal { font-size: 12.5px; color: var(--text-muted); font-style: italic; margin-bottom: 12px; }
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: var(--surface-alt); padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.5; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+  .misconception { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .misconception .wrong { background: var(--red-light); padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; }
+  .misconception .right { padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; color: #065f46; background: var(--green-light); }
+  .misconception .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .quiz-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .quiz-q { padding: 14px 18px; font-size: 14.5px; font-weight: 600; cursor: pointer; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .quiz-q:hover { background: var(--surface-alt); }
+  .quiz-num { flex-shrink: 0; width: 24px; height: 24px; background: var(--accent); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; margin-top: 1px; }
+  .quiz-q .qtext { flex: 1; }
+  .quiz-toggle { font-size: 11px; color: var(--text-muted); flex-shrink: 0; margin-top: 3px; }
+  .quiz-hint { display: none; padding: 10px 18px 14px; font-size: 13px; color: #92400e; background: var(--yellow-light); border-top: 1px solid var(--border); }
+  .quiz-item.open .quiz-hint { display: block; }
+  .reading-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .reading-list li { display: flex; align-items: flex-start; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; font-size: 14px; }
+  .reading-list li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 1px; cursor: pointer; background: var(--surface); display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .reading-list li.checked .cb { background: var(--green); border-color: var(--green); }
+  .reading-list li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .reading-list li.checked .rtext { color: var(--text-muted); text-decoration: line-through; }
+  .notes-area { width: 100%; min-height: 160px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: inherit; font-size: 14px; color: var(--text); resize: vertical; line-height: 1.6; }
+  .notes-area:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .focus-list { list-style: none; display: flex; flex-direction: column; gap: 14px; }
+  .focus-list li { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14.5px; line-height: 1.6; }
+  .focus-list li strong { color: var(--accent); display: block; margin-bottom: 4px; }
+  .connections { display: flex; flex-direction: column; gap: 12px; }
+  .conn-card { display: flex; align-items: flex-start; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14px; }
+  .conn-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .conn-label { font-weight: 700; margin-bottom: 3px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .tradeoff-box { background: var(--surface-alt); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 14px 18px; font-size: 14px; font-style: italic; color: var(--text); margin-top: 14px; }
+  .tier-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 16px 0; }
+  .tier-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; font-size: 14px; }
+  .tier-card h4 { font-size: 13px; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .tier-card .stat { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 2px 7px; border-radius: 4px; }
+  .stat-blue { background: var(--accent-light); color: var(--accent); }
+  .stat-orange { background: var(--orange-light); color: var(--orange); }
+  .stat-green { background: var(--green-light); color: var(--green); }
+  .stat-red { background: var(--red-light); color: var(--red); }
+  @media (max-width: 900px) { #toc { display: none; } main { margin-left: 0; padding: 24px 20px 60px; } .tier-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<aside id="toc">
+  <div id="toc-header">
+    <span class="phase-tag">Phase B · Topic 7</span>
+    <h2>7.5 Rebalancing — Adding &amp; Removing Nodes</h2>
+  </div>
+  <nav>
+    <a href="#s0">🗺️ Overview</a>
+    <a href="#s1">🎯 Goal</a>
+    <a href="#s2">✅ Mastery Criteria</a>
+    <a href="#s3">🗓️ Study Phases</a>
+    <a href="#s4">📋 Cheatsheet</a>
+    <a href="#s5">🧠 Core Definition</a>
+    <a href="#s6">📦 Core Concepts</a>
+    <a href="#s7">🔍 First Principles</a>
+    <a href="#s8">🗺️ Mental Models</a>
+    <a href="#s9">⚙️ How It Works</a>
+    <a href="#s10">🏭 Real-World Examples</a>
+    <a href="#s11">⚖️ Trade-offs</a>
+    <a href="#s12">🎯 Interview Application</a>
+    <a href="#s13">⚠️ Misconceptions</a>
+    <a href="#s14">🔗 Relationships</a>
+    <a href="#s15">🧪 Self-Check Quiz</a>
+    <a href="#s16">📚 Further Reading</a>
+    <a href="#s17">✍️ My Notes</a>
+  </nav>
+</aside>
+
+<main>
+<article>
+
+<!-- HEADER -->
+<div class="doc-header">
+  <div class="meta">
+    <span class="tag tag-phase">⚡ Phase B — Scalability</span>
+    <span class="tag tag-topic">🔀 Topic 7 — Data Partitioning / Sharding</span>
+    <span class="tag tag-date">📅 2026-07-16</span>
+  </div>
+  <h1>7.5 Rebalancing<br><span style="font-weight:400;color:var(--text-muted);font-size:22px;">Adding and Removing Nodes</span></h1>
+</div>
+
+<!-- S0: OVERVIEW -->
+<section id="s0">
+  <h2 class="section-title"><span class="num">§0</span> 🗺️ Topic Overview</h2>
+  <p>Rebalancing is the process of <strong>moving data (and the request load that follows it) between nodes when the cluster changes</strong> — a node is added to scale out, a node fails or is removed, or one shard has grown far hotter or larger than its peers. Consistent hashing (7.4) gave you a <em>placement rule</em> that keeps the number of keys that must move small (<code>~K/N</code>); rebalancing is the <em>operational discipline</em> of actually executing that movement safely, incrementally, and without degrading the cluster into a brownout while you're trying to grow it. The central tension is <strong>minimal movement vs. even balance vs. foreground impact</strong>.</p>
+
+  <ul class="focus-list" style="margin-top:18px;">
+    <li><strong>1. Why <code>hash mod N</code> is disqualified</strong> — changing N remaps ~everything. But even "minimal" movement (K/N) still streams gigabytes across a live network. Reason about movement <em>volume</em>, not just "consistent hashing fixes it."</li>
+    <li><strong>2. Fixed partition count (the production default)</strong> — create a large fixed number of partitions up front, assign many per node, and on membership change <em>move whole partitions between nodes</em>. Keys never change partition. The single most important idea here.</li>
+    <li><strong>3. Dynamic partitioning (split/merge)</strong> — partitions split when they exceed a size threshold and merge when they shrink (HBase regions, MongoDB chunks). Adapts to volume automatically; adds complexity, split storms, and needs pre-splitting.</li>
+    <li><strong>4. The live migration mechanics</strong> — snapshot → stream (throttled) → catch-up delta → atomic cutover → reroute. How a partition moves without losing in-flight writes.</li>
+    <li><strong>5. Automation, routing, detection</strong> — automatic (fast, can cascade) vs. manual (safe, slow); how the router learns the new mapping; and how you detect imbalance in the first place (size / QPS / p99).</li>
+  </ul>
+</section>
+
+<!-- S1: GOAL -->
+<section id="s1">
+  <h2 class="section-title"><span class="num">§1</span> 🎯 Goal of This Subtopic</h2>
+  <div class="callout callout-goal">
+    After studying this, you should be able to explain why rebalancing is a first-class operational concern (not a side effect of the placement rule), compare the three main strategies — fixed partition count, dynamic split/merge, and consistent-hash token reassignment — and pick the right one for a workload, naming a real system for each. You should be able to walk through a live partition migration step by step and explain how reads and writes stay correct throughout, reason about how much data moves and why you throttle it, and decide between automatic and manual rebalancing in terms of blast radius.
+  </div>
+</section>
+
+<!-- S2: MASTERY -->
+<section id="s2">
+  <h2 class="section-title"><span class="num">§2</span> ✅ What Mastery Looks Like</h2>
+  <ul class="checklist" id="mastery-list">
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can explain why rebalancing on <code>hash mod N</code> moves nearly all keys, and contrast it with the ~K/N (one partition's worth) movement of fixed partitions / consistent hashing</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can describe the fixed-partition-count strategy precisely — partitions ≫ nodes, whole partitions reassigned on change, keys never change partition — and explain why it's the production default</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can contrast dynamic partitioning (split/merge by size) with fixed partitioning and state the trade-off (adapts to volume vs. complexity + split storms + pre-split bootstrap)</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can walk through a live migration end to end and explain how in-flight writes aren't lost during cutover</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can explain why you throttle/rate-limit rebalancing and how unthrottled rebalancing degrades or cascades into a storm during a failure</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can argue automatic vs. manual rebalancing in terms of blast radius, and describe how the request router discovers the new key→node mapping</span></li>
+  </ul>
+  <div class="callout callout-tip" style="margin-top:18px;">💡 <strong>Rule of thumb:</strong> If you can teach it to someone else and field their follow-up questions, you've mastered it.</div>
+</section>
+
+<!-- S3: STUDY PHASES -->
+<section id="s3">
+  <h2 class="section-title"><span class="num">§3</span> 🗓️ Study Phases to Achieve Mastery</h2>
+
+  <div class="phase-card open">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph1">Phase 1</span> Acquire 📖</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Read deeply enough that you could explain the concept without the doc.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text"><strong>DDIA Ch. 6 — "Rebalancing Partitions"</strong> (Kleppmann) — the definitive comparison of fixed count, dynamic, and proportional strategies, plus "automatic or manual rebalancing"</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text"><strong>Amazon Dynamo paper (SOSP 2007), §6.2</strong> — the three partitioning strategies and why they evolved toward fixed equal-sized partitions ("Strategy 3")</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text"><strong>HBase / MongoDB docs on region/chunk splitting and pre-splitting</strong> — dynamic partitioning in production</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Read Sections 5–9 of this doc carefully — don't skim</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Re-read the Cheatsheet (§4) and recite it from memory after</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph2">Phase 2</span> Consolidate ✍️</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Verify you can reproduce knowledge in your own words without looking.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Close the doc — write out the Core Definition from memory, then compare</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Explain First Principles out loud: why can't you re-run hash mod N, and why is even "minimal" movement expensive?</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Reconstruct fixed-partition reassignment and the live migration (snapshot→stream→catch-up→cutover) from memory</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Restate each Trade-off row in your own words — if you can't explain the cost, you don't own it</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph3">Phase 3</span> Apply 🔧</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Connect to real systems and simulate interview scenarios.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Go through Real-World Examples (§10) — verify each claim and add notes to §17</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Practice Interview Application (§12) out loud — say the trigger phrases and your response as if live</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Work through Misconceptions (§13) — explain WHY each is wrong</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Trace Relationships (§14) — explain each connection without looking</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph4">Phase 4</span> Validate 🧪</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Confirm you actually own it, not just recognize it.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Answer every Self-Check Quiz question (§15) out loud without notes</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Recite the Cheatsheet (§4) from memory — if you can't, re-do Phase 2</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Tick off mastery criteria in §2 — only check a box if you can demonstrate on demand</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Teach this concept to an imaginary interviewer for 2 minutes without hesitation</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- S4: CHEATSHEET -->
+<section id="s4">
+  <h2 class="section-title"><span class="num">§4</span> 📋 Cheatsheet</h2>
+  <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+
+  <!-- Radial Mindmap SVG -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">🧠 Concept Mindmap</div>
+    <svg viewBox="0 0 820 480" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:820px;display:block;margin:0 auto;">
+      <rect width="820" height="480" fill="#fafafa" rx="8"/>
+      <!-- Connector lines -->
+      <line x1="410" y1="240" x2="175" y2="100" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="645" y2="100" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="100" y2="280" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="720" y2="280" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="175" y2="400" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="645" y2="400" stroke="#aaa" stroke-width="1.5"/>
+      <!-- Central -->
+      <ellipse cx="410" cy="240" rx="105" ry="44" fill="#a5d8ff" stroke="#1971c2" stroke-width="2"/>
+      <text x="410" y="234" text-anchor="middle" dominant-baseline="middle" font-family="Arial,sans-serif" font-size="14" font-weight="bold" fill="#1a1917">Rebalancing</text>
+      <text x="410" y="252" text-anchor="middle" dominant-baseline="middle" font-family="Arial,sans-serif" font-size="12" fill="#333">add / remove nodes</text>
+      <!-- Why It Exists -->
+      <rect x="88" y="66" width="174" height="62" rx="8" fill="#ffc9c9" stroke="#c92a2a" stroke-width="1.5"/>
+      <text x="175" y="87" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Why It Exists</text>
+      <text x="175" y="103" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">hash % N moves ~all keys</text>
+      <text x="175" y="117" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">need cheap, safe capacity change</text>
+      <!-- Fixed Partitions -->
+      <rect x="558" y="66" width="174" height="62" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="645" y="87" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Fixed Partition Count</text>
+      <text x="645" y="103" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">P ≫ N, many per node</text>
+      <text x="645" y="117" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">move WHOLE partitions</text>
+      <!-- Dynamic Partitioning -->
+      <rect x="20" y="248" width="164" height="64" rx="8" fill="#ffd8a8" stroke="#e67700" stroke-width="1.5"/>
+      <text x="102" y="269" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Dynamic Split/Merge</text>
+      <text x="102" y="285" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">split at size threshold</text>
+      <text x="102" y="299" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">HBase / Mongo · pre-split</text>
+      <!-- Live Migration -->
+      <rect x="636" y="248" width="164" height="64" rx="8" fill="#c3fae8" stroke="#0ca678" stroke-width="1.5"/>
+      <text x="718" y="269" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Live Migration</text>
+      <text x="718" y="285" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">snapshot→stream→catch-up</text>
+      <text x="718" y="299" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">→ atomic cutover</text>
+      <!-- Throttle / Auto vs Manual -->
+      <rect x="88" y="372" width="174" height="62" rx="8" fill="#ffe3e3" stroke="#c92a2a" stroke-width="1.5"/>
+      <text x="175" y="393" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Throttle &amp; Trigger</text>
+      <text x="175" y="409" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">rate-limit or brown out p99</text>
+      <text x="175" y="423" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">auto = storm risk</text>
+      <!-- Real Systems -->
+      <rect x="558" y="372" width="174" height="62" rx="8" fill="#b2f2bb" stroke="#2f9e44" stroke-width="1.5"/>
+      <text x="645" y="393" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Real Systems</text>
+      <text x="645" y="409" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Riak · Elasticsearch · Kafka</text>
+      <text x="645" y="423" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">HBase · Mongo · Cassandra</text>
+    </svg>
+    <p class="caption">Radial mindmap: six clusters around the rebalancing core concept</p>
+  </div>
+
+  <!-- Decision Map -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">🗺️ Rebalancing Strategy Decision Map</div>
+    <svg viewBox="0 0 720 720" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:720px;display:block;margin:0 auto;" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+      <rect width="720" height="720" fill="#fafafa" rx="8"/>
+
+      <!-- START -->
+      <rect x="255" y="14" width="210" height="38" rx="19" fill="#1a1917"/>
+      <text x="360" y="37" text-anchor="middle" font-size="12" font-weight="600" fill="#fff">Membership / distribution changed?</text>
+      <line x1="360" y1="52" x2="360" y2="74" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+
+      <!-- Q1 -->
+      <rect x="200" y="74" width="320" height="44" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="360" y="93" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">Node added/removed, skew,</text>
+      <text x="360" y="109" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">or a hot/oversized shard?</text>
+      <line x1="200" y1="96" x2="108" y2="96" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="154" y="88" text-anchor="middle" font-size="10" fill="#6b6861">No</text>
+      <rect x="14" y="74" width="94" height="44" rx="8" fill="#f3f2ef" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="61" y="93" text-anchor="middle" font-size="11" fill="#6b6861">No rebalance</text>
+      <text x="61" y="108" text-anchor="middle" font-size="11" fill="#6b6861">needed</text>
+      <line x1="360" y1="118" x2="360" y2="140" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="372" y="133" font-size="10" fill="#6b6861">Yes</text>
+
+      <!-- Q2 -->
+      <rect x="180" y="140" width="360" height="44" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="360" y="159" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">Tempted to re-run hash(key) % N</text>
+      <text x="360" y="175" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">with the new node count?</text>
+      <line x1="540" y1="162" x2="608" y2="162" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="574" y="154" text-anchor="middle" font-size="10" fill="#6b6861">Yes</text>
+      <rect x="606" y="140" width="104" height="44" rx="8" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5"/>
+      <text x="658" y="159" text-anchor="middle" font-size="11" font-weight="700" fill="#7f1d1d">❌ STOP</text>
+      <text x="658" y="175" text-anchor="middle" font-size="10" fill="#7f1d1d">~all keys move</text>
+      <line x1="360" y1="184" x2="360" y2="206" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="372" y="199" font-size="10" fill="#6b6861">No</text>
+
+      <!-- Q3 -->
+      <rect x="165" y="206" width="390" height="44" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="360" y="225" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">Data volume per key-range varies a lot</text>
+      <text x="360" y="241" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">&amp; grows unpredictably (time-series)?</text>
+      <!-- Yes right → Dynamic -->
+      <line x1="555" y1="228" x2="608" y2="228" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="582" y="220" text-anchor="middle" font-size="10" fill="#6b6861">Yes</text>
+      <rect x="606" y="200" width="104" height="60" rx="8" fill="#ffd8a8" stroke="#e67700" stroke-width="1.5"/>
+      <text x="658" y="220" text-anchor="middle" font-size="11" font-weight="700" fill="#7c2d12">DYNAMIC</text>
+      <text x="658" y="234" text-anchor="middle" font-size="10" fill="#7c2d12">split / merge</text>
+      <text x="658" y="248" text-anchor="middle" font-size="10" fill="#7c2d12">+ pre-split!</text>
+      <line x1="360" y1="250" x2="360" y2="284" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="372" y="270" font-size="10" fill="#6b6861">No (uniform, count-driven)</text>
+
+      <!-- OUTCOME: Fixed -->
+      <rect x="150" y="284" width="420" height="72" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+      <text x="360" y="308" text-anchor="middle" font-size="14" font-weight="800" fill="#1e40af">FIXED PARTITION COUNT (default)</text>
+      <text x="360" y="326" text-anchor="middle" font-size="11" fill="#1e40af">Create P ≫ N partitions up front; many per node.</text>
+      <text x="360" y="342" text-anchor="middle" font-size="11" fill="#1e40af">On change: reassign WHOLE partitions. Keys never change partition.</text>
+      <line x1="360" y1="356" x2="360" y2="380" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+
+      <!-- Execution box -->
+      <rect x="140" y="380" width="440" height="112" rx="10" fill="#fff" stroke="#0ca678" stroke-width="1.5"/>
+      <text x="360" y="401" text-anchor="middle" font-size="12" font-weight="700" fill="#064e3b">Execute the move — protect live traffic</text>
+      <text x="360" y="421" text-anchor="middle" font-size="11" fill="#134e4a">1. Snapshot partition  →  2. Stream bulk to new owner</text>
+      <text x="360" y="438" text-anchor="middle" font-size="11" fill="#134e4a">3. Catch up write delta  →  4. Atomic ownership cutover</text>
+      <text x="360" y="455" text-anchor="middle" font-size="11" fill="#134e4a">5. Reroute requests to new owner</text>
+      <text x="360" y="478" text-anchor="middle" font-size="11" font-weight="700" fill="#0ca678">THROTTLE transfer: cap bandwidth &amp; concurrent moves</text>
+      <line x1="360" y1="492" x2="360" y2="512" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+
+      <!-- Warning 1 -->
+      <rect x="150" y="512" width="420" height="46" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+      <text x="360" y="531" text-anchor="middle" font-size="11" font-weight="700" fill="#92400e">⚠️ Automatic rebalance + node failure = rebalancing storm</text>
+      <text x="360" y="548" text-anchor="middle" font-size="11" fill="#92400e">Gate the TRIGGER (human / thresholds); automate the mechanics</text>
+
+      <!-- Warning 2 -->
+      <rect x="150" y="566" width="420" height="46" rx="8" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5"/>
+      <text x="360" y="585" text-anchor="middle" font-size="11" font-weight="700" fill="#7f1d1d">⚠️ Router must learn the NEW partition→node map</text>
+      <text x="360" y="602" text-anchor="middle" font-size="11" fill="#7f1d1d">gossip / ZooKeeper-etcd / routing tier — else wrong-node hits</text>
+
+      <!-- Legend -->
+      <rect x="150" y="626" width="420" height="76" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="360" y="645" text-anchor="middle" font-size="11" font-weight="700" fill="#6b6861">LEGEND</text>
+      <rect x="176" y="656" width="12" height="12" rx="2" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="195" y="667" font-size="10" fill="#1e40af">Fixed (default)</text>
+      <rect x="300" y="656" width="12" height="12" rx="2" fill="#ffd8a8" stroke="#e67700" stroke-width="1.5"/>
+      <text x="319" y="667" font-size="10" fill="#7c2d12">Dynamic</text>
+      <rect x="410" y="656" width="12" height="12" rx="2" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5"/>
+      <text x="429" y="667" font-size="10" fill="#7f1d1d">Anti-pattern</text>
+      <text x="176" y="688" font-size="10" fill="#6b6861">Movement volume: fixed/consistent ≈ K/N of data; hash % N ≈ N/(N+1) of ALL data.</text>
+
+      <defs>
+        <marker id="dm-arr" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+          <path d="M0,0 L0,7 L7,3.5 z" fill="#bbb"/>
+        </marker>
+      </defs>
+    </svg>
+    <p class="caption">Decision gates — answer top to bottom; the fixed-partition path is the safe default answer</p>
+  </div>
+
+  <div class="cheatsheet">
+<span class="label">§ 1  WHY IT EXISTS</span>Clusters aren't static: you scale out, nodes die, data grows unevenly. When membership
+changes, SOME data must move so load and storage stay balanced. The naive move — re-run
+hash(key) % N — is catastrophic: changing N changes the divisor so ~N/(N+1) of all keys
+remap, i.e. you move almost the entire dataset over the network while serving live
+traffic. Rebalancing exists to make capacity changes CHEAP and SAFE: move only the data
+that must move, do it incrementally, and keep reads/writes correct throughout. It's the
+operational counterpart to the placement rule from consistent hashing.
+
+<span class="label">§ 2  THE THREE STRATEGIES</span>1. FIXED PARTITION COUNT (default): create P partitions up front, P ≫ N. Each node holds
+   many partitions. Add a node → it STEALS whole partitions from existing nodes. Remove a
+   node → its partitions redistribute. Keys never change partition; only partition→node
+   assignment changes. Simple, predictable. (Riak, Elasticsearch, Couchbase.)
+2. DYNAMIC PARTITIONING (split/merge): a partition SPLITS above a size threshold, MERGES
+   when it shrinks. Count tracks DATA VOLUME, not node count. Auto-adapts; adds complexity
+   + "split storms"; needs pre-splitting to avoid one hot start partition. (HBase regions,
+   MongoDB chunks, Spanner/CockroachDB ranges.)
+3. PROPORTIONAL TO NODES (consistent-hash tokens): fixed partitions PER NODE; adding a node
+   splits some existing partitions to give it a fair share. (Cassandra vnodes flavor.)
+
+<span class="label">§ 3  THE LIVE MIGRATION (move a partition without losing writes)</span>1. SNAPSHOT the partition on the source.
+2. STREAM the bulk snapshot to the destination (slow part — THROTTLE it).
+3. CATCH UP: replay writes that landed since the snapshot (change log / hinted handoff),
+   narrowing the delta until tiny.
+4. CUTOVER: briefly freeze/serialize, flip ownership atomically in the mapping.
+5. REROUTE: router sends the key to the new owner; old owner drops the data.
+During transition: read from old owner until caught up (or dual-read); writes go to old
+and are logged for catch-up (or dual-write). Cutover is the only stop-the-world moment
+and is kept sub-second per partition.
+
+<span class="label">§ 4  USE / AVOID</span>Use FIXED partitions:   general case, roughly uniform key density, count-driven scaling,
+                        want predictable ops. This is the safe default answer.
+Use DYNAMIC partitions: data volume per range varies wildly / grows unpredictably
+                        (time-series, wide key ranges). Pre-split at bootstrap!
+Use PROPORTIONAL:       consistent-hash/vnode systems where tokens scale with nodes.
+AVOID hash % N rebalancing — changing N moves ~everything.
+AVOID fully automatic rebalancing on failure — one dead node can trigger a storm.
+AVOID unthrottled streaming — it saturates NIC/disk and browns out foreground traffic.
+
+<span class="label">§ 5  INTERVIEW TRIGGERS</span>→ "You add a node to the cluster — how does data get redistributed?"
+→ "A shard is twice the size of the others. How do you rebalance?"
+→ "How do you move a partition to a new node without downtime or losing writes?"
+→ "Should rebalancing be automatic? What happens during a node failure?"
+
+<span class="label">§ 6  FTAC</span>F  "Rebalancing moves data between nodes when membership/distribution changes. I'd never
+   re-hash mod N — that moves everything. I'd use a large FIXED number of partitions
+   assigned to nodes, and on a change just reassign whole partitions between nodes."
+T  "Fixed partitions give predictable, minimal movement and simple ops, at the cost of
+   choosing the partition count up front (hard to change) and coarser balance granularity.
+   Dynamic split/merge adapts to volume but adds complexity and split storms."
+A  "Assuming roughly uniform key density and count-driven scaling, with live traffic that
+   can't take downtime —"
+C  "Fix ~1000s of partitions up front, many per node. To add a node, migrate whole
+   partitions to it: snapshot → stream (throttled) → catch up the write delta → atomic
+   ownership cutover → reroute. Trigger manually / with guardrails; automate the mechanics."
+
+<span class="label">§ 7  NUMBERS &amp; GOTCHA</span>Movement volume:  fixed/consistent-hash ≈ one node's fair share ≈ K/N of data.
+                  hash % N ≈ N/(N+1) of ALL data (4→5 nodes ≈ 80%).
+Partition count:  pick P ≫ N and fixed (Riak 64–256 vnodes/ring; Elasticsearch &amp; Kafka
+                  partitions fixed at creation).
+Rebalance time:   data_to_move ÷ throttled_rate. 500 GB ÷ 100 MB/s ≈ 83 min
+                  (and you throttle BELOW line rate to protect p99).
+Cutover freeze:   sub-second per partition; only the final delta is serialized.
+GOTCHA #1: Fixed partition count is chosen ONCE and painful to change — too few and you
+  can't spread across future nodes; too many and you pay per-partition overhead (metadata,
+  open files, fan-out). Size P for your MAX future cluster.
+GOTCHA #2: Automatic rebalance + failure detection can amplify a transient blip into a
+  cascade: node looks dead → mass movement starts → extra load makes MORE nodes look dead
+  → storm. Rate-limit moves and gate the trigger.
+  </div>
+</section>
+
+<!-- S5: CORE DEFINITION -->
+<section id="s5">
+  <h2 class="section-title"><span class="num">§5</span> 🧠 Core Definition</h2>
+  <div class="callout callout-teal" style="font-size:16px;font-weight:600;line-height:1.6;">
+    Rebalancing is the controlled redistribution of partitions (and their data and load) across nodes when the cluster changes — adding capacity, removing/failed nodes, or correcting skew — done so that only the minimum necessary data moves, the movement is incremental and throttled to protect live traffic, and reads and writes stay correct throughout. In practice it is almost always implemented by assigning a large <strong>fixed</strong> number of partitions to nodes and reassigning whole partitions, not by re-hashing keys with a node-count-dependent function.
+  </div>
+
+  <!-- Strategy comparison cards -->
+  <div class="tier-grid" style="margin-top:20px;">
+    <div class="tier-card">
+      <h4>🔵 Fixed Partition Count <span class="stat stat-blue">DEFAULT</span></h4>
+      <p style="font-size:13px;margin-bottom:6px;">Create <code>P ≫ N</code> partitions up front; assign many to each node. On change, move <strong>whole partitions</strong>. Keys never change partition.</p>
+      <p style="font-size:13px;margin-bottom:0;color:var(--green);">✅ Predictable, minimal movement, simple routing.</p>
+    </div>
+    <div class="tier-card">
+      <h4>🟠 Dynamic Split / Merge <span class="stat stat-orange">VOLUME-DRIVEN</span></h4>
+      <p style="font-size:13px;margin-bottom:6px;">Partitions split above a size threshold, merge when small. Count tracks data volume. HBase regions, MongoDB chunks.</p>
+      <p style="font-size:13px;margin-bottom:0;color:var(--red);">⚠️ Complexity, split storms, needs pre-splitting.</p>
+    </div>
+  </div>
+</section>
+
+<!-- S6: CORE CONCEPTS -->
+<section id="s6">
+  <h2 class="section-title"><span class="num">§6</span> 📦 Core Concepts</h2>
+
+  <h3>Fixed Partition Count (Decoupling Partitions from Nodes)</h3>
+  <p>Create a large, fixed number of partitions <code>P</code> at cluster creation — many more than the number of nodes <code>N</code> (e.g., 1,000 partitions across 10 nodes = 100 each). A key's partition is determined once (<code>partition = hash(key) mod P</code>) and <strong>never changes</strong>, because <code>P</code> never changes. Only the <em>partition → node</em> assignment changes when you add or remove nodes. Adding a node hands it a fair slice of whole partitions stolen from existing nodes; removing a node redistributes its partitions to survivors. This is the dominant production strategy because movement is predictable (whole partitions, integer counts) and routing stays trivial.</p>
+
+  <!-- Partition reassignment vs key remapping diagram -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">🔀 Partition Reassignment vs. Key Remapping</div>
+    <svg viewBox="0 0 760 320" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:760px;display:block;margin:0 auto;">
+      <rect width="760" height="320" fill="#fafafa" rx="8"/>
+
+      <!-- LEFT: hash % N (bad) -->
+      <text x="190" y="26" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="bold" fill="#dc2626">hash(key) % N  →  add node</text>
+      <text x="190" y="42" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#7f1d1d">nearly every key changes node</text>
+      <!-- before nodes -->
+      <text x="70" y="66" font-family="Arial,sans-serif" font-size="10" fill="#666">before: 3 nodes</text>
+      <rect x="40" y="72" width="90" height="26" rx="5" fill="#dbe4ff" stroke="#3b5bdb"/><text x="85" y="89" text-anchor="middle" font-size="10" fill="#1e40af">k1 k4 k7 → N0</text>
+      <rect x="40" y="102" width="90" height="26" rx="5" fill="#dbe4ff" stroke="#3b5bdb"/><text x="85" y="119" text-anchor="middle" font-size="10" fill="#1e40af">k2 k5 k8 → N1</text>
+      <rect x="40" y="132" width="90" height="26" rx="5" fill="#dbe4ff" stroke="#3b5bdb"/><text x="85" y="149" text-anchor="middle" font-size="10" fill="#1e40af">k3 k6 k9 → N2</text>
+      <!-- arrow -->
+      <line x1="140" y1="115" x2="180" y2="115" stroke="#dc2626" stroke-width="1.5" marker-end="url(#cc-arr-r)"/>
+      <!-- after nodes -->
+      <text x="270" y="66" font-family="Arial,sans-serif" font-size="10" fill="#666">after: 4 nodes (%4)</text>
+      <rect x="230" y="72" width="118" height="26" rx="5" fill="#fee2e2" stroke="#dc2626"/><text x="289" y="89" text-anchor="middle" font-size="10" fill="#7f1d1d">k4 k8 → N0 (moved)</text>
+      <rect x="230" y="102" width="118" height="26" rx="5" fill="#fee2e2" stroke="#dc2626"/><text x="289" y="119" text-anchor="middle" font-size="10" fill="#7f1d1d">k1 k5 k9 → N1 (moved)</text>
+      <rect x="230" y="132" width="118" height="26" rx="5" fill="#fee2e2" stroke="#dc2626"/><text x="289" y="149" text-anchor="middle" font-size="10" fill="#7f1d1d">k2 k6 → N2 (moved)</text>
+      <rect x="230" y="162" width="118" height="26" rx="5" fill="#fee2e2" stroke="#dc2626"/><text x="289" y="179" text-anchor="middle" font-size="10" fill="#7f1d1d">k3 k7 → N3 (moved)</text>
+      <text x="190" y="215" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#dc2626">≈ 8 of 9 keys move — mass migration</text>
+
+      <!-- divider -->
+      <line x1="380" y1="20" x2="380" y2="300" stroke="#e5e3de" stroke-width="1.5" stroke-dasharray="5,3"/>
+
+      <!-- RIGHT: fixed partitions (good) -->
+      <text x="570" y="26" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="bold" fill="#16a34a">Fixed partitions  →  add node</text>
+      <text x="570" y="42" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#065f46">only whole partitions reassigned</text>
+      <!-- partitions P0..P5 fixed; keys stay in their partition -->
+      <text x="450" y="66" font-family="Arial,sans-serif" font-size="10" fill="#666">6 fixed partitions (P0–P5)</text>
+      <rect x="420" y="72" width="140" height="26" rx="5" fill="#dbe4ff" stroke="#3b5bdb"/><text x="490" y="89" text-anchor="middle" font-size="10" fill="#1e40af">N0: P0(k1) P1(k4)</text>
+      <rect x="420" y="102" width="140" height="26" rx="5" fill="#dbe4ff" stroke="#3b5bdb"/><text x="490" y="119" text-anchor="middle" font-size="10" fill="#1e40af">N1: P2(k2) P3(k5)</text>
+      <rect x="420" y="132" width="140" height="26" rx="5" fill="#dbe4ff" stroke="#3b5bdb"/><text x="490" y="149" text-anchor="middle" font-size="10" fill="#1e40af">N2: P4(k3) P5(k6)</text>
+      <line x1="565" y1="115" x2="600" y2="115" stroke="#16a34a" stroke-width="1.5" marker-end="url(#cc-arr-g)"/>
+      <rect x="605" y="88" width="135" height="26" rx="5" fill="#dcfce7" stroke="#16a34a"/><text x="672" y="105" text-anchor="middle" font-size="10" fill="#065f46">N3 takes P1 + P3</text>
+      <text x="672" y="132" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#065f46">k4, k5 keep their</text>
+      <text x="672" y="146" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#065f46">partition — only the</text>
+      <text x="672" y="160" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#065f46">P→node owner changes</text>
+      <text x="570" y="215" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#16a34a">2 partitions move — ≈ 1/N of data</text>
+
+      <!-- key insight bar -->
+      <rect x="40" y="238" width="680" height="60" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="380" y="260" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">KEY INSIGHT</text>
+      <text x="380" y="279" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#333">Key remapping changes WHICH PARTITION a key belongs to (N-dependent) → everything moves.</text>
+      <text x="380" y="293" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#333">Partition reassignment changes WHICH NODE owns a partition (key→partition fixed) → only whole partitions move.</text>
+
+      <defs>
+        <marker id="cc-arr-r" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L0,8 L8,4 z" fill="#dc2626"/></marker>
+        <marker id="cc-arr-g" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L0,8 L8,4 z" fill="#16a34a"/></marker>
+      </defs>
+    </svg>
+    <p class="caption">The core distinction: fixed partitions reassign whole partitions between nodes; the key→partition map never changes</p>
+  </div>
+
+  <h3>Dynamic Partitioning (Split and Merge)</h3>
+  <p>Instead of a fixed count, partitions split when they grow past a size threshold (e.g., HBase splits a region at ~10 GB) and merge when they shrink. The number of partitions tracks the <em>data volume</em>, so a small dataset has few partitions and a large one has many — the system self-tunes. The costs: added complexity (split coordination, metadata churn), the risk of "split storms" under bursty writes, and a cold-start problem — a brand-new table has one partition on one node, so all initial writes hit a single machine until it splits. The fix is <strong>pre-splitting</strong>: seed the table with multiple empty partitions up front.</p>
+
+  <h3>Partition Reassignment vs. Key Remapping</h3>
+  <p>The critical distinction, shown above. <strong>Key remapping</strong> (<code>hash mod N</code>) changes <em>which partition a key belongs to</em> when <code>N</code> changes — so nearly every key moves. <strong>Partition reassignment</strong> changes <em>which node owns a partition</em> while the key→partition mapping stays fixed — so only whole partitions move, and only as many as needed. Every good rebalancing strategy is built on reassignment, not remapping.</p>
+
+  <h3>Live Migration (Snapshot → Stream → Catch-up → Cutover)</h3>
+  <p>Moving a partition while it's serving traffic. You snapshot its current state, stream the (large) snapshot to the destination in the background, then replay the writes that occurred since the snapshot to shrink the delta, then perform a brief atomic ownership cutover and reroute requests to the new owner. The snapshot/stream phase is slow and throttled; the cutover is fast (sub-second) because only the tiny final delta is serialized.</p>
+
+  <h3>Throttling / Rate-Limiting the Move</h3>
+  <p>Rebalancing competes with live traffic for the same NIC, disk, and CPU. Unthrottled, a big transfer saturates the network and spikes foreground p99 — you make the system <em>slower</em> while trying to make it <em>bigger</em>. So systems cap the streaming bandwidth and the number of concurrent partition moves. The trade-off is time-to-rebalance vs. foreground impact; you deliberately transfer below line rate.</p>
+
+  <h3>Automatic vs. Manual Rebalancing &amp; the Request Router</h3>
+  <p><strong>Automatic</strong> rebalancing reacts to detected imbalance or node loss with no human in the loop — fast recovery, but dangerous: a transient blip can be misread as a dead node, kicking off mass movement that adds load and makes <em>more</em> nodes look dead (a rebalancing storm). <strong>Manual</strong> (or semi-automatic) keeps a human to confirm the trigger while the mechanics run automatically — safer, bounded blast radius, slower. Meanwhile, requests must reach the current owner: something (a coordination service like ZooKeeper/etcd, gossip, or a routing tier) has to know the live partition→node map. If the router's view is stale during a move, a request hits the wrong node and is forwarded/retried.</p>
+</section>
+
+<!-- S7: FIRST PRINCIPLES -->
+<section id="s7">
+  <h2 class="section-title"><span class="num">§7</span> 🔍 First Principles — Why Does This Exist?</h2>
+  <p>The root problem is that <strong>capacity and data are both moving targets, but a partitioning scheme assigns fixed ownership.</strong> You shard data to spread storage and load; but the number of nodes changes (scale out, crashes, retirement) and the data grows unevenly (some key ranges attract far more data or traffic). The moment any of those change, the original assignment is no longer balanced — some node is overloaded or holds too much, or a dead node's share must go somewhere. So <em>some</em> data must move. The question is only <em>how much</em> and <em>how safely</em>.</p>
+  <p>The naive answer, <code>node = hash(key) mod N</code>, is seductive because it needs no coordination and spreads keys evenly — but it couples the assignment to <code>N</code>. Change <code>N</code> by one and the modulus changes for almost every key, so almost the entire dataset must relocate. At scale that's terabytes streaming across the network, a cache-miss storm, and hours of degraded service just to add one machine — which defeats elastic scaling entirely. Rebalancing as a discipline exists to break that coupling: <strong>make the amount of data that moves proportional to the capacity that changed, not to the total dataset size.</strong> And because even that <code>1/N</code> is expensive to move over a live system, the second first-principle is <em>incrementality and safety</em>: move in throttled chunks, keep serving from the old owner until the new one is caught up, and cut over atomically.</p>
+
+  <!-- Movement volume comparison bar diagram -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">📊 Data Movement on Adding 1 Node (4 → 5 nodes)</div>
+    <svg viewBox="0 0 720 200" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:720px;display:block;margin:0 auto;">
+      <rect width="720" height="200" fill="#fafafa" rx="8"/>
+      <text x="360" y="26" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" fill="#666">Fraction of total dataset that must physically move</text>
+
+      <!-- hash % N bar -->
+      <text x="20" y="66" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#dc2626">hash % N</text>
+      <rect x="120" y="52" width="520" height="30" rx="4" fill="#fee2e2" stroke="#dc2626" stroke-width="1"/>
+      <rect x="120" y="52" width="416" height="30" rx="4" fill="#dc2626"/>
+      <text x="328" y="72" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#fff">≈ 80% moves  (N/(N+1))</text>
+
+      <!-- fixed / consistent bar -->
+      <text x="20" y="126" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#16a34a">Fixed / CH</text>
+      <rect x="120" y="112" width="520" height="30" rx="4" fill="#dcfce7" stroke="#16a34a" stroke-width="1"/>
+      <rect x="120" y="112" width="104" height="30" rx="4" fill="#16a34a"/>
+      <text x="172" y="132" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#fff">≈ 20%</text>
+      <text x="420" y="132" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#065f46">only the new node's fair share ≈ 1/(N+1) ≈ K/N</text>
+
+      <!-- takeaway -->
+      <rect x="120" y="160" width="520" height="28" rx="6" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="380" y="178" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#333">Same goal (add 1 node) — 4× less data moved. That gap is why rebalancing strategy matters.</text>
+    </svg>
+    <p class="caption">Movement is proportional to capacity changed, not dataset size — the whole point of rebalancing</p>
+  </div>
+</section>
+
+<!-- S8: MENTAL MODELS -->
+<section id="s8">
+  <h2 class="section-title"><span class="num">§8</span> 🗺️ Mental Models</h2>
+
+  <h3>Model 1: Assigned Seating vs. Re-seating Everyone (Fixed Partitions)</h3>
+  <p>Imagine a wedding with 1,000 named place-cards (partitions) distributed across 10 tables (nodes), 100 per table. Each guest (key) has a fixed place-card that never changes. To add an 11th table, you don't reprint every card — you just <em>move ~90 place-cards</em> from existing tables to the new one until each table has ~91. Guests never learn a new card; only the card→table assignment shifts. Contrast <code>hash mod N</code> seating, where adding a table means recomputing every guest's table from scratch — everyone gets up and moves. <em>Where it breaks down:</em> if partitions are wildly uneven in size, a "place-card" representing a huge chunk of data can't be moved as cheaply as the model implies.</p>
+
+  <h3>Model 2: Filling a Moving Truck While the Store Is Open (Live Migration)</h3>
+  <p>Rebalancing a live partition is like relocating a store's inventory while customers keep shopping. You can't lock the doors. So you (1) take an inventory snapshot, (2) truck the bulk over at a controlled pace so you don't block the shared loading dock (throttling), (3) keep a running list of everything sold or restocked since the snapshot and reconcile it (catch-up), then (4) at the quietest moment, flip the "open" sign from old store to new (cutover). Customers shop at the old store until the instant of the flip. <em>Where it breaks down:</em> if writes come faster than you can catch up, the delta never shrinks and you can't cut over — a real failure mode under extreme write load.</p>
+
+  <h3>Model 3: The Thermostat That Can Start a Fire (Automatic Rebalancing)</h3>
+  <p>Automatic rebalancing is a thermostat wired to a very powerful furnace. Normally great — it senses imbalance and corrects it. But if the <em>sensor</em> is flaky (a transient partition makes a healthy node look dead), the thermostat blasts the furnace (mass movement), the extra heat trips <em>other</em> sensors (added load makes more nodes look unresponsive), and now you have a runaway loop — a rebalancing storm. The lesson: put a governor on the furnace (rate-limit moves) and a human hand near the thermostat for the big swings (gate the trigger). <em>Where it breaks down:</em> as an argument against automation entirely — you <em>do</em> want automation for the mechanics and small, confident corrections; the danger is automating the <em>decision to move massive amounts of data</em> on possibly-wrong signals.</p>
+</section>
+
+<!-- S9: HOW IT WORKS -->
+<section id="s9">
+  <h2 class="section-title"><span class="num">§9</span> ⚙️ How It Works — Mechanics</h2>
+
+  <h3>Strategy A — Fixed Partition Count (the default)</h3>
+  <p>At cluster creation, choose <code>P</code> partitions with <code>P ≫ N</code> (e.g., <code>P = 1024</code>, <code>N = 10</code>); <code>P</code> is fixed for the cluster's life. Key placement is <code>partition = hash(key) mod P</code>, then <code>node = owner(partition)</code> — the first step never changes, only the second is mutable. <strong>Add a node:</strong> it claims ~<code>P/(N+1)</code> partitions, a few from each existing node, each migrated live; movement ≈ <code>1/(N+1)</code> of data. <strong>Remove a node:</strong> its <code>P/N</code> partitions reassign across survivors. Because you always move <em>whole partitions</em>, movement is a clean integer count and routing stays stable.</p>
+
+  <h3>Strategy B — Dynamic Partitioning (split/merge)</h3>
+  <p>Start with few partitions (ideally <em>pre-split</em> to avoid a single hot start partition). A partition <strong>splits</strong> when it exceeds the size threshold (HBase ~10 GB region; MongoDB chunk bound), splitting at a midpoint key, and one half may migrate to balance. Adjacent shrunken partitions <strong>merge</strong> to avoid sprawl. Count tracks data volume — self-tuning, at the cost of split coordination, metadata churn, and split-storm risk under bursty ingest.</p>
+
+  <!-- Live migration flow diagram -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">🚚 Live Partition Migration — Snapshot → Stream → Catch-up → Cutover</div>
+    <svg viewBox="0 0 760 300" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:760px;display:block;margin:0 auto;">
+      <rect width="760" height="300" fill="#fafafa" rx="8"/>
+
+      <!-- Source / Dest lanes -->
+      <text x="60" y="40" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#3b5bdb">SOURCE node (current owner)</text>
+      <text x="60" y="185" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#0ca678">DEST node (new owner)</text>
+      <line x1="30" y1="150" x2="730" y2="150" stroke="#e5e3de" stroke-width="1" stroke-dasharray="4,3"/>
+
+      <!-- Step 1 Snapshot -->
+      <rect x="40" y="52" width="120" height="52" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="100" y="74" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#1e40af">① Snapshot</text>
+      <text x="100" y="90" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#1e40af">point-in-time image</text>
+
+      <!-- Step 2 Stream (diagonal to dest) -->
+      <line x1="160" y1="90" x2="240" y2="196" stroke="#e67700" stroke-width="2" marker-end="url(#lm-arr-o)"/>
+      <text x="150" y="140" font-family="Arial,sans-serif" font-size="10" font-weight="bold" fill="#e67700">② Stream (THROTTLED)</text>
+      <rect x="215" y="198" width="130" height="52" rx="8" fill="#c3fae8" stroke="#0ca678" stroke-width="1.5"/>
+      <text x="280" y="220" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#064e3b">bulk data lands</text>
+      <text x="280" y="236" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#064e3b">(the slow part)</text>
+
+      <!-- writes still hitting source -->
+      <rect x="200" y="52" width="150" height="52" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+      <text x="275" y="72" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" font-weight="bold" fill="#92400e">live writes continue</text>
+      <text x="275" y="87" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#92400e">→ logged as a delta</text>
+      <text x="275" y="99" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" fill="#92400e">reads still served here</text>
+
+      <!-- Step 3 Catch-up -->
+      <line x1="350" y1="224" x2="430" y2="224" stroke="#0ca678" stroke-width="1.5" marker-end="url(#lm-arr-g)"/>
+      <rect x="432" y="198" width="140" height="52" rx="8" fill="#c3fae8" stroke="#0ca678" stroke-width="1.5"/>
+      <text x="502" y="218" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#064e3b">③ Catch-up delta</text>
+      <text x="502" y="234" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#064e3b">replay log → delta ≈ 0</text>
+
+      <!-- Step 4 Cutover -->
+      <rect x="432" y="52" width="140" height="52" rx="8" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.5"/>
+      <text x="502" y="72" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#4c1d95">④ Cutover</text>
+      <text x="502" y="87" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#4c1d95">freeze · apply final delta</text>
+      <text x="502" y="99" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" fill="#4c1d95">flip ownership atomically</text>
+      <line x1="502" y1="198" x2="502" y2="106" stroke="#7c3aed" stroke-width="1.5" marker-end="url(#lm-arr-p)"/>
+
+      <!-- Step 5 Reroute -->
+      <rect x="600" y="122" width="130" height="56" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+      <text x="665" y="144" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#065f46">⑤ Reroute</text>
+      <text x="665" y="160" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#065f46">router → new owner</text>
+      <text x="665" y="173" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" fill="#065f46">old owner drops data</text>
+      <line x1="572" y1="78" x2="600" y2="135" stroke="#16a34a" stroke-width="1.5" marker-end="url(#lm-arr-g)"/>
+      <line x1="572" y1="224" x2="600" y2="165" stroke="#16a34a" stroke-width="1.5" marker-end="url(#lm-arr-g)"/>
+
+      <!-- cutover callout -->
+      <rect x="40" y="262" width="690" height="28" rx="6" fill="#fff3cd" stroke="#d97706" stroke-width="1.5"/>
+      <text x="385" y="280" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#92400e">⚠️ Cutover (step 4) is the ONLY stop-the-world moment — kept sub-second because only the tiny final delta is serialized</text>
+
+      <defs>
+        <marker id="lm-arr-o" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L0,8 L8,4 z" fill="#e67700"/></marker>
+        <marker id="lm-arr-g" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L0,8 L8,4 z" fill="#16a34a"/></marker>
+        <marker id="lm-arr-p" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L0,8 L8,4 z" fill="#7c3aed"/></marker>
+      </defs>
+    </svg>
+    <p class="caption">Reads/writes stay on the source until the atomic cutover; the bulk stream is throttled, the freeze is sub-second</p>
+  </div>
+
+  <h3>Request Routing During Transition</h3>
+  <p>Clients/router learn the mapping from a coordination service (ZooKeeper/etcd), gossip (Dynamo/Cassandra), or a routing tier. If a request arrives at a node that no longer owns the partition, it's <strong>forwarded</strong> to the current owner or answered with a redirect/retry — so a stale router view degrades to an extra hop, not an error.</p>
+
+  <h3>Detecting That Rebalancing Is Needed</h3>
+  <p>Track per-partition/per-node <strong>storage size</strong>, <strong>request rate (QPS)</strong>, and <strong>tail latency (p99)</strong>. An imbalance (one shard 2–3× the median size or QPS) or a membership change triggers a rebalance decision — automatically with guardrails, or surfaced to an operator.</p>
+
+  <div class="callout callout-warn">
+    ⚠️ <strong>Rebalancing storm:</strong> automatic rebalancing + failure detection can amplify a transient blip into a cascade — a node briefly looks dead → mass movement starts → the extra load makes more nodes look dead → storm. Rate-limit concurrent moves and gate the <em>trigger</em> (thresholds / human confirmation for big moves).
+  </div>
+
+  <h3>Formulas / Thresholds Worth Memorizing</h3>
+  <p>Movement on membership change (fixed/consistent-hash): ≈ <code>K/N</code> keys ≈ <code>1/N</code> of data. Modulo: ≈ <code>N/(N+1)</code> of all keys. Rebalance wall-clock ≈ <code>data_to_move ÷ throttled_transfer_rate</code> (e.g., <code>500 GB ÷ 100 MB/s ≈ 83 min</code>). Choose <code>P</code> for your <em>maximum future</em> <code>N</code>: at least ≥ max node count, large enough that <code>P/N</code> gives fine-grained balance without excessive per-partition overhead.</p>
+</section>
+
+<!-- S10: REAL-WORLD EXAMPLES -->
+<section id="s10">
+  <h2 class="section-title"><span class="num">§10</span> 🏭 Real-World System Examples</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>System</th><th>How Rebalancing Applies</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Riak</strong></td>
+          <td>Fixed ring of partitions (vnodes), count set at creation (default 64/128/256, power of two); on node add/remove, whole vnodes are handed off between physical nodes</td>
+          <td>Textbook fixed-partition rebalancing — the ring size never changes, only vnode→node placement</td>
+        </tr>
+        <tr>
+          <td><strong>Elasticsearch</strong></td>
+          <td>Shard count is <strong>fixed at index creation</strong> and can't change without reindexing; the cluster rebalances by relocating whole shards between nodes to even out disk and load</td>
+          <td>Classic "choose P up front, can't change it" trade-off — over-sharding to allow growth is itself an anti-pattern</td>
+        </tr>
+        <tr>
+          <td><strong>Apache HBase</strong></td>
+          <td><strong>Dynamic</strong> partitioning: regions auto-split at a size threshold (~10 GB) and move between RegionServers; pre-splitting is standard to avoid a single hot region at table creation</td>
+          <td>The canonical split/merge example; "region hotspotting" on monotonic keys is the classic failure mode</td>
+        </tr>
+        <tr>
+          <td><strong>MongoDB (sharded)</strong></td>
+          <td><strong>Dynamic</strong> chunk-based partitioning; the balancer migrates chunks between shards to equalize count; chunks split when they grow; pre-splitting / zone sharding to bootstrap</td>
+          <td>Balancer runs in the background, throttled; migrations are online with a catch-up + cutover protocol</td>
+        </tr>
+        <tr>
+          <td><strong>Amazon Dynamo / Cassandra</strong></td>
+          <td>Dynamo's "Strategy 3" moved to <strong>fixed equal-sized partitions</strong> for predictable movement; Cassandra uses vnodes (tokens) so adding a node streams a fair share of ranges from many peers</td>
+          <td>The Dynamo paper explicitly documents evolving <em>away</em> from naive random tokens toward fixed partitions</td>
+        </tr>
+        <tr>
+          <td><strong>Apache Kafka</strong></td>
+          <td>Partition count per topic is <strong>fixed</strong> (increasing is allowed but breaks key→partition ordering); consumer-group rebalancing reassigns whole partitions to consumers on membership change</td>
+          <td>Two rebalances: partition→broker (data) and partition→consumer (processing); both reassign whole partitions</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- S11: TRADE-OFFS -->
+<section id="s11">
+  <h2 class="section-title"><span class="num">§11</span> ⚖️ Trade-offs</h2>
+
+  <!-- Fixed vs Dynamic comparison diagram -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">⚖️ Fixed Partition Count vs. Dynamic Split/Merge</div>
+    <svg viewBox="0 0 720 210" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:720px;display:block;margin:0 auto;">
+      <rect width="720" height="210" fill="#fafafa" rx="8"/>
+      <text x="180" y="28" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="bold" fill="#2563eb">Fixed Partition Count</text>
+      <text x="540" y="28" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="bold" fill="#e67700">Dynamic Split/Merge</text>
+      <line x1="360" y1="8" x2="360" y2="205" stroke="#e5e3de" stroke-width="1.5" stroke-dasharray="5,3"/>
+
+      <text x="20" y="60" font-family="Arial,sans-serif" font-size="11" fill="#666" font-weight="bold">Upfront sizing</text>
+      <text x="20" y="90" font-family="Arial,sans-serif" font-size="11" fill="#666" font-weight="bold">Adapts to volume</text>
+      <text x="20" y="120" font-family="Arial,sans-serif" font-size="11" fill="#666" font-weight="bold">Ops complexity</text>
+      <text x="20" y="150" font-family="Arial,sans-serif" font-size="11" fill="#666" font-weight="bold">Movement</text>
+      <text x="20" y="180" font-family="Arial,sans-serif" font-size="11" fill="#666" font-weight="bold">Bootstrap risk</text>
+
+      <!-- Fixed values -->
+      <rect x="140" y="47" width="200" height="18" rx="3" fill="#fee2e2"/><text x="240" y="60" text-anchor="middle" font-size="11" fill="#7f1d1d">Must pick P up front (hard to change)</text>
+      <rect x="140" y="77" width="200" height="18" rx="3" fill="#fee2e2"/><text x="240" y="90" text-anchor="middle" font-size="11" fill="#7f1d1d">No — count is static</text>
+      <rect x="140" y="107" width="200" height="18" rx="3" fill="#dcfce7"/><text x="240" y="120" text-anchor="middle" font-size="11" fill="#065f46">Low — reassign whole partitions</text>
+      <rect x="140" y="137" width="200" height="18" rx="3" fill="#dcfce7"/><text x="240" y="150" text-anchor="middle" font-size="11" fill="#065f46">Predictable, integer count</text>
+      <rect x="140" y="167" width="200" height="18" rx="3" fill="#dcfce7"/><text x="240" y="180" text-anchor="middle" font-size="11" fill="#065f46">None — partitions exist from day 1</text>
+
+      <!-- Dynamic values -->
+      <rect x="385" y="47" width="300" height="18" rx="3" fill="#dcfce7"/><text x="535" y="60" text-anchor="middle" font-size="11" fill="#065f46">None — count self-tunes</text>
+      <rect x="385" y="77" width="300" height="18" rx="3" fill="#dcfce7"/><text x="535" y="90" text-anchor="middle" font-size="11" fill="#065f46">Yes — splits/merges with data</text>
+      <rect x="385" y="107" width="300" height="18" rx="3" fill="#fee2e2"/><text x="535" y="120" text-anchor="middle" font-size="11" fill="#7f1d1d">High — split coordination, metadata churn</text>
+      <rect x="385" y="137" width="300" height="18" rx="3" fill="#ffd8a8"/><text x="535" y="150" text-anchor="middle" font-size="11" fill="#7c2d12">Split storms under bursty writes</text>
+      <rect x="385" y="167" width="300" height="18" rx="3" fill="#fee2e2"/><text x="535" y="180" text-anchor="middle" font-size="11" fill="#7f1d1d">1 hot partition unless pre-split</text>
+    </svg>
+    <p class="caption">Green = advantage, orange = caution, red = cost/limitation</p>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>✅ Benefit</th><th>❌ Cost / Limitation</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="benefit">Fixed partition count → movement is minimal, predictable (whole partitions), routing stays simple</td>
+          <td class="cost">P is chosen once and painful to change; too few limits future scale-out, too many adds per-partition overhead (metadata, open files, fan-out)</td>
+        </tr>
+        <tr>
+          <td class="benefit">Dynamic split/merge auto-adapts partition count to data volume — no upfront sizing</td>
+          <td class="cost">Added complexity, split-storm risk under bursty writes, and a cold-start hot partition unless you pre-split</td>
+        </tr>
+        <tr>
+          <td class="benefit">Live migration (snapshot→stream→catch-up→cutover) enables zero-downtime rebalancing</td>
+          <td class="cost">Complex to implement correctly; under extreme write rates the catch-up delta may never shrink enough to cut over</td>
+        </tr>
+        <tr>
+          <td class="benefit">Throttling protects foreground p99 during rebalancing</td>
+          <td class="cost">Slower time-to-rebalance — you deliberately transfer below line rate, so recovery/scale-out takes longer</td>
+        </tr>
+        <tr>
+          <td class="benefit">Automatic rebalancing recovers fast with no human in the loop</td>
+          <td class="cost">Can misread a transient blip as failure and trigger a rebalancing storm; safer designs gate the trigger manually</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- S12: INTERVIEW APPLICATION -->
+<section id="s12">
+  <h2 class="section-title"><span class="num">§12</span> 🎯 Interview Application</h2>
+
+  <h3>Trigger Phrases</h3>
+  <ul style="margin-left:20px;margin-bottom:16px;font-size:14.5px;line-height:1.8;">
+    <li>"You add a node to scale out — walk me through how the data gets redistributed"</li>
+    <li>"One shard is twice the size of the others / getting hammered — how do you rebalance without downtime?"</li>
+    <li>"How do you move a partition to a new node without losing in-flight writes?"</li>
+    <li>"Should rebalancing be automatic? What could go wrong during a node failure?"</li>
+  </ul>
+
+  <h3>What You Say / Do</h3>
+  <p>Bring this up in the data-partitioning deep-dive or when discussing scaling/failure handling. Frame it: "I'd never rebalance by re-hashing mod N — that moves almost all the data. I'd create a large fixed number of partitions up front, say a few thousand, and assign many to each node. To add a node, I migrate whole partitions to it: snapshot the partition, stream it in the background under a bandwidth cap, catch up the write delta from the commit log, then do a sub-second atomic ownership cutover and reroute. That moves only ~1/N of the data and keeps foreground latency protected. If key density were wildly uneven — time-series, say — I'd consider dynamic split/merge instead, with pre-splitting to avoid a hot start partition. I'd gate the <em>decision</em> to rebalance behind guardrails so a transient failure doesn't kick off a storm, but automate the mechanics."</p>
+
+  <div class="tradeoff-box">
+    💬 <strong>Trade-off statement (memorize this):</strong><br><br>
+    "Fixed-partition rebalancing gives me minimal, predictable data movement and simple routing — only whole partitions move, about 1/N of the data — at the cost of choosing the partition count up front, which I can't easily change later. Dynamic split/merge would remove that upfront sizing but adds complexity and split-storm risk. And whichever I pick, I throttle the movement so I don't brown out live traffic while I'm scaling — trading a slower rebalance for protected p99."
+  </div>
+</section>
+
+<!-- S13: MISCONCEPTIONS -->
+<section id="s13">
+  <h2 class="section-title"><span class="num">§13</span> ⚠️ Common Misconceptions &amp; Gotchas</h2>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> To rebalance after adding a node, you just re-run <code>hash(key) % N</code> with the new N.</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Changing N changes the modulus for nearly every key, so ~N/(N+1) of <em>all</em> data moves — a mass migration and (for caches) a total miss storm. Real systems keep the key→partition mapping independent of N (fixed P) and only reassign partition→node ownership.</div></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> Fixed partitioning splits partitions when you add a node.</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Fixed partitioning <em>never</em> splits or merges on membership change — the count P is constant. Adding a node just <em>reassigns whole existing partitions</em> to it. Splitting/merging is the <em>dynamic</em> strategy, a different approach with different trade-offs.</div></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> Rebalancing is basically free once you use consistent hashing.</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Consistent hashing minimizes <em>how many</em> keys move, but you still physically stream that 1/N of the data — potentially terabytes — across the network while serving live traffic. That's why throttling, catch-up, and careful cutover exist. "Minimal movement" ≠ "no cost."</div></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> Automatic rebalancing is strictly better because it recovers faster.</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Fully automatic rebalancing can amplify a transient blip into a cascade: a node briefly looks dead → mass movement starts → the extra load makes more nodes look dead → rebalancing storm. Production systems commonly automate the mechanics but gate the <em>trigger</em> (rate limits, thresholds, human confirmation for big moves).</div></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> More partitions are always better because they balance more finely.</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Each partition carries overhead — metadata, open file handles, a slot in every routing table, and request fan-out on scatter-gather queries. Too many (over-sharding) bloats memory and slows queries. Size P for your <em>maximum future</em> cluster, not arbitrarily high.</div></div>
+  </div>
+</section>
+
+<!-- S14: RELATIONSHIPS -->
+<section id="s14">
+  <h2 class="section-title"><span class="num">§14</span> 🔗 Relationships to Other Concepts</h2>
+  <div class="connections">
+    <div class="conn-card">
+      <div class="conn-icon">🧱</div>
+      <div>
+        <div class="conn-label">Builds On</div>
+        <strong>7.4 Consistent Hashing</strong> — provides the <em>placement rule</em> that makes movement minimal (K/N); rebalancing is the operational execution of that movement. Also builds on <strong>7.2 Hash Partitioning</strong> (the <code>hash mod P</code> that assigns keys to partitions) and <strong>7.1 Horizontal Partitioning</strong> (rebalancing only exists because data is spread horizontally across nodes).
+      </div>
+    </div>
+    <div class="conn-card">
+      <div class="conn-icon">🔓</div>
+      <div>
+        <div class="conn-label">Enables</div>
+        <strong>7.6 Hot Partitions</strong> — one mitigation for a hot shard is to split and rebalance it, so this subtopic's mechanics are a prerequisite. Also enables elastic autoscaling of stateful tiers in general (only viable if adding/removing capacity is cheap and safe), and Dynamo-style replication that must re-establish replica placement after a change.
+      </div>
+    </div>
+    <div class="conn-card">
+      <div class="conn-icon">⚡</div>
+      <div>
+        <div class="conn-label">Tension With</div>
+        <strong>Foreground latency / availability</strong> — rebalancing competes with live traffic for network and disk, in direct tension with p99 SLOs (hence throttling), and with strong consistency during the cutover window. Also tension with <strong>7.6 Hot Partitions</strong>: a hot <em>key</em> can't be fixed by rebalancing at all (it maps to one partition) — only a hot <em>partition</em> can.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- S15: QUIZ -->
+<section id="s15">
+  <h2 class="section-title"><span class="num">§15</span> 🧪 Self-Check Quiz</h2>
+  <div class="callout callout-quote">Can you answer these without looking? If not, you haven't internalized it yet. Click to reveal the hint.</div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">1</div>
+      <div class="qtext">What is rebalancing, and why is re-running <code>hash(key) % N</code> with the new node count the wrong way to do it?</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 Rebalancing = controlled redistribution of partitions/data across nodes on a membership or distribution change, moving the minimum necessary, incrementally and safely. hash % N ties the destination to N, so changing N remaps ~N/(N+1) of ALL keys → mass migration + miss storm. Revisit §5 and §7.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">2</div>
+      <div class="qtext">You have a 10-node cluster and add an 11th. Using fixed partition count with 1,000 partitions, roughly how many partitions move, from where to where, and does any key change which partition it belongs to?</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 The new node claims ~P/(N+1) ≈ 1000/11 ≈ 91 partitions, taken a few from each existing node (spreading the donor load). No key changes partition — partition = hash(key) mod P is unchanged; only the partition→node owner changes for the ~91 moved partitions. Revisit §6 and §9.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">3</div>
+      <div class="qtext">Walk through how a single partition migrates to a new node without losing writes that arrive during the move. What is the only "stop-the-world" moment and why is it short?</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 Snapshot → stream bulk (throttled) → catch up the write delta from the change log → atomic ownership cutover → reroute. Writes hit the source and are logged for catch-up; reads stay on the source until cutover. The only freeze is the cutover, kept sub-second because only the tiny final delta is serialized. Revisit §9 and §8 Model 2.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">4</div>
+      <div class="qtext">Why do production systems throttle rebalancing, and what's the trade-off you're making when you do?</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 Rebalancing shares NIC/disk/CPU with live traffic; unthrottled streaming saturates the network and spikes foreground p99 — you make the system slower while making it bigger. Throttling caps bandwidth/concurrent moves to protect p99, trading a longer time-to-rebalance (data ÷ throttled rate) for stable latency. Revisit §11 and §7 numbers.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">5</div>
+      <div class="qtext">Give a concrete scenario where fully automatic rebalancing turns a single transient node failure into a cluster-wide outage. How would you prevent it?</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 A brief network partition makes node X look dead → the system auto-starts mass data movement to re-replicate X's partitions → that streaming load pushes other nodes' latency up → failure detector marks THEM dead → more movement → rebalancing storm/cascade. Prevent: rate-limit concurrent moves, add a grace period before declaring a node dead, and gate the trigger (thresholds / human confirmation for large moves). Revisit §13 and §8 Model 3.</div>
+  </div>
+</section>
+
+<!-- S16: FURTHER READING -->
+<section id="s16">
+  <h2 class="section-title"><span class="num">§16</span> 📚 Further Reading</h2>
+  <ul class="reading-list">
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>DDIA Chapter 6 — "Rebalancing Partitions"</strong> (Kleppmann) — the definitive comparison of fixed count, dynamic, and proportional strategies, plus "operations: automatic or manual rebalancing"</div></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>Amazon Dynamo paper (SOSP 2007), §6.2</strong> — <a href="https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf" target="_blank">allthingsdistributed.com</a> — the three partitioning strategies and why they landed on fixed equal-sized partitions</div></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>Apache HBase Reference — Region Splitting &amp; Pre-splitting</strong> — <a href="https://hbase.apache.org/book.html#regions.arch" target="_blank">hbase.apache.org</a> — production dynamic partitioning and avoiding hotspotting</div></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>MongoDB Docs — Sharded Cluster Balancer &amp; Chunk Migration</strong> — <a href="https://www.mongodb.com/docs/manual/core/sharding-balancer-administration/" target="_blank">mongodb.com</a> — online chunk migration protocol and throttling</div></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>ByteByteGo / DDIA notes — "Rebalancing partitions"</strong> — accessible visual walkthrough of moving partitions between nodes</div></li>
+  </ul>
+</section>
+
+<!-- S17: MY NOTES -->
+<section id="s17">
+  <h2 class="section-title"><span class="num">§17</span> ✍️ My Notes</h2>
+  <div class="callout callout-quote">Personal observations, things that confused me, analogies that helped. This section is yours.</div>
+  <textarea class="notes-area" placeholder="Add your personal notes here — analogies that clicked, interview stories, things that confused you..."></textarea>
+</section>
+
+</article>
+</main>
+
+<script>
+// TOC active state
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('#toc nav a');
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(a => a.classList.remove('active'));
+      const a = document.querySelector(`#toc nav a[href="#${e.target.id}"]`);
+      if (a) a.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+sections.forEach(s => obs.observe(s));
+
+// Checklist toggle
+function toggle(cb) { cb.closest('li').classList.toggle('checked'); }
+
+// Phase card toggle
+function togglePhase(header) { header.closest('.phase-card').classList.toggle('open'); }
+
+// Quiz toggle
+function toggleQuiz(q) {
+  const item = q.closest('.quiz-item');
+  item.classList.toggle('open');
+  q.querySelector('.quiz-toggle').textContent = item.classList.contains('open') ? '▲ Hide' : '▼ Hint';
+}
+
+// Reading list toggle
+function toggleReading(cb) { cb.closest('li').classList.toggle('checked'); }
+
+// Notes auto-save (in-memory / localStorage best-effort)
+const notesArea = document.querySelector('.notes-area');
+const NOTES_KEY = 'notes_7_5';
+try { if (localStorage.getItem(NOTES_KEY)) notesArea.value = localStorage.getItem(NOTES_KEY); } catch(e) {}
+notesArea.addEventListener('input', () => {
+  try { localStorage.setItem(NOTES_KEY, notesArea.value); } catch(e) {}
+});
+</script>
+</body>
+</html>
