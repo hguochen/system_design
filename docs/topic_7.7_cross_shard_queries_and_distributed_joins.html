@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.7 Cross-Shard Queries and Distributed Joins</title>
+<style>
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface-alt: #f3f2ef;
+    --border: #e5e3de; --text: #1a1917; --text-muted: #6b6861;
+    --accent: #2563eb; --accent-light: #dbeafe;
+    --green: #16a34a; --green-light: #dcfce7;
+    --red: #dc2626; --red-light: #fee2e2;
+    --yellow: #d97706; --yellow-light: #fef3c7;
+    --purple: #7c3aed; --purple-light: #ede9fe;
+    --orange: #ea580c; --orange-light: #ffedd5;
+    --teal: #0d9488; --teal-light: #ccfbf1;
+    --code-bg: #1e1e2e; --code-text: #cdd6f4;
+    --sidebar-w: 240px; --content-max: 820px;
+    font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; }
+  #toc { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0 48px; z-index: 100; }
+  #toc-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  #toc-header .phase-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-bottom: 6px; }
+  #toc-header h2 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  #toc nav a { display: block; padding: 5px 16px 5px 20px; font-size: 12.5px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+  main { margin-left: var(--sidebar-w); padding: 48px 48px 96px; max-width: calc(var(--sidebar-w) + var(--content-max) + 96px); width: 100%; }
+  article { max-width: var(--content-max); }
+  .doc-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 2px solid var(--border); }
+  .doc-header .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+  .tag-phase { background: var(--accent-light); color: var(--accent); }
+  .tag-topic { background: var(--purple-light); color: var(--purple); }
+  .tag-date  { background: var(--surface-alt);  color: var(--text-muted); }
+  .doc-header h1 { font-size: 30px; font-weight: 800; line-height: 1.25; letter-spacing: -.02em; color: var(--text); }
+  section { margin-bottom: 52px; scroll-margin-top: 32px; }
+  h2.section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -.01em; }
+  h2.section-title .num { font-size: 11px; font-weight: 800; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; letter-spacing: .04em; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 24px 0 10px; }
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+  code { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-family: "SF Mono","Fira Code",Menlo,monospace; font-size: 12.5px; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 14px; border-left: 3px solid; }
+  .callout-goal  { background: var(--accent-light); border-color: var(--accent); color: #1e40af; }
+  .callout-tip   { background: var(--yellow-light); border-color: var(--yellow); color: #92400e; }
+  .callout-warn  { background: var(--red-light); border-color: var(--red); color: #7f1d1d; }
+  .callout-quote { background: var(--surface-alt); border-color: var(--border); color: var(--text-muted); font-style: italic; }
+  .callout-teal  { background: var(--teal-light); border-color: var(--teal); color: #134e4a; }
+  .cheatsheet { background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 24px 28px; font-family: "SF Mono","Fira Code","Cascadia Code",Menlo,monospace; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-x: auto; margin-top: 16px; }
+  .cheatsheet .label { color: #cba6f7; font-weight: 700; letter-spacing: .08em; display: block; margin-top: 18px; margin-bottom: 4px; border-bottom: 1px solid #313244; padding-bottom: 3px; }
+  .cheatsheet .label:first-child { margin-top: 0; }
+  .diagram-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 16px 14px; margin: 20px 0 28px; overflow-x: auto; }
+  .diagram-wrap .diagram-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); margin-bottom: 12px; }
+  .diagram-wrap p.caption { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 10px; margin-bottom: 0; font-style: italic; }
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; font-size: 14.5px; line-height: 1.55; }
+  .checklist li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 2px; background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .checklist li.checked .cb { background: var(--green); border-color: var(--green); }
+  .checklist li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .checklist li.checked .text { color: var(--text-muted); text-decoration: line-through; }
+  .phase-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
+  .phase-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; cursor: pointer; user-select: none; background: var(--surface-alt); }
+  .phase-header:hover { background: var(--border); }
+  .phase-label { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+  .phase-badge { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 2px 8px; border-radius: 20px; }
+  .ph1 { background: #dbeafe; color: #1d4ed8; } .ph2 { background: #fce7f3; color: #9d174d; }
+  .ph3 { background: #d1fae5; color: #065f46; } .ph4 { background: #fef3c7; color: #92400e; }
+  .phase-chevron { font-size: 12px; color: var(--text-muted); transition: transform .2s; }
+  .phase-card.open .phase-chevron { transform: rotate(180deg); }
+  .phase-body { display: none; padding: 16px 20px 20px; }
+  .phase-card.open .phase-body { display: block; }
+  .phase-goal { font-size: 12.5px; color: var(--text-muted); font-style: italic; margin-bottom: 12px; }
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: var(--surface-alt); padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.5; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+  .misconception { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .misconception .wrong { background: var(--red-light); padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; }
+  .misconception .right { padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; color: #065f46; background: var(--green-light); }
+  .misconception .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .quiz-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .quiz-q { padding: 14px 18px; font-size: 14.5px; font-weight: 600; cursor: pointer; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .quiz-q:hover { background: var(--surface-alt); }
+  .quiz-num { flex-shrink: 0; width: 24px; height: 24px; background: var(--accent); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; margin-top: 1px; }
+  .quiz-q .qtext { flex: 1; }
+  .quiz-toggle { font-size: 11px; color: var(--text-muted); flex-shrink: 0; margin-top: 3px; }
+  .quiz-hint { display: none; padding: 10px 18px 14px; font-size: 13px; color: #92400e; background: var(--yellow-light); border-top: 1px solid var(--border); }
+  .quiz-item.open .quiz-hint { display: block; }
+  .reading-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .reading-list li { display: flex; align-items: flex-start; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; font-size: 14px; }
+  .reading-list li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 1px; cursor: pointer; background: var(--surface); display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .reading-list li.checked .cb { background: var(--green); border-color: var(--green); }
+  .reading-list li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .reading-list li.checked .rtext { color: var(--text-muted); text-decoration: line-through; }
+  .notes-area { width: 100%; min-height: 160px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: inherit; font-size: 14px; color: var(--text); resize: vertical; line-height: 1.6; }
+  .notes-area:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .focus-list { list-style: none; display: flex; flex-direction: column; gap: 14px; }
+  .focus-list li { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14.5px; line-height: 1.6; }
+  .focus-list li strong { color: var(--accent); display: block; margin-bottom: 4px; }
+  .connections { display: flex; flex-direction: column; gap: 12px; }
+  .conn-card { display: flex; align-items: flex-start; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14px; }
+  .conn-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .conn-label { font-weight: 700; margin-bottom: 3px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .tradeoff-box { background: var(--surface-alt); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 14px 18px; font-size: 14px; font-style: italic; color: var(--text); margin-top: 14px; }
+  .tier-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 16px 0; }
+  .tier-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; font-size: 14px; }
+  .tier-card h4 { font-size: 13px; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .tier-card .stat { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 2px 7px; border-radius: 4px; }
+  .stat-blue { background: var(--accent-light); color: var(--accent); }
+  .stat-orange { background: var(--orange-light); color: var(--orange); }
+  .stat-green { background: var(--green-light); color: var(--green); }
+  .stat-red { background: var(--red-light); color: var(--red); }
+  @media (max-width: 900px) { #toc { display: none; } main { margin-left: 0; padding: 24px 20px 60px; } .tier-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<aside id="toc">
+  <div id="toc-header">
+    <span class="phase-tag">Phase B · Topic 7</span>
+    <h2>7.7 Cross-Shard Queries &amp; Distributed Joins</h2>
+  </div>
+  <nav>
+    <a href="#s0">🗺️ Overview</a>
+    <a href="#s1">🎯 Goal</a>
+    <a href="#s2">✅ Mastery Criteria</a>
+    <a href="#s3">🗓️ Study Phases</a>
+    <a href="#s4">📋 Cheatsheet</a>
+    <a href="#s5">🧠 Core Definition</a>
+    <a href="#s6">📦 Core Concepts</a>
+    <a href="#s7">🔍 First Principles</a>
+    <a href="#s8">🗺️ Mental Models</a>
+    <a href="#s9">⚙️ How It Works</a>
+    <a href="#s10">🏭 Real-World Examples</a>
+    <a href="#s11">⚖️ Trade-offs</a>
+    <a href="#s12">🎯 Interview Application</a>
+    <a href="#s13">⚠️ Misconceptions</a>
+    <a href="#s14">🔗 Relationships</a>
+    <a href="#s15">🧪 Self-Check Quiz</a>
+    <a href="#s16">📚 Further Reading</a>
+    <a href="#s17">✍️ My Notes</a>
+  </nav>
+</aside>
+
+<main>
+<article>
+
+<!-- HEADER -->
+<div class="doc-header">
+  <div class="meta">
+    <span class="tag tag-phase">⚡ Phase B — Scalability</span>
+    <span class="tag tag-topic">🔀 Topic 7 — Data Partitioning / Sharding</span>
+    <span class="tag tag-date">📅 2026-07-19</span>
+  </div>
+  <h1>7.7 Cross-Shard Queries and Distributed Joins<br><span style="font-weight:400;color:var(--text-muted);font-size:22px;">Scatter-gather, distributed joins, and how to design them away</span></h1>
+</div>
+
+<!-- S0: OVERVIEW -->
+<section id="s0">
+  <h2 class="section-title"><span class="num">§0</span> 🗺️ Topic Overview</h2>
+  <p>Once data is spread across N shards, any query that can't be answered from a single shard becomes a distributed problem. If the query carries the <strong>partition key</strong>, a router sends it to exactly one shard — cheap and fast. If it doesn't (a filter on a non-key column, a join across differently-sharded tables, a global aggregate), the system must <strong>fan out to many or all shards, wait for the slowest, and merge</strong>. That fan-out is where sharded systems get slow, expensive, and operationally painful. This topic is about recognizing single-shard vs cross-shard queries and the small menu of techniques for making the expensive ones acceptable.</p>
+
+  <ul class="focus-list" style="margin-top:18px;">
+    <li><strong>1. Single-shard vs cross-shard is decided by the partition key</strong> — for every important query ask "does it carry the shard key?" Yes → one shard. No → scatter-gather. Your shard-key choice <em>is</em> your query design.</li>
+    <li><strong>2. Scatter-gather &amp; tail-latency amplification</strong> — a query fanned out to N shards completes only when the slowest shard responds. This turns your average latency into your worst-case, and it worsens as N grows.</li>
+    <li><strong>3. The distributed-join toolkit</strong> — three strategies: <em>broadcast/replicated</em> (small table copied everywhere), <em>co-located/co-partitioned</em> (both tables sharded on the join key), <em>shuffle/repartition</em> (move rows to align keys).</li>
+    <li><strong>4. Denormalization &amp; read models</strong> — the most common production answer is to avoid the join: pre-join at write time, duplicate data, or maintain a separately-sharded read model (CQRS). Trade write cost for single-shard reads.</li>
+    <li><strong>5. Aggregations aren't all mergeable</strong> — SUM/COUNT/MIN/MAX merge cleanly; AVG via SUM/COUNT. But COUNT(DISTINCT), median/percentiles, and top-K need approximation (HyperLogLog, t-digest).</li>
+  </ul>
+</section>
+
+<!-- S1: GOAL -->
+<section id="s1">
+  <h2 class="section-title"><span class="num">§1</span> 🎯 Goal of This Subtopic</h2>
+  <div class="callout callout-goal">
+    After studying this, you should be able to classify any query against a sharded dataset as single-shard or cross-shard, explain scatter-gather and why its latency is bound by the slowest shard, choose the right distributed-join strategy (broadcast / co-located / shuffle), and propose denormalization, co-partitioning, global secondary indexes, or a separate read/OLAP store to eliminate a hot-path cross-shard query — stating the trade-off you accept each time.
+  </div>
+</section>
+
+<!-- S2: MASTERY -->
+<section id="s2">
+  <h2 class="section-title"><span class="num">§2</span> ✅ What Mastery Looks Like</h2>
+  <ul class="checklist" id="mastery-list">
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can look at a query and instantly say whether it's single-shard or a scatter-gather, and explain why</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can explain tail-latency amplification: why fanning out to N shards pushes overall latency toward a high percentile of a single shard, worsening with N</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can name and contrast the three distributed-join strategies (broadcast / co-located / shuffle) and pick one for a given schema</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can propose ≥3 ways to serve a non-partition-key query (global secondary index, denormalized copy, separate search/OLAP store) and state each trade-off</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can explain why COUNT(DISTINCT), median, and top-K don't merge like SUM/COUNT, and name an approximation (HLL, t-digest) for each</span></li>
+  </ul>
+  <div class="callout callout-tip" style="margin-top:18px;">💡 <strong>Rule of thumb:</strong> If you can teach it to someone else and field their follow-up questions, you've mastered it.</div>
+</section>
+
+<!-- S3: STUDY PHASES -->
+<section id="s3">
+  <h2 class="section-title"><span class="num">§3</span> 🗓️ Study Phases to Achieve Mastery</h2>
+
+  <div class="phase-card open">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph1">Phase 1</span> Acquire 📖</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Read deeply enough that you could explain the concept without the doc.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text"><strong>DDIA Chapter 6 (Partitioning)</strong> — Kleppmann — "Partitioning and Secondary Indexes" (local vs global/term-partitioned) and "Request Routing"</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text"><strong>Citus — distributed joins &amp; reference tables</strong> — <a href="https://docs.citusdata.com/en/stable/develop/reference_sql.html" target="_blank">docs.citusdata.com</a> — co-located joins, reference tables, repartition joins</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text"><strong>Vitess Query Serving / VTGate</strong> — <a href="https://vitess.io/docs/reference/query-serving/" target="_blank">vitess.io</a> — routing and scatter-gather in a MySQL-sharded system</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Read Sections 4–9 of this doc carefully — don't skim</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Re-read the Cheatsheet (§4) and recite the decision map from memory after</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph2">Phase 2</span> Consolidate ✍️</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Verify you can reproduce knowledge in your own words without looking.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Close the doc — write out the Core Definition from memory, then compare</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Explain First Principles out loud: what breaks the moment you shard, and why a single-node join no longer works</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Reconstruct the scatter-gather flow and the three join strategies from memory</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Restate each Trade-off row in your own words — if you can't explain the cost, you don't own it</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph3">Phase 3</span> Apply 🔧</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Connect to real systems and simulate interview scenarios.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Go through Real-World Examples (§10) — verify each claim and add notes to §17</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Practice Interview Application (§12) out loud — say the trigger phrases and your response as if live</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Work through Misconceptions (§13) — explain WHY each is wrong</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Trace Relationships (§14) — explain each connection without looking</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph4">Phase 4</span> Validate 🧪</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Confirm you actually own it, not just recognize it.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Answer every Self-Check Quiz question (§15) out loud without notes</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Recite the Cheatsheet (§4) from memory — if you can't, re-do Phase 2</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Tick off mastery criteria in §2 — only check a box if you can demonstrate on demand</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Teach this concept to an imaginary interviewer for 2 minutes without hesitation</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- S4: CHEATSHEET -->
+<section id="s4">
+  <h2 class="section-title"><span class="num">§4</span> 📋 Cheatsheet</h2>
+  <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+
+  <!-- Radial Mindmap SVG -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">🧠 Concept Mindmap — keep this in your head</div>
+    <svg viewBox="0 0 820 520" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:820px;display:block;margin:0 auto;">
+      <rect width="820" height="520" fill="#fafafa" rx="8"/>
+      <!-- Connector lines from center -->
+      <line x1="410" y1="260" x2="165" y2="95" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="260" x2="655" y2="95" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="260" x2="95" y2="300" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="260" x2="725" y2="300" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="260" x2="290" y2="445" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="260" x2="530" y2="445" stroke="#aaa" stroke-width="1.5"/>
+      <!-- Central -->
+      <ellipse cx="410" cy="260" rx="108" ry="46" fill="#a5d8ff" stroke="#1971c2" stroke-width="2"/>
+      <text x="410" y="252" text-anchor="middle" font-family="Arial,sans-serif" font-size="14" font-weight="bold" fill="#1a1917">Cross-Shard Queries</text>
+      <text x="410" y="272" text-anchor="middle" font-family="Arial,sans-serif" font-size="14" font-weight="bold" fill="#1a1917">&amp; Distributed Joins</text>
+      <!-- Routing -->
+      <rect x="70" y="60" width="190" height="66" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="165" y="82" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">① Routing</text>
+      <text x="165" y="99" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">Has shard key? → 1 shard</text>
+      <text x="165" y="114" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">No key? → fan-out</text>
+      <!-- Scatter-Gather -->
+      <rect x="560" y="60" width="190" height="66" rx="8" fill="#ffd8a8" stroke="#e67700" stroke-width="1.5"/>
+      <text x="655" y="82" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">② Scatter-Gather</text>
+      <text x="655" y="99" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">Fan to all, wait slowest</text>
+      <text x="655" y="114" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#c92a2a">⚠ tail-latency amplified</text>
+      <!-- Distributed Joins -->
+      <rect x="20" y="266" width="180" height="80" rx="8" fill="#c3fae8" stroke="#0ca678" stroke-width="1.5"/>
+      <text x="110" y="286" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">③ Distributed Joins</text>
+      <text x="110" y="303" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">Broadcast (small tbl)</text>
+      <text x="110" y="318" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">Co-located (same key)</text>
+      <text x="110" y="333" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">Shuffle (repartition)</text>
+      <!-- Avoid It -->
+      <rect x="620" y="266" width="180" height="80" rx="8" fill="#b2f2bb" stroke="#2f9e44" stroke-width="1.5"/>
+      <text x="710" y="286" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">④ Avoid It (best)</text>
+      <text x="710" y="303" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">Denormalize / co-partition</text>
+      <text x="710" y="318" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">Global 2nd index</text>
+      <text x="710" y="333" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">CQRS / search / OLAP</text>
+      <!-- Aggregation -->
+      <rect x="195" y="452" width="200" height="56" rx="8" fill="#ffe3e3" stroke="#c92a2a" stroke-width="1.5"/>
+      <text x="295" y="472" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">⑤ Aggregation</text>
+      <text x="295" y="488" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">SUM/COUNT/MIN/MAX ✓</text>
+      <text x="295" y="502" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">DISTINCT→HLL · p99→t-digest</text>
+      <!-- The One Question -->
+      <rect x="425" y="452" width="200" height="56" rx="8" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.5"/>
+      <text x="525" y="472" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">🔑 The One Question</text>
+      <text x="525" y="488" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">"Does the query carry</text>
+      <text x="525" y="502" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">the partition key?"</text>
+    </svg>
+    <p class="caption">Radial mindmap: five clusters + the one question that decides every case</p>
+  </div>
+
+  <!-- Decision Map -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">🗺️ Cross-Shard Query Decision Map</div>
+    <svg viewBox="0 0 720 720" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:720px;display:block;margin:0 auto;" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+      <rect width="720" height="720" fill="#fafafa" rx="8"/>
+
+      <!-- START -->
+      <rect x="255" y="14" width="210" height="38" rx="19" fill="#1a1917"/>
+      <text x="360" y="37" text-anchor="middle" font-size="12" font-weight="600" fill="#fff">Query hits a sharded table</text>
+      <line x1="360" y1="52" x2="360" y2="74" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+
+      <!-- Q1 -->
+      <rect x="220" y="74" width="280" height="44" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="360" y="93" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">Does it carry the</text>
+      <text x="360" y="109" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">PARTITION KEY?</text>
+      <!-- Yes right -->
+      <line x1="500" y1="96" x2="595" y2="96" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="547" y="88" text-anchor="middle" font-size="10" fill="#6b6861">Yes</text>
+      <rect x="595" y="72" width="112" height="48" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+      <text x="651" y="92" text-anchor="middle" font-size="12" font-weight="700" fill="#065f46">Single-shard ✅</text>
+      <text x="651" y="108" text-anchor="middle" font-size="10" fill="#065f46">Router → 1 shard</text>
+      <!-- No down -->
+      <line x1="360" y1="118" x2="360" y2="140" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="372" y="133" font-size="10" fill="#6b6861">No</text>
+
+      <!-- Q2 -->
+      <rect x="200" y="140" width="320" height="44" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="360" y="159" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">Point/range filter on ONE</text>
+      <text x="360" y="175" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">non-key column, queried often?</text>
+      <!-- Yes right -->
+      <line x1="520" y1="162" x2="588" y2="162" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="554" y="154" text-anchor="middle" font-size="10" fill="#6b6861">Yes</text>
+      <rect x="588" y="138" width="120" height="48" rx="8" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.5"/>
+      <text x="648" y="158" text-anchor="middle" font-size="11" font-weight="700" fill="#5b21b6">Global 2nd index</text>
+      <text x="648" y="174" text-anchor="middle" font-size="9.5" fill="#5b21b6">or denormalized copy</text>
+      <!-- No down -->
+      <line x1="360" y1="184" x2="360" y2="206" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="372" y="199" font-size="10" fill="#6b6861">No</text>
+
+      <!-- Q3 -->
+      <rect x="245" y="206" width="230" height="44" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="360" y="233" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">Is it a JOIN of two tables?</text>
+      <!-- Yes down into join sub-tree -->
+      <line x1="360" y1="250" x2="360" y2="272" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="372" y="265" font-size="10" fill="#6b6861">Yes</text>
+
+      <!-- Join branch box -->
+      <rect x="70" y="272" width="580" height="150" rx="10" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5"/>
+      <text x="360" y="292" text-anchor="middle" font-size="11" font-weight="800" fill="#065f46" letter-spacing=".05em">DISTRIBUTED JOIN — PICK A STRATEGY</text>
+
+      <rect x="90" y="304" width="170" height="100" rx="8" fill="#c3fae8" stroke="#0ca678" stroke-width="1.5"/>
+      <text x="175" y="326" text-anchor="middle" font-size="11.5" font-weight="700" fill="#064e3b">One table small</text>
+      <text x="175" y="341" text-anchor="middle" font-size="11.5" font-weight="700" fill="#064e3b">&amp; static?</text>
+      <text x="175" y="364" text-anchor="middle" font-size="11" fill="#064e3b">→ BROADCAST /</text>
+      <text x="175" y="379" text-anchor="middle" font-size="11" fill="#064e3b">reference table</text>
+      <text x="175" y="394" text-anchor="middle" font-size="9.5" fill="#0ca678">(replicate to all shards)</text>
+
+      <rect x="275" y="304" width="170" height="100" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="360" y="326" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1e3a8a">Both shardable</text>
+      <text x="360" y="341" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1e3a8a">on join key?</text>
+      <text x="360" y="364" text-anchor="middle" font-size="11" fill="#1e3a8a">→ CO-LOCATED</text>
+      <text x="360" y="379" text-anchor="middle" font-size="11" fill="#1e3a8a">(co-partition)</text>
+      <text x="360" y="394" text-anchor="middle" font-size="9.5" fill="#3b5bdb">no network shuffle ★</text>
+
+      <rect x="460" y="304" width="170" height="100" rx="8" fill="#ffe3e3" stroke="#c92a2a" stroke-width="1.5"/>
+      <text x="545" y="326" text-anchor="middle" font-size="11.5" font-weight="700" fill="#991b1b">Neither?</text>
+      <text x="545" y="349" text-anchor="middle" font-size="11" fill="#991b1b">→ SHUFFLE /</text>
+      <text x="545" y="364" text-anchor="middle" font-size="11" fill="#991b1b">repartition join</text>
+      <text x="545" y="382" text-anchor="middle" font-size="9.5" fill="#c92a2a">expensive — or</text>
+      <text x="545" y="395" text-anchor="middle" font-size="9.5" fill="#c92a2a">denormalize instead</text>
+
+      <!-- No (from Q3) down -->
+      <line x1="245" y1="228" x2="60" y2="228" stroke="#bbb" stroke-width="1.5"/>
+      <line x1="60" y1="228" x2="60" y2="470" stroke="#bbb" stroke-width="1.5"/>
+      <line x1="60" y1="470" x2="180" y2="470" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="120" y="220" text-anchor="middle" font-size="10" fill="#6b6861">No — ad-hoc filter / global aggregate</text>
+
+      <!-- Q4 -->
+      <rect x="182" y="448" width="356" height="44" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="360" y="467" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">Can you tolerate fan-out</text>
+      <text x="360" y="483" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">latency &amp; N× cost?</text>
+      <!-- Yes down -->
+      <line x1="290" y1="492" x2="290" y2="520" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="302" y="512" font-size="10" fill="#6b6861">Yes (low QPS)</text>
+      <!-- No down -->
+      <line x1="440" y1="492" x2="440" y2="520" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="452" y="512" font-size="10" fill="#6b6861">No (hot path)</text>
+
+      <rect x="150" y="520" width="180" height="52" rx="8" fill="#ffd8a8" stroke="#e67700" stroke-width="1.5"/>
+      <text x="240" y="541" text-anchor="middle" font-size="12" font-weight="700" fill="#7c2d12">SCATTER-GATHER</text>
+      <text x="240" y="558" text-anchor="middle" font-size="10" fill="#7c2d12">coordinator fans to all</text>
+
+      <rect x="360" y="520" width="200" height="52" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+      <text x="460" y="541" text-anchor="middle" font-size="12" font-weight="800" fill="#1e40af">Separate READ MODEL</text>
+      <text x="460" y="558" text-anchor="middle" font-size="10" fill="#1e40af">CQRS · search · OLAP</text>
+
+      <!-- Warnings -->
+      <rect x="90" y="600" width="540" height="40" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+      <text x="360" y="617" text-anchor="middle" font-size="11" font-weight="700" fill="#92400e">⚠️ Scatter-gather latency = SLOWEST shard · cost = N physical queries per logical query</text>
+      <text x="360" y="632" text-anchor="middle" font-size="11" fill="#92400e">The more shards, the worse the tail — never put a designable-away fan-out on the hot path</text>
+
+      <rect x="90" y="650" width="540" height="40" rx="8" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5"/>
+      <text x="360" y="667" text-anchor="middle" font-size="11" font-weight="700" fill="#7f1d1d">⚠️ Choose the shard key around the HOT query's access pattern first</text>
+      <text x="360" y="682" text-anchor="middle" font-size="11" fill="#7f1d1d">Picking it only for even distribution → the dominant filter/join scatters</text>
+
+      <defs>
+        <marker id="dm-arr" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+          <path d="M0,0 L0,7 L7,3.5 z" fill="#bbb"/>
+        </marker>
+      </defs>
+    </svg>
+    <p class="caption">Answer top to bottom — the partition key decides everything downstream</p>
+  </div>
+
+  <div class="cheatsheet">
+<span class="label">§ 1  WHY IT EXISTS</span>Sharding buys horizontal scale but breaks the single-node assumption that "all the
+data I need is local." A join or a filter on a non-key column can no longer be resolved
+by one machine. Cross-shard techniques answer queries whose data spans multiple shards
+without giving up the scale that sharding bought you.
+
+<span class="label">§ 2  THE ONE QUESTION</span>For EVERY important query ask: "Does it carry the partition key?"
+  YES → router sends it to exactly ONE shard. Fast, cheap, scales linearly.
+  NO  → the system must fan out (scatter) to many/all shards and merge (gather).
+Your shard-key choice IS your query design. Pick it around the dominant query.
+
+<span class="label">§ 3  SCATTER-GATHER</span>Coordinator (VTGate / mongos / ES coordinating node) receives the query,
+broadcasts to all shards, each executes locally, coordinator merges + sorts + limits.
+Latency  = time of the SLOWEST shard (tail-latency amplification).
+Throughput = 1 logical query becomes N physical queries → N× load.
+Good for: low-QPS, ad-hoc, analytical reads. Bad for: high-QPS hot paths.
+
+<span class="label">§ 4  DISTRIBUTED JOIN — 3 STRATEGIES</span>BROADCAST / reference: copy a SMALL, slow-changing table to every shard.
+    Join runs locally on each shard. Cost: storage × N + write fan-out. (Citus reference table)
+CO-LOCATED / co-partition: shard BOTH tables on the join key so matching rows
+    live on the same shard. Zero network shuffle. Best option when feasible. ★
+SHUFFLE / repartition: rows are re-hashed on the join key and moved over the
+    network so partitions align, then joined. Most expensive; last resort.
+
+<span class="label">§ 5  AVOID THE JOIN (usually the real answer)</span>Denormalize: pre-join at write time; store data together → single-shard read.
+Global secondary index: separate index sharded by the lookup column (extra hop, lag).
+CQRS / materialized view: maintain a second copy sharded for the read pattern.
+Offload: push cross-cutting queries to search (Elasticsearch) or a warehouse (OLAP).
+Trade: write amplification, storage, and duplicate-data consistency for read simplicity.
+
+<span class="label">§ 6  AGGREGATIONS ACROSS SHARDS</span>Mergeable (partial → combine):  SUM, COUNT, MIN, MAX.  AVG = SUM/COUNT.
+NOT trivially mergeable:
+  COUNT(DISTINCT) → HyperLogLog (mergeable sketches)
+  median / p99     → t-digest / q-digest
+  top-K            → per-shard top-K then merge (approximate; can miss true top-K)
+GROUP BY: each shard groups locally, coordinator re-groups + re-aggregates.
+
+<span class="label">§ 7  INTERVIEW TRIGGERS + GOTCHA</span>&rarr; "Query by a field that isn't the shard key?"  &rarr; global index / denormalize / OLAP
+&rarr; "Join orders and users on different shards?"  &rarr; co-locate, broadcast, or denormalize
+&rarr; "Global leaderboard / analytics across shards?" &rarr; materialized read model / OLAP
+GOTCHA: Candidates pick a shard key for even distribution, then discover the dominant
+  query filters/joins on a DIFFERENT column &rarr; every hot request scatters. Choose the
+  shard key around the hot query's access pattern FIRST.
+  </div>
+</section>
+
+<!-- S5: CORE DEFINITION -->
+<section id="s5">
+  <h2 class="section-title"><span class="num">§5</span> 🧠 Core Definition</h2>
+  <div class="callout callout-teal" style="font-size:16px;font-weight:600;line-height:1.6;">
+    A cross-shard query is any query whose required data spans more than one partition — because it doesn't carry the partition key, joins tables sharded on different keys, or aggregates across the whole dataset — forcing the system to fan out to multiple shards and merge the results, rather than resolving it on a single shard.
+  </div>
+
+  <!-- Targeted vs Scatter diagram -->
+  <div class="tier-grid" style="margin-top:20px;">
+    <div class="tier-card">
+      <h4>🎯 Targeted (Single-Shard) <span class="stat stat-green">1 hop</span></h4>
+      <p style="font-size:13px;margin-bottom:6px;">Query <strong>carries the partition key</strong> — e.g. <code>WHERE user_id = 42</code> when sharded on <code>user_id</code>. Router maps the key to one shard.</p>
+      <p style="font-size:13px;margin-bottom:0;color:var(--green);">✅ Cheap, fast, scales linearly with shard count.</p>
+    </div>
+    <div class="tier-card">
+      <h4>📡 Scatter (Cross-Shard) <span class="stat stat-red">N hops</span></h4>
+      <p style="font-size:13px;margin-bottom:6px;">Key absent — e.g. <code>WHERE email = ...</code> or a join on another column. Router must contact all shards.</p>
+      <p style="font-size:13px;margin-bottom:0;color:var(--red);">⚠️ Latency = slowest shard; load = N× per logical query.</p>
+    </div>
+  </div>
+</section>
+
+<!-- S6: CORE CONCEPTS -->
+<section id="s6">
+  <h2 class="section-title"><span class="num">§6</span> 📦 Core Concepts</h2>
+
+  <h3>Single-Shard vs Cross-Shard Query (Query Routing)</h3>
+  <p>A router/coordinator inspects the query. If it can determine the partition key (e.g. <code>WHERE user_id = 42</code> when sharded on <code>user_id</code>), it routes to the <strong>one</strong> shard that owns that key — a <em>targeted</em> query. If the key is absent (<code>WHERE email = ...</code>, or a range on a non-key column), the router must send the query to <strong>all</strong> shards — a <em>scatter</em> query. This single distinction drives everything else: performance, cost, and complexity all hinge on whether the query is targeted or scattered.</p>
+
+  <h3>Scatter-Gather (Fan-out / Fan-in)</h3>
+  <p>The pattern for a query no single shard can satisfy: a coordinator <strong>scatters</strong> the query to many/all shards, each executes locally and returns partial results, and the coordinator <strong>gathers</strong> them — merging, re-sorting, re-aggregating, and applying <code>LIMIT</code> globally. The coordinator can only return once every shard it contacted has responded, so latency is governed by the slowest shard. Elasticsearch's query-then-fetch and MongoDB's <code>mongos</code> merge are canonical implementations.</p>
+
+  <!-- Scatter-gather diagram -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">📡 Scatter-Gather — Fan-out then Fan-in</div>
+    <svg viewBox="0 0 780 300" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:780px;display:block;margin:0 auto;">
+      <rect width="780" height="300" fill="#fafafa" rx="8"/>
+
+      <!-- Client -->
+      <rect x="40" y="128" width="96" height="44" rx="8" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.5"/>
+      <text x="88" y="154" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#4c1d95">Client</text>
+      <line x1="136" y1="150" x2="168" y2="150" stroke="#666" stroke-width="1.5" marker-end="url(#sg-arr)"/>
+
+      <!-- Coordinator -->
+      <rect x="170" y="120" width="120" height="60" rx="8" fill="#a5d8ff" stroke="#1971c2" stroke-width="2"/>
+      <text x="230" y="146" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#0b3d66">Coordinator</text>
+      <text x="230" y="162" text-anchor="middle" font-family="Arial,sans-serif" font-size="9.5" fill="#0b3d66">VTGate / mongos / ES</text>
+
+      <!-- Fan-out arrows -->
+      <line x1="290" y1="140" x2="470" y2="52" stroke="#e67700" stroke-width="1.5" marker-end="url(#sg-arr-o)"/>
+      <line x1="290" y1="148" x2="470" y2="118" stroke="#e67700" stroke-width="1.5" marker-end="url(#sg-arr-o)"/>
+      <line x1="290" y1="156" x2="470" y2="184" stroke="#e67700" stroke-width="1.5" marker-end="url(#sg-arr-o)"/>
+      <line x1="290" y1="164" x2="470" y2="250" stroke="#e67700" stroke-width="1.5" marker-end="url(#sg-arr-o)"/>
+      <text x="360" y="96" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#e67700" font-weight="bold">scatter (parallel)</text>
+
+      <!-- Shards -->
+      <rect x="472" y="30" width="150" height="40" rx="6" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="536" y="54" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#1e3a8a" font-weight="bold">Shard 1 · 8ms</text>
+      <rect x="472" y="98" width="150" height="40" rx="6" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="536" y="122" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#1e3a8a" font-weight="bold">Shard 2 · 6ms</text>
+      <rect x="472" y="166" width="150" height="40" rx="6" fill="#fee2e2" stroke="#dc2626" stroke-width="2"/>
+      <text x="536" y="190" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#991b1b" font-weight="bold">Shard 3 · 45ms 🐢</text>
+      <rect x="472" y="234" width="150" height="40" rx="6" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="536" y="258" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#1e3a8a" font-weight="bold">Shard 4 · 7ms</text>
+
+      <!-- Gather note -->
+      <rect x="648" y="120" width="112" height="60" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+      <text x="704" y="141" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#065f46">Gather</text>
+      <text x="704" y="156" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" fill="#065f46">merge · sort · limit</text>
+      <text x="704" y="170" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" fill="#991b1b">waits for 45ms</text>
+      <line x1="622" y1="150" x2="646" y2="150" stroke="#16a34a" stroke-width="1.5" marker-end="url(#sg-arr-g)"/>
+
+      <text x="390" y="292" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#991b1b" font-weight="bold">Total latency ≈ 45ms — the SLOWEST shard sets the pace, not the average (~7ms)</text>
+
+      <defs>
+        <marker id="sg-arr" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L0,8 L8,4 z" fill="#666"/></marker>
+        <marker id="sg-arr-o" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L0,8 L8,4 z" fill="#e67700"/></marker>
+        <marker id="sg-arr-g" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L0,8 L8,4 z" fill="#16a34a"/></marker>
+      </defs>
+    </svg>
+    <p class="caption">One slow shard (45ms) drags the whole query — this is tail-latency amplification</p>
+  </div>
+
+  <h3>Distributed Join</h3>
+  <p>Joining two tables sharded on different keys, so matching rows may live on different shards. Three canonical strategies: <strong>broadcast</strong> (replicate a small table to every shard so the join is local), <strong>co-located</strong> (co-partition both tables on the join key so matching rows are always on the same shard), and <strong>shuffle/repartition</strong> (re-hash and move rows over the network to align partitions, then join). The whole game is minimizing data movement.</p>
+
+  <!-- Three join strategies diagram -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">🔗 Three Distributed-Join Strategies</div>
+    <svg viewBox="0 0 780 250" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:780px;display:block;margin:0 auto;">
+      <rect width="780" height="250" fill="#fafafa" rx="8"/>
+
+      <!-- Broadcast -->
+      <text x="130" y="28" text-anchor="middle" font-family="Arial,sans-serif" font-size="12.5" font-weight="bold" fill="#0ca678">BROADCAST</text>
+      <text x="130" y="44" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#666">small table copied to all</text>
+      <rect x="40" y="58" width="80" height="44" rx="6" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="80" y="78" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#1e3a8a" font-weight="bold">Shard 1</text>
+      <text x="80" y="92" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" fill="#1e3a8a">big + 📋copy</text>
+      <rect x="140" y="58" width="80" height="44" rx="6" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="180" y="78" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#1e3a8a" font-weight="bold">Shard 2</text>
+      <text x="180" y="92" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" fill="#1e3a8a">big + 📋copy</text>
+      <rect x="55" y="120" width="150" height="34" rx="6" fill="#c3fae8" stroke="#0ca678" stroke-width="1.5"/>
+      <text x="130" y="141" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#064e3b">join local · no shuffle</text>
+      <text x="130" y="176" text-anchor="middle" font-family="Arial,sans-serif" font-size="9.5" fill="#0ca678">✓ small &amp; static tables</text>
+      <text x="130" y="190" text-anchor="middle" font-family="Arial,sans-serif" font-size="9.5" fill="#c92a2a">✗ storage × N, write fan-out</text>
+
+      <!-- Co-located -->
+      <text x="390" y="28" text-anchor="middle" font-family="Arial,sans-serif" font-size="12.5" font-weight="bold" fill="#3b5bdb">CO-LOCATED ★</text>
+      <text x="390" y="44" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#666">both sharded on join key</text>
+      <rect x="300" y="58" width="80" height="44" rx="6" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="340" y="76" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#1e3a8a" font-weight="bold">Shard 1</text>
+      <text x="340" y="90" text-anchor="middle" font-family="Arial,sans-serif" font-size="8.5" fill="#1e3a8a">A[k1] + B[k1]</text>
+      <rect x="400" y="58" width="80" height="44" rx="6" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="440" y="76" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#1e3a8a" font-weight="bold">Shard 2</text>
+      <text x="440" y="90" text-anchor="middle" font-family="Arial,sans-serif" font-size="8.5" fill="#1e3a8a">A[k2] + B[k2]</text>
+      <rect x="315" y="120" width="150" height="34" rx="6" fill="#c3fae8" stroke="#0ca678" stroke-width="1.5"/>
+      <text x="390" y="141" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#064e3b">join local · no shuffle</text>
+      <text x="390" y="176" text-anchor="middle" font-family="Arial,sans-serif" font-size="9.5" fill="#0ca678">✓ gold standard, zero movement</text>
+      <text x="390" y="190" text-anchor="middle" font-family="Arial,sans-serif" font-size="9.5" fill="#c92a2a">✗ can only co-locate on one key</text>
+
+      <!-- Shuffle -->
+      <text x="650" y="28" text-anchor="middle" font-family="Arial,sans-serif" font-size="12.5" font-weight="bold" fill="#c92a2a">SHUFFLE</text>
+      <text x="650" y="44" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#666">repartition over network</text>
+      <rect x="560" y="58" width="80" height="44" rx="6" fill="#ffe3e3" stroke="#c92a2a" stroke-width="1.5"/>
+      <text x="600" y="78" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#991b1b" font-weight="bold">Shard 1</text>
+      <text x="600" y="92" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" fill="#991b1b">rehash rows</text>
+      <rect x="660" y="58" width="80" height="44" rx="6" fill="#ffe3e3" stroke="#c92a2a" stroke-width="1.5"/>
+      <text x="700" y="78" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#991b1b" font-weight="bold">Shard 2</text>
+      <text x="700" y="92" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" fill="#991b1b">rehash rows</text>
+      <line x1="640" y1="102" x2="700" y2="118" stroke="#c92a2a" stroke-width="1.5" marker-end="url(#j-arr)"/>
+      <line x1="660" y1="102" x2="600" y2="118" stroke="#c92a2a" stroke-width="1.5" marker-end="url(#j-arr)"/>
+      <rect x="575" y="120" width="150" height="34" rx="6" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5"/>
+      <text x="650" y="141" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#991b1b">move rows, then join</text>
+      <text x="650" y="176" text-anchor="middle" font-family="Arial,sans-serif" font-size="9.5" fill="#c92a2a">✗ network-heavy, last resort</text>
+      <text x="650" y="190" text-anchor="middle" font-family="Arial,sans-serif" font-size="9.5" fill="#666">used by Citus / Spark / MPP</text>
+
+      <!-- dividers -->
+      <line x1="260" y1="16" x2="260" y2="200" stroke="#e5e3de" stroke-width="1" stroke-dasharray="4,3"/>
+      <line x1="520" y1="16" x2="520" y2="200" stroke="#e5e3de" stroke-width="1" stroke-dasharray="4,3"/>
+
+      <text x="390" y="228" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#6b6861" font-style="italic">Prefer co-located → broadcast → shuffle, in that order. Each moves progressively more data.</text>
+
+      <defs>
+        <marker id="j-arr" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto"><path d="M0,0 L0,7 L7,3.5 z" fill="#c92a2a"/></marker>
+      </defs>
+    </svg>
+    <p class="caption">Co-located moves nothing; broadcast copies the small side; shuffle moves rows every query</p>
+  </div>
+
+  <h3>Denormalization &amp; Data Duplication</h3>
+  <p>Rather than join at read time, pre-join or duplicate data at write time so the read touches a single shard — e.g. embed the user's name in each order, or store an order under both <code>user_id</code> and <code>merchant_id</code> shard keys. It converts an expensive distributed read into a cheap targeted read, at the cost of write amplification, extra storage, and keeping duplicates consistent.</p>
+
+  <h3>Global vs Local Secondary Index</h3>
+  <p>A <strong>local (document-partitioned)</strong> secondary index lives on each shard and only indexes that shard's data — so a lookup by the indexed column still scatters to all shards. A <strong>global (term-partitioned)</strong> index is itself sharded by the indexed term, so a lookup is targeted — but writes now update an index on a <em>different</em> shard, adding a hop and consistency lag. DynamoDB GSIs and Vitess secondary vindexes are global-style; Cassandra's built-in secondary indexes are local.</p>
+
+  <h3>Read Model / CQRS / Materialized View</h3>
+  <p>Maintain a <strong>second, independently-sharded copy</strong> of the data optimized for the query the primary sharding can't serve. Writes update the primary; a stream/ETL keeps the read model in sync. Cross-cutting queries (search, analytics, leaderboards) hit the read model or an OLAP/search engine instead of scattering across the OLTP shards.</p>
+</section>
+
+<!-- S7: FIRST PRINCIPLES -->
+<section id="s7">
+  <h2 class="section-title"><span class="num">§7</span> 🔍 First Principles — Why Does This Exist?</h2>
+  <p>On a single database node, every join, filter, and aggregation is "free" topologically: all the data is co-located, so the planner can join, sort, and aggregate without crossing a network. Sharding deliberately breaks that. To get horizontal scale — more data and throughput than one machine can hold — you split data across nodes by a partition key. The instant you do, you lose the guarantee that the data a query needs lives together. A query filtering on the shard key still works fine. But a query that joins on a different column, filters on a non-key attribute, or aggregates globally now needs data from machines that don't know about each other.</p>
+  <p>Cross-shard techniques exist to bridge that gap: to answer multi-partition questions <strong>without</strong> collapsing back to a single node (which forfeits the scale) and <strong>without</strong> paying unbounded latency. Every technique here is a different point on the trade-off curve between <em>where the work happens</em> (read time vs write time), <em>how much data moves</em> (broadcast, co-locate, shuffle), and <em>how fresh the answer is</em> (synchronous scatter vs eventually-consistent read model). There's no single right answer because the fundamental tension — data locality vs distribution — can't be eliminated, only relocated.</p>
+</section>
+
+<!-- S8: MENTAL MODELS -->
+<section id="s8">
+  <h2 class="section-title"><span class="num">§8</span> 🗺️ Mental Models</h2>
+
+  <h3>Model 1: "Ask One Person vs. Ask the Whole Office"</h3>
+  <p>A single-shard query is like asking the one colleague who has the file you need — instant. A cross-shard scatter is like emailing the entire office "does anyone have anything on customer X?" and waiting until the <em>last, slowest</em> person replies before you can compile the answer. This captures both costs at once: you've generated N times the work, and your response time is set by the slowest responder, not the average. <em>Where it breaks down:</em> real coordinators can prune to a subset of shards or early-terminate — it's not always literally everyone.</p>
+
+  <h3>Model 2: Two Filing Cabinets in Different Rooms</h3>
+  <p>Two cabinets (tables) in different rooms (shards), and you need matching records. <strong>Broadcast:</strong> photocopy the small cabinet into every room so any room matches locally. <strong>Co-locate:</strong> re-file both cabinets so related records always sit in the same room from now on. <strong>Shuffle:</strong> physically carry folders between rooms until matching ones are together, then match. The costs are obvious in the physical version — photocopying wastes space, re-filing is a one-time reorg, carrying folders every query is exhausting — and that's exactly the cost profile of the three join strategies.</p>
+
+  <h3>Model 3: Move the Work to Write Time</h3>
+  <p>Every cross-shard read problem can be reframed as: "What if I'd done this work when the data was written instead of when it's read?" Denormalization, materialized views, and CQRS read models are all this move — pay once at write time so reads are cheap and single-shard. It works because reads usually vastly outnumber writes, so amortizing the join cost onto the rarer operation is a win. <em>Where it breaks down:</em> when writes are frequent and reads rare, or when duplicated data must be strongly consistent — then write-time pre-computation becomes the bottleneck and a consistency hazard.</p>
+</section>
+
+<!-- S9: HOW IT WORKS -->
+<section id="s9">
+  <h2 class="section-title"><span class="num">§9</span> ⚙️ How It Works — Mechanics</h2>
+
+  <h3>Query Routing — the fork in the road</h3>
+  <p>A client sends a query to the coordinator/router (VTGate, <code>mongos</code>, Citus coordinator, ES coordinating node). It parses the query and tries to extract the partition key. <strong>Targeted path:</strong> key found → hash/range-map it to the owning shard → forward to that one shard → return its result. <strong>Scatter path:</strong> key absent → forward to all (or a pruned subset of) shards, then merge.</p>
+
+  <h3>Scatter-Gather — fan-out read</h3>
+  <p>The coordinator broadcasts the query in parallel to every target shard; each executes locally and returns partial results; the coordinator <strong>gathers</strong> — merges rows, applies global <code>ORDER BY</code>, re-runs aggregation over partials, and applies the global <code>LIMIT</code>/<code>OFFSET</code>. It <strong>cannot return until the slowest contacted shard responds</strong> (tail-latency amplification). If one shard is slow or down, the whole query stalls or partially fails.</p>
+
+  <div class="callout callout-warn">
+    ⚠️ <strong>The <code>LIMIT k</code> trap:</strong> A <code>LIMIT 10 ORDER BY score</code> on a scatter can't push "limit 10" naively to each shard and stop — the global top-10 might all come from one shard. The coordinator must request the top-<em>k</em> from <em>every</em> shard and re-limit after merging. Fan-out reads more than it returns.
+  </div>
+
+  <h3>Distributed Join — the three strategies in detail</h3>
+  <p><strong>Broadcast / reference table:</strong> the small table is replicated in full to every shard; the join executes independently on each shard between the local big-table partition and the local full copy. Correct because every shard has all rows of the small side. Cost: storage × N shards, and every write to the small table fans out to all shards.</p>
+  <p><strong>Co-located (co-partitioned) join:</strong> both tables are sharded on the join column with the same function, so a given join key's rows from both tables always land on the same shard. The join is purely local — no data movement. The gold standard, but it only works if you can shard both tables on that key (and you can't co-locate on two different keys at once).</p>
+  <p><strong>Shuffle / repartition join:</strong> when neither side can be co-located, the engine re-partitions one or both tables on the join key on the fly — each shard hashes its rows by the join key and ships them to the shard responsible for that key range — then joins the aligned data. Correct but network-heavy; used by Citus repartition joins, Spark, and MPP warehouses.</p>
+
+  <h3>Aggregation Merge</h3>
+  <p>Distributive/algebraic aggregates compute in two passes: each shard computes a partial (<code>SUM</code>, <code>COUNT</code>, <code>MIN</code>, <code>MAX</code>, or <code>SUM</code>+<code>COUNT</code> for <code>AVG</code>) and the coordinator combines them. Holistic aggregates (<code>COUNT(DISTINCT)</code>, median, percentiles, exact top-K) can't be exactly computed from independent per-shard partials in one pass — systems either approximate with mergeable sketches (HyperLogLog for distinct counts; t-digest/q-digest for percentiles) or route all relevant rows to one place for an exact answer.</p>
+
+  <div class="callout callout-warn">
+    ⚠️ <strong>Cross-shard writes:</strong> A transaction that must modify rows on multiple shards needs distributed commit (2PC / Paxos), which is slow and blocking. Production systems usually <em>avoid</em> this by co-locating the entities that must change together under one shard key — turning a distributed transaction into a local one.
+  </div>
+</section>
+
+<!-- S10: REAL-WORLD EXAMPLES -->
+<section id="s10">
+  <h2 class="section-title"><span class="num">§10</span> 🏭 Real-World System Examples</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>System</th><th>How Cross-Shard Queries / Joins Apply</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Vitess (YouTube MySQL sharding)</strong></td>
+          <td>VTGate routes targeted queries by primary vindex; queries without it become scatter-gather. Secondary vindexes give global-index-style targeting. Cross-shard joins are supported but limited and discouraged on the hot path.</td>
+          <td>Vitess deliberately nudges you toward single-shard queries; cross-shard joins run with cost warnings</td>
+        </tr>
+        <tr>
+          <td><strong>Citus (distributed Postgres)</strong></td>
+          <td>First-class model: <strong>reference tables</strong> (broadcast to all nodes), <strong>co-located distributed tables</strong> (same distribution column → local joins), and <strong>repartition joins</strong> (shuffle) when neither fits</td>
+          <td>Cleanest vocabulary for the three join strategies — cite by name in interviews</td>
+        </tr>
+        <tr>
+          <td><strong>MongoDB (sharded)</strong></td>
+          <td><code>mongos</code> routes queries containing the shard key to one shard; queries without it scatter-gather to all. <code>$lookup</code> across sharded collections is restricted and expensive</td>
+          <td>Classic advice: include the shard key in your queries or pay the fan-out</td>
+        </tr>
+        <tr>
+          <td><strong>Elasticsearch</strong></td>
+          <td>Every search fans out to all shards of an index (query-then-fetch); the coordinating node merges, re-sorts, and applies size. Aggregations reduce partial results per shard</td>
+          <td>The canonical scatter-gather engine; often used <em>as</em> the cross-cutting read model in front of a sharded OLTP store</td>
+        </tr>
+        <tr>
+          <td><strong>DynamoDB</strong></td>
+          <td>Queries by partition key are targeted; <strong>Global Secondary Indexes (GSI)</strong> are separately partitioned by the index key to make non-key lookups targeted; <code>Scan</code> reads every partition (avoid on hot paths)</td>
+          <td>Textbook global/term-partitioned index; GSIs are eventually consistent with the base table</td>
+        </tr>
+        <tr>
+          <td><strong>CockroachDB / Google Spanner</strong></td>
+          <td>Distributed SQL planners perform lookup, hash, and merge joins across ranges, using data locality and index selection to minimize cross-node traffic</td>
+          <td>Shows "just use distributed SQL" still pays the same physics — the planner picks broadcast/co-located/shuffle under the hood</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- S11: TRADE-OFFS -->
+<section id="s11">
+  <h2 class="section-title"><span class="num">§11</span> ⚖️ Trade-offs</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>✅ Benefit</th><th>❌ Cost / Limitation</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="benefit">Scatter-gather answers any ad-hoc query without pre-planning the shard key around it</td>
+          <td class="cost">Tail-latency amplification (bound by slowest shard) + N× throughput cost; degrades as shard count grows</td>
+        </tr>
+        <tr>
+          <td class="benefit">Denormalization turns an expensive cross-shard join into a cheap single-shard read</td>
+          <td class="cost">Write amplification, extra storage, and duplicate-data consistency burden (updates must touch every copy)</td>
+        </tr>
+        <tr>
+          <td class="benefit">Broadcast / reference table makes joins fully local on every shard</td>
+          <td class="cost">Only viable for small, slow-changing tables; storage × N and every write fans out to all shards</td>
+        </tr>
+        <tr>
+          <td class="benefit">Co-located join eliminates network shuffle entirely — the gold standard</td>
+          <td class="cost">Requires both tables shardable on the join key; you can only co-locate on one key, constraining other access patterns</td>
+        </tr>
+        <tr>
+          <td class="benefit">Global secondary index makes non-key lookups targeted instead of scattered</td>
+          <td class="cost">Extra network hop + index-update consistency lag; the index is a second sharded structure to maintain</td>
+        </tr>
+        <tr>
+          <td class="benefit">Separate read model / OLAP store offloads cross-cutting queries off the OLTP hot path</td>
+          <td class="cost">Data duplication, sync-pipeline complexity, and eventual-consistency staleness between primary and read model</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- S12: INTERVIEW APPLICATION -->
+<section id="s12">
+  <h2 class="section-title"><span class="num">§12</span> 🎯 Interview Application</h2>
+
+  <h3>Trigger Phrases</h3>
+  <ul style="margin-left:20px;margin-bottom:16px;font-size:14.5px;line-height:1.8;">
+    <li>"We shard by <code>user_id</code>, but now we need to query by <code>email</code> / find all orders in a date range. How?"</li>
+    <li>"How do you join orders and users when they live on different shards?"</li>
+    <li>"How would you build a global leaderboard / run analytics across all shards?"</li>
+    <li>"What happens to this query as we go from 10 shards to 1,000 shards?"</li>
+  </ul>
+
+  <h3>What You Say / Do</h3>
+  <p>This appears in the <strong>deep-dive / data-model</strong> phase, right after you've proposed a shard key. Proactively call out: "With this shard key, query A is single-shard, but query B doesn't carry the key, so it would scatter-gather across all shards — a problem on the hot path." Then reach for the cheapest fix that fits: co-locate the joined entities if you can, add a global secondary index or denormalized copy for the non-key lookup, and push genuinely cross-cutting queries (search, analytics) to a separate read model or OLAP store. Naming Citus's reference/co-located/repartition vocabulary or DynamoDB GSIs signals depth.</p>
+
+  <div class="tradeoff-box">
+    💬 <strong>Trade-off statement (memorize this):</strong><br><br>
+    "If I keep this as a live cross-shard join via scatter-gather, I get flexibility but pay tail-latency amplification and N× load — unacceptable on a hot path at high QPS. So instead I'll co-locate these two entities on the join key (or denormalize the user fields into the order, or maintain a search read model), accepting a one-time reshard (or write amplification and duplicate-data consistency, or eventual-consistency staleness) in exchange for cheap single-shard reads on the hot path."
+  </div>
+</section>
+
+<!-- S13: MISCONCEPTIONS -->
+<section id="s13">
+  <h2 class="section-title"><span class="num">§13</span> ⚠️ Common Misconceptions &amp; Gotchas</h2>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> A distributed SQL database (Spanner, Cockroach, Citus) means I don't have to worry about cross-shard joins.</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> The planner hides the <em>syntax</em>, not the <em>physics</em>. Under the hood it still chooses broadcast, co-located, or shuffle, and a badly-designed schema still triggers expensive network shuffles. You must still design the shard key and co-location around your join pattern.</div></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> Scatter-gather latency is roughly the average shard latency.</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> It's the <em>slowest</em> shard's latency. Fanning out to N shards effectively samples the tail of the latency distribution N times, so overall latency trends toward a high percentile of a single shard — and worsens as N grows (tail-latency amplification).</div></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> A secondary index lets me query the non-shard-key column efficiently.</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Only a <em>global (term-partitioned)</em> index does. A <em>local</em> secondary index (e.g. Cassandra's built-in) still requires scatter-gather to every shard, because each shard only indexes its own rows. Know which kind your database gives you.</div></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> All aggregations just merge — sum the sums, done.</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> SUM/COUNT/MIN/MAX and AVG (via SUM/COUNT) merge cleanly. But COUNT(DISTINCT), median/percentiles, and exact top-K do <em>not</em> compose from independent per-shard partials — you need approximation (HyperLogLog, t-digest) or a costly second pass to be exact.</div></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> Denormalizing fixes cross-shard reads for free.</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> It moves the cost to write time and creates duplicate data. Now every update must fan out to all copies, and you inherit a consistency problem — the very thing you were trying to avoid, relocated to the write path.</div></div>
+  </div>
+</section>
+
+<!-- S14: RELATIONSHIPS -->
+<section id="s14">
+  <h2 class="section-title"><span class="num">§14</span> 🔗 Relationships to Other Concepts</h2>
+  <div class="connections">
+    <div class="conn-card">
+      <div class="conn-icon">🧱</div>
+      <div>
+        <div class="conn-label">Builds On</div>
+        <strong>7.2 Hash Partitioning</strong> &amp; <strong>7.3 Range Partitioning</strong> — the partition strategy determines which queries are single-shard vs scatter (hash destroys range locality → range queries scatter; range keeps it → point lookups on other columns scatter). Also <strong>7.1 Horizontal vs Vertical Partitioning</strong> — sharding is what creates the cross-shard problem in the first place.
+      </div>
+    </div>
+    <div class="conn-card">
+      <div class="conn-icon">🔓</div>
+      <div>
+        <div class="conn-label">Enables</div>
+        <strong>CQRS / materialized read models</strong>, <strong>search infrastructure (Elasticsearch)</strong>, and <strong>OLAP / analytics pipelines</strong> — all exist largely to serve the cross-cutting queries a sharded OLTP store can't answer cheaply. Also underpins <strong>paginated/aggregated API design</strong> over sharded data.
+      </div>
+    </div>
+    <div class="conn-card">
+      <div class="conn-icon">⚡</div>
+      <div>
+        <div class="conn-label">Tension With</div>
+        <strong>7.6 Hot Partitions</strong> — the shard key you pick to avoid hot partitions (even distribution) may be exactly the wrong key for your dominant join/filter, forcing scatter-gather; you often can't optimize distribution and query locality with a single key. Also in tension with <strong>distributed transactions / 2PC (Topic 17)</strong> — cross-shard writes need distributed commit, which co-partitioning tries to avoid.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- S15: QUIZ -->
+<section id="s15">
+  <h2 class="section-title"><span class="num">§15</span> 🧪 Self-Check Quiz</h2>
+  <div class="callout callout-quote">Can you answer these without looking? If not, you haven't internalized it yet. Click to reveal the hint.</div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">1</div>
+      <div class="qtext">You shard <code>orders</code> by <code>user_id</code>. Classify each as single-shard or cross-shard and explain: (a) <code>WHERE user_id = 42</code>, (b) <code>WHERE order_id = 'abc'</code>, (c) <code>WHERE status = 'shipped' AND created_at &gt; ...</code></div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 (a) Single-shard — carries the partition key, router targets one shard. (b) Cross-shard — <code>order_id</code> isn't the shard key, so the router can't know which shard owns it → scatter (unless you add a global index on order_id). (c) Cross-shard — filters on non-key columns, must scatter to all shards. Revisit §6 (routing).</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">2</div>
+      <div class="qtext">Explain tail-latency amplification. Why does fanning a query out to 100 shards make the p99 worse than the p99 of a single shard?</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 The scatter completes only when the slowest of the 100 shards responds. Even if each shard is slow only 1% of the time, the chance that <em>at least one</em> of 100 is slow is ~1−0.99¹⁰⁰ ≈ 63%. So the overall query regularly hits a per-shard tail event → overall latency trends toward a much higher percentile of a single shard, and worsens with N. Revisit §9 and "The Tail at Scale."</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">3</div>
+      <div class="qtext">Join <code>orders</code> (sharded by <code>user_id</code>) with a small, rarely-changing <code>products</code> catalog. Which join strategy and why? What changes if instead you join with a huge <code>shipments</code> table sharded by <code>shipment_id</code>?</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 Products: BROADCAST / reference table — it's small and static, so replicate it to every shard and join locally, no shuffle. Shipments: it's huge and sharded on a different key, so you can't broadcast and can't co-locate with orders → either a SHUFFLE/repartition join (expensive) or, better, denormalize the needed shipment fields onto orders / maintain a co-located copy. Revisit §9.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">4</div>
+      <div class="qtext">Name a real production system for each: (a) scatter-gather search, (b) reference/broadcast tables, (c) a global secondary index. Describe how each handles the non-key query.</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 (a) Elasticsearch — every search fans out to all shards, coordinating node merges. (b) Citus reference tables — a small table replicated to every worker so joins are local. (c) DynamoDB GSI (or Vitess secondary vindex) — a separate index partitioned by the lookup column so the query targets the shard owning that term instead of scattering. Revisit §10.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">5</div>
+      <div class="qtext">Your sharded store must return a global "count of distinct active users today" and the "p99 request latency across all shards." Why can't you just sum per-shard results, and what would you do instead?</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 COUNT(DISTINCT) isn't additive — the same user may be active on multiple shards, so summing per-shard distinct counts double-counts. Use HyperLogLog: each shard emits a mergeable HLL sketch, the coordinator unions them. Percentiles aren't additive either — you can't average p99s. Use t-digest/q-digest sketches merged at the coordinator, or ship raw latency samples to an OLAP store. Revisit §9 (aggregation merge) and §13.</div>
+  </div>
+</section>
+
+<!-- S16: FURTHER READING -->
+<section id="s16">
+  <h2 class="section-title"><span class="num">§16</span> 📚 Further Reading</h2>
+  <ul class="reading-list">
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>Designing Data-Intensive Applications, Ch. 6 (Partitioning)</strong> — Kleppmann — "Partitioning and Secondary Indexes" (local vs global/term-partitioned) and "Request Routing" are the core of this topic</div></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>Citus — Distributed Query Execution &amp; Table Co-location</strong> — <a href="https://docs.citusdata.com/en/stable/develop/reference_sql.html" target="_blank">docs.citusdata.com</a> — reference tables, co-located joins, repartition joins with clear vocabulary</div></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>Vitess Query Serving docs</strong> — <a href="https://vitess.io/docs/reference/query-serving/" target="_blank">vitess.io</a> — VTGate routing, scatter-gather, and vindexes in a MySQL-sharded system</div></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>MongoDB — Targeted vs Broadcast Operations</strong> — <a href="https://www.mongodb.com/docs/manual/core/sharded-cluster-query-router/" target="_blank">mongodb.com</a> — how <code>mongos</code> decides to target one shard vs scatter</div></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>"The Tail at Scale"</strong> (Dean &amp; Barroso, CACM 2013) — <a href="https://research.google/pubs/pub40801/" target="_blank">research.google</a> — the definitive treatment of tail-latency amplification in fan-out systems</div></li>
+  </ul>
+</section>
+
+<!-- S17: MY NOTES -->
+<section id="s17">
+  <h2 class="section-title"><span class="num">§17</span> ✍️ My Notes</h2>
+  <div class="callout callout-quote">Personal observations, things that confused me, analogies that helped. This section is yours.</div>
+  <textarea class="notes-area" placeholder="Add your personal notes here — analogies that clicked, interview stories, things that confused you..."></textarea>
+</section>
+
+</article>
+</main>
+
+<script>
+// TOC active state
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('#toc nav a');
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(a => a.classList.remove('active'));
+      const a = document.querySelector(`#toc nav a[href="#${e.target.id}"]`);
+      if (a) a.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+sections.forEach(s => obs.observe(s));
+
+// Checklist toggle
+function toggle(cb) {
+  const li = cb.closest('li');
+  li.classList.toggle('checked');
+}
+
+// Phase card toggle
+function togglePhase(header) {
+  header.closest('.phase-card').classList.toggle('open');
+}
+
+// Quiz toggle
+function toggleQuiz(q) {
+  const item = q.closest('.quiz-item');
+  item.classList.toggle('open');
+  q.querySelector('.quiz-toggle').textContent = item.classList.contains('open') ? '▲ Hide' : '▼ Hint';
+}
+
+// Reading list toggle
+function toggleReading(cb) {
+  const li = cb.closest('li');
+  li.classList.toggle('checked');
+}
+
+// Notes auto-save (in-memory only)
+const notesArea = document.querySelector('.notes-area');
+const NOTES_KEY = 'notes_7_7';
+if (localStorage.getItem(NOTES_KEY)) notesArea.value = localStorage.getItem(NOTES_KEY);
+notesArea.addEventListener('input', () => {
+  try { localStorage.setItem(NOTES_KEY, notesArea.value); } catch(e) {}
+});
+</script>
+</body>
+</html>

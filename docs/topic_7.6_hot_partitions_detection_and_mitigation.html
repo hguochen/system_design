@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.6 Hot Partitions — Detection and Mitigation</title>
+<style>
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface-alt: #f3f2ef;
+    --border: #e5e3de; --text: #1a1917; --text-muted: #6b6861;
+    --accent: #2563eb; --accent-light: #dbeafe;
+    --green: #16a34a; --green-light: #dcfce7;
+    --red: #dc2626; --red-light: #fee2e2;
+    --yellow: #d97706; --yellow-light: #fef3c7;
+    --purple: #7c3aed; --purple-light: #ede9fe;
+    --orange: #ea580c; --orange-light: #ffedd5;
+    --teal: #0d9488; --teal-light: #ccfbf1;
+    --code-bg: #1e1e2e; --code-text: #cdd6f4;
+    --sidebar-w: 240px; --content-max: 820px;
+    font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; }
+  #toc { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0 48px; z-index: 100; }
+  #toc-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  #toc-header .phase-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-bottom: 6px; }
+  #toc-header h2 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  #toc nav a { display: block; padding: 5px 16px 5px 20px; font-size: 12.5px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+  main { margin-left: var(--sidebar-w); padding: 48px 48px 96px; max-width: calc(var(--sidebar-w) + var(--content-max) + 96px); width: 100%; }
+  article { max-width: var(--content-max); }
+  .doc-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 2px solid var(--border); }
+  .doc-header .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+  .tag-phase { background: var(--accent-light); color: var(--accent); }
+  .tag-topic { background: var(--purple-light); color: var(--purple); }
+  .tag-date  { background: var(--surface-alt);  color: var(--text-muted); }
+  .doc-header h1 { font-size: 30px; font-weight: 800; line-height: 1.25; letter-spacing: -.02em; color: var(--text); }
+  section { margin-bottom: 52px; scroll-margin-top: 32px; }
+  h2.section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -.01em; }
+  h2.section-title .num { font-size: 11px; font-weight: 800; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; letter-spacing: .04em; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 24px 0 10px; }
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+  code { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-family: "SF Mono","Fira Code",Menlo,monospace; font-size: 12.5px; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 14px; border-left: 3px solid; }
+  .callout-goal  { background: var(--accent-light); border-color: var(--accent); color: #1e40af; }
+  .callout-tip   { background: var(--yellow-light); border-color: var(--yellow); color: #92400e; }
+  .callout-warn  { background: var(--red-light); border-color: var(--red); color: #7f1d1d; }
+  .callout-quote { background: var(--surface-alt); border-color: var(--border); color: var(--text-muted); font-style: italic; }
+  .callout-teal  { background: var(--teal-light); border-color: var(--teal); color: #134e4a; }
+  .cheatsheet { background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 24px 28px; font-family: "SF Mono","Fira Code","Cascadia Code",Menlo,monospace; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-x: auto; margin-top: 16px; }
+  .cheatsheet .label { color: #cba6f7; font-weight: 700; letter-spacing: .08em; display: block; margin-top: 18px; margin-bottom: 4px; border-bottom: 1px solid #313244; padding-bottom: 3px; }
+  .cheatsheet .label:first-child { margin-top: 0; }
+  .diagram-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 16px 14px; margin: 20px 0 28px; overflow-x: auto; }
+  .diagram-wrap .diagram-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); margin-bottom: 12px; }
+  .diagram-wrap p.caption { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 10px; margin-bottom: 0; font-style: italic; }
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; font-size: 14.5px; line-height: 1.55; }
+  .checklist li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 2px; background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .checklist li.checked .cb { background: var(--green); border-color: var(--green); }
+  .checklist li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .checklist li.checked .text { color: var(--text-muted); text-decoration: line-through; }
+  .phase-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
+  .phase-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; cursor: pointer; user-select: none; background: var(--surface-alt); }
+  .phase-header:hover { background: var(--border); }
+  .phase-label { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+  .phase-badge { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 2px 8px; border-radius: 20px; }
+  .ph1 { background: #dbeafe; color: #1d4ed8; } .ph2 { background: #fce7f3; color: #9d174d; }
+  .ph3 { background: #d1fae5; color: #065f46; } .ph4 { background: #fef3c7; color: #92400e; }
+  .phase-chevron { font-size: 12px; color: var(--text-muted); transition: transform .2s; }
+  .phase-card.open .phase-chevron { transform: rotate(180deg); }
+  .phase-body { display: none; padding: 16px 20px 20px; }
+  .phase-card.open .phase-body { display: block; }
+  .phase-goal { font-size: 12.5px; color: var(--text-muted); font-style: italic; margin-bottom: 12px; }
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: var(--surface-alt); padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.5; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+  .misconception { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .misconception .wrong { background: var(--red-light); padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; }
+  .misconception .right { padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; color: #065f46; background: var(--green-light); }
+  .misconception .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .quiz-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .quiz-q { padding: 14px 18px; font-size: 14.5px; font-weight: 600; cursor: pointer; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .quiz-q:hover { background: var(--surface-alt); }
+  .quiz-num { flex-shrink: 0; width: 24px; height: 24px; background: var(--accent); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; margin-top: 1px; }
+  .quiz-q .qtext { flex: 1; }
+  .quiz-toggle { font-size: 11px; color: var(--text-muted); flex-shrink: 0; margin-top: 3px; }
+  .quiz-hint { display: none; padding: 10px 18px 14px; font-size: 13px; color: #92400e; background: var(--yellow-light); border-top: 1px solid var(--border); }
+  .quiz-item.open .quiz-hint { display: block; }
+  .reading-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .reading-list li { display: flex; align-items: flex-start; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; font-size: 14px; }
+  .reading-list li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 1px; cursor: pointer; background: var(--surface); display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .reading-list li.checked .cb { background: var(--green); border-color: var(--green); }
+  .reading-list li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .reading-list li.checked .rtext { color: var(--text-muted); text-decoration: line-through; }
+  .notes-area { width: 100%; min-height: 160px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: inherit; font-size: 14px; color: var(--text); resize: vertical; line-height: 1.6; }
+  .notes-area:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .focus-list { list-style: none; display: flex; flex-direction: column; gap: 14px; }
+  .focus-list li { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14.5px; line-height: 1.6; }
+  .focus-list li strong { color: var(--accent); display: block; margin-bottom: 4px; }
+  .connections { display: flex; flex-direction: column; gap: 12px; }
+  .conn-card { display: flex; align-items: flex-start; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14px; }
+  .conn-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .conn-label { font-weight: 700; margin-bottom: 3px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .tradeoff-box { background: var(--surface-alt); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 14px 18px; font-size: 14px; font-style: italic; color: var(--text); margin-top: 14px; }
+  .tier-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 16px 0; }
+  .tier-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; font-size: 14px; }
+  .tier-card h4 { font-size: 13px; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .tier-card .stat { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 2px 7px; border-radius: 4px; }
+  .stat-blue { background: var(--accent-light); color: var(--accent); }
+  .stat-orange { background: var(--orange-light); color: var(--orange); }
+  .stat-green { background: var(--green-light); color: var(--green); }
+  .stat-red { background: var(--red-light); color: var(--red); }
+  @media (max-width: 900px) { #toc { display: none; } main { margin-left: 0; padding: 24px 20px 60px; } .tier-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<aside id="toc">
+  <div id="toc-header">
+    <span class="phase-tag">Phase B · Topic 7</span>
+    <h2>7.6 Hot Partitions — Detection &amp; Mitigation</h2>
+  </div>
+  <nav>
+    <a href="#s0">🗺️ Overview</a>
+    <a href="#s1">🎯 Goal</a>
+    <a href="#s2">✅ Mastery Criteria</a>
+    <a href="#s3">🗓️ Study Phases</a>
+    <a href="#s4">📋 Cheatsheet</a>
+    <a href="#s5">🧠 Core Definition</a>
+    <a href="#s6">📦 Core Concepts</a>
+    <a href="#s7">🔍 First Principles</a>
+    <a href="#s8">🗺️ Mental Models</a>
+    <a href="#s9">⚙️ How It Works</a>
+    <a href="#s10">🏭 Real-World Examples</a>
+    <a href="#s11">⚖️ Trade-offs</a>
+    <a href="#s12">🎯 Interview Application</a>
+    <a href="#s13">⚠️ Misconceptions</a>
+    <a href="#s14">🔗 Relationships</a>
+    <a href="#s15">🧪 Self-Check Quiz</a>
+    <a href="#s16">📚 Further Reading</a>
+    <a href="#s17">✍️ My Notes</a>
+  </nav>
+</aside>
+
+<main>
+<article>
+
+<!-- HEADER -->
+<div class="doc-header">
+  <div class="meta">
+    <span class="tag tag-phase">⚡ Phase B — Scalability</span>
+    <span class="tag tag-topic">🔀 Topic 7 — Data Partitioning / Sharding</span>
+    <span class="tag tag-date">📅 2026-07-18</span>
+  </div>
+  <h1>7.6 Hot Partitions<br><span style="font-weight:400;color:var(--text-muted);font-size:22px;">Detection and Mitigation</span></h1>
+</div>
+
+<!-- S0: OVERVIEW -->
+<section id="s0">
+  <h2 class="section-title"><span class="num">§0</span> 🗺️ Topic Overview</h2>
+  <p>A hot partition is a shard that receives disproportionately more traffic or data than its peers, becoming a bottleneck even though the cluster as a whole has spare capacity. Every partitioning scheme in this topic assumes roughly uniform access — real traffic follows a power law, where a small number of keys or partitions absorb most of the load. This subtopic is about closing that gap: <strong>detecting</strong> a shard that's silently becoming your bottleneck, telling a <strong>hot partition</strong> (many keys, fixable by splitting/rebalancing) apart from a <strong>hot key</strong> (one key, unfixable by resharding), and matching the right mitigation to the right cause.</p>
+
+  <ul class="focus-list" style="margin-top:18px;">
+    <li><strong>1. Hot partition vs. hot key</strong> — the load-bearing distinction. A hot partition's load is spread across many keys; a hot key alone saturates whatever single partition it's pinned to. Splitting/rebalancing fixes the former, not the latter.</li>
+    <li><strong>2. Detection requires per-partition granularity</strong> — cluster-wide averages hide a hot partition completely. You need per-shard QPS, size, and p99 latency with an imbalance ratio as the alert signal.</li>
+    <li><strong>3. Root causes</strong> — celebrity/viral keys, monotonic write keys, flash-sale bursts, and poor partition-key choice are the recurring culprits. Know how to recognize each from a design description.</li>
+    <li><strong>4. Mitigation toolbox, matched to cause</strong> — key salting, caching, read replicas, write-key redesign, and splitting/rebalancing each solve a different root cause. Know when each applies.</li>
+    <li><strong>5. What doesn't work</strong> — more partitions or a rebalance does nothing for a single hot key; it just relocates the same saturated key to a different, now-equally-hot node.</li>
+  </ul>
+</section>
+
+<!-- S1: GOAL -->
+<section id="s1">
+  <h2 class="section-title"><span class="num">§1</span> 🎯 Goal of This Subtopic</h2>
+  <div class="callout callout-goal">
+    After studying this, you should be able to distinguish a hot partition from a hot key precisely and explain why the fix for one is useless for the other, design a detection strategy using per-shard metrics and an imbalance threshold, diagnose the root cause of a described hotspot (celebrity key, monotonic write key, flash-sale burst, poor partition key), and propose the correct mitigation — key salting, caching, read replicas, write-key redesign, or splitting — justifying why alternatives wouldn't work. You should also be able to reason separately about read-hot vs. write-hot partitions, since the mitigation toolbox differs.
+  </div>
+</section>
+
+<!-- S2: MASTERY -->
+<section id="s2">
+  <h2 class="section-title"><span class="num">§2</span> ✅ What Mastery Looks Like</h2>
+  <ul class="checklist" id="mastery-list">
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can define a hot partition and a hot key precisely and explain why a hot key cannot be fixed by splitting or rebalancing</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can describe a monitoring strategy that would actually surface a hot partition (per-shard QPS/size/p99 + imbalance ratio), and explain why a cluster-wide average would miss it</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can identify at least three distinct root causes of hotspotting (celebrity/viral key, monotonic write key, flash-sale burst) from a design scenario</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can explain key salting step by step — how a hot key's writes are spread across sub-keys and how reads are reassembled — and state its cost</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can explain why caching in front of a hot partition helps read-hot but not write-hot hotspots, and propose a separate mitigation for write-hot cases</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can identify when splitting/rebalancing (7.5) is the right fix vs. when it's a dead end (single hot key)</span></li>
+  </ul>
+  <div class="callout callout-tip" style="margin-top:18px;">💡 <strong>Rule of thumb:</strong> If you can teach it to someone else and field their follow-up questions, you've mastered it.</div>
+</section>
+
+<!-- S3: STUDY PHASES -->
+<section id="s3">
+  <h2 class="section-title"><span class="num">§3</span> 🗓️ Study Phases to Achieve Mastery</h2>
+
+  <div class="phase-card open">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph1">Phase 1</span> Acquire 📖</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Read deeply enough that you could explain the concept without the doc.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text"><strong>DDIA Ch. 6 — "Skewed Workloads and Relieving Hot Spots"</strong> (Kleppmann) — the canonical treatment of hot keys and key salting</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text"><strong>AWS DynamoDB docs — "Designing Partition Keys"</strong> and <strong>"Adaptive Capacity"</strong> — production-grade hot partition detection and mitigation</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text"><strong>Twitter engineering — the celebrity/fan-out problem</strong> — fan-out-on-write vs. fan-out-on-read hybrid for high-follower accounts</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Read Sections 5–9 of this doc carefully — don't skim</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Re-read the Cheatsheet (§4) and recite it from memory after</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph2">Phase 2</span> Consolidate ✍️</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Verify you can reproduce knowledge in your own words without looking.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Close the doc — write out the Core Definition from memory, then compare</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Explain First Principles out loud: why does uniform-hash partitioning break down in the real world?</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Reconstruct key salting step by step from memory — the write path and the read-side aggregation</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Restate each Trade-off row in your own words — if you can't explain the cost, you don't own it</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph3">Phase 3</span> Apply 🔧</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Connect to real systems and simulate interview scenarios.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Go through Real-World Examples (§10) — verify each claim and add notes to §17</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Practice Interview Application (§12) out loud — say the trigger phrases and your response as if live</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Work through Misconceptions (§13) — explain WHY each is wrong</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Trace Relationships (§14) — explain each connection without looking</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph4">Phase 4</span> Validate 🧪</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Confirm you actually own it, not just recognize it.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Answer every Self-Check Quiz question (§15) out loud without notes</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Recite the Cheatsheet (§4) from memory — if you can't, re-do Phase 2</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Tick off mastery criteria in §2 — only check a box if you can demonstrate on demand</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Teach this concept to an imaginary interviewer for 2 minutes without hesitation</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- S4: CHEATSHEET -->
+<section id="s4">
+  <h2 class="section-title"><span class="num">§4</span> 📋 Cheatsheet</h2>
+  <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+
+  <!-- Radial Mindmap SVG -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">🧠 Concept Mindmap</div>
+    <svg viewBox="0 0 820 480" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:820px;display:block;margin:0 auto;">
+      <rect width="820" height="480" fill="#fafafa" rx="8"/>
+      <!-- Connector lines -->
+      <line x1="410" y1="240" x2="175" y2="100" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="645" y2="100" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="100" y2="280" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="720" y2="280" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="175" y2="400" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="240" x2="645" y2="400" stroke="#aaa" stroke-width="1.5"/>
+      <!-- Central -->
+      <ellipse cx="410" cy="240" rx="105" ry="44" fill="#a5d8ff" stroke="#1971c2" stroke-width="2"/>
+      <text x="410" y="234" text-anchor="middle" dominant-baseline="middle" font-family="Arial,sans-serif" font-size="14" font-weight="bold" fill="#1a1917">Hot Partitions</text>
+      <text x="410" y="252" text-anchor="middle" dominant-baseline="middle" font-family="Arial,sans-serif" font-size="12" fill="#333">detect &amp; mitigate</text>
+      <!-- Hot Partition -->
+      <rect x="88" y="68" width="174" height="60" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="175" y="89" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Hot Partition</text>
+      <text x="175" y="105" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">many keys, collectively hot</text>
+      <text x="175" y="119" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">fix: split / rebalance</text>
+      <!-- Hot Key -->
+      <rect x="558" y="68" width="174" height="60" rx="8" fill="#ffd8a8" stroke="#e67700" stroke-width="1.5"/>
+      <text x="645" y="89" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Hot Key</text>
+      <text x="645" y="105" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">one key saturates a shard</text>
+      <text x="645" y="119" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">fix: salt / cache / replicate</text>
+      <!-- Detection -->
+      <rect x="20" y="248" width="160" height="64" rx="8" fill="#c3fae8" stroke="#0ca678" stroke-width="1.5"/>
+      <text x="100" y="269" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Detection</text>
+      <text x="100" y="285" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">per-shard QPS/size/p99</text>
+      <text x="100" y="299" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">imbalance ratio ≥ 2–3×</text>
+      <!-- Key Salting -->
+      <rect x="640" y="248" width="160" height="64" rx="8" fill="#ffc9c9" stroke="#c92a2a" stroke-width="1.5"/>
+      <text x="720" y="269" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Key Salting</text>
+      <text x="720" y="285" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">key#0..N, scatter writes</text>
+      <text x="720" y="299" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">gather + merge on read</text>
+      <!-- Caching / Replicas -->
+      <rect x="88" y="372" width="174" height="60" rx="8" fill="#b2f2bb" stroke="#2f9e44" stroke-width="1.5"/>
+      <text x="175" y="393" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Caching / Replicas</text>
+      <text x="175" y="409" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">fixes READ-hot only</text>
+      <text x="175" y="423" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">L1/L2 (5.7/5.8) + read replicas</text>
+      <!-- Root Causes -->
+      <rect x="558" y="372" width="174" height="60" rx="8" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.5"/>
+      <text x="645" y="393" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">Root Causes</text>
+      <text x="645" y="409" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">celebrity key, flash sale</text>
+      <text x="645" y="423" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">monotonic write key</text>
+    </svg>
+    <p class="caption">Radial mindmap: six clusters around the hot-partition core concept</p>
+  </div>
+
+  <!-- Decision Map -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">🗺️ Hotspot Detection &amp; Mitigation Decision Map</div>
+    <svg viewBox="0 0 720 680" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:720px;display:block;margin:0 auto;" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+      <rect width="720" height="680" fill="#fafafa" rx="8"/>
+
+      <!-- START -->
+      <rect x="255" y="14" width="210" height="38" rx="19" fill="#1a1917"/>
+      <text x="360" y="37" text-anchor="middle" font-size="12" font-weight="600" fill="#fff">Per-shard QPS/size/p99 tracked?</text>
+      <line x1="360" y1="52" x2="360" y2="74" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+
+      <!-- Q1 -->
+      <rect x="200" y="74" width="320" height="44" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="360" y="93" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">Any shard ≥ 2–3× the cluster</text>
+      <text x="360" y="109" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">median QPS / size / p99?</text>
+      <line x1="200" y1="96" x2="108" y2="96" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="154" y="88" text-anchor="middle" font-size="10" fill="#6b6861">No</text>
+      <rect x="14" y="74" width="94" height="44" rx="8" fill="#f3f2ef" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="61" y="93" text-anchor="middle" font-size="11" fill="#6b6861">No hotspot —</text>
+      <text x="61" y="108" text-anchor="middle" font-size="11" fill="#6b6861">keep monitoring</text>
+      <line x1="360" y1="118" x2="360" y2="140" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="372" y="133" font-size="10" fill="#6b6861">Yes</text>
+
+      <!-- Q2 -->
+      <rect x="180" y="140" width="360" height="44" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="360" y="159" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">Is the load spread across MANY keys</text>
+      <text x="360" y="175" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">or concentrated on ONE key?</text>
+      <line x1="180" y1="162" x2="108" y2="162" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="140" y="154" text-anchor="middle" font-size="10" fill="#6b6861">Many keys</text>
+      <rect x="14" y="140" width="94" height="60" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="61" y="160" text-anchor="middle" font-size="11" font-weight="700" fill="#1e40af">HOT</text>
+      <text x="61" y="174" text-anchor="middle" font-size="11" font-weight="700" fill="#1e40af">PARTITION</text>
+      <text x="61" y="188" text-anchor="middle" font-size="9" fill="#1e40af">split / rebalance</text>
+      <line x1="360" y1="184" x2="360" y2="206" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="380" y="199" font-size="10" fill="#6b6861">One key → HOT KEY</text>
+
+      <!-- Q3 -->
+      <rect x="165" y="206" width="390" height="44" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="360" y="225" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">Is the hot key's load mostly</text>
+      <text x="360" y="241" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">READS or WRITES?</text>
+      <line x1="555" y1="228" x2="608" y2="228" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="582" y="220" text-anchor="middle" font-size="10" fill="#6b6861">Writes</text>
+      <rect x="606" y="200" width="104" height="60" rx="8" fill="#ffc9c9" stroke="#c92a2a" stroke-width="1.5"/>
+      <text x="658" y="220" text-anchor="middle" font-size="11" font-weight="700" fill="#7f1d1d">KEY SALTING</text>
+      <text x="658" y="234" text-anchor="middle" font-size="10" fill="#7f1d1d">key#0..N</text>
+      <text x="658" y="248" text-anchor="middle" font-size="10" fill="#7f1d1d">merge on read</text>
+      <line x1="360" y1="250" x2="360" y2="284" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+      <text x="372" y="270" font-size="10" fill="#6b6861">Reads</text>
+
+      <!-- OUTCOME: Read-hot -->
+      <rect x="150" y="284" width="420" height="72" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+      <text x="360" y="308" text-anchor="middle" font-size="14" font-weight="800" fill="#1e40af">CACHING FIRST (L1/L2)</text>
+      <text x="360" y="326" text-anchor="middle" font-size="11" fill="#1e40af">Absorb reads before they hit the partition (5.7/5.8).</text>
+      <text x="360" y="342" text-anchor="middle" font-size="11" fill="#1e40af">Still hot after caching? → add READ REPLICAS.</text>
+      <line x1="360" y1="356" x2="360" y2="380" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+
+      <!-- Monotonic key check -->
+      <rect x="140" y="380" width="440" height="80" rx="10" fill="#fff" stroke="#0ca678" stroke-width="1.5"/>
+      <text x="360" y="404" text-anchor="middle" font-size="12" font-weight="700" fill="#064e3b">Is the partition key monotonically increasing</text>
+      <text x="360" y="422" text-anchor="middle" font-size="12" font-weight="700" fill="#064e3b">(timestamp / auto-increment) driving this?</text>
+      <text x="360" y="444" text-anchor="middle" font-size="11" fill="#134e4a">If yes → redesign key (hash prefix / reversal), not just split</text>
+      <line x1="360" y1="460" x2="360" y2="482" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm-arr)"/>
+
+      <!-- Warning 1 -->
+      <rect x="150" y="482" width="420" height="46" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+      <text x="360" y="501" text-anchor="middle" font-size="11" font-weight="700" fill="#92400e">⚠️ Never rebalance a single-key hotspot</text>
+      <text x="360" y="518" text-anchor="middle" font-size="11" fill="#92400e">the key just moves — new node equally hot</text>
+
+      <!-- Warning 2 -->
+      <rect x="150" y="536" width="420" height="46" rx="8" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5"/>
+      <text x="360" y="555" text-anchor="middle" font-size="11" font-weight="700" fill="#7f1d1d">⚠️ Cluster-wide averages hide hot partitions</text>
+      <text x="360" y="572" text-anchor="middle" font-size="11" fill="#7f1d1d">always alert on PER-SHARD metrics, not fleet average</text>
+
+      <!-- Legend -->
+      <rect x="150" y="596" width="420" height="70" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="360" y="615" text-anchor="middle" font-size="11" font-weight="700" fill="#6b6861">LEGEND</text>
+      <rect x="176" y="626" width="12" height="12" rx="2" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="195" y="637" font-size="10" fill="#1e40af">Hot partition path</text>
+      <rect x="320" y="626" width="12" height="12" rx="2" fill="#ffc9c9" stroke="#c92a2a" stroke-width="1.5"/>
+      <text x="339" y="637" font-size="10" fill="#7f1d1d">Hot key (write)</text>
+      <rect x="460" y="626" width="12" height="12" rx="2" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="479" y="637" font-size="10" fill="#1e40af">Hot key (read)</text>
+      <text x="176" y="655" font-size="10" fill="#6b6861">Splitting/rebalancing only helps the LEFT branch — many-key partitions.</text>
+
+      <defs>
+        <marker id="dm-arr" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+          <path d="M0,0 L0,7 L7,3.5 z" fill="#bbb"/>
+        </marker>
+      </defs>
+    </svg>
+    <p class="caption">Decision gates — answer top to bottom; the branch you land on determines the entire mitigation strategy</p>
+  </div>
+
+  <div class="cheatsheet">
+<span class="label">§ 1  WHY IT EXISTS</span>Every partitioning scheme assumes roughly uniform key access, so spreading keys
+evenly also spreads load evenly. Real traffic follows a power law (Zipfian):
+a small fraction of keys absorb most of the traffic. A system can be "perfectly"
+partitioned by key count/storage and still have one node pegged at 100% CPU
+while neighbors idle — because that node holds the key(s) everyone wants right
+now. Detecting WHICH situation you're in (many keys vs. one key) determines
+whether resharding can help at all.
+
+<span class="label">§ 2  HOT PARTITION vs. HOT KEY</span>HOT PARTITION — many keys collectively overload one shard. Fixable by
+  splitting the partition or rebalancing it to a less-loaded node (7.5).
+HOT KEY — one key so popular it saturates whatever partition it's pinned to.
+  NOT fixable by splitting/rebalancing — the key is atomic; it just moves,
+  whole, to a new node that becomes equally hot.
+This is the single most important distinction: it determines your entire
+mitigation toolbox.
+
+<span class="label">§ 3  DETECTION</span>Cluster-wide averages HIDE a hot partition — the other N-1 partitions dilute
+the number. You need PER-SHARD metrics: QPS (read/write separately), storage
+size, p99/p999 latency — flagged when a shard is ≥ 2–3× the cluster median.
+Correlate with recent events (deploy, viral post, product launch) to guess
+root cause before picking a mitigation.
+
+<span class="label">§ 4  MITIGATION TOOLBOX (matched to cause)</span>Read-hot key/partition:   Cache in front (L1/L2, 5.7/5.8) first, then read
+                          replicas if still hot after caching.
+Write-hot key:            KEY SALTING — key#0..N, scatter writes, scatter-
+                          gather + merge on read (sum/latest/union).
+Monotonic write key:      Redesign the key — hash prefix or reversed
+                          timestamp — to scatter new writes across the space.
+Hot partition (many keys): Split the partition / rebalance it (7.5).
+
+<span class="label">§ 5  USE / AVOID</span>Use salting:       ONE key's writes are the bottleneck; you can tolerate
+                   fan-out reads to reassemble the value.
+Use caching:       ONE key's reads are the bottleneck.
+Use read replicas: a WHOLE partition (many keys) is read-hot.
+Use split/rebalance: a partition is hot from too MANY keys/data, not one key.
+AVOID rebalancing a single-key hotspot — it relocates the same problem.
+AVOID trusting cluster-wide averages to catch a hot partition.
+
+<span class="label">§ 6  INTERVIEW TRIGGERS</span>→ "One shard/partition is getting way more traffic than the others."
+→ "A celebrity user's account is overwhelming a single node."
+→ "How would you detect a partition becoming a bottleneck before it fails?"
+→ "We added more shards but the same node is still hot — why didn't that help?"
+
+<span class="label">§ 7  NUMBERS &amp; GOTCHA</span>Imbalance signal:  shard QPS or size ≥ ~2–3× cluster median.
+Salting fan-out:   N sub-keys → ~1/N write load per sub-key; N reads on
+                   scatter-gather — pick N to match write QPS, not arbitrarily.
+Zipfian intuition: top 1% of keys can absorb 50%+ of traffic in real systems.
+GOTCHA: Splitting or rebalancing a partition that's hot because of ONE key
+  changes NOTHING — that key moves, whole, to the new shard, which is now
+  equally hot. Diagnose hot-key vs. hot-partition BEFORE choosing a fix.
+  </div>
+</section>
+
+<!-- S5: CORE DEFINITION -->
+<section id="s5">
+  <h2 class="section-title"><span class="num">§5</span> 🧠 Core Definition</h2>
+  <div class="callout callout-teal" style="font-size:16px;font-weight:600;line-height:1.6;">
+    A hot partition is a shard that receives significantly more read/write traffic or stores significantly more data than its peers, becoming a bottleneck even while the rest of the cluster has spare capacity — distinct from (but often caused by) a hot key, a single item so disproportionately popular that it saturates whatever one partition it is assigned to, a problem that resharding cannot solve because a key cannot be split across nodes.
+  </div>
+
+  <!-- Comparison cards -->
+  <div class="tier-grid" style="margin-top:20px;">
+    <div class="tier-card">
+      <h4>🔵 Hot Partition <span class="stat stat-blue">MANY KEYS</span></h4>
+      <p style="font-size:13px;margin-bottom:6px;">Load spread across many keys that happen to co-locate on one shard. A distribution problem across the partition's contents.</p>
+      <p style="font-size:13px;margin-bottom:0;color:var(--green);">✅ Fixable: split the partition or rebalance it (7.5).</p>
+    </div>
+    <div class="tier-card">
+      <h4>🟠 Hot Key <span class="stat stat-orange">ONE KEY</span></h4>
+      <p style="font-size:13px;margin-bottom:6px;">One item so popular it alone saturates its partition, independent of how many partitions exist.</p>
+      <p style="font-size:13px;margin-bottom:0;color:var(--red);">⚠️ Not fixable by resharding — needs salting, caching, or replication.</p>
+    </div>
+  </div>
+</section>
+
+<!-- S6: CORE CONCEPTS -->
+<section id="s6">
+  <h2 class="section-title"><span class="num">§6</span> 📦 Core Concepts</h2>
+
+  <h3>Hot Partition (Shard-Level Imbalance)</h3>
+  <p>A partition that, as a whole, absorbs disproportionate load — because it happens to hold a cluster of moderately popular keys, or a larger data volume than its peers. This is a distribution problem across the <em>partition's contents</em>, and it responds to the standard tools: splitting the partition (dynamic partitioning) or reassigning it to relieve the imbalance (rebalancing, 7.5). The defining feature is that no single key is the whole story — the heat is spread across many keys that happen to co-locate.</p>
+
+  <h3>Hot Key (Single-Item Saturation)</h3>
+  <p>One specific key — a celebrity's profile, a viral post, a flash-sale product ID — that receives so much traffic it alone saturates the partition or node responsible for it, independent of how many partitions exist. Because a key is the atomic unit of placement, no partitioning scheme can spread a single key's load across multiple nodes without changing the key itself (salting) or serving it differently (caching/replication). This is the single most important distinction in the subtopic: hot-key problems are not solved by adding partitions.</p>
+
+  <!-- Hot Partition vs Hot Key comparison diagram -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">🔀 Hot Partition vs. Hot Key — Why Rebalancing Only Fixes One</div>
+    <svg viewBox="0 0 760 320" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:760px;display:block;margin:0 auto;">
+      <rect width="760" height="320" fill="#fafafa" rx="8"/>
+
+      <!-- LEFT: hot partition (fixable) -->
+      <text x="190" y="26" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="bold" fill="#16a34a">Hot Partition (many keys)</text>
+      <text x="190" y="42" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#065f46">splitting spreads the load</text>
+      <text x="70" y="66" font-family="Arial,sans-serif" font-size="10" fill="#666">before: 1 overloaded shard</text>
+      <rect x="40" y="72" width="220" height="30" rx="5" fill="#fee2e2" stroke="#dc2626"/><text x="150" y="92" text-anchor="middle" font-size="10" fill="#7f1d1d">Shard A: k1 k2 k3 k4 k5 k6 (hot)</text>
+      <rect x="40" y="112" width="220" height="24" rx="5" fill="#f3f2ef" stroke="#ccc"/><text x="150" y="128" text-anchor="middle" font-size="10" fill="#999">Shard B: k7 k8 (idle)</text>
+      <line x1="150" y1="140" x2="150" y2="164" stroke="#16a34a" stroke-width="1.5" marker-end="url(#hp-arr-g)"/>
+      <text x="170" y="155" font-family="Arial,sans-serif" font-size="9" fill="#16a34a">split</text>
+      <rect x="40" y="168" width="105" height="26" rx="5" fill="#dcfce7" stroke="#16a34a"/><text x="92" y="185" text-anchor="middle" font-size="10" fill="#065f46">A: k1 k2 k3</text>
+      <rect x="155" y="168" width="105" height="26" rx="5" fill="#dcfce7" stroke="#16a34a"/><text x="207" y="185" text-anchor="middle" font-size="10" fill="#065f46">A': k4 k5 k6</text>
+      <text x="150" y="220" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#16a34a">✓ Load now spread across 2 shards</text>
+
+      <!-- divider -->
+      <line x1="380" y1="20" x2="380" y2="300" stroke="#e5e3de" stroke-width="1.5" stroke-dasharray="5,3"/>
+
+      <!-- RIGHT: hot key (not fixable) -->
+      <text x="570" y="26" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="bold" fill="#dc2626">Hot Key (one key)</text>
+      <text x="570" y="42" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#7f1d1d">splitting does nothing</text>
+      <text x="450" y="66" font-family="Arial,sans-serif" font-size="10" fill="#666">before: 1 overloaded shard</text>
+      <rect x="420" y="72" width="240" height="30" rx="5" fill="#fee2e2" stroke="#dc2626"/><text x="540" y="92" text-anchor="middle" font-size="10" fill="#7f1d1d">Shard A: kHOT (celebrity, 90% traffic)</text>
+      <rect x="420" y="112" width="240" height="24" rx="5" fill="#f3f2ef" stroke="#ccc"/><text x="540" y="128" text-anchor="middle" font-size="10" fill="#999">plus k9, k10 (idle)</text>
+      <line x1="540" y1="140" x2="540" y2="164" stroke="#dc2626" stroke-width="1.5" marker-end="url(#hp-arr-r)"/>
+      <text x="565" y="155" font-family="Arial,sans-serif" font-size="9" fill="#dc2626">"split"</text>
+      <rect x="420" y="168" width="240" height="26" rx="5" fill="#fee2e2" stroke="#dc2626"/><text x="540" y="185" text-anchor="middle" font-size="10" fill="#7f1d1d">Shard A': kHOT alone (still 90% traffic)</text>
+      <text x="540" y="220" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#dc2626">✗ kHOT moved whole — new shard equally hot</text>
+
+      <!-- key insight bar -->
+      <rect x="40" y="238" width="680" height="60" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="380" y="258" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">KEY INSIGHT</text>
+      <text x="380" y="277" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#333">A hot partition's load is divisible across its many keys — splitting redistributes it.</text>
+      <text x="380" y="291" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#333">A hot key's load is NOT divisible — it moves whole. Only salting/caching/replication help.</text>
+
+      <defs>
+        <marker id="hp-arr-r" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L0,8 L8,4 z" fill="#dc2626"/></marker>
+        <marker id="hp-arr-g" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L0,8 L8,4 z" fill="#16a34a"/></marker>
+      </defs>
+    </svg>
+    <p class="caption">The core distinction: a hot partition's load is divisible and splits cleanly; a hot key's load is atomic and simply relocates</p>
+  </div>
+
+  <h3>Key Salting (Write Splitting)</h3>
+  <p>A technique for defeating a hot key's write load: append a random or round-robin suffix (e.g., <code>productA#0</code> … <code>productA#9</code>) to the logical key, spreading writes for "the same" logical item across N physical sub-keys/partitions. Reads must then scatter-gather across all N sub-keys and merge the results (sum a counter, pick the latest timestamp, etc.). This trades write scalability for read complexity and cost — every read now fans out to N shards instead of one.</p>
+
+  <h3>Read Replication for Read-Hot Partitions</h3>
+  <p>When a partition (or a specific key within it) is read-heavy but not write-heavy, adding read replicas — additional copies of the same data serving reads — multiplies read capacity without touching the partitioning scheme at all. This works because read replicas don't need to agree on write ordering the way splitting a write path would; it's the standard fix for "everyone wants to read this," and it composes with caching (Topic 5.7/5.8) as a first line of defense before replicas are even needed.</p>
+
+  <h3>Monotonic Key Hotspotting</h3>
+  <p>When the partition key is monotonically increasing (a timestamp, an auto-incrementing ID), every new write lands in the same key range — and therefore the same partition — until that partition splits. Even after splitting, the newest (highest) sub-range remains hot forever, because new writes always target "now." The fix is to break the monotonicity: prepend a hash or a reversed/salted prefix to the key so new writes scatter across the key space instead of piling onto one end.</p>
+
+  <h3>Detection via Per-Shard Metrics</h3>
+  <p>Because a hot partition is invisible in a cluster-wide average (the other N-1 partitions dilute it), detection requires <strong>per-partition</strong> telemetry: QPS, storage size, and p99/p999 latency, tracked per shard and compared against the cluster median. An imbalance ratio (e.g., one shard at 2–3× median QPS or size) is the standard alerting trigger — this is the same detection machinery referenced in 7.5 as the input to a rebalancing decision.</p>
+</section>
+
+<!-- S7: FIRST PRINCIPLES -->
+<section id="s7">
+  <h2 class="section-title"><span class="num">§7</span> 🔍 First Principles — Why Does This Exist?</h2>
+  <p>Every partitioning scheme in this topic — hash partitioning, range partitioning, consistent hashing — rests on an implicit assumption: that keys are accessed with roughly uniform frequency, so spreading keys evenly across partitions also spreads <em>load</em> evenly. Real-world access patterns violate this assumption almost universally. Popularity in real systems follows a power-law (Zipfian) distribution: a small fraction of items (celebrity accounts, viral posts, the one SKU on sale) receive a disproportionate share of all traffic. Hash partitioning does an excellent job of spreading <em>keys</em> evenly across the keyspace — but it says nothing about spreading <em>popularity</em> evenly, because popularity is a property of the workload, not the key itself.</p>
+  <p>The result is that a system can be "perfectly" partitioned by key count and storage size, and still have one node pegged at 100% CPU while its neighbors idle at 10% — because that one node happens to hold the key(s) everyone wants right now. This subtopic exists because uniform partitioning solves the <em>storage</em> distribution problem but not the <em>load</em> distribution problem, and because the fix depends entirely on <em>why</em> a hotspot exists: whether the heat is spread across many keys (fixable by moving/splitting partitions) or concentrated in one key (fixable only by changing how that key is stored, cached, or accessed). Detecting which situation you're in, and reaching for the right tool, is the practical skill this subtopic builds.</p>
+
+  <!-- Zipfian distribution diagram -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">📊 Real-World Traffic Skew — Power Law (Zipfian) Distribution</div>
+    <svg viewBox="0 0 720 260" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:720px;display:block;margin:0 auto;">
+      <rect width="720" height="260" fill="#fafafa" rx="8"/>
+      <text x="360" y="24" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" fill="#666">Share of total traffic absorbed, top keys ranked by popularity</text>
+
+      <!-- bars, decreasing height -->
+      <rect x="50" y="50" width="46" height="150" fill="#dc2626"/><text x="73" y="46" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#7f1d1d">52%</text>
+      <rect x="106" y="150" width="46" height="50" fill="#e67700"/><text x="129" y="146" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#7c2d12">18%</text>
+      <rect x="162" y="172" width="46" height="28" fill="#e67700"/><text x="185" y="168" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#7c2d12">10%</text>
+      <rect x="218" y="182" width="46" height="18" fill="#d97706"/><text x="241" y="178" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#92400e">6%</text>
+      <rect x="274" y="188" width="46" height="12" fill="#16a34a"/><text x="297" y="184" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#065f46">4%</text>
+      <rect x="330" y="192" width="46" height="8" fill="#16a34a"/><text x="353" y="188" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" fill="#065f46">3%</text>
+      <rect x="386" y="194" width="46" height="6" fill="#16a34a"/>
+      <rect x="442" y="195" width="46" height="5" fill="#16a34a"/>
+      <text x="530" y="180" font-family="Arial,sans-serif" font-size="10" fill="#666">... long tail of thousands</text>
+      <text x="530" y="195" font-family="Arial,sans-serif" font-size="10" fill="#666">of near-zero-traffic keys</text>
+
+      <text x="73" y="215" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" fill="#666">key 1</text>
+      <text x="129" y="215" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" fill="#666">key 2</text>
+      <text x="185" y="215" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" fill="#666">key 3</text>
+      <text x="241" y="215" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" fill="#666">key 4</text>
+
+      <line x1="40" y1="200" x2="700" y2="200" stroke="#333" stroke-width="1.5"/>
+
+      <rect x="40" y="230" width="640" height="24" rx="6" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="360" y="246" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#333">Uniform hashing spreads KEYS evenly — it does nothing to spread this POPULARITY skew</text>
+    </svg>
+    <p class="caption">Illustrative Zipfian shape: a handful of keys dominate traffic while thousands contribute almost nothing — the pattern hash partitioning cannot fix on its own</p>
+  </div>
+</section>
+
+<!-- S8: MENTAL MODELS -->
+<section id="s8">
+  <h2 class="section-title"><span class="num">§8</span> 🗺️ Mental Models</h2>
+
+  <h3>Model 1: The Overcrowded Checkout Lane</h3>
+  <p>Imagine a supermarket with ten checkout lanes, each assigned a random slice of the alphabet by customer last name. If last names were uniformly distributed, every lane moves at the same pace. But if a bus of people all named "Smith" arrives, lane 7 (Smith's lane) backs up while the other nine sit empty — even though the store, in aggregate, has plenty of capacity. Opening more lanes for the S's (splitting) helps if many different S-surnamed people are queuing (a hot <em>partition</em> of many keys). It does nothing if it's actually one person named Smith trying to buy 500 identical items one at a time (a hot <em>key</em>) — for that, you need a dedicated express process (caching/salting), not more lanes.</p>
+
+  <h3>Model 2: The Viral Tweet Fan-Out</h3>
+  <p>A regular user's tweet reaching 200 followers is trivial to fan out — write it to 200 timelines. A celebrity's tweet reaching 50 million followers is a hot key at the write layer: writing to 50 million timelines synchronously would saturate whatever partition holds "pending fan-out work" for that one tweet. The real fix isn't more partitions — it's changing the <em>strategy</em> for celebrities specifically: fan-out-on-read (don't pre-write to every follower's timeline; merge celebrity posts in at read time) instead of fan-out-on-write. This model captures why hot-key mitigations are often architectural changes to the access pattern, not more infrastructure.</p>
+
+  <h3>Model 3: Salting as Photocopying a Popular Flyer</h3>
+  <p>If one bulletin board is overwhelmed with people posting notes about the same popular event, you don't build more bulletin boards for unrelated events — you photocopy the <em>same</em> flyer onto ten boards (salting: <code>event#0</code>...<code>event#9</code>) so posting traffic spreads across all ten. But now anyone who wants the full picture (all RSVPs) has to check all ten boards and combine what they find (scatter-gather + merge on read). The model captures the fundamental trade: you've traded a write bottleneck for read fan-out cost — salting isn't free, it's a shift of where the cost lives.</p>
+</section>
+
+<!-- S9: HOW IT WORKS -->
+<section id="s9">
+  <h2 class="section-title"><span class="num">§9</span> ⚙️ How It Works — Mechanics</h2>
+
+  <h3>Detecting a Hot Partition</h3>
+  <p>Collect per-partition metrics continuously: QPS (read/write separately), storage size, and p99/p999 latency. Compute the cluster median for each metric across all partitions, and flag any partition whose metric exceeds a threshold ratio versus the median (commonly 2–3×). Correlate with recent events (a deploy, a viral post, a product launch) to identify likely root cause before choosing a mitigation.</p>
+
+  <h3>Diagnosing Hot Partition vs. Hot Key</h3>
+  <p>Inspect the flagged partition's key-level access distribution (if available) or sample recent requests. If load is concentrated on one (or a handful of) keys, it's a <strong>hot key</strong> problem — mitigations are caching, salting, or replication of that specific key's data. If load is spread across many keys that happen to co-locate on this partition, it's a <strong>hot partition</strong> problem — mitigations are splitting or rebalancing (7.5).</p>
+
+  <!-- Key salting write/read flow diagram -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">🧂 Key Salting — Write Path (Scatter) and Read Path (Gather + Merge)</div>
+    <svg viewBox="0 0 760 300" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:760px;display:block;margin:0 auto;">
+      <rect width="760" height="300" fill="#fafafa" rx="8"/>
+
+      <text x="200" y="26" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="bold" fill="#e67700">WRITE (scatter)</text>
+      <text x="560" y="26" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="bold" fill="#0ca678">READ (gather + merge)</text>
+      <line x1="380" y1="14" x2="380" y2="286" stroke="#e5e3de" stroke-width="1.5" stroke-dasharray="5,3"/>
+
+      <!-- Write side -->
+      <rect x="140" y="46" width="120" height="36" rx="8" fill="#1a1917"/>
+      <text x="200" y="69" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#fff">write(hotKey, v)</text>
+      <line x1="200" y1="82" x2="200" y2="102" stroke="#e67700" stroke-width="1.5" marker-end="url(#ks-arr-o)"/>
+      <rect x="130" y="104" width="140" height="30" rx="6" fill="#ffd8a8" stroke="#e67700" stroke-width="1.5"/>
+      <text x="200" y="123" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#7c2d12">append random suffix #0..N</text>
+
+      <line x1="200" y1="134" x2="80" y2="164" stroke="#e67700" stroke-width="1.5" marker-end="url(#ks-arr-o)"/>
+      <line x1="200" y1="134" x2="200" y2="164" stroke="#e67700" stroke-width="1.5" marker-end="url(#ks-arr-o)"/>
+      <line x1="200" y1="134" x2="320" y2="164" stroke="#e67700" stroke-width="1.5" marker-end="url(#ks-arr-o)"/>
+
+      <rect x="30" y="166" width="100" height="30" rx="5" fill="#dbe4ff" stroke="#3b5bdb"/><text x="80" y="185" text-anchor="middle" font-size="10" fill="#1e40af">key#0 (Shard A)</text>
+      <rect x="150" y="166" width="100" height="30" rx="5" fill="#dbe4ff" stroke="#3b5bdb"/><text x="200" y="185" text-anchor="middle" font-size="10" fill="#1e40af">key#1 (Shard B)</text>
+      <rect x="270" y="166" width="100" height="30" rx="5" fill="#dbe4ff" stroke="#3b5bdb"/><text x="320" y="185" text-anchor="middle" font-size="10" fill="#1e40af">key#N (Shard C)</text>
+
+      <rect x="60" y="216" width="260" height="34" rx="6" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="190" y="230" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Each write hits ONE sub-key —</text>
+      <text x="190" y="243" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">write load ≈ 1/N per sub-key</text>
+
+      <!-- Read side -->
+      <rect x="500" y="46" width="120" height="36" rx="8" fill="#1a1917"/>
+      <text x="560" y="69" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="#fff">read(hotKey)</text>
+      <line x1="560" y1="82" x2="440" y2="112" stroke="#0ca678" stroke-width="1.5" marker-end="url(#ks-arr-g)"/>
+      <line x1="560" y1="82" x2="560" y2="112" stroke="#0ca678" stroke-width="1.5" marker-end="url(#ks-arr-g)"/>
+      <line x1="560" y1="82" x2="680" y2="112" stroke="#0ca678" stroke-width="1.5" marker-end="url(#ks-arr-g)"/>
+
+      <rect x="390" y="114" width="100" height="30" rx="5" fill="#c3fae8" stroke="#0ca678"/><text x="440" y="133" text-anchor="middle" font-size="10" fill="#064e3b">GET key#0</text>
+      <rect x="510" y="114" width="100" height="30" rx="5" fill="#c3fae8" stroke="#0ca678"/><text x="560" y="133" text-anchor="middle" font-size="10" fill="#064e3b">GET key#1</text>
+      <rect x="630" y="114" width="100" height="30" rx="5" fill="#c3fae8" stroke="#0ca678"/><text x="680" y="133" text-anchor="middle" font-size="10" fill="#064e3b">GET key#N</text>
+
+      <line x1="440" y1="144" x2="560" y2="170" stroke="#0ca678" stroke-width="1.5" marker-end="url(#ks-arr-g)"/>
+      <line x1="560" y1="144" x2="560" y2="170" stroke="#0ca678" stroke-width="1.5" marker-end="url(#ks-arr-g)"/>
+      <line x1="680" y1="144" x2="560" y2="170" stroke="#0ca678" stroke-width="1.5" marker-end="url(#ks-arr-g)"/>
+
+      <rect x="470" y="172" width="180" height="34" rx="6" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.5"/>
+      <text x="560" y="186" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" font-weight="bold" fill="#4c1d95">MERGE results</text>
+      <text x="560" y="200" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" fill="#4c1d95">sum / latest-wins / union</text>
+
+      <rect x="440" y="216" width="240" height="34" rx="6" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="560" y="230" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">Every read fans out to N shards —</text>
+      <text x="560" y="243" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#333">read cost multiplied by N</text>
+
+      <rect x="60" y="262" width="640" height="26" rx="6" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+      <text x="380" y="279" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#92400e">Trade: write bottleneck solved, read cost and app-level merge complexity introduced</text>
+
+      <defs>
+        <marker id="ks-arr-o" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L0,8 L8,4 z" fill="#e67700"/></marker>
+        <marker id="ks-arr-g" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L0,8 L8,4 z" fill="#0ca678"/></marker>
+      </defs>
+    </svg>
+    <p class="caption">Salting spreads one hot key's writes across N sub-keys; reads pay the cost back by scattering to all N and merging</p>
+  </div>
+
+  <h3>Mitigating a Read-Hot Key or Partition</h3>
+  <p>Add a cache in front (L1 in-process and/or L2 distributed, Topic 5.7/5.8) — this absorbs the bulk of read traffic before it reaches the partition at all. If reads still exceed single-node capacity after caching, add <strong>read replicas</strong> of the hot data and load-balance reads across them. For an extremely hot single key, consider client-side or edge caching to avoid the request reaching the backend cluster altogether.</p>
+
+  <h3>Mitigating a Write-Hot Key (Key Salting)</h3>
+  <p>Choose a salt cardinality <code>N</code> based on required write throughput (e.g., N=10 sub-keys to spread a 10,000 write/sec key into ~1,000 write/sec per sub-key). On write, append a random or round-robin suffix to the logical key. On read, issue N parallel reads across all sub-keys and merge results — sum for counters, latest-wins for values, union for sets. Trade-off: write throughput scales ~linearly with N; read cost scales linearly with N and requires application-level merge logic.</p>
+
+  <h3>Mitigating a Monotonic-Key Write Hotspot</h3>
+  <p>Identify that the partition key is monotonically increasing — all new writes target the highest key range. Redesign the key: prepend a hash prefix, reverse the timestamp, or use a random shard prefix combined with the natural key, so new writes scatter across the keyspace instead of piling onto one range. If historical range-scan queries relied on key order, add a secondary index or reintroduce ordering at the application layer, since the physical key order no longer matches logical order.</p>
+
+  <div class="callout callout-warn">
+    ⚠️ <strong>Never rebalance a single-key hotspot:</strong> confirm the hotspot is distributed across many keys — not one — before splitting or rebalancing. Otherwise the effort is wasted: the hot key relocates whole to the new shard, which becomes equally hot.
+  </div>
+
+  <h3>Formulas / Thresholds Worth Memorizing</h3>
+  <p>Imbalance signal: partition QPS or size ≥ ~2–3× the cluster median. Salting fan-out: N sub-keys spread writes ~1/N per sub-key, but reads scatter-gather across N and merge — pick N to match write QPS, not arbitrarily. Zipfian intuition: the top 1% of keys can absorb 50%+ of traffic in real workloads.</p>
+</section>
+
+<!-- S10: REAL-WORLD EXAMPLES -->
+<section id="s10">
+  <h2 class="section-title"><span class="num">§10</span> 🏭 Real-World System Examples</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>System</th><th>How Hot Partition Handling Applies</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Amazon DynamoDB</strong></td>
+          <td>Explicitly documents partition-key design guidance to avoid hot partitions; "Adaptive Capacity" automatically shifts throughput allocation toward a hot partition, and recommends write sharding (salting) for known hot keys</td>
+          <td>One of the most direct, production-facing treatments of this exact problem — DynamoDB's docs are a canonical reference</td>
+        </tr>
+        <tr>
+          <td><strong>Twitter (fan-out architecture)</strong></td>
+          <td>Celebrity accounts are a textbook hot-key problem at the application layer; Twitter uses a hybrid fan-out-on-write (regular users) / fan-out-on-read (celebrities) strategy to avoid writing to millions of timelines synchronously</td>
+          <td>The mitigation here is an access-pattern redesign, not a partitioning change — illustrates that hot-key fixes are often architectural</td>
+        </tr>
+        <tr>
+          <td><strong>Apache Cassandra</strong></td>
+          <td>Vnodes reduce (but don't eliminate) hot partition risk by spreading ranges more finely; a single wide partition (too many rows under one partition key) is a well-known anti-pattern requiring key redesign</td>
+          <td>Cassandra's data modeling guidance explicitly warns against unbounded partition growth from a single hot key</td>
+        </tr>
+        <tr>
+          <td><strong>Instagram / view-counters at scale</strong></td>
+          <td>High-traffic counters (like counts, view counts) are classic hot-key candidates; mitigated via in-memory aggregation buffers and periodic flush, plus key salting for the highest-traffic counters</td>
+          <td>Shows the combination of caching + salting used together rather than either alone</td>
+        </tr>
+        <tr>
+          <td><strong>Kafka</strong></td>
+          <td>A poorly chosen partition key (e.g., a low-cardinality or skewed field) creates a hot partition that a single consumer must process, capping throughput regardless of total partition/consumer count</td>
+          <td>Illustrates that hot partitions aren't only a storage-layer concept — they also cap consumer-side processing throughput</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- S11: TRADE-OFFS -->
+<section id="s11">
+  <h2 class="section-title"><span class="num">§11</span> ⚖️ Trade-offs</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>✅ Benefit</th><th>❌ Cost / Limitation</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="benefit">Key salting scales write throughput for a hot key ~linearly with N</td>
+          <td class="cost">Reads must scatter-gather across N sub-keys and merge results — N× read cost and added application-level complexity</td>
+        </tr>
+        <tr>
+          <td class="benefit">Caching in front of a hot key/partition absorbs read load with minimal architecture change</td>
+          <td class="cost">Doesn't help write-hot problems at all; adds invalidation complexity (Topic 5.5/5.8)</td>
+        </tr>
+        <tr>
+          <td class="benefit">Read replicas scale read-hot partitions without touching the partitioning scheme</td>
+          <td class="cost">Doesn't help write-hot problems; adds replication lag and eventual-consistency considerations</td>
+        </tr>
+        <tr>
+          <td class="benefit">Splitting/rebalancing a genuinely hot (many-key) partition spreads load across more nodes</td>
+          <td class="cost">Useless — or actively wasted effort — if the hotspot is actually one dominant key</td>
+        </tr>
+        <tr>
+          <td class="benefit">Redesigning a monotonic key to scatter writes fixes the root cause permanently</td>
+          <td class="cost">Breaks natural key ordering, often requiring a secondary index or application-level sort for range queries</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- S12: INTERVIEW APPLICATION -->
+<section id="s12">
+  <h2 class="section-title"><span class="num">§12</span> 🎯 Interview Application</h2>
+
+  <h3>Trigger Phrases</h3>
+  <ul style="margin-left:20px;margin-bottom:16px;font-size:14.5px;line-height:1.8;">
+    <li>"One shard/partition is getting way more traffic than the others — what do you do?"</li>
+    <li>"A celebrity user's account is overwhelming a single node — how do you handle it?"</li>
+    <li>"How would you detect that a partition has become a bottleneck before it takes down the system?"</li>
+    <li>"We tried adding more shards but the same node is still hot — why didn't that help?"</li>
+  </ul>
+
+  <h3>What You Say / Do</h3>
+  <p>Bring this up in the deep-dive or scaling/failure-handling phase, right after establishing the base partitioning scheme. Frame it: "First I'd want to know whether this is a hot <em>partition</em> (many keys collectively overloading one shard) or a hot <em>key</em> (one item saturating whatever shard it lands on) — the fix is completely different. I'd instrument per-shard QPS, size, and p99 latency and flag anything 2-3x the median. If it's a hot key with heavy reads, I'd add caching in front, then read replicas if that's not enough. If it's heavy writes on one key, I'd salt it — split it into N sub-keys and merge on read. If it's genuinely a hot partition holding many keys, that's when I'd split or rebalance it."</p>
+
+  <div class="tradeoff-box">
+    💬 <strong>Trade-off statement (memorize this):</strong><br><br>
+    "If I salt a hot key into N sub-keys, I get roughly N× the write throughput, but every read now fans out to N shards and needs an application-level merge — I'm trading a write bottleneck for read complexity. For this system, where writes to this key are the reported bottleneck and reads can tolerate the extra fan-out cost, salting is the right call."
+  </div>
+</section>
+
+<!-- S13: MISCONCEPTIONS -->
+<section id="s13">
+  <h2 class="section-title"><span class="num">§13</span> ⚠️ Common Misconceptions &amp; Gotchas</h2>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> Adding more partitions or rebalancing always fixes a hot shard.</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> If the heat comes from a single dominant key, splitting or rebalancing just relocates that same key — whole — to a new node, which becomes equally hot. Only mitigations that change how that specific key is stored, cached, or accessed (salting, caching, replication) help.</div></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> A hot partition will show up clearly in overall cluster monitoring (average CPU, average QPS).</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Cluster-wide averages are diluted by the N-1 non-hot partitions and routinely hide a hot partition entirely. Detection requires per-shard metrics compared against the median, not fleet-wide aggregates.</div></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> Key salting is a free win for scaling a hot key.</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Salting trades a write bottleneck for a read cost — every read must now scatter-gather across all N sub-keys and merge results in the application layer. It also complicates any operation that assumed the "key" mapped to exactly one physical location.</div></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> Using a monotonically increasing key (timestamp, auto-increment ID) as the partition key is a natural, safe default.</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Monotonic keys funnel all new writes onto the same key range indefinitely — the newest partition is permanently hot because "now" always maps there. This is one of the most common hotspotting bugs in real systems and requires deliberately breaking the monotonicity (hash prefix, reversal, or salting).</div></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> Caching in front of a hot key solves the problem in general.</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Caching helps read-hot keys but does nothing for write-hot keys — every write still has to land somewhere and be invalidated everywhere. Write-hot problems need salting or a redesigned write path, not caching.</div></div>
+  </div>
+</section>
+
+<!-- S14: RELATIONSHIPS -->
+<section id="s14">
+  <h2 class="section-title"><span class="num">§14</span> 🔗 Relationships to Other Concepts</h2>
+  <div class="connections">
+    <div class="conn-card">
+      <div class="conn-icon">🧱</div>
+      <div>
+        <div class="conn-label">Builds On</div>
+        <strong>7.5 Rebalancing</strong> — provides the splitting/reassignment mechanics that fix a genuinely hot (many-key) partition; also builds on <strong>7.2 Hash Partitioning</strong> and <strong>7.4 Consistent Hashing</strong>, since hotspotting is the failure mode that appears when either scheme's uniform-distribution assumption breaks down in practice.
+      </div>
+    </div>
+    <div class="conn-card">
+      <div class="conn-icon">🔓</div>
+      <div>
+        <div class="conn-label">Enables</div>
+        <strong>7.7 Cross-Shard Queries</strong> — key salting's scatter-gather read pattern is structurally the same problem as querying across shards, so mastering one makes the other's mechanics familiar; also enables robust production-readiness discussions for any sharded system, since "how do you handle hotspots" is a standard deep-dive follow-up to any partitioning design.
+      </div>
+    </div>
+    <div class="conn-card">
+      <div class="conn-icon">⚡</div>
+      <div>
+        <div class="conn-label">Tension With</div>
+        <strong>5.7 Hot Key Problem</strong> and <strong>5.8 Multi-Level Caching</strong> — hot keys at the caching layer and hot partitions at the storage layer are the same underlying phenomenon (power-law access skew) appearing at different layers of the stack; and with <strong>7.1 Horizontal Partitioning</strong> in general, since finer-grained partitioning helps balance data volume but does nothing about traffic skew concentrated on individual keys.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- S15: QUIZ -->
+<section id="s15">
+  <h2 class="section-title"><span class="num">§15</span> 🧪 Self-Check Quiz</h2>
+  <div class="callout callout-quote">Can you answer these without looking? If not, you haven't internalized it yet. Click to reveal the hint.</div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">1</div>
+      <div class="qtext">What is the difference between a hot partition and a hot key, and why does that distinction matter for choosing a fix?</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 Hot partition = many keys collectively overload one shard, fixable by splitting/rebalancing since the load is divisible across keys. Hot key = one key alone saturates its partition; it's atomic, so splitting/rebalancing just relocates it, whole, to an equally hot new node. Revisit §5 and §6.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">2</div>
+      <div class="qtext">Your monitoring shows overall cluster CPU at a healthy 40%, yet users are reporting timeouts. How could a hot partition be causing this despite the healthy aggregate number, and what monitoring change would surface it?</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 One partition could be pegged at 100% while the other N-1 idle at ~30%, averaging out to a "healthy" 40% cluster-wide. Fix: track per-shard QPS/size/p99 and alert when any shard is ≥ 2–3× the cluster median, instead of relying on fleet-wide averages. Revisit §6 (Detection) and §9.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">3</div>
+      <div class="qtext">Walk through key salting step by step: how do you salt a hot key on write, and how do you read it back? What does this cost you?</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 Choose N sub-keys; on write, append a random/round-robin suffix (key#0..N) so load spreads ~1/N per sub-key. On read, scatter a GET to all N sub-keys in parallel and merge results (sum/latest-wins/union depending on data type). Cost: N× read fan-out and application-level merge logic — a write bottleneck becomes a read-cost trade. Revisit §9 and §11.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">4</div>
+      <div class="qtext">A table uses an auto-incrementing order ID as its partition key, and the newest partition is always the hottest, even after several splits. Why does splitting not permanently fix this, and what would?</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 Every new write targets "now," which always maps to the highest key range — splitting just creates a new highest range that immediately becomes the new hotspot. The real fix is to break the monotonicity itself: prepend a hash prefix or reverse the timestamp so new writes scatter across the keyspace instead of always landing at one end. Revisit §6 (Monotonic Key Hotspotting) and §13.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">5</div>
+      <div class="qtext">Name a real production system that documents hot-partition mitigation and describe the specific technique it recommends.</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 Amazon DynamoDB explicitly documents partition-key design guidance to avoid hot partitions, offers "Adaptive Capacity" to automatically shift throughput allocation toward a hot partition, and recommends write sharding (key salting) for known hot keys. Revisit §10.</div>
+  </div>
+</section>
+
+<!-- S16: FURTHER READING -->
+<section id="s16">
+  <h2 class="section-title"><span class="num">§16</span> 📚 Further Reading</h2>
+  <ul class="reading-list">
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>DDIA Chapter 6 — "Skewed Workloads and Relieving Hot Spots"</strong> (Kleppmann) — the canonical treatment of hot keys and key salting</div></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>AWS DynamoDB Developer Guide — "Designing Partition Keys to Distribute Your Workload"</strong> — <a href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-partition-key-design.html" target="_blank">docs.aws.amazon.com</a> — production-grade guidance including write sharding</div></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>AWS DynamoDB Developer Guide — "Adaptive Capacity"</strong> — <a href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.AdaptiveCapacity.html" target="_blank">docs.aws.amazon.com</a> — how DynamoDB automatically responds to hot partitions</div></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>Twitter Engineering Blog — Timeline architecture / fan-out</strong> — search "Twitter fanout celebrity timeline" — the fan-out-on-write vs. fan-out-on-read hybrid as an application-layer hot-key mitigation</div></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>Cassandra data modeling docs — wide partitions / hot partition anti-patterns</strong> — <a href="https://cassandra.apache.org/doc/latest/cassandra/data_modeling/" target="_blank">cassandra.apache.org</a> — hot partition symptoms specific to Cassandra's storage model</div></li>
+  </ul>
+</section>
+
+<!-- S17: MY NOTES -->
+<section id="s17">
+  <h2 class="section-title"><span class="num">§17</span> ✍️ My Notes</h2>
+  <div class="callout callout-quote">Personal observations, things that confused me, analogies that helped. This section is yours.</div>
+  <textarea class="notes-area" placeholder="Add your personal notes here — analogies that clicked, interview stories, things that confused you..."></textarea>
+</section>
+
+</article>
+</main>
+
+<script>
+// TOC active state
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('#toc nav a');
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(a => a.classList.remove('active'));
+      const a = document.querySelector(`#toc nav a[href="#${e.target.id}"]`);
+      if (a) a.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+sections.forEach(s => obs.observe(s));
+
+// Checklist toggle
+function toggle(cb) { cb.closest('li').classList.toggle('checked'); }
+
+// Phase card toggle
+function togglePhase(header) { header.closest('.phase-card').classList.toggle('open'); }
+
+// Quiz toggle
+function toggleQuiz(q) {
+  const item = q.closest('.quiz-item');
+  item.classList.toggle('open');
+  q.querySelector('.quiz-toggle').textContent = item.classList.contains('open') ? '▲ Hide' : '▼ Hint';
+}
+
+// Reading list toggle
+function toggleReading(cb) { cb.closest('li').classList.toggle('checked'); }
+
+// Notes auto-save (in-memory / localStorage best-effort)
+const notesArea = document.querySelector('.notes-area');
+const NOTES_KEY = 'notes_7_6';
+try { if (localStorage.getItem(NOTES_KEY)) notesArea.value = localStorage.getItem(NOTES_KEY); } catch(e) {}
+notesArea.addEventListener('input', () => {
+  try { localStorage.setItem(NOTES_KEY, notesArea.value); } catch(e) {}
+});
+</script>
+</body>
+</html>

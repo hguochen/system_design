@@ -446,3 +446,138 @@ Bring this up in the data-partitioning deep-dive or when discussing scaling/fail
 ## 17. ✍️ My Notes
 
 > *Personal observations, things that confused me, analogies that helped.*
+
+MODEL ANSWER — Criterion 1
+
+(a) hash(key) % N ties a key's destination NODE to N (the divisor = node count).
+    hash(key) is stable, but the MODULO RESULT flips when N changes: a key that
+    mapped to hash%4 now maps to hash%5, a different node for almost every key.
+    Fraction that moves ≈ N/(N+1) → 4→5 nodes ≈ 4/5 (~80%). For a cache that's a
+    near-total miss storm; for a store it's moving ~the whole dataset.
+
+(b) Fixed-partition / consistent hashing decouples key placement from node count.
+    Keys hash to a FIXED number of partitions (partition = hash(key) % P); P never
+    changes, so a key's partition never changes. Nodes merely OWN partitions.
+    Add a node → it takes over ~1/(N+1) of the partitions (≈ 1/5), and the keys
+    inside those partitions ride along. Only that slice moves (~K/N ≈ 1/N of data);
+    everything else stays put. Whole partitions move — not individual keys.
+
+MODEL ANSWER — Criterion 2
+
+(a) Create P ≫ N, sized for the MAXIMUM future cluster — e.g., 10,000 partitions
+    for a cluster that may reach 100+ nodes (~100 partitions/node). Sizing P for
+    today's 10 nodes is the mistake: P must be ≥ max N, ideally many partitions
+    per node even at peak. High P:N buys (1) fine-grained balance (hand off single
+    partitions to even load) and (2) headroom to grow. It does NOT change how much
+    moves per node-add — that's ~1/N of data regardless of P.
+
+(b) partition = hash(key) % P, and P is fixed for the cluster's life.
+    (i)  Add node: it claims ~P/(N+1) whole partitions, a few from each existing
+         node; the keys inside ride along. ~1/N of data moves. No key changes partition.
+    (ii) Remove node: its partitions are reassigned across survivors, whole.
+         ~1/N of data moves. No key changes partition.
+    Only the partition→node assignment ever changes; key→partition is immutable.
+
+(c) Default because it's simple and operationally predictable — whole-partition
+    moves, stable routing, no split/merge machinery. Downside: P is chosen ONCE and
+    painful to change. Too high → per-partition overhead (metadata, open files,
+    fan-out) on a small dataset. Too low → you eventually hit a 1:1 partition:node
+    ratio and can't spread across more nodes — a hard scaling ceiling.
+
+MODEL ANSWER — Criterion 3
+
+(a) DYNAMIC: partition count is driven by DATA VOLUME. A partition SPLITS when it
+    crosses a size threshold (e.g., 10GB → two 5GB halves) and adjacent partitions
+    MERGE when they fall below a low threshold (e.g., 2GB). Count self-tunes.
+    FIXED: count is chosen ONCE up front and is painful to change.
+
+(b) Bootstrap trap: a new table starts as ONE partition on ONE node, so all early
+    writes hammer a single machine until it splits. A monotonic key (timestamp,
+    auto-increment) makes it chronic: every new write targets the highest range, so
+    even after splitting, the "tail" partition stays hot. Fix: pre-split to spread
+    the initial load, AND design the key (salt / hash-prefix) so new writes scatter.
+
+(c) Trade-off: dynamic self-tunes partition count to data volume (no upfront sizing,
+    efficient at any scale) but costs split/merge coordination, metadata churn, and
+    split-storm risk under bursty writes. Pick dynamic when volume per key-range is
+    uneven or unpredictable — e.g., time-series/IoT/event logs, or multi-tenant
+    stores with wildly different tenant sizes.
+
+MODEL ANSWER — Criterion 4
+
+(a) Phases:
+    1. SNAPSHOT the partition on the current owner (point-in-time image).
+    2. STREAM the snapshot to the new node in the background, THROTTLED so live
+       traffic keeps priority on NIC/disk.
+    3. CATCH UP: replay the ordered write-log accumulated since the snapshot,
+       shrinking the delta toward ~0.
+    4. CUTOVER: brief sub-second freeze on the old owner, apply the final tiny
+       delta, flip ownership atomically (via the coordination service).
+    5. REROUTE: router points the partition at the new owner; old owner drops data.
+
+(b) The OLD node stays authoritative and serves BOTH reads and writes throughout.
+    Every write it accepts is applied AND appended to an ordered log (WAL / change
+    stream). Those logged writes are replayed to the new node in phase 3. Because
+    each write is durably on the old node + captured in order, none can be lost.
+
+(c) Cutover = brief freeze → apply final delta → atomic ownership flip → reroute.
+    It's the only stop-the-world moment, but it's sub-second because only the tiny
+    remaining delta is serialized (the bulk + most of the delta already moved live).
+    Writes during the freeze are HELD and then applied — ZERO loss, just <1s delay.
+
+MODEL ANSWER — Criterion 5
+
+(a) Rebalancing shares NIC, disk I/O, and CPU with live traffic. Unthrottled, a big
+    transfer saturates those and spikes foreground p99/p999 — you make the system
+    SLOWER while making it bigger. Throttling (bandwidth cap + limited concurrent
+    moves) protects tail latency; the trade-off is a longer time-to-rebalance.
+
+(b) Storm loop (unthrottled + automatic): node blips → failure detector marks it
+    dead → auto-rebalance starts mass data movement to re-replicate its partitions
+    → that streaming load pushes OTHER nodes' latency up → detector marks THEM dead
+    → even more movement → cascade. The cure becomes the disease.
+
+(c) Guardrails: (1) MECHANISM — rate-limit concurrent moves / cap bandwidth so
+    movement can't saturate the cluster. (2) TRIGGER — a grace period / averaging
+    window before declaring a node dead, and human confirmation (or a hard
+    threshold) for large moves. Automate the how; gate the whether.
+
+MODEL ANSWER — Criterion 6
+
+(a) Automatic = fast recovery (availability) but wide blast radius if the trigger
+    misfires; manual = bounded blast radius but slower. Key axis is move SIZE and
+    CONFIDENCE: automate the mechanics always, auto-run small confident corrections,
+    but gate large/mass moves behind a human or hard threshold.
+
+(b) The router/client learns the new partition→node map via:
+    1. Coordination service (ZooKeeper/etcd) — authoritative map, watched for changes.
+    2. Gossip — peer-to-peer ownership propagation (Dynamo/Cassandra/Riak).
+    3. Routing tier / config servers (MongoDB mongos), often + client-side cache.
+
+(c) A stale-view request hitting the old owner degrades to an EXTRA HOP, not an error:
+    that node forwards it to the current owner (or returns a redirect the client
+    retries). The request still succeeds; cost is a little latency. No loss, no
+    atomicity issue.
+
+
+Adversarial Stress-Test Gate
+You're migrating a large partition using the exact snapshot → stream → catch-up → cutover flow you just described. But this partition is a write hotspot under a sustained, very high write rate. Every time you replay the accumulated delta to the new node, just as many new writes have piled up on the old node in the meantime — so the delta never shrinks toward zero. You can never reach a small-enough final delta to do a safe sub-second cutover. The migration is effectively stuck forever.
+(a) What is fundamentally going on here — why does this specific flow break down?
+(b) How do you actually get this partition migrated? Give me at least one concrete way to break the deadlock.
+
+MODEL ANSWER — Adversarial Gate
+
+Diagnosis: a RATE RACE. The delta shrinks only when catch-up DRAIN rate > incoming
+WRITE rate. Throttling deliberately caps the drain to protect live traffic, so a
+write-hot partition where ingest >= drain never converges — deadlock, regardless of
+key design (a monotonic key is just one way to get write-hot).
+
+Break it by widening drain > ingest:
+  - Speed the DRAIN: lift/raise the migration throttle for a final sprint (trade p99).
+  - Slow the INGEST: write backpressure on that partition, OR dual-write new writes to
+    the new node so they stop feeding the delta (drain the historical backlog only).
+  - Shrink the unit: split the hot partition first, migrate smaller pieces.
+  - Last resort: extend the freeze, accept downtime proportional to delta size.
+
+Limit: if it's a single HOT KEY, splitting won't help — indivisible, one node. That's
+hot-key mitigation (replication / key-splitting), not rebalancing → Topic 7.6.
