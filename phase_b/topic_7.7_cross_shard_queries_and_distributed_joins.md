@@ -410,3 +410,197 @@ This appears in the **deep-dive / data-model** phase, right after you've propose
 
 > *Personal observations, things that confused me, analogies that helped.*
 
+Criterion 1 of 5 — the routing reflex. (Can you instantly classify a query as single-shard or cross-shard, and say why?)
+
+Table orders is sharded by user_id (hash partitioning). For each query below, tell me: single-shard or cross-shard, and why.
+
+SELECT * FROM orders WHERE user_id = 42
+SELECT * FROM orders WHERE user_id = 42 AND status = 'shipped'
+SELECT * FROM orders WHERE order_id = 'a1b2c3'
+SELECT * FROM orders WHERE created_at > NOW() - INTERVAL '1 day'
+SELECT * FROM orders WHERE user_id IN (42, 87, 900)
+
+MODEL ANSWER — Criterion 1: Routing Reflex
+Rule: router targets a shard only if it can extract the partition key AND
+the data lives on one shard.
+
+1. WHERE user_id = 42                 → SINGLE-SHARD. Carries the key → targeted.
+2. WHERE user_id = 42 AND status=...  → SINGLE-SHARD. Key present; status is
+                                        filtered locally within that one shard.
+3. WHERE order_id = 'a1b2c3'          → CROSS-SHARD (scatter). order_id isn't the
+                                        shard key → router can't target.
+                                        Exception: global 2nd index on order_id → targeted.
+4. WHERE created_at > ...             → CROSS-SHARD (scatter to ALL). Non-key range;
+                                        hash partitioning destroys ordering, so no pruning.
+5. WHERE user_id IN (42, 87, 900)     → CROSS-SHARD but BOUNDED (multi-get). Hash each
+                                        key → contact only the ≤3 owning shards, not all.
+
+Criterion 2 of 5 — tail-latency amplification. (No query to classify this time — explain the mechanism.)
+
+You have a query that scatters to 100 shards. Each individual shard responds in ≤10ms 99% of the time (its p99 is 10ms).
+
+Explain: why is the overall query's p99 latency worse than 10ms? Walk me through the mechanism, and if you can, put rough numbers on how much worse. Then tell me one thing you'd do to fight it.
+
+MODEL ANSWER — Criterion 2: Tail-Latency Amplification
+
+SETUP: query scatters to N=100 shards; each shard's p99 = 10ms
+       (1% chance a shard exceeds 10ms, independently).
+
+WHY IT AMPLIFIES:
+  The query returns only when the SLOWEST shard returns → it's fast
+  only if ALL 100 shards are fast. Independent ANDs multiply:
+      P(query ≤ 10ms) = 0.99^100 ≈ 0.366
+  So 10ms is ~p37 of the overall query — even though it's p99 per shard.
+  P(≥1 slow shard) = 1 − 0.99^100 ≈ 0.634 → ~63% of queries hit a straggler.
+
+WORSE WITH N:  0.99^N shrinks as N grows (0.99^1000 ≈ 0.00004).
+  Very wide fan-outs are almost GUARANTEED to hit a straggler every time.
+  Takeaway: fan-out turns a per-shard tail event into the COMMON case.
+
+MITIGATIONS WHEN YOU MUST SCATTER (from "The Tail at Scale", Dean & Barroso):
+  • Hedged requests — send to one replica; if no reply within ~p95,
+    send a 2nd copy to another replica, take the first to return, cancel
+    the loser. ~5% extra load, big tail reduction.
+  • Tied requests — send to two replicas at once; each knows the other;
+    whichever dequeues it first tells the other to cancel. Less wasted work.
+  • Per-shard timeouts + partial results (return what responded).
+  • Shard pruning / bound N; add read replicas so one slow node is bypassed.
+
+  Criterion 3 of 5 — the join trio. (Name, contrast, and pick.)
+
+First, briefly: name the three distributed-join strategies and the one-line cost of each. Then apply them to two scenarios:
+
+Scenario A: Join orders (huge, sharded by user_id) with countries (a tiny, near-static lookup table of ~200 rows). Which strategy, and why?
+Scenario B: Join orders (sharded by user_id) with order_items (also huge). You control how order_items is sharded. How do you make this join cheap, and what's the name for that?
+
+MODEL ANSWER — Criterion 3: Join Strategies
+
+TRIO (cheapest → costliest data movement):
+  Co-located  — shard BOTH tables on the SAME key + SAME hash fn.
+                Matching rows co-resident → local join, zero movement.
+                Cost: can only co-locate on one key; constrains other patterns.
+  Broadcast   — replicate a SMALL, static table to every shard → local join.
+                Cost: storage × N + every write fans out to all shards.
+  Shuffle     — re-hash rows on the join key over the network, then join.
+                Cost: network-intensive; last resort.
+
+A. orders ⋈ countries(200 rows, static) → BROADCAST. Tiny + rarely changes;
+   replicate to every shard, join locally.
+
+B. orders(by user_id) ⋈ order_items(you control) → CO-LOCATE.
+   KEY INSIGHT: co-locate on user_id (the key orders already uses) — NOT order_id.
+   Carry user_id onto order_items, shard order_items by user_id.
+   → a user's orders + items share hash(user_id) → same shard → local join, 1 shard.
+   Sharding order_items by order_id would NOT co-locate (hash(user_id) ≠ hash(order_id)).
+
+Criterion 4 of 5 — the non-key-query menu. (≥3 fixes, each with its trade-off.)
+
+Scenario: orders is sharded by user_id. But customer-support tooling constantly looks up a single order by order_id — WHERE order_id = 'X'. It's a frequent, latency-sensitive hot-path query, and as we established, order_id isn't the shard key, so today it scatters to every shard.
+
+Give me at least three distinct ways to serve this query efficiently — and for each one, state the trade-off (what it costs you). The trade-off is half the grade; don't just name the technique.
+
+MODEL ANSWER — Criterion 4: Serving a Non-Key Query (order_id on orders/by user_id)
+
+1. GLOBAL SECONDARY INDEX on order_id (term-partitioned)
+   → lookup targets the one shard owning that order_id.
+   Cost: extra write to the index on every insert (write amplification) +
+         a write hop + index is usually EVENTUALLY CONSISTENT with base (lag).
+
+2. DENORMALIZE — keep a second copy of orders keyed/sharded by order_id
+   → order_id lookup is single-shard.
+   Cost: duplicate data + must keep copies consistent on every write.
+
+3. SEARCH / READ MODEL (Elasticsearch / CQRS projection) indexed by order_id
+   → offloads the lookup off the OLTP shards entirely.
+   Cost: sync pipeline + eventual-consistency staleness.
+
+(Caching by order_id is only a COMPLEMENT: miss still scatters, hit rate is low
+ for arbitrary support lookups, and TTL risks serving stale data to support.)
+
+Pattern: "index it, denormalize it, or offload it" — caching alone won't save you.
+
+Criterion 5 of 5 — aggregation merge. (The last one before the stress-test gate.)
+
+Your orders are sharded by user_id across 50 shards. Analytics needs four global numbers computed across all orders:
+
+Total revenue (SUM(amount))
+Number of distinct customers who ordered today (COUNT(DISTINCT user_id))
+The median order value
+Average order value (AVG(amount))
+
+For each: can the coordinator compute it by combining independent per-shard partial results? If yes, say how the partials merge. If no, explain why it doesn't merge and what you'd use instead.
+
+MODEL ANSWER — Criterion 5: Aggregation Merge (orders sharded by user_id, 50 shards)
+
+MERGES CLEANLY (distributive/algebraic — partial → combine):
+  1. SUM(amount)   → each shard returns partial sum; coordinator adds them.
+  4. AVG(amount)   → each shard returns (partial SUM, partial COUNT);
+                     coordinator = Σsums / Σcounts.  NEVER average the averages.
+
+DOESN'T MERGE (holistic — need a sketch or second pass):
+  2. COUNT(DISTINCT user_id) → same id can appear on many shards → summing
+       per-shard distinct counts overcounts. Fix: each shard emits a
+       HyperLogLog SKETCH; coordinator UNIONS them (approximate).
+       [Special case: distinct on the SHARD KEY (user_id) has no cross-shard
+        overlap → per-shard distinct counts DO sum here.]
+  3. median / percentiles → a per-shard median can't be combined into a global
+       median. Fix: each shard emits a t-digest (or q-digest) sketch;
+       coordinator merges the sketches.
+
+Also holistic: top-K (per-shard top-K can miss the true global top-K).
+Rule: SUM/COUNT/MIN/MAX merge; AVG=SUM/COUNT; DISTINCT→HLL; percentiles→t-digest.
+
+🛑 Adversarial Stress-Test Gate
+
+You're designing the orders service. You chose to shard by user_id specifically because it spreads writes evenly and avoids the hot partitions we studied in 7.6 — a hot seller or viral product won't concentrate load on one shard.
+
+But now the dominant, latency-critical query for the merchant dashboard is: "get all orders for a given merchant_id, sorted by recency" — and it runs constantly at high QPS. merchant_id isn't your shard key, so today it scatters to all 50 shards on the hot path.
+
+Here's the bind: you can't co-locate on both user_id and merchant_id at once — a row physically lives on one shard. Sharding by user_id spreads writes but scatters the merchant query; sharding by merchant_id makes the merchant query single-shard but re-creates the hot-partition problem (a viral merchant melts one shard) and scatters the buyer's "my orders" query.
+
+How do you actually resolve this? Walk me through your design and defend the trade-offs. There's no clean single-key answer — I want to see how you reason under a genuine conflict.
+
+STRESS-TEST RESOLUTION — no single key wins, so serve each pattern separately
+- PRIMARY: keep orders sharded by user_id → buyer's "my orders" is single-shard,
+  and writes stay spread (no hot seller melts a shard).
+- READ MODEL: a separate materialized/covering table keyed by merchant_id,
+  sorted by timestamp, carrying the dashboard's display columns → merchant query
+  is single-partition (no refetch fan-out).
+- HOT MERCHANT: salt merchant_id into N buckets → writes + reads spread across
+  N partitions; read is a BOUNDED scatter (N), not all-shard, not one hot node.
+- CONSISTENCY: read model updated async → eventual; seconds of lag OK for a dashboard.
+Core lesson: when one key can't satisfy two access patterns, DUPLICATE the data
+into a second, independently-keyed read model — pay writes+staleness for fast reads.
+
+
+7.7 CROSS-SHARD QUERIES & DISTRIBUTED JOINS — CHEAT SHEET
+
+THE ONE QUESTION: does the query carry the PARTITION KEY?
+  YES → router → single shard (cheap, scales linearly)
+  NO  → CROSS-SHARD → scatter-gather: fan to all shards, gather, merge.
+        ⚠ latency = SLOWEST shard (tail-latency amplification):
+          N=100 shards @ p99=10ms → only 0.99^100 ≈ 37% finish ≤10ms.
+          Worse as N grows. Cost = N physical queries per logical query.
+        Scatter-gather is fine ONLY for low-QPS / ad-hoc / async.
+
+CROSS-SHARD QUERY TYPES + FIXES:
+1) FILTER on non-key column
+   - Global secondary index (term-partitioned by that col) → targeted. Cost: write hop + amplification + eventual-consistency lag
+   - Denormalize a copy keyed by that col. Cost: dup data + consistency
+   - Offload to search (Elasticsearch) / OLAP read model. Cost: sync + staleness
+2) JOIN two tables (order by data moved, cheapest first)
+   - CO-LOCATE ★ — shard BOTH on the SAME key + SAME hash fn → local join, no move.
+     Cost: only one co-location key. (Co-locate on the OTHER table's shard key, not the join col.)
+   - BROADCAST — replicate a SMALL, static table to every shard. Cost: storage×N + write fan-out
+   - SHUFFLE — repartition on join key over network. Cost: heavy network; last resort
+3) AGGREGATE
+   - Mergeable (2-step partial→combine): SUM, COUNT, MIN, MAX.  AVG = ΣSUM/ΣCOUNT (never avg-of-avgs)
+   - Holistic (need a sketch): COUNT(DISTINCT)→HyperLogLog (union sketches);
+     median/percentile→t-digest;  top-K→per-shard top-K then merge (approx)
+
+WHEN TO SCATTER ANYWAY: hedged/tied requests, per-shard timeout + partial results, prune N.
+
+GOLDEN RULE: pick the shard key around the HOT query; cost = data moved; move work to write time.
+CAPSTONE: one key can't serve two access patterns → DUPLICATE into a 2nd read model keyed for
+  the other pattern (CQRS, covering index, eventual-consistent). Hot key on that model → SALT it
+  into N buckets (bounded scatter, not one melted partition). This is the 7.6 ↔ 7.7 bridge.

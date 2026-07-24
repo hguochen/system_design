@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rate Limiter — Mock Interview Log</title>
+<style>
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface-alt: #f3f2ef;
+    --border: #e5e3de; --text: #1a1917; --text-muted: #6b6861;
+    --accent: #2563eb; --accent-light: #dbeafe;
+    --green: #16a34a; --green-light: #dcfce7;
+    --red: #dc2626; --red-light: #fee2e2;
+    --yellow: #d97706; --yellow-light: #fef3c7;
+    --purple: #7c3aed; --purple-light: #ede9fe;
+    --orange: #ea580c; --orange-light: #ffedd5;
+    --code-bg: #1e1e2e; --code-text: #cdd6f4;
+    --sidebar-w: 240px; --content-max: 820px;
+    font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; }
+  #toc { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0 48px; z-index: 100; }
+  #toc-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  #toc-header .phase-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-bottom: 6px; }
+  #toc-header h2 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  #toc nav a { display: block; padding: 5px 16px 5px 20px; font-size: 12.5px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+  main { margin-left: var(--sidebar-w); padding: 48px 48px 96px; max-width: calc(var(--sidebar-w) + var(--content-max) + 96px); width: 100%; }
+  article { max-width: var(--content-max); }
+  .doc-header { margin-bottom: 32px; padding-bottom: 24px; border-bottom: 2px solid var(--border); }
+  .doc-header .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+  .tag-phase { background: var(--accent-light); color: var(--accent); }
+  .tag-topic { background: var(--purple-light); color: var(--purple); }
+  .tag-date  { background: var(--surface-alt);  color: var(--text-muted); }
+  .doc-header h1 { font-size: 29px; font-weight: 800; line-height: 1.25; letter-spacing: -.02em; color: var(--text); }
+  section { margin-bottom: 48px; scroll-margin-top: 32px; }
+  h2.section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 18px; display: flex; align-items: center; gap: 10px; letter-spacing: -.01em; }
+  h2.section-title .num { font-size: 11px; font-weight: 800; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; letter-spacing: .04em; }
+  h3 { font-size: 15.5px; font-weight: 700; color: var(--text); margin: 22px 0 10px; }
+  h4 { font-size: 13.5px; font-weight: 700; color: var(--accent); margin: 18px 0 8px; }
+  p { margin-bottom: 13px; }
+  p:last-child { margin-bottom: 0; }
+  ul, ol { margin: 0 0 14px 20px; }
+  li { margin-bottom: 6px; font-size: 14.5px; line-height: 1.6; }
+  code { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-family: "SF Mono","Fira Code",Menlo,monospace; font-size: 12.5px; }
+  pre { background: var(--code-bg); color: var(--code-text); border-radius: 10px; padding: 16px 20px; font-family: "SF Mono","Fira Code",Menlo,monospace; font-size: 12.5px; line-height: 1.6; overflow-x: auto; margin: 14px 0 20px; }
+  pre code { background: none; border: none; padding: 0; color: inherit; font-size: inherit; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin-bottom: 18px; font-size: 14px; border-left: 3px solid; }
+  .callout-goal  { background: var(--accent-light); border-color: var(--accent); color: #1e40af; }
+  .callout-tip   { background: var(--yellow-light); border-color: var(--yellow); color: #92400e; }
+  .callout-warn  { background: var(--red-light); border-color: var(--red); color: #7f1d1d; }
+  .callout-win   { background: var(--green-light); border-color: var(--green); color: #14532d; }
+  .callout-quote { background: var(--surface-alt);  border-color: var(--border); color: var(--text-muted); font-style: italic; }
+  .exchange { border: 1px solid var(--border); border-radius: 12px; padding: 4px 18px 14px; margin: 16px 0; background: var(--surface); }
+  .q-int { background: var(--purple-light); border-radius: 8px; padding: 12px 16px; font-size: 13.5px; margin: 14px 0 12px; border-left: 3px solid var(--purple); }
+  .q-int .lbl { font-size: 10.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--purple); display: block; margin-bottom: 5px; }
+  .a-gary { background: var(--surface-alt); border-radius: 8px; padding: 12px 16px; font-size: 13.5px; margin: 12px 0; border-left: 3px solid var(--text-muted); }
+  .a-gary .lbl { font-size: 10.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); display: block; margin-bottom: 5px; }
+  .did-well { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--green); border-radius: 8px; padding: 12px 16px; font-size: 13.5px; margin: 12px 0; }
+  .did-well .lbl { font-size: 10.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--green); display: block; margin-bottom: 5px; }
+  .missed { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--red); border-radius: 8px; padding: 12px 16px; font-size: 13.5px; margin: 12px 0; }
+  .missed .lbl { font-size: 10.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--red); display: block; margin-bottom: 5px; }
+  .fix { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 12px 16px; font-size: 13.5px; margin: 12px 0; }
+  .fix .lbl { font-size: 10.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); display: block; margin-bottom: 5px; }
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th { background: var(--surface-alt); padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.5; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+  .score { font-weight: 800; }
+  .notes-area { width: 100%; min-height: 140px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: inherit; font-size: 14px; color: var(--text); resize: vertical; line-height: 1.6; }
+  .notes-area:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  @media (max-width: 900px) { #toc { display: none; } main { margin-left: 0; padding: 24px 20px 60px; } }
+</style>
+</head>
+<body>
+
+<aside id="toc">
+  <div id="toc-header">
+    <div class="phase-tag">Mock Log — Q2</div>
+    <h2>Rate Limiter — 1M QPS</h2>
+  </div>
+  <nav>
+    <a href="#s0">🗺️ Summary &amp; Verdict</a>
+    <a href="#s1">📊 Scorecard</a>
+    <a href="#s2">1️⃣ Requirements</a>
+    <a href="#s3">2️⃣ Estimation</a>
+    <a href="#s4">3️⃣ High-Level Design</a>
+    <a href="#s5">⭐ The Central Lesson</a>
+    <a href="#s6">🔀 Transfer Test Result</a>
+    <a href="#s7">📚 Study Takeaways</a>
+    <a href="#s8">✍️ My Notes</a>
+  </nav>
+</aside>
+
+<main>
+<article>
+
+<div class="doc-header">
+  <div class="meta">
+    <span class="tag tag-phase">🎤 Mock Interview</span>
+    <span class="tag tag-topic">🚦 Q2 — Rate Limiter</span>
+    <span class="tag tag-date">📅 2026-07-23</span>
+  </div>
+  <h1>Rate Limiter — Mock Interview Log (1B DAU / 1M QPS)</h1>
+</div>
+
+<!-- ══════════ SUMMARY ══════════ -->
+<section id="s0">
+  <h2 class="section-title"><span class="num">00</span> 🗺️ Summary &amp; Verdict</h2>
+
+  <div class="callout callout-warn">⚖️ <strong>Verdict: solid on the transferable Phase B discipline, shaky on the rate-limiter-specific core.</strong> Requirements and estimation skills clearly carried over from the URL shortener; the distributed-counter design — the heart of this problem, and heavy Topic 25 territory — is where the foundation ran out. This was a <em>transfer test</em>, and it did its job: it confirmed the roadmap gap (Problem #2 depends on Topic 25, which is unstudied) is real.</div>
+
+  <p>This mock was run deliberately at <strong>Phase B scope</strong> — using only stateless-service, load-balancing, caching, and sharding primitives, treating the rate-limiting algorithm internals as named tradeoffs rather than implemented depth. That framing is why the requirements/estimation phases went well and the core counter architecture wobbled: the counter model <em>is</em> the Topic 25 content.</p>
+
+  <h3>The one-line takeaway</h3>
+  <div class="callout callout-goal">🎯 The canonical rate-limiter counter design is <strong>shard by key + atomic <code>INCR</code> + a local blocked-key cache for hot keys</strong>. The interview went sideways when a more complex, approximate "slice-and-sync" design was chosen over this and defended with benefits it doesn't actually provide.</div>
+</section>
+
+<!-- ══════════ SCORECARD ══════════ -->
+<section id="s1">
+  <h2 class="section-title"><span class="num">01</span> 📊 Scorecard</h2>
+
+  <div class="table-wrap">
+  <table>
+    <tr><th style="width:26%">Dimension</th><th style="width:12%">Score</th><th style="width:62%">Why — cited from the session</th></tr>
+    <tr><td>Requirements gathering</td><td class="score" style="color:var(--green)">4 / 5</td><td>Placement reasoning with the gateway-hop cost; the L3/L4-vs-L7 correction (CDN for volumetric, gateway for application); quantified NFRs incl. the &lt;10ms-on-every-request insight; <em>recovered</em> the fail-open/closed inversion under pushback and stated the general principle.</td></tr>
+    <tr><td>Estimation</td><td class="score" style="color:var(--yellow)">3 / 5</td><td>Got the headline: write-heavy, every request is a counter op, <strong>throughput not memory forces sharding</strong>. But needed correcting that a single node can't <em>serve</em> 1M QPS, and the per-node throughput figure was off ~20× (app-server number reused for Redis).</td></tr>
+    <tr><td>High-level design</td><td class="score" style="color:var(--red)">2.5 / 5</td><td>Built two contradictory counter architectures, then chose the more complex, approximate one (<code>hash(uuid)</code> slices + central sync) over the simpler exact one the estimation had set up — defended with durability/scaling reasons that don't distinguish them.</td></tr>
+    <tr><td>Deep-dive rigor</td><td class="score" style="color:var(--red)">2.5 / 5</td><td>Named the atomic primitive only after dodging it twice; the race being buffered against was self-inflicted by the architecture; hot-key problem (topic 5.7) not reached independently.</td></tr>
+    <tr><td>Tradeoff articulation</td><td class="score" style="color:var(--yellow)">3 / 5</td><td>Good on the accuracy buffer and fail-open/closed; but the single most important architectural tradeoff (shard-by-key vs slice) was backwards and poorly justified.</td></tr>
+    <tr><td>Communication clarity</td><td class="score" style="color:var(--yellow)">3.5 / 5</td><td>Clear diagrams and structure; responsive to pushback (fixed fail-open/closed cleanly). But the design communication itself contained contradictions.</td></tr>
+  </table>
+  </div>
+</section>
+
+<!-- ══════════ PHASE 1 ══════════ -->
+<section id="s2">
+  <h2 class="section-title"><span class="num">02</span> 1️⃣ Phase 1 — Requirements</h2>
+
+  <div class="q-int"><span class="lbl">Interviewer — prompt</span>Design a rate limiter for a large public API.</div>
+
+  <div class="a-gary"><span class="lbl">Gary — clarifying questions</span>Asked: external vs internal contributor; QPS; regional/global; API signatures; anticipated attack types.</div>
+  <div class="missed"><span class="lbl">Concern raised</span>"External vs internal" doesn't affect the design — a wasted clarifying question. Several others (API contract, purpose, granularity) were Gary's to <em>propose</em>, not ask.</div>
+  <div class="fix"><span class="lbl">Interviewer gave</span>1M QPS aggregate, global/multi-region, mixed public API. Pushed Gary to propose the rate-limiter's own contract, purpose, and granularity.</div>
+
+  <div class="a-gary"><span class="lbl">Gary — proposed scope</span>Placement: client / server / gateway → chose <strong>API gateway</strong> (separation of concerns; named the cost = extra network hop). Over-limit behavior: 429 reject vs queue/hold, deferred to business impact. Purpose: DDoS protection — (1) volumetric L3/L4 per-IP+endpoint, (2) protocol L3/L4 per-IP+endpoint, (3) application attacks per-user/API-key.</div>
+  <div class="did-well"><span class="lbl">Did well</span>Proposed placement with a real tradeoff and named the hop cost. Mapped attack types to key granularities thoughtfully.</div>
+  <div class="missed"><span class="lbl">Concern 1 — threat-model layer error</span>An L7 gateway rate limiter does <strong>not</strong> stop L3/L4 volumetric or protocol floods — those saturate the network before a request is parsed into "user X hit endpoint Y." Volumetric DDoS is absorbed <em>upstream</em> by the CDN/edge (anycast, scrubbing). The rate limiter is an <strong>L7</strong> tool for application-level abuse.</div>
+  <div class="missed"><span class="lbl">Concern 2 — missing rate-limiter NFRs</span>No latency budget (the check sits on <em>every</em> request), no fail-open/closed posture, no accuracy tolerance.</div>
+
+  <div class="a-gary"><span class="lbl">Gary — corrections + NFRs</span>Corrected: CDN/anycast handles L3/L4 volumetric &amp; protocol; gateway handles application attacks. NFRs: (1) RL check p99 &lt;10ms (taxes every RTT); (2) 99.99% availability with the 4-vs-5-nines cost argument; (3) fail-open/closed "depends on the API" — asked for the use case; (4) 5% accuracy buffer to trade exactness for latency.</div>
+  <div class="did-well"><span class="lbl">Did well</span>Clean L3/L4→CDN, L7→gateway layering (Phase B CDN transfer). Good NFRs; accepting a 5% approximation buffer to buy latency is exactly the right instinct.</div>
+
+  <h3>The fail-open / fail-closed exchange (the hardest call)</h3>
+  <div class="q-int"><span class="lbl">Interviewer</span>Mixed public API — mostly ordinary reads/writes, a few sensitive (login, token, payment). When the limiter's datastore is unreachable, fail open or closed? One global choice or per-endpoint? Commit + justify, including what it does to your 99.99% if you get it wrong.</div>
+  <div class="missed"><span class="lbl">Failure — inverted the mapping</span>Gary first proposed: <strong>ordinary → fail closed</strong>, <strong>sensitive → fail open</strong>. Backwards.</div>
+  <div class="q-int"><span class="lbl">Interviewer — the scenario that exposed it</span>"Redis is down 8 seconds. Under your scheme, your <code>/login</code> endpoint now has NO limit (fail-open) — what does a credential-stuffing bot do with those 8 seconds? And your ordinary reads all return 429 (fail-closed) — so your main API is dark because a cache node blipped. You've turned a protective add-on into a SPOF. Comfortable with both?"</div>
+  <div class="did-well"><span class="lbl">Recovery — corrected under pushback</span>Ordinary → <strong>fail open</strong> (a protective component must never become the SPOF that takes down what it protects); sensitive → <strong>fail closed</strong> (an unprotected window on login/payment invites irreversible harm). Stated the general principle: default fail-open, pay the fail-closed cost only where over-allowing is irreversible.</div>
+</section>
+
+<!-- ══════════ PHASE 2 ══════════ -->
+<section id="s3">
+  <h2 class="section-title"><span class="num">03</span> 2️⃣ Phase 2 — Estimation</h2>
+
+  <div class="q-int"><span class="lbl">Interviewer</span>Counter-store load; memory for counters; can one node hold it; binding constraint + how it differs from the shortener.</div>
+
+  <div class="a-gary"><span class="lbl">Gary</span>1M QPS = 100B/day. Assumed 10M users, 50M IPs/day, 3 APIs. 1M QPS on the counter store (check+increment each). Memory: per-user:api ~50B, per-IP:api ~70B → ~11GB, "trivial." Concluded a single node holds it. Binding constraint = serve 1M QPS at &lt;10ms p99.</div>
+  <div class="did-well"><span class="lbl">Did well — the key transfer</span>Recognized this is <strong>write-heavy</strong> — every request is a counter op — a different center of gravity from the read-heavy shortener. Correctly called memory trivial.</div>
+  <div class="missed"><span class="lbl">Miss 1 — arithmetic</span>Per-IP line used <code>10M</code> where 50M IPs was assumed — a 5× input error (conclusion survived: still trivial).</div>
+  <div class="missed"><span class="lbl">Miss 2 — the load-bearing one</span>Conflated "can one node <em>store</em> the data" (yes) with "can one node <em>serve</em> the traffic" (no). A single node cannot serve 1M QPS.</div>
+
+  <div class="a-gary"><span class="lbl">Gary — after nudge</span>Fixed memory to 36GB. "Redis node serves ~5K concurrent → 1M/5K = 200 nodes → sharding forced by throughput."</div>
+  <div class="fix"><span class="lbl">Corrections</span>(1) Redis throughput ≈ <strong>~100K ops/sec/node</strong>, not 5K (that's an app-server figure) → <strong>~10 shards</strong>, not 200 — off ~20×. (2) The "coordination across nodes within 10ms" framing is wrong: if you shard by key, each key lives on <strong>one</strong> node → a check-increment touches one node → <strong>no cross-node coordination per request</strong>. The estimation itself implied the clean design.</div>
+</section>
+
+<!-- ══════════ PHASE 3 ══════════ -->
+<section id="s4">
+  <h2 class="section-title"><span class="num">04</span> 3️⃣ Phase 3 — High-Level Design</h2>
+
+  <div class="q-int"><span class="lbl">Interviewer</span>Request path, sharding, atomicity of check-and-increment, algorithm choice (name the tradeoff even without the internals).</div>
+
+  <div class="a-gary"><span class="lbl">Gary — design (from diagrams)</span>Gateway → cluster of Redis nodes, each holding a <em>slice</em> of the allowance, + a separate central <strong>Counter Store</strong> synced every 1s (aggregate ÷ N per node). Sharding by <code>hash(user_id)</code> / <code>hash(IP)</code> on consistent hashing. Over-limit: non-critical → 429 reject; critical → queue. Algorithm: <strong>fixed window</strong>; 5% buffer absorbs boundary burst + "race conditions where nodes read stale counts."</div>
+
+  <div class="missed"><span class="lbl">Failure — two contradictory designs at once</span>You can't both (a) shard by <code>hash(user_id)</code> — key on one node, node holds the <em>full</em> count — AND (b) have each node hold a <em>slice</em> synced from a central store every 1s. Slicing only makes sense if a user's requests spread across all nodes, which contradicts sharding by key.</div>
+  <div class="q-int"><span class="lbl">Interviewer</span>Which is it? And in the shard-by-key design, name the atomic primitive. The race you're buffering against is self-inflicted by the slice scheme.</div>
+
+  <div class="a-gary"><span class="lbl">Gary — doubled down</span>Switched the shard key to <code>hash(request_uuid)</code> so requests scatter across all nodes and each node holds a slice. (Chose the approximate design over the exact one.)</div>
+  <div class="q-int"><span class="lbl">Interviewer — laid the two side by side</span><strong>Shard by <code>hash(user_id)</code>:</strong> key on one node, one atomic increment, exact count, no central store, no sync, no race. <strong>Shard by <code>hash(uuid)</code>:</strong> forces a central store, 1s staleness (huge at 1M QPS), divide-by-N unfairness (unlucky node rejects what a neighbor would allow), an extra tier. "You moved toward option two — defend it, or take the simple one. And name the atomic primitive (asked 2×)."</div>
+
+  <div class="a-gary"><span class="lbl">Gary — justification + primitive</span>Justified slice-and-sync by "durability + horizontal scaling + node-failure tolerance (9 slices survive)." Primitive = <code>INCR</code> / <code>INCRBY</code>.</div>
+  <div class="fix"><span class="lbl">Final correction</span><strong>Primitive ✓</strong> — <code>INCR</code> is right for fixed window (atomic, returns new value; add <code>EXPIRE</code> to reset the window; Lua for multi-step algorithms). <strong>Justification ✗</strong> — durability &amp; horizontal scaling do <em>not</em> distinguish the designs: shard-by-key gets HA from per-shard replication and scales via the consistent hashing already drawn (topic 7.4). Worse, the slice design <em>added</em> a central counter store every node hits every second — a new SPOF/bottleneck. The one real reason to spread a key (the <strong>hot key</strong>: one abuser hammering a key at 100K/sec slams its single shard) went uncited — and its cheap fix is a <strong>local blocked-key cache</strong>, not rebuilding the counter model.</div>
+
+  <div class="callout callout-warn">⚠️ <strong>Over-limit behavior note:</strong> "queue the request for critical APIs" is risky at 1M QPS — holding synchronous connections consumes the very resources you're protecting. Standard is 429 + <code>Retry-After</code>. (Also: over-limit behavior and limiter-failure behavior are two different axes — don't conflate them.)</div>
+</section>
+
+<!-- ══════════ THE LESSON ══════════ -->
+<section id="s5">
+  <h2 class="section-title"><span class="num">05</span> ⭐ The Central Lesson — Counter Architecture</h2>
+
+  <p>Everything in this mock rotated around one decision: <strong>how the distributed counter is structured.</strong> Two families exist; the interview went sideways by mixing them and then picking the harder one for the wrong reasons.</p>
+
+  <div class="table-wrap">
+  <table>
+    <tr><th style="width:20%"></th><th style="width:40%">Shard by key (INCR) ⭐ default</th><th style="width:40%">Local slice + central sync</th></tr>
+    <tr><td><strong>How</strong></td><td>hash(key) → one shard; atomic <code>INCR</code> there</td><td>requests scatter; each node holds limit÷N; sync to central store every ~1s</td></tr>
+    <tr><td><strong>Accuracy</strong></td><td class="score" style="color:var(--green)">Exact</td><td class="score" style="color:var(--red)">Approximate (stale up to sync interval)</td></tr>
+    <tr><td><strong>Per-request coord.</strong></td><td class="score" style="color:var(--green)">None (one node)</td><td class="score" style="color:var(--red)">Central aggregation tier</td></tr>
+    <tr><td><strong>Fairness</strong></td><td class="score" style="color:var(--green)">True global count</td><td class="score" style="color:var(--red)">Divide-by-N assumes even traffic; unlucky nodes over-reject</td></tr>
+    <tr><td><strong>Hot key</strong></td><td class="score" style="color:var(--yellow)">One shard gets hammered → fix with local blocked-cache</td><td class="score" style="color:var(--green)">Naturally spread — the ONE real advantage</td></tr>
+    <tr><td><strong>Extra components</strong></td><td class="score" style="color:var(--green)">None</td><td class="score" style="color:var(--red)">Central store (new SPOF/bottleneck)</td></tr>
+  </table>
+  </div>
+
+  <pre><code>CANONICAL RATE-LIMITER COUNTER DESIGN (memorize this)
+
+  1. SHARD the counter store by the rate-limit key:
+       hash(user_id:api)  or  hash(ip:api)  →  one shard
+     Each key lives on exactly one node ⇒ NO cross-node coordination.
+
+  2. ATOMIC check-and-increment on that one node:
+       INCR key            (atomic, returns new count)
+       if new == 1: EXPIRE key <window>   (reset the window)
+       if new  > limit: reject 429 + Retry-After
+     Multi-step algorithms (sliding window, token refill) ⇒ Lua script.
+
+  3. HOT KEY defense (one abuser hammering one key):
+       once a key is over its limit, cache "blocked" in-process at the
+       gateway for a short TTL ⇒ stop hitting Redis for it entirely.
+     Cheap. Keeps the exact design. No slice/sync rebuild needed.
+
+  4. FAILURE posture:
+       ordinary endpoints  → FAIL OPEN  (never let the limiter be the SPOF)
+       sensitive endpoints → FAIL CLOSED (login/payment: block > over-allow)
+
+  5. ACCURACY: a small over-allow (5% buffer) is almost always fine —
+       admitting that unlocks the cheap designs. Ask the interviewer.</code></pre>
+
+  <div class="callout callout-tip">💡 <strong>Reflexes that would have saved this run:</strong> (1) When you shard by key, there is no cross-node race — don't buffer against a race your architecture created. (2) Before choosing the complex design, ask "does the simple one have the same benefit?" — durability/scaling did. (3) A protective component must never become a SPOF (the fail-open principle) — same idea recurs in the hot-key cache.</div>
+</section>
+
+<!-- ══════════ TRANSFER ══════════ -->
+<section id="s6">
+  <h2 class="section-title"><span class="num">06</span> 🔀 Transfer Test Result</h2>
+
+  <p>This mock doubled as a test of whether shortener concepts transfer to an unrehearsed problem. The result was informative:</p>
+
+  <h3>What transferred cleanly ✅</h3>
+  <ul>
+    <li><strong>Requirements discipline</strong> — proposing scope, quantified NFRs, the availability cost argument, and the per-endpoint failure split (after one correction).</li>
+    <li><strong>CDN / edge layering</strong> — the L3/L4-vs-L7 split reused Phase B CDN knowledge directly.</li>
+    <li><strong>Estimation framing</strong> — spotting the write-heavy nature and that <em>throughput</em>, not memory, is the constraint (the same "which number is actually hard?" reflex from the shortener).</li>
+    <li><strong>The atomic primitive concept</strong> — CAS/atomic-write from the shortener's Q2 reappeared as <code>INCR</code> (though it took two prompts to surface).</li>
+  </ul>
+
+  <h3>What did NOT transfer ❌</h3>
+  <ul>
+    <li><strong>The distributed-counter architecture</strong> — the rate-limiter-specific core. Shard-by-key vs. sloppy-counter, hot-key handling, and the algorithm internals are Topic 25 content, and their absence showed exactly where the design tangled.</li>
+    <li><strong>Volunteering failure modes</strong> — still the recurring habit gap: the hot key and the self-inflicted race both needed prompting.</li>
+  </ul>
+
+  <div class="callout callout-win">✅ <strong>Net:</strong> the general interview <em>method</em> is now portable across problems — that's real and it's the point of the drilling. The rate-limiter <em>content</em> gap is specific and studyable (Topic 25, ~4h).</div>
+</section>
+
+<!-- ══════════ STUDY ══════════ -->
+<section id="s7">
+  <h2 class="section-title"><span class="num">07</span> 📚 Study Takeaways</h2>
+
+  <ol>
+    <li><strong>Study Topic 25 before the next rate-limiter attempt.</strong> This run empirically confirmed the "After Phase B" unlock is partial. Needed: the four algorithms (token/leaky bucket, fixed/sliding window), distributed counter consistency, hot-key handling, and rate-limit headers.</li>
+    <li><strong>Memorize the canonical counter design</strong> in §5 — shard-by-key + atomic <code>INCR</code> + local blocked-key cache. It's the answer this mock was missing.</li>
+    <li><strong>Carry the fail-open/closed principle forward</strong> — it's reusable in any protective component: default to preserving availability; fail closed only where over-permitting is irreversible.</li>
+    <li><strong>Failure-mode reflex</strong> — for every component drawn, say "and when this fails / when one key is hot, X happens" <em>before</em> being asked. Still the #1 recurring gap across both problems.</li>
+  </ol>
+
+  <div class="callout callout-quote">Roadmap note: Problem #2 (Rate Limiter) is labelled "After Phase B" but its core content lives in Topic 25 (Phase H). Consider annotating the roadmap so it stops signalling readiness while the central material is unstudied.</div>
+</section>
+
+<!-- ══════════ NOTES ══════════ -->
+<section id="s8">
+  <h2 class="section-title"><span class="num">08</span> ✍️ My Notes</h2>
+  <textarea class="notes-area" placeholder="Post-mock reflections — what felt shaky, what to re-drill after Topic 25…"></textarea>
+</section>
+
+</article>
+</main>
+
+<script>
+  const sections = document.querySelectorAll('section[id]');
+  const tocLinks = document.querySelectorAll('#toc nav a');
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        tocLinks.forEach(l => l.classList.remove('active'));
+        const active = document.querySelector(`#toc nav a[href="#${e.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+  sections.forEach(s => observer.observe(s));
+
+  const notesArea = document.querySelector('.notes-area');
+  if (notesArea) {
+    try { notesArea.value = localStorage.getItem('ratelimiter-mock-notes') || ''; } catch(e) {}
+    notesArea.addEventListener('input', () => {
+      try { localStorage.setItem('ratelimiter-mock-notes', notesArea.value); } catch(e) {}
+    });
+  }
+</script>
+</body>
+</html>
