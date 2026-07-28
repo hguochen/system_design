@@ -1,0 +1,1216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.1 SQL vs. NoSQL — When to Use Each</title>
+<style>
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface-alt: #f3f2ef;
+    --border: #e5e3de; --text: #1a1917; --text-muted: #6b6861;
+    --accent: #2563eb; --accent-light: #dbeafe;
+    --green: #16a34a; --green-light: #dcfce7;
+    --red: #dc2626; --red-light: #fee2e2;
+    --yellow: #d97706; --yellow-light: #fef3c7;
+    --purple: #7c3aed; --purple-light: #ede9fe;
+    --orange: #ea580c; --orange-light: #ffedd5;
+    --teal: #0d9488; --teal-light: #ccfbf1;
+    --code-bg: #1e1e2e; --code-text: #cdd6f4;
+    --sidebar-w: 240px; --content-max: 820px;
+    font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; }
+  #toc { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0 48px; z-index: 100; }
+  #toc-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  #toc-header .phase-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-bottom: 6px; }
+  #toc-header h2 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  #toc nav a { display: block; padding: 5px 16px 5px 20px; font-size: 12.5px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+  main { margin-left: var(--sidebar-w); padding: 48px 48px 96px; max-width: calc(var(--sidebar-w) + var(--content-max) + 96px); width: 100%; }
+  article { max-width: var(--content-max); }
+  .doc-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 2px solid var(--border); }
+  .doc-header .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+  .tag-phase { background: var(--accent-light); color: var(--accent); }
+  .tag-topic { background: var(--purple-light); color: var(--purple); }
+  .tag-date  { background: var(--surface-alt);  color: var(--text-muted); }
+  .doc-header h1 { font-size: 30px; font-weight: 800; line-height: 1.25; letter-spacing: -.02em; color: var(--text); }
+  section { margin-bottom: 52px; scroll-margin-top: 32px; }
+  h2.section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -.01em; }
+  h2.section-title .num { font-size: 11px; font-weight: 800; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; letter-spacing: .04em; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 24px 0 10px; }
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+  code { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-family: "SF Mono","Fira Code",Menlo,monospace; font-size: 12.5px; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 14px; border-left: 3px solid; }
+  .callout-goal  { background: var(--accent-light); border-color: var(--accent); color: #1e40af; }
+  .callout-tip   { background: var(--yellow-light); border-color: var(--yellow); color: #92400e; }
+  .callout-warn  { background: var(--red-light); border-color: var(--red); color: #7f1d1d; }
+  .callout-quote { background: var(--surface-alt); border-color: var(--border); color: var(--text-muted); font-style: italic; }
+  .callout-teal  { background: var(--teal-light); border-color: var(--teal); color: #134e4a; }
+  .cheatsheet { background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 24px 28px; font-family: "SF Mono","Fira Code","Cascadia Code",Menlo,monospace; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-x: auto; margin-top: 16px; }
+  .cheatsheet .label { color: #cba6f7; font-weight: 700; letter-spacing: .08em; display: block; margin-top: 18px; margin-bottom: 4px; border-bottom: 1px solid #313244; padding-bottom: 3px; }
+  .cheatsheet .label:first-child { margin-top: 0; }
+  .diagram-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 16px 14px; margin: 20px 0 28px; overflow-x: auto; }
+  .diagram-wrap .diagram-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); margin-bottom: 12px; }
+  .diagram-wrap p.caption { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 10px; margin-bottom: 0; font-style: italic; }
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; font-size: 14.5px; line-height: 1.55; }
+  .checklist li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 2px; background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .checklist li.checked .cb { background: var(--green); border-color: var(--green); }
+  .checklist li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .checklist li.checked .text { color: var(--text-muted); text-decoration: line-through; }
+  .phase-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
+  .phase-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; cursor: pointer; user-select: none; background: var(--surface-alt); }
+  .phase-header:hover { background: var(--border); }
+  .phase-label { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+  .phase-badge { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 2px 8px; border-radius: 20px; }
+  .ph1 { background: #dbeafe; color: #1d4ed8; } .ph2 { background: #fce7f3; color: #9d174d; }
+  .ph3 { background: #d1fae5; color: #065f46; } .ph4 { background: #fef3c7; color: #92400e; }
+  .phase-chevron { font-size: 12px; color: var(--text-muted); transition: transform .2s; }
+  .phase-card.open .phase-chevron { transform: rotate(180deg); }
+  .phase-body { display: none; padding: 16px 20px 20px; }
+  .phase-card.open .phase-body { display: block; }
+  .phase-goal { font-size: 12.5px; color: var(--text-muted); font-style: italic; margin-bottom: 12px; }
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: var(--surface-alt); padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.5; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+  .misconception { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .misconception .wrong { background: var(--red-light); padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; }
+  .misconception .right { padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; color: #065f46; background: var(--green-light); }
+  .misconception .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .quiz-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .quiz-q { padding: 14px 18px; font-size: 14.5px; font-weight: 600; cursor: pointer; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .quiz-q:hover { background: var(--surface-alt); }
+  .quiz-num { flex-shrink: 0; width: 24px; height: 24px; background: var(--accent); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; margin-top: 1px; }
+  .quiz-q .qtext { flex: 1; }
+  .quiz-toggle { font-size: 11px; color: var(--text-muted); flex-shrink: 0; margin-top: 3px; }
+  .quiz-hint { display: none; padding: 10px 18px 14px; font-size: 13px; color: #92400e; background: var(--yellow-light); border-top: 1px solid var(--border); }
+  .quiz-item.open .quiz-hint { display: block; }
+  .reading-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .reading-list li { display: flex; align-items: flex-start; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; font-size: 14px; }
+  .reading-list li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 1px; cursor: pointer; background: var(--surface); display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .reading-list li.checked .cb { background: var(--green); border-color: var(--green); }
+  .reading-list li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .reading-list li.checked .rtext { color: var(--text-muted); text-decoration: line-through; }
+  .notes-area { width: 100%; min-height: 160px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: inherit; font-size: 14px; color: var(--text); resize: vertical; line-height: 1.6; }
+  .notes-area:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .focus-list { list-style: none; display: flex; flex-direction: column; gap: 14px; }
+  .focus-list li { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14.5px; line-height: 1.6; }
+  .focus-list li strong { color: var(--accent); display: block; margin-bottom: 4px; }
+  .connections { display: flex; flex-direction: column; gap: 12px; }
+  .conn-card { display: flex; align-items: flex-start; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14px; }
+  .conn-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .conn-label { font-weight: 700; margin-bottom: 3px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .tradeoff-box { background: var(--surface-alt); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 14px 18px; font-size: 14px; font-style: italic; color: var(--text); margin-top: 14px; }
+  .tier-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 16px 0; }
+  .tier-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; font-size: 14px; }
+  .tier-card h4 { font-size: 13px; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .tier-card .stat { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 2px 7px; border-radius: 4px; }
+  .stat-blue { background: var(--accent-light); color: var(--accent); }
+  .stat-orange { background: var(--orange-light); color: var(--orange); }
+  .stat-green { background: var(--green-light); color: var(--green); }
+  .stat-red { background: var(--red-light); color: var(--red); }
+  @media (max-width: 900px) { #toc { display: none; } main { margin-left: 0; padding: 24px 20px 60px; } .tier-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<aside id="toc">
+  <div id="toc-header">
+    <span class="phase-tag">Phase C · Topic 8</span>
+    <h2>8.1 SQL vs. NoSQL</h2>
+  </div>
+  <nav>
+    <a href="#s0">🗺️ Overview</a>
+    <a href="#s1">🎯 Goal</a>
+    <a href="#s2">✅ Mastery Criteria</a>
+    <a href="#s3">🗓️ Study Phases</a>
+    <a href="#s4">📋 Cheatsheet</a>
+    <a href="#s5">🧠 Core Definition</a>
+    <a href="#s6">📦 Core Concepts</a>
+    <a href="#s7">🔍 First Principles</a>
+    <a href="#s8">🗺️ Mental Models</a>
+    <a href="#s9">⚙️ How It Works</a>
+    <a href="#s10">🏭 Real-World Examples</a>
+    <a href="#s11">⚖️ Trade-offs</a>
+    <a href="#s12">🎯 Interview Application</a>
+    <a href="#s13">⚠️ Misconceptions</a>
+    <a href="#s14">🔗 Relationships</a>
+    <a href="#s15">🧪 Self-Check Quiz</a>
+    <a href="#s16">📚 Further Reading</a>
+    <a href="#s17">✍️ My Notes</a>
+  </nav>
+</aside>
+
+<main>
+<article>
+
+<!-- HEADER -->
+<div class="doc-header">
+  <div class="meta">
+    <span class="tag tag-phase">🗄️ Phase C — Data Storage</span>
+    <span class="tag tag-topic">🗄️ Topic 8 — Database Fundamentals</span>
+    <span class="tag tag-date">📅 2026-07-24</span>
+  </div>
+  <h1>8.1 SQL vs. NoSQL<br><span style="font-weight:400;color:var(--text-muted);font-size:22px;">When to Use Each</span></h1>
+</div>
+
+<!-- S0: OVERVIEW -->
+<section id="s0">
+  <h2 class="section-title"><span class="num">§0</span> 🗺️ Topic Overview</h2>
+  <p>This is the first real <strong>storage decision</strong> in a system design interview, and the one candidates most often get wrong — not because they pick the "wrong" database, but because they justify it badly. "SQL vs. NoSQL" is a misleading name: the query language is the least important part of the difference. The real axes are the <strong>data model</strong> (relations vs. key-value / document / wide-column / graph), the <strong>schema contract</strong> (enforced on write vs. interpreted on read), the <strong>distribution model</strong> (scale-up-then-shard vs. partition-native), and the <strong>transaction scope</strong> (multi-row ACID vs. single-item atomicity with tunable consistency).</p>
+  <p>The central tension: a relational database is <strong>query-flexible and access-pattern-agnostic</strong> — model the data once, ask questions you hadn't thought of yet. A NoSQL store is <strong>access-pattern-specific</strong> — model the data around the queries you know you'll run, and in exchange get flat latency and near-linear horizontal scale. Modern databases have converged heavily (Postgres has JSONB, DynamoDB has transactions, Spanner has SQL <em>and</em> horizontal scale), so the mature answer is almost never "NoSQL because scale."</p>
+
+  <ul class="focus-list" style="margin-top:18px;">
+    <li><strong>1. Model the access patterns before the database</strong> — the decision is driven by how data is read and written, not how it "looks." Write down the top 3–5 queries by QPS first. If you can't enumerate them, that itself argues for relational.</li>
+    <li><strong>2. Know the four NoSQL families and what each is for</strong> — key-value (Redis, DynamoDB), document (MongoDB, DynamoDB), wide-column (Cassandra, HBase, Bigtable), graph (Neo4j). Saying "I'd use NoSQL" without naming a family and a product is an instant depth failure.</li>
+    <li><strong>3. Schema-on-write vs. schema-on-read is a real trade-off, not a free lunch</strong> — NoSQL doesn't remove the schema; it moves it into your application code and makes every reader responsible for every historical shape of the data.</li>
+    <li><strong>4. Joins and multi-entity transactions are what you actually give up</strong> — denormalization, application-side joins, and single-item atomicity are the practical costs. Be able to say exactly which query gets expensive and what you'd do instead.</li>
+    <li><strong>5. "SQL doesn't scale" is false — know the real scaling story</strong> — a single tuned Postgres node handles tens of thousands of QPS over terabytes. Sharding relational is possible (Vitess, Citus) but bolt-on; NoSQL is partition-native from day one. <em>Bolt-on vs. built-in</em> is the honest version of the scale argument.</li>
+  </ul>
+</section>
+
+<!-- S1: GOAL -->
+<section id="s1">
+  <h2 class="section-title"><span class="num">§1</span> 🎯 Goal of This Subtopic</h2>
+  <div class="callout callout-goal">
+    After studying this, you should be able to take a set of entities, relationships, and access patterns and confidently choose relational or a <em>specific</em> NoSQL family — justifying it on schema flexibility, query pattern, consistency needs, and scale — while naming precisely what you gave up and how you'd cover it. You should also be able to rebut "we need NoSQL because we need scale" with real numbers, and design a polyglot answer where different parts of the system live in different stores.
+  </div>
+</section>
+
+<!-- S2: MASTERY -->
+<section id="s2">
+  <h2 class="section-title"><span class="num">§2</span> ✅ What Mastery Looks Like</h2>
+  <ul class="checklist" id="mastery-list">
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can classify a given workload (entities + top queries + scale + consistency needs) as relational or a <strong>named</strong> NoSQL family, and defend it in under 90 seconds</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can name all four NoSQL families with a production product and the exact access pattern each is built for</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can explain schema-on-write vs. schema-on-read and what happens operationally when the shape of the data changes in each</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can state precisely what breaks when you denormalize into a document store — and name three mitigations (app-side join, transactional writes, CDC-maintained read model)</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can rebut "SQL doesn't scale" with concrete numbers and the bolt-on vs. partition-native framing</span></li>
+    <li><div class="cb" onclick="toggle(this)"></div><span class="text">Can describe how modern systems converged (Postgres JSONB, MongoDB multi-doc ACID, DynamoDB transactions, Spanner/CockroachDB) and why "SQL vs. NoSQL" is a false binary</span></li>
+  </ul>
+  <div class="callout callout-tip" style="margin-top:18px;">💡 <strong>Rule of thumb:</strong> If you can teach it to someone else and field their follow-up questions, you've mastered it.</div>
+</section>
+
+<!-- S3: STUDY PHASES -->
+<section id="s3">
+  <h2 class="section-title"><span class="num">§3</span> 🗓️ Study Phases to Achieve Mastery</h2>
+
+  <div class="phase-card open">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph1">Phase 1</span> Acquire 📖</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Read deeply enough that you could explain the concept without the doc.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text"><strong>DDIA Chapter 2 — Data Models and Query Languages</strong> (Kleppmann) — relational vs. document vs. graph, the object-relational mismatch, and why the debate is really about data locality</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text"><strong>Amazon DynamoDB paper (USENIX ATC 2022)</strong> — <a href="https://www.usenix.org/conference/atc22/presentation/elhemali" target="_blank">usenix.org</a> — why a partition-native store exists and what it deliberately gives up</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text"><strong>Alex DeBrie — Single-Table Design with DynamoDB</strong> — <a href="https://www.alexdebrie.com/posts/dynamodb-single-table/" target="_blank">alexdebrie.com</a> — the clearest explanation of access-pattern-driven modeling</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Read Sections 5–9 of this doc carefully — don't skim</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Re-read the Cheatsheet (§4) and try to recite the decision map from memory</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph2">Phase 2</span> Consolidate ✍️</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Verify you can reproduce knowledge in your own words without looking.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Close the doc — write out the Core Definition and the four NoSQL families from memory, then compare</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Explain First Principles out loud: what did the web-scale companies of 2005–2010 hit that relational couldn't do, and <em>why</em></span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Reconstruct the decision map (§4) from memory on paper — every gate, in order</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Restate each Trade-off row in your own words — if you can't explain the cost, you don't own it</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph3">Phase 3</span> Apply 🔧</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Connect to real systems and simulate interview scenarios.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Go through Real-World Examples (§10) — verify each claim and add notes to §17</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Take three systems you know (URL shortener, Twitter feed, e-commerce checkout) and write the storage choice + justification for each</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Practice Interview Application (§12) out loud — say the trigger phrases and your response as if live</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Work through Misconceptions (§13) — explain WHY each is wrong, not just that it is</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-label"><span class="phase-badge ph4">Phase 4</span> Validate 🧪</div>
+      <span class="phase-chevron">▼</span>
+    </div>
+    <div class="phase-body">
+      <p class="phase-goal">Goal: Confirm you actually own it, not just recognize it.</p>
+      <ul class="checklist">
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Answer every Self-Check Quiz question (§15) out loud without notes</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Recite the Cheatsheet (§4) from memory — if you can't, re-do Phase 2</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Tick off mastery criteria in §2 — only check a box if you can demonstrate on demand</span></li>
+        <li><div class="cb" onclick="toggle(this)"></div><span class="text">Teach this concept to an imaginary interviewer for 2 minutes without hesitation</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- S4: CHEATSHEET -->
+<section id="s4">
+  <h2 class="section-title"><span class="num">§4</span> 📋 Cheatsheet</h2>
+  <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+
+  <!-- Radial Mindmap SVG -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">🧠 Concept Mindmap</div>
+    <svg viewBox="0 0 820 500" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:820px;display:block;margin:0 auto;">
+      <rect width="820" height="500" fill="#fafafa" rx="8"/>
+      <!-- Connector lines -->
+      <line x1="410" y1="250" x2="180" y2="105" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="250" x2="640" y2="105" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="250" x2="105" y2="272" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="250" x2="715" y2="272" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="250" x2="180" y2="418" stroke="#aaa" stroke-width="1.5"/>
+      <line x1="410" y1="250" x2="640" y2="418" stroke="#aaa" stroke-width="1.5"/>
+      <!-- Central -->
+      <ellipse cx="410" cy="250" rx="106" ry="46" fill="#a5d8ff" stroke="#1971c2" stroke-width="2"/>
+      <text x="410" y="238" text-anchor="middle" dominant-baseline="middle" font-family="Arial,sans-serif" font-size="15" font-weight="bold" fill="#1a1917">SQL vs. NoSQL</text>
+      <text x="410" y="258" text-anchor="middle" dominant-baseline="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#1a1917">data model — not the</text>
+      <text x="410" y="272" text-anchor="middle" dominant-baseline="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#1a1917">query language</text>
+
+      <!-- Branch 1: Relational -->
+      <rect x="80" y="62" width="200" height="86" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+      <text x="180" y="80" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">RELATIONAL</text>
+      <text x="180" y="96" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">Postgres · MySQL</text>
+      <text x="180" y="110" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">relations + joins · schema-on-write</text>
+      <text x="180" y="124" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">multi-row ACID · ad-hoc SQL</text>
+      <text x="180" y="138" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">scale up, shard later (bolt-on)</text>
+
+      <!-- Branch 2: 4 families -->
+      <rect x="540" y="62" width="200" height="86" rx="8" fill="#ffd8a8" stroke="#e67700" stroke-width="1.5"/>
+      <text x="640" y="80" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">4 NoSQL FAMILIES</text>
+      <text x="640" y="96" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">Key-value — Redis / DynamoDB</text>
+      <text x="640" y="110" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">Document — Mongo / DynamoDB</text>
+      <text x="640" y="124" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">Wide-column — Cassandra / Bigtable</text>
+      <text x="640" y="138" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">Graph — Neo4j / Neptune</text>
+
+      <!-- Branch 3: The 4 axes -->
+      <rect x="10" y="228" width="190" height="88" rx="8" fill="#c3fae8" stroke="#0ca678" stroke-width="1.5"/>
+      <text x="105" y="246" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">THE 4 AXES</text>
+      <text x="105" y="262" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">1. Data model</text>
+      <text x="105" y="276" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">2. Schema on-write / on-read</text>
+      <text x="105" y="290" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">3. Distribution model</text>
+      <text x="105" y="304" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">4. Transaction scope</text>
+
+      <!-- Branch 4: What you give up -->
+      <rect x="620" y="228" width="190" height="88" rx="8" fill="#ffc9c9" stroke="#c92a2a" stroke-width="1.5"/>
+      <text x="715" y="246" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">WHAT YOU GIVE UP</text>
+      <text x="715" y="262" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">Server-side joins → denormalize</text>
+      <text x="715" y="276" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">Multi-entity ACID → txn API / saga</text>
+      <text x="715" y="290" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">Ad-hoc queries → GSI / CDC → ES</text>
+      <text x="715" y="304" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">Referential integrity → app code</text>
+
+      <!-- Branch 5: Numbers / scale -->
+      <rect x="80" y="376" width="200" height="86" rx="8" fill="#ffe3e3" stroke="#c92a2a" stroke-width="1.5"/>
+      <text x="180" y="394" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">SCALE REALITY</text>
+      <text x="180" y="410" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">1 Postgres node ≈ 10–50k QPS</text>
+      <text x="180" y="424" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">single-digit TB · replicas = READS</text>
+      <text x="180" y="438" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">WRITES are the real ceiling</text>
+      <text x="180" y="452" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">name the number you exceed</text>
+
+      <!-- Branch 6: Convergence -->
+      <rect x="540" y="376" width="200" height="86" rx="8" fill="#b2f2bb" stroke="#2f9e44" stroke-width="1.5"/>
+      <text x="640" y="394" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#1a1917">CONVERGENCE</text>
+      <text x="640" y="410" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">Postgres JSONB (doc in SQL)</text>
+      <text x="640" y="424" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">Mongo multi-doc ACID</text>
+      <text x="640" y="438" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">DynamoDB TransactWriteItems</text>
+      <text x="640" y="452" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#333">Spanner / CockroachDB = both</text>
+    </svg>
+    <p class="caption">Radial mindmap: six clusters around the SQL vs. NoSQL decision — the binary is a false one, the axes are what matter</p>
+  </div>
+
+  <!-- Decision Map -->
+  <div class="diagram-wrap">
+    <div class="diagram-title">🗺️ SQL vs. NoSQL Decision Map</div>
+    <svg viewBox="0 0 720 800" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:720px;display:block;margin:0 auto;" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+      <rect width="720" height="800" fill="#fafafa" rx="8"/>
+
+      <!-- START -->
+      <rect x="255" y="10" width="210" height="36" rx="18" fill="#1a1917"/>
+      <text x="360" y="32" text-anchor="middle" font-size="12" font-weight="600" fill="#fff">Need a primary datastore</text>
+      <line x1="360" y1="46" x2="360" y2="66" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm8-arr)"/>
+
+      <!-- Q1 -->
+      <rect x="185" y="66" width="350" height="44" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="360" y="85" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">Q1. Access patterns KNOWN and STABLE?</text>
+      <text x="360" y="101" text-anchor="middle" font-size="11" fill="#6b6861">(can you list the top 3–5 queries?)</text>
+      <line x1="185" y1="88" x2="140" y2="88" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm8-arr)"/>
+      <text x="162" y="80" text-anchor="middle" font-size="10" fill="#6b6861">No</text>
+      <rect x="8" y="66" width="132" height="44" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="74" y="85" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1e40af">RELATIONAL ✅</text>
+      <text x="74" y="100" text-anchor="middle" font-size="10" fill="#1e40af">ad-hoc / evolving</text>
+      <line x1="360" y1="110" x2="360" y2="132" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm8-arr)"/>
+      <text x="372" y="125" font-size="10" fill="#6b6861">Yes</text>
+
+      <!-- Q2 -->
+      <rect x="185" y="132" width="350" height="44" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="360" y="151" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">Q2. Multi-entity ACID on the hot path?</text>
+      <text x="360" y="167" text-anchor="middle" font-size="11" fill="#6b6861">(payments, ledger, inventory + order)</text>
+      <line x1="535" y1="154" x2="576" y2="154" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm8-arr)"/>
+      <text x="556" y="146" text-anchor="middle" font-size="10" fill="#6b6861">Yes</text>
+      <rect x="576" y="132" width="136" height="44" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="644" y="151" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1e40af">RELATIONAL ✅</text>
+      <text x="644" y="166" text-anchor="middle" font-size="10" fill="#1e40af">or Spanner / Cockroach</text>
+      <line x1="360" y1="176" x2="360" y2="198" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm8-arr)"/>
+      <text x="372" y="191" font-size="10" fill="#6b6861">No</text>
+
+      <!-- Q3 -->
+      <rect x="185" y="198" width="350" height="44" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="360" y="217" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">Q3. Dominant read = N-hop TRAVERSAL?</text>
+      <text x="360" y="233" text-anchor="middle" font-size="11" fill="#6b6861">(friends-of-friends, fraud rings, paths)</text>
+      <line x1="185" y1="220" x2="140" y2="220" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm8-arr)"/>
+      <text x="162" y="212" text-anchor="middle" font-size="10" fill="#6b6861">Yes</text>
+      <rect x="8" y="198" width="132" height="44" rx="8" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.5"/>
+      <text x="74" y="217" text-anchor="middle" font-size="11.5" font-weight="700" fill="#5b21b6">GRAPH DB</text>
+      <text x="74" y="232" text-anchor="middle" font-size="10" fill="#5b21b6">Neo4j / Neptune</text>
+      <line x1="360" y1="242" x2="360" y2="264" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm8-arr)"/>
+      <text x="372" y="257" font-size="10" fill="#6b6861">No</text>
+
+      <!-- Q4 -->
+      <rect x="185" y="264" width="350" height="40" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="360" y="289" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">Q4. What is the SHAPE of the dominant access?</text>
+      <line x1="360" y1="304" x2="360" y2="318" stroke="#bbb" stroke-width="1.5"/>
+      <line x1="92" y1="318" x2="628" y2="318" stroke="#bbb" stroke-width="1.5"/>
+      <line x1="92" y1="318" x2="92" y2="332" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm8-arr)"/>
+      <line x1="270" y1="318" x2="270" y2="332" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm8-arr)"/>
+      <line x1="450" y1="318" x2="450" y2="332" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm8-arr)"/>
+      <line x1="628" y1="318" x2="628" y2="332" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm8-arr)"/>
+
+      <!-- Q4 outcomes -->
+      <rect x="8" y="336" width="168" height="86" rx="8" fill="#ffd8a8" stroke="#e67700" stroke-width="1.5"/>
+      <text x="92" y="354" text-anchor="middle" font-size="11.5" font-weight="700" fill="#7c2d12">KEY-VALUE</text>
+      <text x="92" y="370" text-anchor="middle" font-size="10" fill="#7c2d12">whole object by one key</text>
+      <text x="92" y="384" text-anchor="middle" font-size="10" fill="#7c2d12">Redis · DynamoDB</text>
+      <text x="92" y="402" text-anchor="middle" font-size="10" font-style="italic" fill="#7c2d12">sessions, carts,</text>
+      <text x="92" y="415" text-anchor="middle" font-size="10" font-style="italic" fill="#7c2d12">flags, counters</text>
+
+      <rect x="186" y="336" width="168" height="86" rx="8" fill="#ffe8cc" stroke="#e67700" stroke-width="1.5"/>
+      <text x="270" y="354" text-anchor="middle" font-size="11.5" font-weight="700" fill="#7c2d12">DOCUMENT</text>
+      <text x="270" y="370" text-anchor="middle" font-size="10" fill="#7c2d12">nested self-contained obj</text>
+      <text x="270" y="384" text-anchor="middle" font-size="10" fill="#7c2d12">MongoDB · PG JSONB</text>
+      <text x="270" y="402" text-anchor="middle" font-size="10" font-style="italic" fill="#7c2d12">catalogs, profiles,</text>
+      <text x="270" y="415" text-anchor="middle" font-size="10" font-style="italic" fill="#7c2d12">CMS, event payloads</text>
+
+      <rect x="366" y="336" width="168" height="86" rx="8" fill="#c3fae8" stroke="#0ca678" stroke-width="1.5"/>
+      <text x="450" y="354" text-anchor="middle" font-size="11.5" font-weight="700" fill="#065f46">WIDE-COLUMN</text>
+      <text x="450" y="370" text-anchor="middle" font-size="10" fill="#065f46">partition key + sorted range</text>
+      <text x="450" y="384" text-anchor="middle" font-size="10" fill="#065f46">Cassandra · Bigtable</text>
+      <text x="450" y="402" text-anchor="middle" font-size="10" font-style="italic" fill="#065f46">time series, feeds,</text>
+      <text x="450" y="415" text-anchor="middle" font-size="10" font-style="italic" fill="#065f46">message history, logs</text>
+
+      <rect x="544" y="336" width="168" height="86" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="628" y="354" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1e40af">RELATIONAL</text>
+      <text x="628" y="370" text-anchor="middle" font-size="10" fill="#1e40af">mixed / relational-ish</text>
+      <text x="628" y="384" text-anchor="middle" font-size="10" fill="#1e40af">Postgres · MySQL</text>
+      <text x="628" y="402" text-anchor="middle" font-size="10" font-style="italic" fill="#1e40af">revisit only at</text>
+      <text x="628" y="415" text-anchor="middle" font-size="10" font-style="italic" fill="#1e40af">real, measured scale</text>
+
+      <!-- Q5 -->
+      <line x1="628" y1="422" x2="628" y2="440" stroke="#bbb" stroke-width="1.5"/>
+      <line x1="628" y1="440" x2="360" y2="440" stroke="#bbb" stroke-width="1.5"/>
+      <line x1="360" y1="440" x2="360" y2="456" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm8-arr)"/>
+      <rect x="170" y="456" width="380" height="44" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="360" y="475" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1917">Q5. Does ONE node still fit?</text>
+      <text x="360" y="491" text-anchor="middle" font-size="11" fill="#6b6861">~single-digit TB · ~10–50k QPS · p99 in budget</text>
+      <line x1="170" y1="478" x2="140" y2="478" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm8-arr)"/>
+      <text x="155" y="470" text-anchor="middle" font-size="10" fill="#6b6861">Yes</text>
+      <rect x="8" y="452" width="132" height="52" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="74" y="471" text-anchor="middle" font-size="11" font-weight="700" fill="#1e40af">RELATIONAL ✅</text>
+      <text x="74" y="486" text-anchor="middle" font-size="10" fill="#1e40af">primary + replicas</text>
+      <text x="74" y="499" text-anchor="middle" font-size="10" fill="#1e40af">don't distribute early</text>
+      <line x1="550" y1="478" x2="576" y2="478" stroke="#bbb" stroke-width="1.5" marker-end="url(#dm8-arr)"/>
+      <text x="563" y="470" text-anchor="middle" font-size="10" fill="#6b6861">No</text>
+      <rect x="576" y="446" width="136" height="64" rx="8" fill="#ffe3e3" stroke="#c92a2a" stroke-width="1.5"/>
+      <text x="644" y="464" text-anchor="middle" font-size="11" font-weight="700" fill="#7f1d1d">SHARD or GO</text>
+      <text x="644" y="478" text-anchor="middle" font-size="11" font-weight="700" fill="#7f1d1d">PARTITION-NATIVE</text>
+      <text x="644" y="492" text-anchor="middle" font-size="9.5" fill="#7f1d1d">Vitess/Citus = bolt-on</text>
+      <text x="644" y="504" text-anchor="middle" font-size="9.5" fill="#7f1d1d">NoSQL if WRITES hurt</text>
+
+      <!-- Warnings -->
+      <rect x="110" y="534" width="500" height="42" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+      <text x="360" y="551" text-anchor="middle" font-size="11" font-weight="700" fill="#92400e">⚠️ "We need NoSQL for scale" is only true once you name the ceiling</text>
+      <text x="360" y="567" text-anchor="middle" font-size="10.5" fill="#92400e">Usually it's WRITE throughput on the single primary — not data size, not read QPS</text>
+
+      <rect x="110" y="586" width="500" height="42" rx="8" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5"/>
+      <text x="360" y="603" text-anchor="middle" font-size="11" font-weight="700" fill="#7f1d1d">⚠️ Never say "NoSQL" without naming a FAMILY + PRODUCT + ACCESS PATTERN</text>
+      <text x="360" y="619" text-anchor="middle" font-size="10.5" fill="#7f1d1d">…and what you gave up: joins, multi-entity ACID, ad-hoc queries</text>
+
+      <rect x="110" y="638" width="500" height="42" rx="8" fill="#ccfbf1" stroke="#0d9488" stroke-width="1.5"/>
+      <text x="360" y="655" text-anchor="middle" font-size="11" font-weight="700" fill="#134e4a">✅ Polyglot is a legitimate answer — one store per access pattern</text>
+      <text x="360" y="671" text-anchor="middle" font-size="10.5" fill="#134e4a">Postgres for orders · Redis for sessions · Cassandra for events · ES for search</text>
+
+      <!-- Legend -->
+      <rect x="110" y="694" width="500" height="94" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="360" y="714" text-anchor="middle" font-size="11" font-weight="700" fill="#6b6861">LEGEND</text>
+      <rect x="132" y="724" width="12" height="12" rx="2" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="151" y="735" font-size="10" fill="#1e40af">Relational</text>
+      <rect x="222" y="724" width="12" height="12" rx="2" fill="#ffd8a8" stroke="#e67700" stroke-width="1.5"/>
+      <text x="241" y="735" font-size="10" fill="#7c2d12">KV / Document</text>
+      <rect x="342" y="724" width="12" height="12" rx="2" fill="#c3fae8" stroke="#0ca678" stroke-width="1.5"/>
+      <text x="361" y="735" font-size="10" fill="#065f46">Wide-column</text>
+      <rect x="452" y="724" width="12" height="12" rx="2" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.5"/>
+      <text x="471" y="735" font-size="10" fill="#5b21b6">Graph</text>
+      <rect x="522" y="724" width="12" height="12" rx="2" fill="#ffe3e3" stroke="#c92a2a" stroke-width="1.5"/>
+      <text x="541" y="735" font-size="10" fill="#7f1d1d">Scale decision</text>
+      <text x="132" y="760" font-size="10" fill="#6b6861">Gates answered top-to-bottom. The first gate that matches ends the search.</text>
+      <text x="132" y="776" font-size="10" fill="#6b6861">Default is RELATIONAL unless you can name the specific reason to leave it.</text>
+
+      <defs>
+        <marker id="dm8-arr" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+          <path d="M0,0 L0,7 L7,3.5 z" fill="#bbb"/>
+        </marker>
+      </defs>
+    </svg>
+    <p class="caption">Five gates in order — access patterns, transactions, traversal, access shape, then and only then, scale</p>
+  </div>
+
+  <div class="cheatsheet">
+<span class="label">§ 1  WHY IT EXISTS</span>Relational DBs assume all data is reachable from ONE machine, so joins, multi-row
+transactions and ad-hoc queries are cheap. That assumption broke for 2000s web
+companies: data outgrew one machine and write volume exceeded one primary. Sharding
+a relational DB destroys exactly the features you paid for (cross-shard joins need
+scatter-gather; cross-shard transactions need 2PC). NoSQL inverted the design:
+assume partitioning FIRST, then only offer operations servable from ONE partition.
+NoSQL didn't remove work — it moved joins and schema enforcement into the app.
+
+<span class="label">§ 2  THE FOUR AXES (the real difference — not the query language)</span>DATA MODEL     relations + joins  ⟷  key-value / document / wide-column / graph
+SCHEMA         on-write (DB enforces; migration up front)
+               ⟷ on-read (app enforces; every reader handles every old shape)
+DISTRIBUTION   scale up, then bolt on sharding (Vitess / Citus)
+               ⟷ partition-native: the shard key is part of the data model day 1
+TRANSACTIONS   multi-row ACID, strong by default
+               ⟷ single-item atomic; tunable / eventual (BASE); quorum R + W &gt; N
+
+<span class="label">§ 3  THE FOUR NoSQL FAMILIES  (never say just "NoSQL")</span>KEY-VALUE    Redis, DynamoDB, Memcached — GET/PUT by key; value opaque.
+             → sessions, carts, rate-limit counters, feature flags
+DOCUMENT     MongoDB, DynamoDB, Couchbase, PG JSONB — nested self-contained docs,
+             secondary indexes on inner fields. → catalogs, profiles, CMS
+WIDE-COLUMN  Cassandra, HBase, Bigtable — partition key + clustering key; rows
+             sorted inside a partition; LSM write path. → time series, feeds, logs
+GRAPH        Neo4j, Neptune — nodes + edges; traversal is O(hops) not O(joins).
+             → social graphs, fraud rings, recommendation paths
+
+<span class="label">§ 4  USE / AVOID</span>Use RELATIONAL when: queries are ad-hoc or will evolve; entities are highly
+  related; you need multi-entity ACID; data fits a node (or a few shards); you
+  want the DB — not every future engineer — to enforce the schema.
+Use NoSQL when: access patterns are known + stable; the dominant read is one key
+  or one partition; you need partition-native scale for WRITES; the record is
+  naturally self-contained; latency must stay flat as data grows.
+AVOID NoSQL when you can't enumerate your queries — you'll pick the wrong key
+  and be forced into scatter-gather or a full re-model.
+AVOID relational-by-default at extreme write volume with a natural partition key.
+
+<span class="label">§ 5  WHAT YOU GIVE UP LEAVING RELATIONAL (and the fix)</span>Server-side joins    → denormalize / duplicate; or app-side join (watch N+1, §8.8)
+Multi-entity ACID    → single-item atomicity; DynamoDB TransactWriteItems (≤100),
+                       Mongo multi-doc txns; saga + outbox across services
+Ad-hoc queries       → GSIs, or CDC-stream into Elasticsearch / a warehouse
+Referential integrity→ app-enforced; orphaned references become a real bug class
+Schema enforcement   → moves into app code + every historical document shape
+
+<span class="label">§ 6  NUMBERS TO ANCHOR THE "SCALE" ARGUMENT</span>Single Postgres / MySQL node: ~10k–50k simple QPS, single-digit TB comfortably.
+  Read replicas multiply READS only. ONE primary = the WRITE ceiling. That's the
+  number to name before you claim you need to distribute.
+DynamoDB: 400 KB max item; ~3,000 RCU / 1,000 WCU per partition (hot-partition cap)
+MongoDB:  16 MB max document
+Cassandra: keep a partition under ~100 MB / ~100k rows
+Rule: don't distribute until you've named the number you're exceeding.
+
+<span class="label">§ 7  INTERVIEW TRIGGERS + GOTCHA</span>→ "What database would you use here, and why?"   → access patterns FIRST, then pick
+→ "100M users / 1M writes per second"            → name the single-node ceiling
+→ "The schema will change often"                 → document store OR PG JSONB column
+→ "This must be transactionally correct"         → relational / Spanner
+GOTCHA: Saying "NoSQL because it scales" without naming a FAMILY, a PRODUCT, the
+  ACCESS PATTERN it's modeled for, and WHAT YOU GAVE UP. The interviewer is testing
+  whether you know NoSQL buys scale by REMOVING joins and multi-entity ACID — not
+  by being magically faster. For an indexed single-row lookup, Postgres is just as
+  fast; what NoSQL gives you is FLAT latency as the dataset grows.
+  </div>
+</section>
+
+<!-- S5: CORE DEFINITION -->
+<section id="s5">
+  <h2 class="section-title"><span class="num">§5</span> 🧠 Core Definition</h2>
+  <div class="callout callout-teal" style="font-size:16px;font-weight:600;line-height:1.6;">
+    <strong>Relational (SQL)</strong> databases store data as normalized tables with a schema enforced on write and a query planner that can join and filter arbitrarily — optimizing for query flexibility and multi-row ACID correctness on a single node. <strong>NoSQL</strong> databases are a family of stores (key-value, document, wide-column, graph) that abandon some combination of joins, cross-entity transactions, and enforced schema in order to model data directly around known access patterns and partition natively across many nodes.
+  </div>
+</section>
+
+<!-- S6: CORE CONCEPTS -->
+<section id="s6">
+  <h2 class="section-title"><span class="num">§6</span> 📦 Core Concepts</h2>
+
+  <h3>The Relational Model &amp; Normalization</h3>
+  <p>Data is decomposed into tables of tuples with typed columns; relationships are expressed by foreign keys and the query planner reassembles them at read time with joins. Each fact is stored exactly once, so an update touches one place and two copies can never disagree. The cost: answering a real question usually touches several tables — cheap when they're on one machine, expensive the moment they're not.</p>
+
+  <h3>Schema-on-Write vs. Schema-on-Read</h3>
+  <p>Schema-on-write means the database rejects any row that doesn't match the declared shape; a change requires a migration, but every reader can trust the data. Schema-on-read means the store accepts any document and the <em>application</em> interprets it — genuinely flexible during rapid iteration, but production data accumulates every historical shape and every reader must defensively handle all of them forever. <strong>The schema didn't disappear; it moved from one enforced place into N application code paths.</strong></p>
+
+  <h3>The Four NoSQL Families</h3>
+
+  <div class="diagram-wrap">
+    <div class="diagram-title">📦 The Four NoSQL Families — Shape and Access Pattern</div>
+    <svg viewBox="0 0 800 300" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:800px;display:block;margin:0 auto;" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+      <rect width="800" height="300" fill="#fafafa" rx="8"/>
+
+      <!-- KEY-VALUE -->
+      <rect x="10" y="14" width="185" height="272" rx="10" fill="#fff" stroke="#e67700" stroke-width="1.5"/>
+      <rect x="10" y="14" width="185" height="30" rx="10" fill="#ffd8a8"/>
+      <rect x="10" y="34" width="185" height="10" fill="#ffd8a8"/>
+      <text x="102" y="34" text-anchor="middle" font-size="12.5" font-weight="800" fill="#7c2d12">KEY-VALUE</text>
+      <!-- shape -->
+      <rect x="28" y="58" width="70" height="22" rx="4" fill="#fff3bf" stroke="#e67700"/>
+      <text x="63" y="73" text-anchor="middle" font-size="10" fill="#7c2d12">user:42</text>
+      <line x1="98" y1="69" x2="118" y2="69" stroke="#e67700" stroke-width="1.5" marker-end="url(#f-arr)"/>
+      <rect x="118" y="58" width="60" height="22" rx="4" fill="#f3f2ef" stroke="#bbb"/>
+      <text x="148" y="73" text-anchor="middle" font-size="10" fill="#6b6861">◼ blob</text>
+      <text x="102" y="102" text-anchor="middle" font-size="10.5" font-weight="700" fill="#1a1917">GET / PUT by one key</text>
+      <text x="102" y="118" text-anchor="middle" font-size="10" fill="#6b6861">value is opaque to the DB</text>
+      <line x1="26" y1="132" x2="178" y2="132" stroke="#f0e0d0"/>
+      <text x="102" y="150" text-anchor="middle" font-size="10.5" font-weight="700" fill="#7c2d12">Redis · DynamoDB</text>
+      <text x="102" y="164" text-anchor="middle" font-size="10.5" font-weight="700" fill="#7c2d12">Memcached</text>
+      <line x1="26" y1="178" x2="178" y2="178" stroke="#f0e0d0"/>
+      <text x="102" y="196" text-anchor="middle" font-size="10" fill="#333">sessions · carts</text>
+      <text x="102" y="210" text-anchor="middle" font-size="10" fill="#333">feature flags</text>
+      <text x="102" y="224" text-anchor="middle" font-size="10" fill="#333">rate-limit counters</text>
+      <text x="102" y="252" text-anchor="middle" font-size="9.5" font-style="italic" fill="#c92a2a">✗ no query by value</text>
+      <text x="102" y="268" text-anchor="middle" font-size="9.5" font-style="italic" fill="#c92a2a">✗ no joins</text>
+
+      <!-- DOCUMENT -->
+      <rect x="205" y="14" width="185" height="272" rx="10" fill="#fff" stroke="#e67700" stroke-width="1.5"/>
+      <rect x="205" y="14" width="185" height="30" rx="10" fill="#ffe8cc"/>
+      <rect x="205" y="34" width="185" height="10" fill="#ffe8cc"/>
+      <text x="297" y="34" text-anchor="middle" font-size="12.5" font-weight="800" fill="#7c2d12">DOCUMENT</text>
+      <rect x="240" y="54" width="114" height="52" rx="5" fill="#fff9db" stroke="#e67700"/>
+      <text x="250" y="68" font-size="9" fill="#7c2d12">{ id, name,</text>
+      <text x="256" y="80" font-size="9" fill="#7c2d12">addr: { … },</text>
+      <text x="256" y="92" font-size="9" fill="#7c2d12">items: [ … ] }</text>
+      <text x="297" y="122" text-anchor="middle" font-size="10.5" font-weight="700" fill="#1a1917">nested, self-contained</text>
+      <text x="297" y="136" text-anchor="middle" font-size="10" fill="#6b6861">index + query inner fields</text>
+      <line x1="221" y1="148" x2="373" y2="148" stroke="#f0e0d0"/>
+      <text x="297" y="166" text-anchor="middle" font-size="10.5" font-weight="700" fill="#7c2d12">MongoDB · DynamoDB</text>
+      <text x="297" y="180" text-anchor="middle" font-size="10.5" font-weight="700" fill="#7c2d12">Couchbase · PG JSONB</text>
+      <line x1="221" y1="192" x2="373" y2="192" stroke="#f0e0d0"/>
+      <text x="297" y="210" text-anchor="middle" font-size="10" fill="#333">product catalogs</text>
+      <text x="297" y="224" text-anchor="middle" font-size="10" fill="#333">user profiles · CMS</text>
+      <text x="297" y="238" text-anchor="middle" font-size="10" fill="#333">event payloads</text>
+      <text x="297" y="262" text-anchor="middle" font-size="9.5" font-style="italic" fill="#c92a2a">✗ cross-doc joins are</text>
+      <text x="297" y="276" text-anchor="middle" font-size="9.5" font-style="italic" fill="#c92a2a">app-side (N+1 risk)</text>
+
+      <!-- WIDE-COLUMN -->
+      <rect x="400" y="14" width="185" height="272" rx="10" fill="#fff" stroke="#0ca678" stroke-width="1.5"/>
+      <rect x="400" y="14" width="185" height="30" rx="10" fill="#c3fae8"/>
+      <rect x="400" y="34" width="185" height="10" fill="#c3fae8"/>
+      <text x="492" y="34" text-anchor="middle" font-size="12.5" font-weight="800" fill="#065f46">WIDE-COLUMN</text>
+      <rect x="418" y="54" width="52" height="52" rx="5" fill="#e6fcf5" stroke="#0ca678"/>
+      <text x="444" y="76" text-anchor="middle" font-size="9" fill="#065f46">chan</text>
+      <text x="444" y="88" text-anchor="middle" font-size="9" fill="#065f46">#42</text>
+      <rect x="478" y="54" width="90" height="15" rx="3" fill="#e6fcf5" stroke="#0ca678"/>
+      <text x="523" y="65" text-anchor="middle" font-size="8.5" fill="#065f46">t=09:01 msg</text>
+      <rect x="478" y="72" width="90" height="15" rx="3" fill="#e6fcf5" stroke="#0ca678"/>
+      <text x="523" y="83" text-anchor="middle" font-size="8.5" fill="#065f46">t=09:02 msg</text>
+      <rect x="478" y="90" width="90" height="15" rx="3" fill="#e6fcf5" stroke="#0ca678"/>
+      <text x="523" y="101" text-anchor="middle" font-size="8.5" fill="#065f46">t=09:03 msg</text>
+      <text x="492" y="122" text-anchor="middle" font-size="10.5" font-weight="700" fill="#1a1917">partition key + sort key</text>
+      <text x="492" y="136" text-anchor="middle" font-size="10" fill="#6b6861">range scan inside a partition</text>
+      <line x1="416" y1="148" x2="568" y2="148" stroke="#d3f9e8"/>
+      <text x="492" y="166" text-anchor="middle" font-size="10.5" font-weight="700" fill="#065f46">Cassandra · ScyllaDB</text>
+      <text x="492" y="180" text-anchor="middle" font-size="10.5" font-weight="700" fill="#065f46">HBase · Bigtable</text>
+      <line x1="416" y1="192" x2="568" y2="192" stroke="#d3f9e8"/>
+      <text x="492" y="210" text-anchor="middle" font-size="10" fill="#333">message history</text>
+      <text x="492" y="224" text-anchor="middle" font-size="10" fill="#333">time series · feeds</text>
+      <text x="492" y="238" text-anchor="middle" font-size="10" fill="#333">event / audit logs</text>
+      <text x="492" y="262" text-anchor="middle" font-size="9.5" font-style="italic" fill="#c92a2a">✗ query without the</text>
+      <text x="492" y="276" text-anchor="middle" font-size="9.5" font-style="italic" fill="#c92a2a">partition key = scatter</text>
+
+      <!-- GRAPH -->
+      <rect x="595" y="14" width="195" height="272" rx="10" fill="#fff" stroke="#7c3aed" stroke-width="1.5"/>
+      <rect x="595" y="14" width="195" height="30" rx="10" fill="#ede9fe"/>
+      <rect x="595" y="34" width="195" height="10" fill="#ede9fe"/>
+      <text x="692" y="34" text-anchor="middle" font-size="12.5" font-weight="800" fill="#5b21b6">GRAPH</text>
+      <line x1="646" y1="66" x2="692" y2="90" stroke="#7c3aed" stroke-width="1.5"/>
+      <line x1="692" y1="90" x2="738" y2="66" stroke="#7c3aed" stroke-width="1.5"/>
+      <line x1="692" y1="90" x2="692" y2="60" stroke="#7c3aed" stroke-width="1.5"/>
+      <circle cx="646" cy="66" r="11" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.5"/>
+      <circle cx="738" cy="66" r="11" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.5"/>
+      <circle cx="692" cy="56" r="11" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.5"/>
+      <circle cx="692" cy="96" r="13" fill="#ddd6fe" stroke="#7c3aed" stroke-width="2"/>
+      <text x="692" y="122" text-anchor="middle" font-size="10.5" font-weight="700" fill="#1a1917">nodes + edges first-class</text>
+      <text x="692" y="136" text-anchor="middle" font-size="10" fill="#6b6861">traversal is O(hops), not O(joins)</text>
+      <line x1="611" y1="148" x2="773" y2="148" stroke="#e9e2fb"/>
+      <text x="692" y="166" text-anchor="middle" font-size="10.5" font-weight="700" fill="#5b21b6">Neo4j · Neptune</text>
+      <text x="692" y="180" text-anchor="middle" font-size="10.5" font-weight="700" fill="#5b21b6">JanusGraph</text>
+      <line x1="611" y1="192" x2="773" y2="192" stroke="#e9e2fb"/>
+      <text x="692" y="210" text-anchor="middle" font-size="10" fill="#333">friends-of-friends</text>
+      <text x="692" y="224" text-anchor="middle" font-size="10" fill="#333">fraud rings</text>
+      <text x="692" y="238" text-anchor="middle" font-size="10" fill="#333">recommendation paths</text>
+      <text x="692" y="262" text-anchor="middle" font-size="9.5" font-style="italic" fill="#c92a2a">✗ hardest to partition —</text>
+      <text x="692" y="276" text-anchor="middle" font-size="9.5" font-style="italic" fill="#c92a2a">edges cross everything</text>
+
+      <defs>
+        <marker id="f-arr" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+          <path d="M0,0 L0,7 L7,3.5 z" fill="#e67700"/>
+        </marker>
+      </defs>
+    </svg>
+    <p class="caption">Each family exists for exactly one access shape — name the family AND the pattern, never just "NoSQL"</p>
+  </div>
+
+  <h3>Access-Pattern-Driven Modeling (Single-Table Design)</h3>
+  <p>In relational modeling you design the data first and the queries follow. In NoSQL you invert it: enumerate the queries, then design keys and item shapes so every query is a single-partition read. DynamoDB single-table design is the extreme form — multiple entity types share one table with composite <code>PK</code>/<code>SK</code> values engineered so one query returns a whole object graph. The power is flat, predictable latency; the risk is that an unanticipated query has no efficient path and needs a new index or a re-model.</p>
+
+  <h3>Denormalization and Duplication</h3>
+  <p>Because there is no server-side join, NoSQL designs deliberately store the same fact in multiple places — the author's display name embedded in every post, the order total copied onto the customer record. Reads become single fetches; writes become fan-outs, and you inherit the job of keeping copies consistent (usually via change-data-capture or transactional writes).</p>
+
+  <h3>Transaction Scope: ACID vs. BASE (and the convergence)</h3>
+  <p>Relational databases offer ACID across arbitrary rows and tables. Most NoSQL stores originally guaranteed atomicity only within one item/document/partition and offered <strong>BASE</strong> semantics — basically available, soft state, eventual consistency — often with <em>tunable</em> consistency (Cassandra's <code>ONE</code>/<code>QUORUM</code>/<code>ALL</code>, DynamoDB's eventually- vs. strongly-consistent reads). That gap has narrowed sharply: MongoDB has multi-document transactions, DynamoDB has <code>TransactWriteItems</code>, and Spanner/CockroachDB offer full distributed ACID SQL. The honest modern framing is <em>the scope and cost of a transaction</em>, not "has transactions or doesn't."</p>
+
+  <h3>Polyglot Persistence</h3>
+  <p>Real systems don't pick one. A single product typically runs Postgres for orders and billing, Redis for sessions and rate limits, Cassandra or a time-series DB for events, Elasticsearch for search, and S3 + a warehouse for analytics. In an interview, proposing the right store <em>per access pattern</em> — and naming the sync mechanism between them (CDC, outbox, streaming) — reads as senior; insisting on one database for everything reads as junior.</p>
+</section>
+
+<!-- S7: FIRST PRINCIPLES -->
+<section id="s7">
+  <h2 class="section-title"><span class="num">§7</span> 🔍 First Principles — Why Does This Exist?</h2>
+
+  <p>The relational model won for thirty years because it solved the right problem: in 1970 storage was expensive and correctness was hard, so storing each fact exactly once and letting a planner recombine facts on demand was the optimal trade. But every relational feature we value — joins, ad-hoc SQL, multi-row ACID, foreign keys — silently depends on one assumption: <strong>all the data is reachable from a single machine's address space and a single transaction log.</strong></p>
+
+  <div class="diagram-wrap">
+    <div class="diagram-title">🔍 Why NoSQL Exists — The Chain of Forced Moves</div>
+    <svg viewBox="0 0 800 230" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:800px;display:block;margin:0 auto;" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+      <rect width="800" height="230" fill="#fafafa" rx="8"/>
+
+      <rect x="12" y="46" width="170" height="94" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="97" y="68" text-anchor="middle" font-size="11.5" font-weight="800" fill="#1e40af">1. ONE NODE</text>
+      <text x="97" y="88" text-anchor="middle" font-size="10" fill="#1e40af">All data co-located.</text>
+      <text x="97" y="102" text-anchor="middle" font-size="10" fill="#1e40af">Joins, ad-hoc SQL and</text>
+      <text x="97" y="116" text-anchor="middle" font-size="10" fill="#1e40af">multi-row ACID are all</text>
+      <text x="97" y="130" text-anchor="middle" font-size="10" fill="#1e40af">cheap. This works.</text>
+
+      <line x1="182" y1="93" x2="208" y2="93" stroke="#999" stroke-width="1.5" marker-end="url(#fp-arr)"/>
+
+      <rect x="212" y="46" width="170" height="94" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+      <text x="297" y="68" text-anchor="middle" font-size="11.5" font-weight="800" fill="#92400e">2. IT OUTGROWS</text>
+      <text x="297" y="88" text-anchor="middle" font-size="10" fill="#92400e">Data exceeds one disk;</text>
+      <text x="297" y="102" text-anchor="middle" font-size="10" fill="#92400e">write volume exceeds</text>
+      <text x="297" y="116" text-anchor="middle" font-size="10" fill="#92400e">what ONE primary can</text>
+      <text x="297" y="130" text-anchor="middle" font-size="10" fill="#92400e">commit. (Amazon 2007)</text>
+
+      <line x1="382" y1="93" x2="408" y2="93" stroke="#999" stroke-width="1.5" marker-end="url(#fp-arr)"/>
+
+      <rect x="412" y="46" width="170" height="94" rx="10" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5"/>
+      <text x="497" y="68" text-anchor="middle" font-size="11.5" font-weight="800" fill="#7f1d1d">3. SHARDING BREAKS</text>
+      <text x="497" y="86" text-anchor="middle" font-size="10" fill="#7f1d1d">Cross-shard join →</text>
+      <text x="497" y="99" text-anchor="middle" font-size="10" fill="#7f1d1d">scatter-gather (7.7)</text>
+      <text x="497" y="115" text-anchor="middle" font-size="10" fill="#7f1d1d">Cross-shard txn → 2PC,</text>
+      <text x="497" y="128" text-anchor="middle" font-size="10" fill="#7f1d1d">slow &amp; blocking</text>
+
+      <line x1="582" y1="93" x2="608" y2="93" stroke="#999" stroke-width="1.5" marker-end="url(#fp-arr)"/>
+
+      <rect x="612" y="46" width="176" height="94" rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+      <text x="700" y="68" text-anchor="middle" font-size="11.5" font-weight="800" fill="#065f46">4. INVERT IT</text>
+      <text x="700" y="86" text-anchor="middle" font-size="10" fill="#065f46">Assume partitioning FIRST.</text>
+      <text x="700" y="99" text-anchor="middle" font-size="10" fill="#065f46">Only offer ops servable</text>
+      <text x="700" y="112" text-anchor="middle" font-size="10" fill="#065f46">from ONE partition.</text>
+      <text x="700" y="128" text-anchor="middle" font-size="10" font-weight="700" fill="#065f46">= Dynamo / Bigtable</text>
+
+      <text x="400" y="24" text-anchor="middle" font-size="12" font-weight="700" fill="#1a1917">The relational assumption: "all my data is on one machine" — and what happens when it stops being true</text>
+
+      <rect x="12" y="160" width="776" height="56" rx="8" fill="#fff" stroke="#e5e3de" stroke-width="1.5"/>
+      <text x="400" y="181" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1a1917">The deeper principle: query flexibility + strong multi-entity transactions + unlimited horizontal scale are not simultaneously free.</text>
+      <text x="400" y="200" text-anchor="middle" font-size="10.5" fill="#6b6861">Someone always pays — in latency, in operational complexity, or in application-level work. Every database is a different point on that curve.</text>
+
+      <defs>
+        <marker id="fp-arr" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+          <path d="M0,0 L0,8 L8,4 z" fill="#999"/>
+        </marker>
+      </defs>
+    </svg>
+    <p class="caption">NoSQL wasn't a rejection of SQL — it was the consequence of dropping the single-machine assumption</p>
+  </div>
+
+  <p>That assumption broke around the mid-2000s. Amazon's shopping cart, Google's crawl index, and Facebook's message history simply did not fit on one machine, and the write volume exceeded what one primary could commit. The obvious move — shard the relational database — destroys the very features you were paying for: a join across shards becomes a network scatter-gather, and a transaction across shards needs two-phase commit, which is slow and blocking. You end up with a relational database that can't do relational things, plus the operational burden of running one.</p>
+
+  <p>NoSQL was the inverted design: <strong>assume partitioning first, then offer only the operations that can be answered from a single partition.</strong> That's why key-value and wide-column stores expose an API built around a partition key — not because engineers dislike SQL, but because any operation spanning partitions has inherently different cost and failure characteristics. The Dynamo paper (2007) and Bigtable paper (2006) are the founding documents of that inversion.</p>
+
+  <p>The deeper principle: <strong>you cannot get query flexibility, strong multi-entity transactions, and unlimited horizontal scale for free at the same time.</strong> The recent convergence (Spanner, CockroachDB, Postgres JSONB, DynamoDB transactions) doesn't abolish the trade-off; it moves the cost — Spanner buys distributed ACID with atomic clocks and commit-wait latency, and JSONB buys flexibility by giving up the planner's statistics on those fields.</p>
+</section>
+
+<!-- S8: MENTAL MODELS -->
+<section id="s8">
+  <h2 class="section-title"><span class="num">§8</span> 🗺️ Mental Models</h2>
+
+  <h3>Model 1: Warehouse with a Librarian vs. Pre-Packed Boxes</h3>
+  <p>A relational database is a warehouse where items are stored once, in the right aisle, with a very good librarian (the query planner) who can assemble any order you ask for — including orders nobody anticipated. A NoSQL store is a warehouse of <strong>pre-packed boxes</strong>: someone decided in advance what customers would ask for and packed each box to match, so fulfilment is instant and identical every time. Ask for something nobody pre-packed and you must open every box on every shelf (a scatter-gather scan) or repack the warehouse. <em>Where it breaks down:</em> secondary indexes and GSIs let you pre-pack a second arrangement after the fact — but you pay for it on every write, and it's usually eventually consistent.</p>
+
+  <h3>Model 2: The Schema Never Disappears — It Just Changes Landlords</h3>
+  <p>"Schemaless" doesn't mean there is no schema; it means the schema lives in your application code instead of the database. Under schema-on-write, one migration pays the cost once, up front, and every reader thereafter can trust the shape. Under schema-on-read you avoid the migration, but every reader, forever, must handle every shape the data has ever had. The question is never "schema or no schema" — it's "do I pay in one migration, or in N defensive code paths?" <em>Where it breaks down:</em> for genuinely heterogeneous data (per-tenant custom fields, third-party event payloads), enumerating a fixed schema really is impossible, and schema-on-read is the correct answer, not a dodge.</p>
+
+  <h3>Model 3: Follow the Write, Not the Read</h3>
+  <p>When you're stuck, ask where the <em>writes</em> go. Relational scales reads well (read replicas are easy) but has one primary, so write throughput is the hard ceiling. Partition-native stores spread writes across partitions by design, so write volume scales with node count. If the pain is "too many reads," the answer is usually caching and replicas, not a new database. If the pain is "too many writes, naturally keyed by entity," that's the genuine NoSQL signal. <em>Where it breaks down:</em> it doesn't cover the flexibility axis — a low-volume system with wildly unpredictable queries still wants relational.</p>
+</section>
+
+<!-- S9: HOW IT WORKS -->
+<section id="s9">
+  <h2 class="section-title"><span class="num">§9</span> ⚙️ How It Works — Mechanics</h2>
+
+  <div class="diagram-wrap">
+    <div class="diagram-title">⚙️ Two Read Paths — Query Planner vs. Partition Router</div>
+    <svg viewBox="0 0 800 340" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:800px;display:block;margin:0 auto;" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+      <rect width="800" height="340" fill="#fafafa" rx="8"/>
+      <line x1="400" y1="10" x2="400" y2="330" stroke="#e5e3de" stroke-width="1.5" stroke-dasharray="5,3"/>
+
+      <text x="200" y="28" text-anchor="middle" font-size="12.5" font-weight="800" fill="#1e40af">RELATIONAL — planner decides</text>
+      <text x="600" y="28" text-anchor="middle" font-size="12.5" font-weight="800" fill="#7c2d12">PARTITION-NATIVE — key decides</text>
+
+      <!-- LEFT -->
+      <rect x="140" y="42" width="120" height="26" rx="13" fill="#1a1917"/>
+      <text x="200" y="59" text-anchor="middle" font-size="10.5" fill="#fff">SQL query</text>
+      <line x1="200" y1="68" x2="200" y2="84" stroke="#bbb" stroke-width="1.5" marker-end="url(#hw-arr)"/>
+      <rect x="100" y="84" width="200" height="34" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="200" y="98" text-anchor="middle" font-size="10.5" font-weight="700" fill="#1e40af">Parser + Planner</text>
+      <text x="200" y="112" text-anchor="middle" font-size="9.5" fill="#1e40af">uses table stats → picks a plan</text>
+      <line x1="200" y1="118" x2="200" y2="134" stroke="#bbb" stroke-width="1.5" marker-end="url(#hw-arr)"/>
+      <rect x="100" y="134" width="200" height="34" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="200" y="148" text-anchor="middle" font-size="10.5" font-weight="700" fill="#1e40af">Executor + Buffer Pool</text>
+      <text x="200" y="162" text-anchor="middle" font-size="9.5" fill="#1e40af">index/seq scan · hash/merge JOIN</text>
+      <line x1="200" y1="168" x2="200" y2="184" stroke="#bbb" stroke-width="1.5" marker-end="url(#hw-arr)"/>
+      <rect x="100" y="184" width="200" height="34" rx="7" fill="#fff" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="200" y="198" text-anchor="middle" font-size="10.5" font-weight="700" fill="#1e40af">B-tree pages on ONE primary</text>
+      <text x="200" y="212" text-anchor="middle" font-size="9.5" fill="#1e40af">WAL append + fsync at COMMIT</text>
+      <rect x="100" y="230" width="200" height="46" rx="7" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+      <text x="200" y="247" text-anchor="middle" font-size="10" font-weight="700" fill="#065f46">✔ any query, any join</text>
+      <text x="200" y="261" text-anchor="middle" font-size="10" font-weight="700" fill="#065f46">✔ multi-row ACID from ONE log</text>
+      <rect x="100" y="284" width="200" height="44" rx="7" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5"/>
+      <text x="200" y="301" text-anchor="middle" font-size="10" font-weight="700" fill="#7f1d1d">✘ ONE write primary = ceiling</text>
+      <text x="200" y="315" text-anchor="middle" font-size="10" fill="#7f1d1d">replicas scale READS only (lag!)</text>
+
+      <!-- RIGHT -->
+      <rect x="540" y="42" width="120" height="26" rx="13" fill="#1a1917"/>
+      <text x="600" y="59" text-anchor="middle" font-size="10.5" fill="#fff">GET(pk, sk)</text>
+      <line x1="600" y1="68" x2="600" y2="84" stroke="#bbb" stroke-width="1.5" marker-end="url(#hw-arr)"/>
+      <rect x="500" y="84" width="200" height="34" rx="7" fill="#ffd8a8" stroke="#e67700" stroke-width="1.5"/>
+      <text x="600" y="98" text-anchor="middle" font-size="10.5" font-weight="700" fill="#7c2d12">Request router</text>
+      <text x="600" y="112" text-anchor="middle" font-size="9.5" fill="#7c2d12">hash(partition key) → owning node</text>
+      <line x1="600" y1="118" x2="600" y2="134" stroke="#bbb" stroke-width="1.5" marker-end="url(#hw-arr)"/>
+      <rect x="500" y="134" width="200" height="34" rx="7" fill="#ffd8a8" stroke="#e67700" stroke-width="1.5"/>
+      <text x="600" y="148" text-anchor="middle" font-size="10.5" font-weight="700" fill="#7c2d12">ONE partition serves it locally</text>
+      <text x="600" y="162" text-anchor="middle" font-size="9.5" fill="#7c2d12">no coordination with other nodes</text>
+      <line x1="600" y1="168" x2="600" y2="184" stroke="#bbb" stroke-width="1.5" marker-end="url(#hw-arr)"/>
+      <rect x="500" y="184" width="200" height="34" rx="7" fill="#fff" stroke="#e67700" stroke-width="1.5"/>
+      <text x="600" y="198" text-anchor="middle" font-size="10.5" font-weight="700" fill="#7c2d12">LSM: commit log → memtable</text>
+      <text x="600" y="212" text-anchor="middle" font-size="9.5" fill="#7c2d12">→ immutable SSTables · quorum R+W&gt;N</text>
+      <rect x="500" y="230" width="200" height="46" rx="7" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+      <text x="600" y="247" text-anchor="middle" font-size="10" font-weight="700" fill="#065f46">✔ latency flat at ANY data size</text>
+      <text x="600" y="261" text-anchor="middle" font-size="10" font-weight="700" fill="#065f46">✔ writes scale with node count</text>
+      <rect x="500" y="284" width="200" height="44" rx="7" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5"/>
+      <text x="600" y="301" text-anchor="middle" font-size="10" font-weight="700" fill="#7f1d1d">✘ no partition key = scatter-gather</text>
+      <text x="600" y="315" text-anchor="middle" font-size="10" fill="#7f1d1d">✘ txns bounded to item / partition</text>
+
+      <defs>
+        <marker id="hw-arr" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+          <path d="M0,0 L0,7 L7,3.5 z" fill="#bbb"/>
+        </marker>
+      </defs>
+    </svg>
+    <p class="caption">Left: the planner can answer anything, but one log is the write ceiling. Right: the key answers everything — and nothing else.</p>
+  </div>
+
+  <h3>The Relational Read/Write Path</h3>
+  <p>The client sends SQL; the parser and planner use table statistics to choose an execution plan (index scan vs. sequential scan, hash join vs. nested-loop vs. merge join). The executor pulls pages via the buffer pool, applies filters, performs joins, and materializes the result. Writes go through the transaction manager: acquire locks or MVCC snapshots, append to the write-ahead log, <code>fsync</code> at commit, update pages. Because the WAL is a <strong>single ordered log on one primary</strong>, ACID across arbitrary rows is straightforward — and that same single log is the write-throughput ceiling. Read replicas apply the WAL asynchronously, so read scaling is easy but replicas are stale by the replication lag (the origin of read-your-own-writes bugs).</p>
+
+  <h3>The Partition-Native Read/Write Path</h3>
+  <p>The client sends a request that includes a partition key. A request router (DynamoDB's request routers, Cassandra's coordinator, <code>mongos</code>) hashes the key to find the owning node(s). That node serves the read locally from its own storage engine — typically an <strong>LSM tree</strong> (Cassandra, Bigtable, HBase, DynamoDB) optimized for high write throughput. Because the operation touches one partition, <strong>latency is independent of total dataset size</strong> — that's the flat p99 these stores advertise. Writes append to a commit log + memtable and flush to immutable SSTables; replication to N replicas uses a configurable quorum (<code>R + W &gt; N</code> for strong consistency). Any query <em>without</em> the partition key becomes a scatter-gather across all partitions — this is where a badly chosen key destroys the performance story (see 7.7).</p>
+
+  <h3>Schema Evolution in Each Model</h3>
+  <p><strong>Relational:</strong> <code>ALTER TABLE</code>. Adding a nullable column is usually instant metadata-only in modern Postgres/MySQL; adding a <code>NOT NULL</code> column with a default, changing a type, or indexing a large table can require a rewrite or a lock — hence online schema-change tooling (gh-ost, pt-online-schema-change, <code>CREATE INDEX CONCURRENTLY</code>). <strong>Document:</strong> write the new shape immediately; old documents keep the old shape and readers must handle both, either forever or until a backfill normalizes them. <em>The migration cost is deferred, not removed.</em></p>
+
+  <h3>Transactions and Their Scope</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Store</th><th>Atomic unit</th><th>Beyond that</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Postgres / MySQL</strong></td><td>Arbitrary rows across arbitrary tables</td><td>Isolation levels from read-committed to serializable; the default, not a feature you reach for</td></tr>
+        <tr><td><strong>DynamoDB</strong></td><td>A single item</td><td><code>TransactWriteItems</code> — ACID across ≤100 items, with a cost multiplier and higher failure rate under contention</td></tr>
+        <tr><td><strong>MongoDB</strong></td><td>A single document</td><td>Multi-document transactions since 4.0 — real, but carry meaningful cost and are not the intended default pattern</td></tr>
+        <tr><td><strong>Cassandra</strong></td><td>A single partition (row-level)</td><td>No general transactions; lightweight transactions (<code>IF NOT EXISTS</code>) use Paxos per partition, ~an order of magnitude slower</td></tr>
+        <tr><td><strong>Spanner / CockroachDB</strong></td><td>Arbitrary rows, globally distributed</td><td>Full distributed ACID — paid for in commit latency (TrueTime commit-wait) and operational cost</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout callout-warn">
+    ⚠️ <strong>Failure modes to know:</strong> <strong>(1) Hot partition</strong> — a skewed partition key saturates one node's throughput cap (DynamoDB ~3,000 RCU / 1,000 WCU per partition) while the rest of the table idles; fix by salting or re-keying (see 7.6). <strong>(2) Unanticipated query</strong> — no efficient path; add a GSI (extra write cost, eventually consistent), full-scan, or re-model. <strong>(3) Cross-entity inconsistency</strong> — a partially applied logical operation (order created, inventory not decremented) is a real state your system can be in; mitigate with transactional APIs, the outbox pattern, or idempotent sagas with compensation. <strong>(4) Replica lag</strong> — the relational analogue of eventual consistency; fix with read-your-writes routing to the primary for a window.
+  </div>
+</section>
+
+<!-- S10: REAL-WORLD EXAMPLES -->
+<section id="s10">
+  <h2 class="section-title"><span class="num">§10</span> 🏭 Real-World System Examples</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>System</th><th>How SQL vs. NoSQL Applies</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Amazon</strong><br>(cart + orders)</td>
+          <td>Cart and session state in <strong>DynamoDB</strong> (key-value, single-key access, must never be slow); orders and financial records in relational systems. The 2007 Dynamo paper was motivated specifically by cart availability during peak.</td>
+          <td>The canonical "different store per access pattern" example — cite it for polyglot persistence</td>
+        </tr>
+        <tr>
+          <td><strong>Instagram</strong></td>
+          <td><strong>PostgreSQL</strong> as the primary store for users, media metadata, and relationships (sharded application-side); <strong>Cassandra</strong> for high-volume feed/activity data; <strong>Redis</strong> for counters and caching</td>
+          <td>Direct counter-example to "big scale ⇒ no relational" — Instagram runs relational at enormous scale</td>
+        </tr>
+        <tr>
+          <td><strong>Netflix</strong></td>
+          <td><strong>Cassandra</strong> as the primary operational store for viewing history and member data — extremely write-heavy, naturally partitioned by member ID, availability over strict consistency</td>
+          <td>Multi-region active-active is far easier with a partition-native, tunable-consistency store</td>
+        </tr>
+        <tr>
+          <td><strong>Discord</strong></td>
+          <td>Migrated message history MongoDB → <strong>Cassandra</strong> → <strong>ScyllaDB</strong>: trillions of messages, dominant query is "the last N messages in channel X" — a textbook wide-column partition key + clustering key</td>
+          <td>Best story to cite: the access pattern (range scan inside a partition) <em>is</em> the reason for wide-column</td>
+        </tr>
+        <tr>
+          <td><strong>Stripe</strong> / any payments system</td>
+          <td>Relational (Postgres/MySQL) for ledgers and balances — double-entry bookkeeping needs multi-row ACID and referential integrity you should never hand-roll</td>
+          <td>The "money moves ⇒ relational (or Spanner)" rule of thumb</td>
+        </tr>
+        <tr>
+          <td><strong>Google</strong> (internal)</td>
+          <td><strong>Bigtable</strong> (wide-column) for crawl/index-scale data; <strong>Spanner</strong> for globally distributed ACID SQL — F1/AdWords migrated off sharded MySQL to Spanner</td>
+          <td>Spanner is the proof the binary is obsolete: SQL + horizontal scale, paid for with TrueTime commit-wait</td>
+        </tr>
+        <tr>
+          <td><strong>LinkedIn</strong> / social graphs</td>
+          <td>Degrees-of-connection traversal served by purpose-built graph infrastructure rather than recursive SQL joins</td>
+          <td>Multi-hop traversal is the one access pattern where relational degrades non-linearly</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- S11: TRADE-OFFS -->
+<section id="s11">
+  <h2 class="section-title"><span class="num">§11</span> ⚖️ Trade-offs</h2>
+
+  <div class="diagram-wrap">
+    <div class="diagram-title">⚖️ Relational vs. Partition-Native NoSQL — Key Dimensions</div>
+    <svg viewBox="0 0 760 260" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:760px;display:block;margin:0 auto;">
+      <rect width="760" height="260" fill="#fafafa" rx="8"/>
+
+      <text x="255" y="26" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="bold" fill="#2563eb">RELATIONAL</text>
+      <text x="590" y="26" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="bold" fill="#e67700">NoSQL (partition-native)</text>
+      <line x1="420" y1="8" x2="420" y2="252" stroke="#e5e3de" stroke-width="1.5" stroke-dasharray="5,3"/>
+
+      <text x="12" y="58" font-family="Arial,sans-serif" font-size="10.5" fill="#666" font-weight="bold">Query flexibility</text>
+      <text x="12" y="90" font-family="Arial,sans-serif" font-size="10.5" fill="#666" font-weight="bold">Multi-entity ACID</text>
+      <text x="12" y="122" font-family="Arial,sans-serif" font-size="10.5" fill="#666" font-weight="bold">Write scaling</text>
+      <text x="12" y="154" font-family="Arial,sans-serif" font-size="10.5" fill="#666" font-weight="bold">Latency at 100 TB</text>
+      <text x="12" y="186" font-family="Arial,sans-serif" font-size="10.5" fill="#666" font-weight="bold">Schema enforcement</text>
+      <text x="12" y="218" font-family="Arial,sans-serif" font-size="10.5" fill="#666" font-weight="bold">Modeling up-front cost</text>
+      <text x="12" y="248" font-family="Arial,sans-serif" font-size="10.5" fill="#666" font-weight="bold">Ops surface area</text>
+
+      <rect x="130" y="46" width="280" height="17" rx="3" fill="#dcfce7"/>
+      <text x="270" y="58" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#065f46">Any query — planner + joins</text>
+      <rect x="130" y="78" width="280" height="17" rx="3" fill="#dcfce7"/>
+      <text x="270" y="90" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#065f46">Native, arbitrary rows/tables</text>
+      <rect x="130" y="110" width="280" height="17" rx="3" fill="#fee2e2"/>
+      <text x="270" y="122" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#7f1d1d">ONE primary — the hard ceiling</text>
+      <rect x="130" y="142" width="280" height="17" rx="3" fill="#ffd8a8"/>
+      <text x="270" y="154" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#7c2d12">Degrades — needs sharding (bolt-on)</text>
+      <rect x="130" y="174" width="280" height="17" rx="3" fill="#dcfce7"/>
+      <text x="270" y="186" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#065f46">DB enforces it, once, for everyone</text>
+      <rect x="130" y="206" width="280" height="17" rx="3" fill="#dcfce7"/>
+      <text x="270" y="218" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#065f46">Low — model entities, query later</text>
+      <rect x="130" y="236" width="280" height="17" rx="3" fill="#dcfce7"/>
+      <text x="270" y="248" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#065f46">Low — one mature system</text>
+
+      <rect x="430" y="46" width="320" height="17" rx="3" fill="#fee2e2"/>
+      <text x="590" y="58" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#7f1d1d">Only the modeled patterns; rest = scatter</text>
+      <rect x="430" y="78" width="320" height="17" rx="3" fill="#ffd8a8"/>
+      <text x="590" y="90" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#7c2d12">Bounded (item / ≤100 items / partition)</text>
+      <rect x="430" y="110" width="320" height="17" rx="3" fill="#dcfce7"/>
+      <text x="590" y="122" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#065f46">Scales with node count — partition-native</text>
+      <rect x="430" y="142" width="320" height="17" rx="3" fill="#dcfce7"/>
+      <text x="590" y="154" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#065f46">Flat — one partition per request</text>
+      <rect x="430" y="174" width="320" height="17" rx="3" fill="#fee2e2"/>
+      <text x="590" y="186" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#7f1d1d">Moves into app code + every old shape</text>
+      <rect x="430" y="206" width="320" height="17" rx="3" fill="#fee2e2"/>
+      <text x="590" y="218" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#7f1d1d">High — must know queries BEFORE modeling</text>
+      <rect x="430" y="236" width="320" height="17" rx="3" fill="#ffd8a8"/>
+      <text x="590" y="248" text-anchor="middle" font-family="Arial,sans-serif" font-size="10.5" fill="#7c2d12">Managed is easy; polyglot multiplies it</text>
+    </svg>
+    <p class="caption">Green = advantage, orange = acceptable, red = cost. Neither column is "better" — they're optimized for different questions.</p>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>✅ Benefit</th><th>❌ Cost / Limitation</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="benefit">Relational: ad-hoc query flexibility — the planner answers questions you never anticipated, joins and aggregations server-side</td>
+          <td class="cost">Query cost is unpredictable; a bad plan or missing index degrades non-linearly, and the flexibility is only cheap while data fits few nodes</td>
+        </tr>
+        <tr>
+          <td class="benefit">Relational: multi-row ACID + referential integrity — the DB, not every future engineer, enforces correctness</td>
+          <td class="cost">Ties you to a single write primary (unless you adopt Spanner/CockroachDB and pay their latency and operational cost)</td>
+        </tr>
+        <tr>
+          <td class="benefit">NoSQL: partition-native horizontal scale — write throughput and dataset size grow with node count, latency stays flat</td>
+          <td class="cost">Only for queries that carry the partition key; everything else becomes scatter-gather or needs a second index / read model</td>
+        </tr>
+        <tr>
+          <td class="benefit">NoSQL: schema-on-read flexibility — ship a new field today with no migration</td>
+          <td class="cost">Every reader must handle every historical shape forever; data quality erodes silently and migration debt compounds</td>
+        </tr>
+        <tr>
+          <td class="benefit">NoSQL: denormalized single-fetch reads — one round trip returns a whole object graph</td>
+          <td class="cost">Duplicated facts must be kept in sync on write; you own the consistency problem the DB used to own</td>
+        </tr>
+        <tr>
+          <td class="benefit">NoSQL: predictable per-operation cost — a single-partition read costs the same at 1 GB and 100 TB</td>
+          <td class="cost">You must know the access patterns <em>before</em> modeling; an unanticipated query is expensive or impossible without a re-model</td>
+        </tr>
+        <tr>
+          <td class="benefit">Polyglot persistence — the right store for each access pattern</td>
+          <td class="cost">Operational surface area multiplies: N systems to run, monitor, back up, and keep in sync (CDC/outbox pipelines and their staleness)</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- S12: INTERVIEW APPLICATION -->
+<section id="s12">
+  <h2 class="section-title"><span class="num">§12</span> 🎯 Interview Application</h2>
+
+  <h3>Trigger Phrases</h3>
+  <ul style="margin-left:20px;margin-bottom:16px;font-size:14.5px;line-height:1.8;">
+    <li>"What database would you use for this, and why?"</li>
+    <li>"We expect 100 million users and a million writes per second — does your choice still hold?"</li>
+    <li>"The product team says the schema is going to change a lot. Does that change your answer?"</li>
+    <li>"This has to be transactionally correct — you can't double-charge a customer."</li>
+    <li>"Would you use SQL or NoSQL here?" <em>(the trap: answering the binary instead of reframing it)</em></li>
+  </ul>
+
+  <h3>What You Say / Do</h3>
+  <p>This lands in the <strong>high-level design / data model</strong> phase, right after requirements. Never answer the binary directly — reframe it first: <em>"Before I pick, let me state the access patterns."</em> List the top 3–5 queries with rough QPS, then walk the gates: are the patterns stable, do I need multi-entity ACID, what's the dominant read shape, does one node still fit. Then name a <strong>specific product and family</strong> ("DynamoDB as a key-value store, partitioned on <code>user_id</code>"), state the access pattern it's modeled for, and immediately volunteer what you gave up and how you'd cover it. Explicitly consider polyglot — it's usually the correct real-world answer, and proposing Postgres for orders + Redis for sessions + Elasticsearch for search shows you're designing for patterns, not for a brand.</p>
+
+  <div class="tradeoff-box">
+    💬 <strong>Trade-off statement (memorize this):</strong><br><br>
+    "The dominant access pattern here is [read the last N messages in a channel / fetch a cart by user ID], which is a single-partition read at very high write volume — so I'd use [Cassandra / DynamoDB] partitioned on [key]. That buys me flat p99 latency and write throughput that scales with node count. What I give up is server-side joins and multi-entity ACID, so [the join with user profiles becomes a denormalized copy refreshed by CDC / the order-plus-inventory write becomes a TransactWriteItems, or a saga if it spans services]. If instead the requirement had been [ad-hoc analytics / strict financial correctness], I'd have stayed on Postgres — a single node comfortably handles [X] QPS and we're well under that."
+  </div>
+</section>
+
+<!-- S13: MISCONCEPTIONS -->
+<section id="s13">
+  <h2 class="section-title"><span class="num">§13</span> ⚠️ Common Misconceptions &amp; Gotchas</h2>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> "SQL doesn't scale, so at high volume you need NoSQL."</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> A single well-tuned Postgres or MySQL node serves tens of thousands of QPS over single-digit terabytes, and Instagram, Shopify, and GitHub run relational at enormous scale. The honest distinction is <strong>bolt-on vs. partition-native</strong>: relational can be sharded (Vitess, Citus), but sharding costs you cross-shard joins and transactions, whereas NoSQL stores are partitioned by design. Name the specific ceiling you're exceeding — usually <em>write</em> throughput on the single primary — or your scale argument is hand-waving.</div></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> "NoSQL is schemaless, so I don't have to design a schema."</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> The schema moved into your application code. Production data ends up containing every historical shape of every document, and every reader must defensively handle all of them. Worse, in access-pattern-driven stores you must design the <em>key</em> schema more carefully than a relational schema — the wrong partition key is far more expensive to fix than a missing index.</div></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> "NoSQL is faster than SQL."</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> For an indexed single-row lookup, a relational database is comparably fast. What NoSQL provides is <em>flat latency as the dataset grows</em>, achieved by only ever touching one partition. That's a scaling property, not raw speed — and it's bought by removing joins and general transactions, not by superior engineering.</div></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> "NoSQL means no transactions and eventual consistency."</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Out of date. DynamoDB has <code>TransactWriteItems</code> and strongly-consistent reads, MongoDB has multi-document ACID transactions, Cassandra has quorum reads/writes with <code>R + W &gt; N</code> and lightweight transactions. The right framing is the <em>scope and cost</em> of a transaction — cheap within a partition, expensive or bounded across them.</div></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> "It's a binary choice — you pick one database for the system."</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Almost every real system is polyglot: relational for the transactional core, Redis for sessions and counters, wide-column for high-volume events, Elasticsearch for search, object storage plus a warehouse for analytics. The interview-strong answer picks a store per access pattern <em>and</em> names how they stay in sync (CDC, outbox, streaming) plus the staleness that introduces.</div></div>
+  </div>
+
+  <div class="misconception">
+    <div class="wrong"><span class="icon">❌</span><div><strong>Misconception:</strong> "Document stores are just relational without the joins, so I'll model the same entities as documents."</div></div>
+    <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> That's how document databases get misused. Documents should be <strong>aggregates that are read and written as a unit</strong>. If you're doing application-side joins across collections on the hot path, you've built a relational schema without a query planner — you'd have been better off with Postgres, or with a genuinely denormalized document design.</div></div>
+  </div>
+</section>
+
+<!-- S14: RELATIONSHIPS -->
+<section id="s14">
+  <h2 class="section-title"><span class="num">§14</span> 🔗 Relationships to Other Concepts</h2>
+  <div class="connections">
+    <div class="conn-card">
+      <div class="conn-icon">🧱</div>
+      <div>
+        <div class="conn-label">Builds On</div>
+        <strong>Topic 7 — Partitioning / Sharding (7.1–7.7)</strong> — partition-native NoSQL <em>is</em> sharding built into the data model, so hash vs. range partitioning, hot partitions, and cross-shard queries all apply directly to your partition-key choice here. Also <strong>Topic 2 — CAP / consistency</strong> (BASE, tunable consistency, <code>R + W &gt; N</code> are the vocabulary for the consistency axis) and <strong>Topic 5 — Caching</strong> (a cache in front of Postgres is often the correct alternative to switching databases at all).
+      </div>
+    </div>
+    <div class="conn-card">
+      <div class="conn-icon">🔓</div>
+      <div>
+        <div class="conn-label">Enables</div>
+        The rest of Topic 8: <strong>8.2 OLTP vs. OLAP</strong> (a third axis cutting across SQL/NoSQL), <strong>8.3 normalization / denormalization</strong> (the modeling technique this decision forces), <strong>8.4 indexing</strong> (B-tree in relational vs. LSM-tree in most NoSQL — the storage-engine reason NoSQL absorbs writes so well), and <strong>8.6 ACID</strong>. Also opens <strong>Topic 9 (object storage)</strong> and <strong>Topic 10 (warehouses)</strong> as the other members of the polyglot set.
+      </div>
+    </div>
+    <div class="conn-card">
+      <div class="conn-icon">⚡</div>
+      <div>
+        <div class="conn-label">Tension With</div>
+        <strong>8.6 ACID transactions</strong> — the more you distribute for scale, the more expensive multi-entity ACID becomes (Spanner pays for it in commit latency). <strong>8.3 normalization</strong> — NoSQL pushes you to denormalize for single-fetch reads, directly conflicting with the "store each fact once" discipline that keeps data correct. <strong>7.7 cross-shard queries</strong> — the flexibility you keep in relational is exactly the flexibility that becomes a scatter-gather once you partition.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- S15: QUIZ -->
+<section id="s15">
+  <h2 class="section-title"><span class="num">§15</span> 🧪 Self-Check Quiz</h2>
+  <div class="callout callout-quote">Can you answer these without looking? If not, you haven't internalized it yet. Click to reveal the hint.</div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">1</div>
+      <div class="qtext">Name the four NoSQL families, give a production product for each, and state the one access pattern each is optimized for. Then say which you'd pick for "fetch the last 50 messages in a Discord channel" and why.</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 Key-value (Redis/DynamoDB — whole object by one key), document (MongoDB/PG JSONB — nested self-contained object), wide-column (Cassandra/Bigtable — partition key + sorted range inside it), graph (Neo4j — multi-hop traversal). Discord = wide-column: partition on <code>channel_id</code>, cluster on <code>message_id</code>/timestamp descending → the query is one sequential read inside one partition. Revisit §6 and §4 (decision map) if you hesitated.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">2</div>
+      <div class="qtext">An interviewer says: "We're expecting 500 million users, so obviously we need NoSQL." How do you respond? Be specific about the numbers and the mechanism.</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 User <em>count</em> isn't the ceiling — QPS and write throughput are. A single Postgres node handles ~10–50k QPS over single-digit TB, and read replicas multiply reads. The real ceiling is the <strong>single write primary</strong>. So: what's the write rate, what's the working-set size, and what's the p99 budget? Only if writes exceed one primary does partition-native win — and then it's because of partitioning, not because NoSQL is "faster." Revisit §13 (first misconception) and §4 §6.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">3</div>
+      <div class="qtext">You move a <code>users</code> + <code>orders</code> model from Postgres into DynamoDB. Name three capabilities you just lost, and the concrete workaround for each.</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 (1) Server-side joins → denormalize user fields into the order item, or single-table design with a shared PK; (2) multi-entity ACID → <code>TransactWriteItems</code> (≤100 items) or a saga/outbox if it spans services; (3) ad-hoc queries on non-key fields → a GSI, or CDC-stream into Elasticsearch. Bonus: referential integrity moves into app code (orphaned refs become a bug class). Revisit §4 §5 and §11.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">4</div>
+      <div class="qtext">Give a real production system for each of: (a) relational at massive scale, (b) wide-column chosen for a range-within-partition read, (c) key-value chosen for availability on a single-key path. Explain the access pattern that drove each choice.</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 (a) Instagram — Postgres for users/media/relationships, sharded app-side, because the entities are highly related and queries evolve; (b) Discord — Cassandra/ScyllaDB, because "last N messages in channel X" is a sorted range inside one partition; (c) Amazon cart — DynamoDB, because the cart is fetched by one key and must stay available during peak even under partition. Revisit §10.</div>
+  </div>
+
+  <div class="quiz-item">
+    <div class="quiz-q" onclick="toggleQuiz(this)">
+      <div class="quiz-num">5</div>
+      <div class="qtext">A team chose MongoDB "because the schema will change often." Six months in, the product needs a report joining users, orders, and refunds, filtered on three arbitrary fields. What went wrong, and what are your options now?</div>
+      <div class="quiz-toggle">▼ Hint</div>
+    </div>
+    <div class="quiz-hint">💡 They failed Q1 of the decision map: the access patterns weren't known and stable, so they optimized for write-time flexibility and lost read-time flexibility. The "pre-packed boxes" have no box for this question. Options: (1) add indexes / use the aggregation pipeline with <code>$lookup</code> — works but is the weakest path; (2) CDC-stream into a warehouse or Elasticsearch and run the report there (the usual real answer); (3) move the transactional core to Postgres and keep Mongo for genuinely heterogeneous payloads. Also note the data now has N historical shapes to reconcile. Revisit §4 (Q1), §8 Model 1, §13 (last misconception).</div>
+  </div>
+</section>
+
+<!-- S16: FURTHER READING -->
+<section id="s16">
+  <h2 class="section-title"><span class="num">§16</span> 📚 Further Reading</h2>
+  <ul class="reading-list">
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>DDIA Chapter 2 — Data Models and Query Languages</strong> (Kleppmann) — relational vs. document vs. graph, the object-relational mismatch, and why the "great debate" is really about data locality</div></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>Amazon DynamoDB: A Scalable, Predictably Performant, and Fully Elastic NoSQL Database Service (USENIX ATC 2022)</strong> — <a href="https://www.usenix.org/conference/atc22/presentation/elhemali" target="_blank">usenix.org</a> — partition management, hot partitions, adaptive capacity</div></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>Alex DeBrie — "The What, Why, and When of Single-Table Design with DynamoDB"</strong> — <a href="https://www.alexdebrie.com/posts/dynamodb-single-table/" target="_blank">alexdebrie.com</a> — the clearest explanation of access-pattern-driven modeling</div></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>Bigtable: A Distributed Storage System for Structured Data (Google, OSDI 2006)</strong> — <a href="https://research.google/pubs/pub27898/" target="_blank">research.google</a> — the origin of the wide-column model</div></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>"How Discord Stores Trillions of Messages"</strong> — <a href="https://discord.com/blog/how-discord-stores-trillions-of-messages" target="_blank">discord.com/blog</a> — a migration story driven entirely by the access pattern</div></li>
+    <li><div class="cb" onclick="toggleReading(this)"></div><div class="rtext"><strong>Spanner: Google's Globally-Distributed Database (OSDI 2012)</strong> — <a href="https://research.google/pubs/pub39966/" target="_blank">research.google</a> — why the SQL/NoSQL binary collapsed</div></li>
+  </ul>
+</section>
+
+<!-- S17: MY NOTES -->
+<section id="s17">
+  <h2 class="section-title"><span class="num">§17</span> ✍️ My Notes</h2>
+  <div class="callout callout-quote">Personal observations, things that confused me, analogies that helped. This section is yours.</div>
+  <textarea class="notes-area" placeholder="Add your personal notes here — analogies that clicked, interview stories, things that confused you..."></textarea>
+</section>
+
+</article>
+</main>
+
+<script>
+// TOC active state
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('#toc nav a');
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(a => a.classList.remove('active'));
+      const a = document.querySelector(`#toc nav a[href="#${e.target.id}"]`);
+      if (a) a.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+sections.forEach(s => obs.observe(s));
+
+// Checklist toggle
+function toggle(cb) {
+  const li = cb.closest('li');
+  li.classList.toggle('checked');
+}
+
+// Phase card toggle
+function togglePhase(header) {
+  header.closest('.phase-card').classList.toggle('open');
+}
+
+// Quiz toggle
+function toggleQuiz(q) {
+  const item = q.closest('.quiz-item');
+  item.classList.toggle('open');
+  q.querySelector('.quiz-toggle').textContent = item.classList.contains('open') ? '▲ Hide' : '▼ Hint';
+}
+
+// Reading list toggle
+function toggleReading(cb) {
+  const li = cb.closest('li');
+  li.classList.toggle('checked');
+}
+
+// Notes auto-save
+const notesArea = document.querySelector('.notes-area');
+const NOTES_KEY = 'notes_8_1';
+if (localStorage.getItem(NOTES_KEY)) notesArea.value = localStorage.getItem(NOTES_KEY);
+notesArea.addEventListener('input', () => {
+  try { localStorage.setItem(NOTES_KEY, notesArea.value); } catch(e) {}
+});
+</script>
+</body>
+</html>
