@@ -45,12 +45,12 @@ After studying this, you should be able to:
 
 > *Concrete, testable proof that you own this concept — not just familiarity.*
 
-- [ ] Can classify a given workload (entities + top queries + scale + consistency needs) as relational or a **named** NoSQL family, and defend it in under 90 seconds
-- [ ] Can name all four NoSQL families with a production product and the exact access pattern each is built for
-- [ ] Can explain schema-on-write vs. schema-on-read and describe what happens operationally when the shape of the data changes in each
-- [ ] Can state precisely what breaks when you denormalize into a document store — and name at least three mitigations (app-side join, transactions/`TransactWriteItems`, CDC-maintained read model)
-- [ ] Can rebut "SQL doesn't scale" with concrete numbers and the bolt-on vs. partition-native framing
-- [ ] Can describe how modern systems have converged (Postgres JSONB, MongoDB multi-doc ACID, DynamoDB transactions, Spanner/CockroachDB) and why that makes "SQL vs. NoSQL" a false binary
+- [x] Can classify a given workload (entities + top queries + scale + consistency needs) as relational or a **named** NoSQL family, and defend it in under 90 seconds
+- [x] Can name all four NoSQL families with a production product and the exact access pattern each is built for
+- [x] Can explain schema-on-write vs. schema-on-read and describe what happens operationally when the shape of the data changes in each
+- [x] Can state precisely what breaks when you denormalize into a document store — and name at least three mitigations (app-side join, transactions/`TransactWriteItems`, CDC-maintained read model)
+- [x] Can rebut "SQL doesn't scale" with concrete numbers and the bolt-on vs. partition-native framing
+- [x] Can describe how modern systems have converged (Postgres JSONB, MongoDB multi-doc ACID, DynamoDB transactions, Spanner/CockroachDB) and why that makes "SQL vs. NoSQL" a false binary
 
 > 💡 **Rule of thumb:** If you can teach it to someone else and field their follow-up questions, you've mastered it.
 
@@ -459,3 +459,243 @@ This lands in the **high-level design / data model** phase, right after requirem
 ## 17. ✍️ My Notes
 
 > *Personal observations, things that confused me, analogies that helped.*
+
+MODEL ANSWER — Criterion 2: the four families
+
+KEY-VALUE ......................... Redis · DynamoDB · Memcached
+  Signature:  GET(key) → whole opaque value.
+              Caller ALREADY HOLDS the key (cookie, auth token, URL).
+  Disqualified by: no key in hand · any filter/aggregate on the value ·
+              any "list all X where…"
+
+DOCUMENT .......................... MongoDB · DynamoDB · PG JSONB
+  Signature:  GET(id) → an AGGREGATE: the object WITH its children,
+              self-contained, no joins to assemble it.
+              Secondary: FIND(inner_field = ?) on a few known fields.
+  ← the aggregate/locality win is the POINT. Inner-field query is a bonus.
+  Disqualified by: children needing independent high-volume query ·
+              routine cross-document joins · unbounded nested growth
+
+WIDE-COLUMN ....................... Cassandra · ScyllaDB · HBase · Bigtable
+  Signature:  WHERE partition = ? AND clustering > ? ORDER BY clustering
+              LIMIT N   → a sorted slice inside ONE partition.
+              "The last N ___ for this ___, newest first."
+  ⚠ NOT "GROUP BY". CQL's GROUP BY is partition-scoped only; cross-
+    partition aggregation is what this family is WORST at.
+  Disqualified by: query lacks the partition key · update/delete-heavy
+              (tombstones) · low write volume · needs joins or ad-hoc filters
+  ✗ NOT "little relationship between data" — irrelevant.
+
+GRAPH ............................. Neo4j · Neptune · JanusGraph
+  Signature:  3+ hops, or VARIABLE/unbounded depth. Shortest path,
+              cycles, connected components. ≤2 hops → relational self-join.
+  Disqualified by: ≤2 hops · AND — the big one — a graph too large for
+              one machine. Edges cross everything; partitioning is NP-hard,
+              and cutting it turns pointer hops into network hops.
+              (Which is why FB's TAO is sharded MySQL, not a graph DB.)
+
+THE DYNAMODB DISCRIMINATOR
+  Wrong frame: "which label fits the product better."
+  Right frame: THE FAMILY IS A PROPERTY OF YOUR ACCESS PATTERN,
+               NOT OF THE PRODUCT.
+    Access is GET(pk) → whole item?     → you are using it as KEY-VALUE.
+       Model it that way: opaque value, no GSIs, key design is everything.
+    Need to query on inner attributes?  → you are using it as a DOCUMENT
+       store. Now you need GSIs, attribute-level modeling, and you pay
+       write amplification + eventual consistency on the index.
+  Same database. Your requirement picks the mode — and the mode changes
+  how you MODEL, not just what you call it.
+
+MODEL ANSWER — Splitting full_name: 50M rows, 6 reader services
+
+POSTGRES — expand / migrate / contract (the "parallel change" pattern)
+  DAY 1 — EXPAND
+    ALTER TABLE users ADD COLUMN first_name text, ADD COLUMN last_name text;
+      (nullable → metadata-only, instant, no rewrite, no lock)
+    Deploy writer: DUAL-WRITE both full_name AND the new columns.
+    full_name stays. Nothing has broken. Nothing is NOT NULL yet.
+  DAYS 2–7 — BACKFILL
+    Batched UPDATE (~10k rows/txn) so you don't hold a long transaction
+    or bloat the WAL. Verifiable at any time:
+      SELECT count(*) FROM users WHERE first_name IS NULL;   ← ticks to 0
+  DAY 30 — where you actually are
+    All 50M rows have BOTH shapes. full_name is STILL THERE, still
+    written, because readers haven't all migrated. That's correct, not
+    a failure.
+  MONTH 2–3 — MIGRATE READERS, then CONTRACT
+    Each of the 6 teams switches to the new columns. Only when the last
+    one is done:  ALTER TABLE users DROP COLUMN full_name;
+    → NOW you can add NOT NULL. Not before.
+  WHO CHANGES CODE:  all 6 teams. Same as Mongo.
+  DETECTION:  failure is at WRITE time — loud, immediate, attributed to
+    the developer who caused it. Plus you can PROVE completion with a
+    single query, and the process has a defined END.
+
+MONGODB — no expand phase, no contract phase, no end
+  DAY 1:   write the new shape. Ship it. Zero coordination. Genuinely fast.
+  DAY 30:  BOTH shapes coexist, permanently interleaved by write date.
+           No process converts the old 50M. There is no `\d users` — the
+           shape is undiscoverable except by reading every consumer.
+  WHO CHANGES CODE: all 6 teams — but NOTHING FORCES THEM. Each writes
+           its own `full_name ?? first+last` branch, independently, and
+           those branches live forever. New 7th service? It must
+           rediscover both shapes from scratch.
+  DETECTION: at READ time, in whichever service touches the new shape
+           first, possibly weeks later —
+             loud   → null deref, blank name in UI
+             SILENT → `full_name || ""` renders empty and throws nothing
+             WRONG  → whitespace-splitting mangles "Van Der Berg",
+                      "María José García", "Wu Xiaoming"
+           Silent and wrong are the expensive ones. No query proves
+           you're done, because "done" isn't a state that exists.
+
+THE ACTUAL CONTRAST  (it is NOT 1 team vs 6 teams)
+  Postgres: coordination FORCED, VISIBLE, PROVABLE, TERMINATING.
+            Cost paid once, up front, by a defined set of people.
+  Mongo:    coordination OPTIONAL, INVISIBLE, UNPROVABLE, PERPETUAL.
+            Cost deferred, then paid N times, forever, and it compounds
+            with every subsequent shape change.
+  Schema-on-read didn't remove the migration. It removed the DEADLINE.
+
+TERMINOLOGY NOTE
+  Enforcing column shape is a SCHEMA CONSTRAINT, not "C in ACID."
+  C = transactions preserve invariants YOU declared. Don't conflate.
+
+MODEL ANSWER — Criterion 4: what denormalization breaks, and the three mitigations
+
+WHAT BREAKS (all three are the same root cause)
+  Root: the embedded copy has NO referential link to its source.
+  1. MUTATION FAN-OUT — one email change = 10,000 document rewrites.
+  2. PII SCATTER — personal data now lives in 5M documents instead of 1.
+  3. QUERYABILITY — filtering on embedded fields across all documents
+     is a scan, not a lookup.
+
+PER-FIELD, THE ANSWER DIFFERS  ← the thing most people miss
+  email  → REFERENCE. Must stay current. Never should have been embedded.
+           (Nuance: a receipt legitimately wants the address it was SENT
+            to — that's a separate snapshot field, not the live email.)
+  name   → mostly reference; snapshot only for the historical record.
+  tier   → legitimate SNAPSHOT. "Orders placed while they were gold" is a
+           coherent business question the embedded value answers correctly.
+           Also: not PII → survives GDPR erasure.
+
+THE THREE MITIGATIONS
+  1. NORMALIZE + APP-SIDE JOIN
+     Store customer_id; fetch the customer separately.
+     Cost: extra round trip, N+1 risk (8.8). Use when the field must
+     stay current and reads can afford the second fetch.
+  2. TRANSACTIONAL / BATCHED MAINTENANCE OF COPIES
+     Keep the denormalized copy, own the sync.
+     Small cardinality → TransactWriteItems (≤100) / multi-doc txn.
+     LARGE cardinality → batched, idempotent, RESUMABLE job. 10,000 docs
+     is NOT a transaction: 16MB oplog cap, 60s timeout, it will fail.
+     Use when read locality genuinely matters and copies are few.
+  3. CDC-MAINTAINED READ MODEL  ← the one you didn't reach
+     Change streams / CDC → Elasticsearch, or → warehouse (Snowflake,
+     BigQuery, Redshift). Analytical + cross-cutting queries run THERE.
+     Cost: pipeline complexity + eventual-consistency staleness.
+     Use when the query is analytical, ad-hoc, or spans all entities.
+
+MAPPING THE THREE SCENARIOS
+  (1) email change  → mitigation 1 (it was never a snapshot)
+  (2) GDPR erasure  → mitigation 2, batched form; scrub name/email to
+                      null, RETAIN the order, keep tier. Needs an index
+                      on customer_id or you're scanning 5M docs to find
+                      the copies. Must be provable within 30 days.
+  (3) gold-tier Q3  → mitigation 3. This is OLAP, not OLTP. It does not
+                      belong in ANY transactional store — not Mongo, and
+                      emphatically not Cassandra, whose GROUP BY is
+                      partition-scoped and whose whole design is single-
+                      partition reads.
+
+TWO RECURRING ERRORS TO KILL
+  · Partition key = what the QUERY FILTERS ON. Never the entity's own id.
+  · Analytical requirements are answered by a SEPARATE SYSTEM (8.2),
+    never by swapping one OLTP store for another.
+
+MODEL ANSWER — Rebutting "200M users, so Postgres can't handle it"
+
+STEP 1 — SEPARATE THE CONCLUSION FROM THE REASONING
+  "You may well be right, but not for that reason. 200 million users
+   isn't a ceiling — user count doesn't touch a database. Let me name
+   the number that does."
+
+STEP 2 — NAME THE REAL CEILING, PRECISELY
+  Single Postgres node ≈ 10–50k SIMPLE OPS/sec, read-skewed. But:
+    · reads scale out — replicas, cache. Nearly free.
+    · WRITES DO NOT. One primary, one WAL, fsync at commit.
+  50k sustained WRITES/sec is past a single primary. So the conclusion
+  holds — arrived at by the write path, not the user count.
+  ⚠ Do not quote the read-inclusive QPS figure against a write number.
+
+STEP 3 — BOLT-ON vs. PARTITION-NATIVE  ← both halves required
+  Postgres CAN shard (Vitess, Citus) — but sharding is BOLT-ON: the
+  shard key isn't in the data model, so cross-shard joins become
+  scatter-gather and cross-shard transactions need 2PC. You keep the
+  operational cost of relational and lose the features you paid for.
+  Cassandra is PARTITION-NATIVE: the partition key IS the data model
+  from day one. Nothing to bolt on, and no cross-shard tax — because
+  cross-partition operations simply aren't offered.
+
+STEP 4 — WIN IT ON THE ACCESS PATTERN, NOT THE SCALE
+  "What's the dominant read?" — a social feed is 'last N items for this
+  user, newest first.' Grouping + ordering + limit = wide-column,
+  textbook. PRIMARY KEY ((user_id), created_at DESC).
+  So: Cassandra, yes — because the access shape fits, and the write
+  volume confirms it. Not because '200 million users'.
+
+STEP 5 — VOLUNTEER THE BILL
+  No joins, no multi-entity ACID, tunable consistency. Fan-out on write
+  for the feed. If we later need 'which users engaged with X last week',
+  that's OLAP — CDC to a warehouse, not a query against Cassandra.
+
+THE SHAPE OF THE ANSWER
+  Concede the conclusion → correct the reasoning → name the write
+  ceiling → bolt-on vs. partition-native → re-decide on ACCESS PATTERN
+  → state what you gave up.
+  Flat contradiction loses. "Right answer, wrong reason" wins.
+
+STRESS-TEST RESOLUTION — digital bank, 30k transfers/sec, EU residency
+
+SCOPE THE INVARIANT (same first move, opposite answer)
+  Billing: "money balances PER CUSTOMER" → co-locatable → shard relational.
+  Bank:    "Σ of ALL balances is invariant", and a transfer touches TWO
+           ARBITRARY accounts, possibly in different regions.
+           No shard key co-locates arbitrary pairs.
+           ⇒ NOT co-locatable ⇒ you genuinely need DISTRIBUTED ACID.
+  This is the case Spanner exists for. Billing was not.
+
+ANSWER: Spanner (or CockroachDB, if GCP lock-in is disqualifying)
+  gains: distributed ACID across arbitrary rows; geo-partitioning for
+         residency; SQL + joins retained for statements and audit
+  pays:  $$$; TrueTime commit-wait on every write; lock-in
+
+LATENCY — mitigate, don't redefine
+  ✗ "raise the SLA"  ← that's acceptance, not mitigation
+  ✓ LEADER PLACEMENT: pin each account's leader to its home region.
+    intra-region transfer (the common case) → local commit, fast
+    cross-region transfer (the rare case)   → wide commit, ~200ms+
+    Optimize the distribution, not the average.
+  ✓ Statements shard by account_id → single-partition reads, unaffected.
+
+WHAT YOU TELL THE REGULATOR
+  Append-only immutable ledger. Every transfer = exactly two entries
+  summing to zero. Balances are DERIVED from the ledger, never edited.
+  Periodic proof that Σ balances is unchanged. The invariant is
+  independently VERIFIABLE, not merely enforced by a lock.
+
+THE ALTERNATIVE WORTH NAMING
+  Real inter-bank money movement (ACH, SWIFT, cards) does NOT use
+  distributed transactions — it uses a saga: debit → PENDING → settle,
+  with compensation and reconciliation. Because 2PC across institutional
+  and legal boundaries is impossible, not just slow.
+  Inside ONE bank on ONE Spanner instance, synchronous is legitimate —
+  this is literally what F1/AdWords does. But say you know the other
+  model exists and why it's used where it's used.
+
+THE RULE (the whole gate, one line)
+  SCOPE THE INVARIANT FIRST.
+    per-entity  → co-locate it, shard relational, no distributed ACID
+    genuinely spanning entities → distributed ACID (Spanner/CRDB), or
+                                  a saga if the boundary is institutional
+  The scale number never decides this. The invariant's scope does.
