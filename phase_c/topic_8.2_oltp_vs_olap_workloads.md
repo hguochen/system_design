@@ -393,3 +393,135 @@ This surfaces in the **data model / deep dive** phase, right after you've settle
 
 > *Personal observations, things that confused me, analogies that helped.*
 
+MODEL ANSWER — Criterion 1
+
+1. OLTP — point access by primary key (customer_id), extremely high
+   concurrency (50K/sec), single row touched. Textbook OLTP shape.
+
+2. OLAP — touches few columns (order_value, category) across a huge
+   row range (12 months of orders), aggregated (AVG), run at low
+   frequency. Shape = scan + aggregate, not row count of executions.
+
+3. OLTP — single-row write (one SKU's inventory count), triggered by
+   a single transactional event. Row-store excels at this: one page,
+   one write, done.
+
+4. OLAP — scan across all regions/products for a quarter, aggregating
+   revenue and ranking (TOP 10 = requires full aggregation before
+   sorting). Few columns (product, revenue), many rows, batch cadence.
+
+RULE APPLIED CONSISTENTLY: ask "does this touch one row via a key,
+or does it scan+aggregate many rows across few columns" — never
+"is this data important" or "how often does this run" as the
+primary signal (frequency is a secondary tell, not the definition).
+
+MODEL ANSWER — Criterion 2
+
+ROW-STORE:
+  Physical layout: [id, name, email, amt][id, name, email, amt]...
+  Point read/write: 1 row = 1 page = 1 I/O. Fast regardless of column count.
+  Aggregation: must still read every row's FULL WIDTH to extract 1-2
+  columns — I/O dominated by data you don't want. Wasteful, not "slow
+  algorithm," just wrong-shaped I/O for the job.
+
+COLUMN-STORE:
+  Physical layout: [id,id,id...][amt,amt,amt...] — each column its own
+  contiguous structure/file.
+  Aggregation: read ONLY the referenced columns' bytes — a fraction of
+  total table size. PLUS: adjacent values in one column are similar
+  (same region code repeated, similar timestamps) → compresses far
+  better (RLE, dictionary encoding) than row-store ever could.
+  Single-row update: touches N separate column files instead of 1
+  page — expensive. This is WHY column-stores are append-oriented,
+  not update-oriented, by design.
+
+MODEL ANSWER — Criterion 3: rejecting the read-replica trap
+
+REASON 1 — STORAGE LAYOUT (physical)
+  Replica is still row-store. An aggregate touching 2-3 columns still
+  pays full-row I/O for every row scanned — the replica doesn't change
+  the physical layout, only the copy of data.
+
+REASON 2 — SCHEMA SHAPE (logical)
+  Replica is still normalized (3NF). Each fact lives in one table to
+  avoid write anomalies — but that means a report needs to reassemble
+  the answer across many tables via joins. The report pays the same
+  multi-table join cost on the replica that it would on the primary.
+
+THE POINT: neither reason is about hardware or contention — a replica
+with infinite CPU/IO headroom still has BOTH of these problems, because
+they're properties of the data's PHYSICAL and LOGICAL organization, not
+of which node is serving the query. That's why "just add a replica"
+doesn't fix an OLAP-shaped problem — you need a different LAYOUT
+(columnar) and usually a different SCHEMA (star/snowflake), not just
+more copies of the same row-store/3NF combination.
+
+MODEL ANSWER — Criterion 4
+
+ETL: Extract → Transform → Load. Transform happens BEFORE loading into
+  the warehouse. Batch (hourly/nightly). Staleness: hours.
+
+ELT: Extract → Load → Transform. Raw data loaded first, transformed
+  in-warehouse (dbt-style) using warehouse compute. Batch. Staleness: hours.
+
+CDC: Tail the OLTP write-ahead log/binlog (Debezium, AWS DMS), stream
+  row-level changes continuously as they happen. Staleness: seconds.
+
+APPLIED: "fraud metrics within 10 seconds of a transaction" —
+  ETL and ELT fail categorically, not marginally: they are BATCH by
+  design, so their staleness floor is hours regardless of tuning.
+  Only CDC's continuous log-tailing can bound freshness to seconds.
+  The deciding factor is the pipeline's fundamental cadence (batch vs.
+  streaming), not how "optimized" the batch job is.
+
+MODEL ANSWER — Criterion 5: engines + the physical property
+
+OLTP
+
+1. PostgreSQL / MySQL
+   Property: B-tree-indexed, row-oriented heap pages. A full row lives
+   contiguously in one page; the B-tree index maps a key to that page
+   in O(log n). Point read/write = index traversal + ONE page I/O.
+   WAL + MVCC (or row-level locking) let many short transactions
+   commit concurrently without blocking unrelated rows.
+
+2. DynamoDB
+   Property: partition-key hashing routes a GET/PUT to exactly ONE
+   physical partition — no scatter-gather. Underlying storage is
+   log-structured (append-first), giving flat, predictable p99
+   latency and very high write throughput per partition regardless
+   of total table size.
+
+3. Cassandra (or similar wide-column store used on a write-heavy
+   transactional path, e.g. Uber's trip/driver state)
+   Property: partition key + clustering key fixes physical row
+   placement; writes append to a commit log + memtable, flushed to
+   immutable SSTables (LSM-tree). This write path is what gives
+   extremely high single-partition write throughput.
+
+OLAP
+
+1. Snowflake
+   Property: fully columnar storage, physically separated from
+   compute. Independent "virtual warehouses" (compute clusters) scan
+   only the columns referenced, pruning via zone-map metadata on
+   micro-partitions — that's the MPP fan-out.
+
+2. Redshift
+   Property: columnar storage (each column stored and compressed
+   separately) + MPP: data is distributed across compute node
+   "slices," and the leader node coordinates a parallel scan+
+   aggregate plan across all of them.
+
+3. BigQuery
+   Property: Dremel-derived columnar format (Capacitor) + a
+   serverless, tree-structured MPP execution engine — a query fans
+   out across thousands of workers, each scanning only its column
+   shard, and partial results aggregate back up the tree.
+
+THE PATTERN ACROSS ALL SIX: name the actual storage/execution
+mechanism (index type, page layout, write path, or parallel
+execution model) — never the workload trait ("high QPS") or an
+unrelated pipeline detail (dbt, CDC) that happens to appear near
+that engine's name in a real-world example.
+

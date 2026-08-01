@@ -1,0 +1,1130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.3 Data Modeling — Normalization and Denormalization</title>
+<style>
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface-alt: #f3f2ef;
+    --border: #e5e3de; --text: #1a1917; --text-muted: #6b6861;
+    --accent: #2563eb; --accent-light: #dbeafe;
+    --green: #16a34a; --green-light: #dcfce7;
+    --red: #dc2626; --red-light: #fee2e2;
+    --yellow: #d97706; --yellow-light: #fef3c7;
+    --purple: #7c3aed; --purple-light: #ede9fe;
+    --orange: #ea580c; --orange-light: #ffedd5;
+    --teal: #0d9488; --teal-light: #ccfbf1;
+    --code-bg: #1e1e2e; --code-text: #cdd6f4;
+    --sidebar-w: 240px; --content-max: 820px;
+    font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; }
+  #toc { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0 48px; z-index: 100; }
+  #toc-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  #toc-header .phase-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-bottom: 6px; }
+  #toc-header h2 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  #toc-header .tier-tag { font-size: 10px; font-weight: 800; letter-spacing: .06em; color: var(--yellow); background: var(--yellow-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-top: 8px; }
+  #toc nav a { display: block; padding: 5px 16px 5px 20px; font-size: 12.5px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+  main { margin-left: var(--sidebar-w); padding: 48px 48px 96px; max-width: calc(var(--sidebar-w) + var(--content-max) + 96px); width: 100%; }
+  article { max-width: var(--content-max); }
+  .doc-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 2px solid var(--border); }
+  .doc-header .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+  .tag-phase { background: var(--accent-light); color: var(--accent); }
+  .tag-topic { background: var(--purple-light); color: var(--purple); }
+  .tag-tier  { background: var(--yellow-light); color: var(--yellow); }
+  .tag-prereq{ background: var(--teal-light); color: var(--teal); }
+  .tag-date  { background: var(--surface-alt);  color: var(--text-muted); }
+  .doc-header h1 { font-size: 30px; font-weight: 800; line-height: 1.25; letter-spacing: -.02em; color: var(--text); }
+  section { margin-bottom: 52px; scroll-margin-top: 32px; }
+  h2.section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -.01em; }
+  h2.section-title .num { font-size: 11px; font-weight: 800; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; letter-spacing: .04em; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 24px 0 10px; }
+  h4 { font-size: 13.5px; font-weight: 700; color: var(--text); margin: 18px 0 8px; }
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+  code { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-family: "SF Mono","Fira Code",Menlo,monospace; font-size: 12.5px; }
+  ul.plain { margin: 0 0 14px 20px; }
+  ul.plain li { margin-bottom: 7px; font-size: 14.5px; line-height: 1.6; }
+  ol.steps { margin: 0 0 14px 22px; }
+  ol.steps li { margin-bottom: 8px; font-size: 14.5px; line-height: 1.6; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 14px; border-left: 3px solid; }
+  .callout-goal  { background: var(--accent-light); border-color: var(--accent); color: #1e40af; }
+  .callout-tip   { background: var(--yellow-light); border-color: var(--yellow); color: #92400e; }
+  .callout-warn  { background: var(--red-light); border-color: var(--red); color: #7f1d1d; }
+  .callout-quote { background: var(--surface-alt); border-color: var(--border); color: var(--text-muted); font-style: italic; }
+  .callout-teal  { background: var(--teal-light); border-color: var(--teal); color: #134e4a; }
+  .the-question { background: var(--surface); border: 2px solid var(--accent); border-radius: 12px; padding: 16px 20px; margin-top: 18px; font-size: 15.5px; }
+  .the-question .lbl { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); display: block; margin-bottom: 5px; }
+  .the-question em { color: var(--text); font-weight: 600; }
+  .definition { background: var(--purple-light); border-left: 4px solid var(--purple); border-radius: 8px; padding: 16px 20px; margin: 18px 0 24px; font-size: 15px; font-weight: 600; color: #4c1d95; line-height: 1.6; }
+  .mental-model { background: var(--teal-light); border-left: 3px solid var(--teal); border-radius: 8px; padding: 14px 18px; margin: 18px 0; font-size: 14px; color: #134e4a; }
+  .mental-model .mm-name { font-weight: 800; }
+  .mental-model .mm-break { display: block; margin-top: 7px; font-style: italic; opacity: .85; }
+  .bridge { background: linear-gradient(90deg, var(--accent-light), transparent); border-left: 4px solid var(--accent); border-radius: 8px; padding: 13px 18px; margin-top: 28px; font-size: 14.5px; color: #1e40af; font-weight: 600; }
+  .bridge .arrow { font-weight: 800; margin-right: 6px; }
+  .checkpoint { background: var(--surface); border: 2px solid var(--green); border-radius: 12px; padding: 16px 20px; margin-top: 26px; }
+  .checkpoint > .cp-title { font-size: 12px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--green); margin-bottom: 12px; display: flex; align-items: center; gap: 7px; }
+  .checkpoint.gate { border-color: var(--red); }
+  .checkpoint.gate > .cp-title { color: var(--red); }
+  .cheatsheet { background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 24px 28px; font-family: "SF Mono","Fira Code","Cascadia Code",Menlo,monospace; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-x: auto; margin-top: 16px; }
+  .cheatsheet .label { color: #cba6f7; font-weight: 700; letter-spacing: .08em; display: block; margin-top: 18px; margin-bottom: 4px; border-bottom: 1px solid #313244; padding-bottom: 3px; }
+  .cheatsheet .label:first-child { margin-top: 0; }
+  .diagram-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 16px 14px; margin: 20px 0 28px; overflow-x: auto; }
+  .diagram-wrap .diagram-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); margin-bottom: 12px; }
+  .diagram-wrap svg { display: block; width: 100%; height: auto; }
+  .diagram-wrap p.caption { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 10px; margin-bottom: 0; font-style: italic; }
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; font-size: 14.5px; line-height: 1.55; }
+  .checklist li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 2px; background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .checklist li.checked .cb { background: var(--green); border-color: var(--green); }
+  .checklist li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .checklist li.checked .text { color: var(--text-muted); text-decoration: line-through; }
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: var(--surface-alt); padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.5; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+  .misconception { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .misconception .wrong { background: var(--red-light); padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; }
+  .misconception .right { padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; color: #065f46; background: var(--green-light); }
+  .misconception .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .quiz-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .quiz-q { padding: 14px 18px; font-size: 14.5px; font-weight: 600; cursor: pointer; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .quiz-q:hover { background: var(--surface-alt); }
+  .quiz-num { flex-shrink: 0; width: 24px; height: 24px; background: var(--accent); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; margin-top: 1px; }
+  .checkpoint.gate .quiz-num { background: var(--red); }
+  .quiz-q .qtext { flex: 1; font-weight: 500; }
+  .quiz-toggle { font-size: 11px; color: var(--text-muted); flex-shrink: 0; margin-top: 3px; }
+  .quiz-hint { display: none; padding: 10px 18px 14px; font-size: 13px; color: #92400e; background: var(--yellow-light); border-top: 1px solid var(--border); line-height: 1.6; }
+  .quiz-item.open .quiz-hint { display: block; }
+  .reading-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .reading-list li { display: flex; align-items: flex-start; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; font-size: 14px; }
+  .reading-list li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 1px; cursor: pointer; background: var(--surface); display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .reading-list li.checked .cb { background: var(--green); border-color: var(--green); }
+  .reading-list li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .reading-list li.checked .rtext { color: var(--text-muted); text-decoration: line-through; }
+  .notes-area { width: 100%; min-height: 200px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: inherit; font-size: 14px; color: var(--text); resize: vertical; line-height: 1.6; }
+  .notes-area:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .connections { display: flex; flex-direction: column; gap: 12px; }
+  .conn-card { display: flex; align-items: flex-start; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14px; }
+  .conn-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .conn-label { font-weight: 700; margin-bottom: 3px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .tradeoff-box { background: var(--surface-alt); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 16px 20px; font-size: 14.5px; font-style: italic; color: var(--text); margin-top: 14px; line-height: 1.65; }
+  .trigger-list { list-style: none; display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+  .trigger-list li { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--orange); border-radius: 8px; padding: 10px 16px; font-size: 14px; font-style: italic; color: var(--text); }
+  @media (max-width: 900px) { #toc { display: none; } main { margin-left: 0; padding: 24px 20px 60px; } }
+</style>
+</head>
+<body>
+
+<aside id="toc">
+  <div id="toc-header">
+    <span class="phase-tag">Phase C · Topic 8</span>
+    <h2>8.3 Normalization &amp; Denormalization</h2>
+    <span class="tier-tag">🥇 T1 · ~1.75h</span>
+  </div>
+  <nav>
+    <a href="#s0">🧭 The Question</a>
+    <a href="#s1">📋 Cheatsheet</a>
+    <a href="#s2">🧠 The Mindmap</a>
+    <a href="#s3">🔥 The Problem</a>
+    <a href="#s4">💡 The Core Idea</a>
+    <a href="#s5">⚙️ How It Works</a>
+    <a href="#s6">⚖️ The Decision</a>
+    <a href="#s7">🎯 In the Interview</a>
+    <a href="#s8">🧪 Mastery Gate</a>
+    <a href="#s9">🔗 Connections</a>
+    <a href="#s10">✍️ My Notes</a>
+  </nav>
+</aside>
+
+<main>
+<article>
+
+  <header class="doc-header">
+    <div class="meta">
+      <span class="tag tag-phase">Phase C — Data Storage</span>
+      <span class="tag tag-topic">Topic 8 — Database Fundamentals</span>
+      <span class="tag tag-tier">🥇 T1 Core · ~1.75h</span>
+      <span class="tag tag-prereq">Prereqs: 8.1, 8.2</span>
+      <span class="tag tag-date">2026-07-31</span>
+    </div>
+    <h1>8.3 Data Modeling — Normalization and Denormalization</h1>
+  </header>
+
+  <!-- ══════════════════ §0 ══════════════════ -->
+  <section id="s0">
+    <h2 class="section-title"><span class="num">§0</span> 🧭 The Question This Answers</h2>
+
+    <p>8.1 asked which <em>engine</em> to use and 8.2 asked which <em>workload shape</em> you're serving. This subtopic asks the question that sits underneath both: once you've picked a store, <strong>where does each individual fact physically live?</strong> Normalization says a fact lives in exactly one place, so it can never disagree with itself. Denormalization says a fact lives in every place that reads it, so no read has to reassemble it. Both are correct — they just move cost between writes and reads, and the entire craft is knowing which direction to push for a given access pattern.</p>
+
+    <p>The central tension is that correctness and read performance pull in opposite directions here. Every duplicated copy of a fact is a read you made faster and a way your data can now become internally inconsistent. There is no schema that is simply "good" — there is only a schema that is correctly biased toward the workload it serves.</p>
+
+    <div class="the-question">
+      <span class="lbl">The question</span>
+      <em>Should this fact live in exactly one place, or in every place that reads it — and if it's duplicated, who owns the truth?</em>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> Before we can answer that, we need to know what actually goes wrong when a fact lives in more than one place. What breaks?</div>
+  </section>
+
+  <!-- ══════════════════ §1 ══════════════════ -->
+  <section id="s1">
+    <h2 class="section-title"><span class="num">§1</span> 📋 Cheatsheet</h2>
+
+    <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+    <div class="callout callout-tip">⏭️ <strong>First time through this topic?</strong> Skip to §2 and come back here for revision.</div>
+
+<div class="cheatsheet"><span class="label">§ 1  WHY IT EXISTS</span>Store the same fact in two places and the two copies will eventually disagree.
+Not "might" — will, because updates are concurrent, partial, and fallible. A
+customer changes their address; one row gets the new value, another doesn't,
+and now the database contains two contradictory answers to one question with
+no way to tell which is right. These are the update, insert, and delete
+anomalies Codd identified in 1970. Normalization eliminates them structurally
+rather than procedurally: if a fact physically exists in exactly one place, no
+amount of buggy application code or interleaved concurrency can make two copies
+disagree, because there is no second copy. The cost is that answering a
+question now requires reassembling it from several tables via joins — and
+joins are exactly what stops working when you shard.
+<span class="label">§ 2  WHAT IT IS</span>NORMALIZATION   Decomposing tables so every non-key attribute depends on
+                the key, the whole key, and nothing but the key.
+  1NF  Atomic values. No repeating groups, no comma-separated lists in a cell.
+  2NF  1NF + no partial dependency. Every non-key attribute depends on the
+       WHOLE composite key, not just part of it.
+  3NF  2NF + no transitive dependency. Non-key attributes don't depend on
+       other non-key attributes. (zip → city belongs in its own table.)
+  BCNF Stricter 3NF; rarely the deciding factor in an interview.
+DENORMALIZATION Deliberately reintroducing duplication — copied columns,
+                embedded documents, precomputed aggregates, materialized
+                views — to remove joins from the read path. It is a
+                performance decision, not a mistake, and it is only correct
+                when you also name the sync mechanism.
+<span class="label">§ 3  THE MECHANISM</span>NORMALIZED READ   The answer is scattered across N tables. Every query pays
+                  N-1 joins: index lookup per table, then a nested-loop or
+                  hash join to stitch rows together. Cheap on one machine
+                  with warm indexes. Expensive the moment those tables live
+                  on different shards — a local join becomes a network
+                  scatter-gather (see 7.7).
+DENORMALIZED READ One fetch by key returns the whole answer. No join, no
+                  fan-out, predictable p99 — this is why single-table design
+                  exists in DynamoDB and why timelines are precomputed.
+THE TRADE         You did not delete the work. You moved it from read time
+                  to write time. One write now touches every copy, and the
+                  copies are only consistent if that fan-out is atomic
+                  (transaction) or eventually reconciled (async + repair).
+THE INVARIANT     Every duplicated fact needs a named SOURCE OF TRUTH and a
+                  named SYNC MECHANISM. A design that duplicates without
+                  naming both is incomplete, and interviewers probe exactly
+                  there.
+<span class="label">§ 4  USE / AVOID</span>NORMALIZE when: writes are frequent and must be correct; the entity is shared
+  by many readers; the access pattern isn't known yet; the data is the system
+  of record (money, inventory, identity, permissions).
+DENORMALIZE when: the read:write ratio is heavily read-skewed; the join is on
+  the hot path and measurably dominates latency; the data is immutable or
+  slow-changing; the store cannot join at all (DynamoDB, Cassandra); the read
+  crosses shard boundaries.
+AVOID normalizing to 3NF-and-beyond as a reflex in a NoSQL design — it
+  produces a schema the engine physically cannot serve, because there is no
+  join operator to reassemble it.
+AVOID denormalizing a fast-changing, widely-shared fact — the fan-out cost
+  and drift risk grow with the number of copies, and one entity update
+  becomes an unbounded write amplification.
+<span class="label">§ 5  DENORMALIZATION PATTERNS (name these, don't just say "denormalize")</span>COPIED COLUMN      Duplicate a hot attribute onto the child row.
+                   orders.customer_name alongside orders.customer_id.
+EMBEDDED DOCUMENT  Nest the child inside the parent record. Order + line
+                   items as one document. Bounded children only.
+PRECOMPUTED COUNTER Store the aggregate, don't COUNT() it.
+                   post.comment_count. Watch for the hot-row problem.
+MATERIALIZED VIEW  Engine-maintained precomputed join/aggregate. Postgres
+                   MATERIALIZED VIEW, or a DynamoDB GSI as a read model.
+FAN-OUT-ON-WRITE   Write the result into every reader's own row at write
+                   time. Twitter-style timelines (see 24.1).
+<span class="label">§ 6  NUMBERS TO ANCHOR THE DISCUSSION</span>Rule of thumb: normalize until it hurts, denormalize until it works.
+A same-shard indexed join is typically sub-millisecond; the argument for
+  denormalizing is rarely about one join, it's about JOIN DEPTH (5+ tables)
+  or CROSS-SHARD joins, which turn into network scatter-gather.
+Read:write ratio is the deciding signal. ~100:1 or higher read-skew is
+  where denormalization usually pays; near 1:1 it usually doesn't.
+Write amplification = number of copies. Denormalizing a field onto 10M rows
+  means one logical update becomes 10M physical writes — that's a backfill
+  job, not an UPDATE statement.
+Bounded-children rule: embed only if the child collection has a known ceiling
+  (order → line items, yes; user → posts, no).
+<span class="label">§ 7  INTERVIEW TRIGGERS + GOTCHA</span>→ "Walk me through your schema for this"            → state your normal form
+                                                       AND your denorm choices
+→ "This page does a 6-table join on every load"     → denormalize the read path
+→ "How do you keep those two copies in sync?"       → source of truth + sync
+                                                       mechanism, by name
+→ "We're moving this table to DynamoDB"             → access-pattern-first
+                                                       modeling, not 3NF
+GOTCHA: Denormalizing without naming (a) which copy is the source of truth and
+  (b) the mechanism that keeps the others converged — transaction, CDC stream,
+  async job with a reconciliation/repair pass — is the single most common
+  depth failure here. Saying "we'd denormalize for speed" and stopping reads
+  as if duplication were free. It never is; you have traded a correctness
+  guarantee for a latency win, and the interviewer wants to hear you say so.</div>
+  </section>
+
+  <!-- ══════════════════ §2 ══════════════════ -->
+  <section id="s2">
+    <h2 class="section-title"><span class="num">§2</span> 🧠 The Mindmap</h2>
+    <div class="callout callout-quote">The picture to hold in your head while you study. Everything below hangs off this.</div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Concept map — normalization ⇄ denormalization</div>
+      <svg viewBox="0 0 1060 660" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="mmArrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" fill="#b8b4ac"/>
+          </marker>
+        </defs>
+
+        <!-- connectors -->
+        <g stroke="#b8b4ac" stroke-width="1.8" fill="none" marker-end="url(#mmArrow)">
+          <path d="M470,300 L215,205"/>
+          <path d="M530,292 L530,210"/>
+          <path d="M590,300 L845,205"/>
+          <path d="M470,372 L215,462"/>
+          <path d="M530,380 L530,455"/>
+          <path d="M590,372 L845,462"/>
+        </g>
+
+        <!-- centre -->
+        <ellipse cx="530" cy="336" rx="158" ry="52" fill="#a5d8ff" stroke="#1971c2" stroke-width="2.5"/>
+        <text x="530" y="328" text-anchor="middle" font-size="17" font-weight="800" fill="#0b3d66">NORMALIZATION ⇄ DENORM</text>
+        <text x="530" y="352" text-anchor="middle" font-size="13" font-style="italic" fill="#1971c2">"where does a fact live?"</text>
+
+        <!-- TOP LEFT : the rules -->
+        <rect x="30" y="30" width="270" height="172" rx="10" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+        <text x="46" y="55" font-size="13.5" font-weight="800" fill="#1e3a8a">📏 THE RULES (normal forms)</text>
+        <text x="46" y="82"  font-size="12.5" fill="#1e3a8a">1NF — atomic values, no lists in a cell</text>
+        <text x="46" y="105" font-size="12.5" fill="#1e3a8a">2NF — depends on the WHOLE key</text>
+        <text x="46" y="128" font-size="12.5" fill="#1e3a8a">3NF — no transitive dependency</text>
+        <text x="46" y="151" font-size="12.5" fill="#1e3a8a">BCNF — stricter, rarely decisive</text>
+        <text x="46" y="180" font-size="11.5" font-style="italic" fill="#3b5bdb">key · whole key · nothing but the key</text>
+
+        <!-- TOP CENTRE : anomalies -->
+        <rect x="395" y="30" width="270" height="172" rx="10" fill="#ffc9c9" stroke="#c92a2a" stroke-width="2"/>
+        <text x="411" y="55" font-size="13.5" font-weight="800" fill="#7f1d1d">⚠️ THE ANOMALIES (what breaks)</text>
+        <text x="411" y="82"  font-size="12.5" fill="#7f1d1d">UPDATE — one copy changes, other</text>
+        <text x="411" y="100" font-size="12.5" fill="#7f1d1d">     doesn't; both look equally valid</text>
+        <text x="411" y="123" font-size="12.5" fill="#7f1d1d">INSERT — can't add X without a Y</text>
+        <text x="411" y="146" font-size="12.5" fill="#7f1d1d">DELETE — lose X as collateral of Y</text>
+        <text x="411" y="180" font-size="11.5" font-style="italic" fill="#c92a2a">Codd, 1970 — structural, not procedural</text>
+
+        <!-- TOP RIGHT : denorm patterns -->
+        <rect x="760" y="30" width="270" height="172" rx="10" fill="#ffd8a8" stroke="#e67700" stroke-width="2"/>
+        <text x="776" y="55" font-size="13.5" font-weight="800" fill="#7c2d12">🧩 DENORM PATTERNS</text>
+        <text x="776" y="82"  font-size="12.5" fill="#7c2d12">copied column</text>
+        <text x="776" y="103" font-size="12.5" fill="#7c2d12">embedded document (bounded only)</text>
+        <text x="776" y="124" font-size="12.5" fill="#7c2d12">precomputed counter</text>
+        <text x="776" y="145" font-size="12.5" fill="#7c2d12">materialized view / GSI</text>
+        <text x="776" y="166" font-size="12.5" fill="#7c2d12">fan-out-on-write</text>
+        <text x="776" y="188" font-size="11.5" font-style="italic" fill="#e67700">name the pattern, not "denormalize"</text>
+
+        <!-- BOTTOM LEFT : keeping copies honest -->
+        <rect x="30" y="470" width="270" height="160" rx="10" fill="#c3fae8" stroke="#0ca678" stroke-width="2"/>
+        <text x="46" y="495" font-size="13.5" font-weight="800" fill="#134e4a">🔄 KEEPING COPIES HONEST</text>
+        <text x="46" y="521" font-size="12.5" fill="#134e4a">ONE source of truth (exactly one)</text>
+        <text x="46" y="543" font-size="12.5" fill="#134e4a">sync: transaction / CDC / async job</text>
+        <text x="46" y="565" font-size="12.5" fill="#134e4a">reconciliation + repair pass</text>
+        <text x="46" y="595" font-size="11.5" font-style="italic" fill="#0ca678">drift is a WHEN, not an IF</text>
+
+        <!-- BOTTOM CENTRE : the decision -->
+        <rect x="395" y="470" width="270" height="160" rx="10" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+        <text x="411" y="495" font-size="13.5" font-weight="800" fill="#4c1d95">🎚️ THE DECISION (4 signals)</text>
+        <text x="411" y="521" font-size="12.5" fill="#4c1d95">read : write ratio (~100:1 +)</text>
+        <text x="411" y="543" font-size="12.5" fill="#4c1d95">join depth &amp; shard-crossing</text>
+        <text x="411" y="565" font-size="12.5" fill="#4c1d95">mutability of the fact</text>
+        <text x="411" y="587" font-size="12.5" fill="#4c1d95">store capability (can it join?)</text>
+        <text x="411" y="614" font-size="11.5" font-style="italic" fill="#7c3aed">default = normalize; retreat locally</text>
+
+        <!-- BOTTOM RIGHT : real systems -->
+        <rect x="760" y="470" width="270" height="160" rx="10" fill="#b2f2bb" stroke="#2f9e44" stroke-width="2"/>
+        <text x="776" y="495" font-size="13.5" font-weight="800" fill="#14532d">🏭 REAL SYSTEMS</text>
+        <text x="776" y="521" font-size="12.5" fill="#14532d">Postgres — 3NF system of record</text>
+        <text x="776" y="543" font-size="12.5" fill="#14532d">DynamoDB — single-table design</text>
+        <text x="776" y="565" font-size="12.5" fill="#14532d">Twitter — fan-out timelines</text>
+        <text x="776" y="587" font-size="12.5" fill="#14532d">Amazon — point-in-time snapshots</text>
+        <text x="776" y="614" font-size="11.5" font-style="italic" fill="#2f9e44">each one resolved the tension</text>
+      </svg>
+      <p class="caption">Left to right is the argument, not just a grouping.</p>
+    </div>
+
+    <p><strong>How to read it:</strong> the <strong>rules</strong> exist to prevent the <strong>anomalies</strong>; the anomalies are the price you accept when you adopt a <strong>denorm pattern</strong>; that price is only acceptable if you have a mechanism for <strong>keeping copies honest</strong>; and which way you lean is settled by <strong>the decision</strong> signals, which you can check against how <strong>real systems</strong> actually resolved it.</p>
+  </section>
+
+  <!-- ══════════════════ §3 ══════════════════ -->
+  <section id="s3">
+    <h2 class="section-title"><span class="num">§3</span> 🔥 The Problem</h2>
+
+    <p>Before relational modeling, business data lived in flat files and single wide records — one row per order, carrying the customer's name, address, and phone number right alongside the line items. It reads beautifully. Every query is a single fetch, no joins, no indirection. And it is structurally incapable of staying correct.</p>
+
+    <p>Consider a customer with 400 orders, where their address is stored on every order row. The customer moves. You now have 400 rows to update, and three distinct ways to break. <strong>The update anomaly:</strong> the job updates 380 rows and dies, and the database now holds two contradictory addresses for one customer with no marker saying which is current. <strong>The insert anomaly:</strong> you cannot record a new customer at all until they place an order, because the only place an address can be stored is on an order row — the fact has no home of its own. <strong>The delete anomaly:</strong> deleting a customer's last order erases the only copy of their address as collateral damage. In each case the corruption isn't caused by a bug in the storage engine. It's caused by the <em>shape of the schema</em> permitting two copies of one fact to exist independently.</p>
+
+    <p>The instinctive fix is procedural: be careful in application code. Wrap it in a transaction, write a helper that always updates all copies, add tests. This does not work, and understanding precisely why is what separates a real answer from a rehearsed one. It fails because correctness now depends on every future writer — every service, every migration script, every hotfix, every intern — remembering the invariant, forever. It fails because concurrent writers interleave: two transactions each updating a different subset of the copies can commit in an order that leaves the copies permanently mismatched. And it fails because partial failure is normal, not exceptional — a process dies mid-fan-out and there is nothing in the schema that can detect the resulting split-brain, because both values are equally legal as far as the database is concerned. <strong>Procedural correctness is a promise. Structural correctness is a guarantee.</strong></p>
+
+    <p>Codd's 1970 insight was to make the guarantee structural. If a fact physically exists in exactly one location, then no sequence of concurrent, partial, or buggy writes can produce two copies that disagree — there <em>is</em> no second copy to disagree. Anomalies aren't prevented by discipline; they're rendered impossible by the schema. That's normalization, and it's why 3NF became the default for systems of record.</p>
+
+    <p>But the guarantee is not free, and the bill arrives at read time. Once a customer's address lives in one table and their orders in another, answering "show me this order with the shipping address" requires a join. On a single machine with warm indexes, that join is sub-millisecond and nobody notices. Push the same schema onto a sharded cluster — where the customer row and the order rows may live on different physical nodes — and that local join becomes a cross-network scatter-gather with the tail-latency profile of the slowest shard (this is exactly the 7.7 problem). Put five of those joins on a page that loads on every request, and normalization's correctness guarantee is now the thing making your product slow.</p>
+
+    <p>So the field arrived at the position it holds today: normalization is the correct <strong>default</strong>, and denormalization is a deliberate, <em>local</em>, <em>justified</em> retreat from it — trading a correctness guarantee for a latency win, on specific data, for a specific access pattern, with a named mechanism for containing the damage.</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Before / after — one wide table vs. decomposed</div>
+      <svg viewBox="0 0 1040 400" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="baArrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#2563eb"/>
+          </marker>
+        </defs>
+
+        <!-- LEFT PANEL -->
+        <rect x="20" y="20" width="440" height="360" rx="12" fill="#fff5f5" stroke="#c92a2a" stroke-width="2" stroke-dasharray="6 4"/>
+        <text x="40" y="48" font-size="14" font-weight="800" fill="#7f1d1d">BEFORE — one wide table</text>
+
+        <rect x="40" y="66" width="400" height="26" fill="#ffc9c9" stroke="#c92a2a"/>
+        <text x="52" y="84" font-size="12" font-weight="700" fill="#7f1d1d">orders</text>
+        <g font-size="11.5" fill="#1a1917" font-family="SF Mono, Menlo, monospace">
+          <rect x="40" y="92" width="400" height="24" fill="#fff" stroke="#e5e3de"/>
+          <text x="52" y="109">id  │ cust │ address     │ item</text>
+          <rect x="40" y="116" width="400" height="24" fill="#fff" stroke="#e5e3de"/>
+          <text x="52" y="133">1   │ Ada  │ 12 Oak St   │ pen</text>
+          <rect x="40" y="140" width="400" height="24" fill="#fff" stroke="#e5e3de"/>
+          <text x="52" y="157">2   │ Ada  │ 12 Oak St   │ mug</text>
+          <rect x="40" y="164" width="400" height="24" fill="#ffe3e3" stroke="#c92a2a" stroke-width="1.5"/>
+          <text x="52" y="181">3   │ Ada  │ 99 Elm Rd   │ pad</text>
+        </g>
+        <text x="40" y="214" font-size="12.5" font-weight="700" fill="#c92a2a">⚠ Which address is Ada's?</text>
+        <text x="40" y="234" font-size="12" fill="#7f1d1d">The schema permits both. Update died</text>
+        <text x="40" y="252" font-size="12" fill="#7f1d1d">at row 2 of 3 — nothing marks which</text>
+        <text x="40" y="270" font-size="12" fill="#7f1d1d">value is current.</text>
+        <text x="40" y="300" font-size="12.5" fill="#c92a2a">✗ UPDATE anomaly — copies disagree</text>
+        <text x="40" y="322" font-size="12.5" fill="#c92a2a">✗ INSERT anomaly — no customer w/o order</text>
+        <text x="40" y="344" font-size="12.5" fill="#c92a2a">✗ DELETE anomaly — last order kills address</text>
+
+        <!-- arrow -->
+        <line x1="470" y1="200" x2="565" y2="200" stroke="#2563eb" stroke-width="3" marker-end="url(#baArrow)"/>
+        <text x="517" y="188" text-anchor="middle" font-size="11.5" font-weight="800" fill="#2563eb">decompose</text>
+
+        <!-- RIGHT PANEL -->
+        <rect x="580" y="20" width="440" height="360" rx="12" fill="#f0fdf4" stroke="#2f9e44" stroke-width="2"/>
+        <text x="600" y="48" font-size="14" font-weight="800" fill="#14532d">AFTER — decomposed</text>
+
+        <rect x="600" y="66" width="400" height="26" fill="#b2f2bb" stroke="#2f9e44"/>
+        <text x="612" y="84" font-size="12" font-weight="700" fill="#14532d">customers</text>
+        <g font-size="11.5" fill="#1a1917" font-family="SF Mono, Menlo, monospace">
+          <rect x="600" y="92" width="400" height="24" fill="#fff" stroke="#e5e3de"/>
+          <text x="612" y="109">id │ name │ address</text>
+          <rect x="600" y="116" width="400" height="24" fill="#dcfce7" stroke="#2f9e44" stroke-width="1.5"/>
+          <text x="612" y="133">7  │ Ada  │ 99 Elm Rd     ◄── ONE home</text>
+        </g>
+
+        <rect x="600" y="156" width="400" height="26" fill="#b2f2bb" stroke="#2f9e44"/>
+        <text x="612" y="174" font-size="12" font-weight="700" fill="#14532d">orders</text>
+        <g font-size="11.5" fill="#1a1917" font-family="SF Mono, Menlo, monospace">
+          <rect x="600" y="182" width="400" height="24" fill="#fff" stroke="#e5e3de"/>
+          <text x="612" y="199">id │ cust_id │ item</text>
+          <rect x="600" y="206" width="400" height="22" fill="#fff" stroke="#e5e3de"/>
+          <text x="612" y="222">1  │    7    │ pen</text>
+          <rect x="600" y="228" width="400" height="22" fill="#fff" stroke="#e5e3de"/>
+          <text x="612" y="244">2  │    7    │ mug</text>
+          <rect x="600" y="250" width="400" height="22" fill="#fff" stroke="#e5e3de"/>
+          <text x="612" y="266">3  │    7    │ pad</text>
+        </g>
+        <text x="600" y="300" font-size="12.5" fill="#2f9e44">✓ One update. Cannot disagree.</text>
+        <text x="600" y="322" font-size="12.5" fill="#2f9e44">✓ All three anomalies impossible</text>
+        <text x="600" y="344" font-size="12.5" fill="#c92a2a">✗ Every read now pays a JOIN</text>
+      </svg>
+      <p class="caption">The guarantee is structural — and it is paid for, per read, forever.</p>
+    </div>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">Why can't you eliminate update anomalies by simply being disciplined in application code — always wrapping the fan-out in a transaction and always using a shared helper function? Give the three distinct reasons this is a promise rather than a guarantee.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 Answer out loud before reading on. If you hesitate, re-read the third paragraph — the difference between procedural and structural correctness.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> If a fact should have exactly one home, what's the actual rule for deciding where that home is — and what do you call the schema that follows it?</div>
+  </section>
+
+  <!-- ══════════════════ §4 ══════════════════ -->
+  <section id="s4">
+    <h2 class="section-title"><span class="num">§4</span> 💡 The Core Idea</h2>
+
+    <div class="definition">Normalization is the process of decomposing tables until every non-key attribute depends on the key, the whole key, and nothing but the key — so that each fact has exactly one physical home; denormalization is the deliberate reintroduction of duplicate copies of a fact to remove joins from a hot read path, accepting anomaly risk in exchange for read latency.</div>
+
+    <p>The five ideas below build on each other. Each one only makes sense because of the one before it.</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">The build chain</div>
+      <svg viewBox="0 0 1040 180" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="bcArrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#7c3aed"/>
+          </marker>
+        </defs>
+        <g>
+          <rect x="10" y="30" width="176" height="58" rx="9" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+          <text x="98" y="55" text-anchor="middle" font-size="12.5" font-weight="800" fill="#4c1d95">ONE HOME</text>
+          <text x="98" y="73" text-anchor="middle" font-size="12.5" font-weight="800" fill="#4c1d95">PER FACT</text>
+          <text x="98" y="108" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">because a copy</text>
+          <text x="98" y="124" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">can disagree</text>
+          <text x="98" y="140" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">with itself</text>
+        </g>
+        <line x1="192" y1="59" x2="222" y2="59" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow)"/>
+        <g>
+          <rect x="228" y="30" width="176" height="58" rx="9" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+          <text x="316" y="55" text-anchor="middle" font-size="12.5" font-weight="800" fill="#1e3a8a">NORMAL</text>
+          <text x="316" y="73" text-anchor="middle" font-size="12.5" font-weight="800" fill="#1e3a8a">FORMS</text>
+          <text x="316" y="108" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">therefore we need</text>
+          <text x="316" y="124" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">a rule for where</text>
+          <text x="316" y="140" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">"one" is</text>
+        </g>
+        <line x1="410" y1="59" x2="440" y2="59" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow)"/>
+        <g>
+          <rect x="446" y="30" width="176" height="58" rx="9" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+          <text x="534" y="55" text-anchor="middle" font-size="12.5" font-weight="800" fill="#92400e">COST MOVES</text>
+          <text x="534" y="73" text-anchor="middle" font-size="12.5" font-weight="800" fill="#92400e">TO READS</text>
+          <text x="534" y="108" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">which means at</text>
+          <text x="534" y="124" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">scale, joins are</text>
+          <text x="534" y="140" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">the bill</text>
+        </g>
+        <line x1="628" y1="59" x2="658" y2="59" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow)"/>
+        <g>
+          <rect x="664" y="30" width="176" height="58" rx="9" fill="#ffd8a8" stroke="#e67700" stroke-width="2"/>
+          <text x="752" y="55" text-anchor="middle" font-size="12.5" font-weight="800" fill="#7c2d12">DENORM</text>
+          <text x="752" y="73" text-anchor="middle" font-size="12.5" font-weight="800" fill="#7c2d12">PATTERNS</text>
+          <text x="752" y="108" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">so we buy reads</text>
+          <text x="752" y="124" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">back by copying</text>
+          <text x="752" y="140" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">facts again</text>
+        </g>
+        <line x1="846" y1="59" x2="876" y2="59" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow)"/>
+        <g>
+          <rect x="882" y="30" width="150" height="58" rx="9" fill="#c3fae8" stroke="#0ca678" stroke-width="2"/>
+          <text x="957" y="55" text-anchor="middle" font-size="12.5" font-weight="800" fill="#134e4a">SYNC OR</text>
+          <text x="957" y="73" text-anchor="middle" font-size="12.5" font-weight="800" fill="#134e4a">DRIFT</text>
+          <text x="957" y="108" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">so every copy</text>
+          <text x="957" y="124" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">needs an owner</text>
+          <text x="957" y="140" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">and a mechanism</text>
+        </g>
+      </svg>
+      <p class="caption">Read the italics as one sentence — that's the whole argument of this subtopic.</p>
+    </div>
+
+    <h3>One Home Per Fact — the functional dependency</h3>
+    <p>The whole discipline rests on a single relationship: a <strong>functional dependency</strong>, written <code>A → B</code>, meaning "given A, B is completely determined." <code>customer_id → address</code> says that once you know the customer, the address follows; it is a property of the <em>business domain</em>, not of any particular query. The rule that falls out is that B belongs in the table whose key is A, and nowhere else. When <code>address</code> appears on an order row, you've stored a customer-determined fact in an order-keyed table, and that mismatch is precisely what creates room for two copies to diverge. Every anomaly in §3 traces back to a functional dependency being stored somewhere other than its own key's table.</p>
+
+    <h3>Normal Forms — the rule for finding "one"</h3>
+    <p>Because "put each fact in its own table" is too vague to apply mechanically, the normal forms turn it into a checklist, each one closing a specific loophole the previous one left open. <strong>1NF</strong> demands atomic values: no <code>"pen,mug,pad"</code> crammed into one cell and no repeating <code>item_1, item_2, item_3</code> columns, because you cannot index, constrain, or independently update a value buried inside another value. <strong>2NF</strong> adds that no non-key attribute may depend on only <em>part</em> of a composite key — in an <code>order_items(order_id, product_id)</code> table, <code>product_name</code> depends on <code>product_id</code> alone, so it's duplicated on every line item that sells that product and belongs in <code>products</code> instead. <strong>3NF</strong> adds that no non-key attribute may depend on <em>another non-key attribute</em>: storing <code>zip</code> and <code>city</code> together in <code>customers</code> is a transitive dependency (<code>customer_id → zip → city</code>), so a zip-to-city correction has to be applied in as many rows as use that zip. <strong>BCNF</strong> tightens 3NF for tables with overlapping candidate keys; know the name, but it is almost never the deciding factor in an interview. The practical shorthand — <em>the key, the whole key, and nothing but the key</em> — maps exactly onto 1NF, 2NF, 3NF in that order.</p>
+
+    <h3>The Cost Moves to Reads</h3>
+    <p>Notice what normalization actually did: it did not remove work, it relocated it. Writes became cheap and safe — one fact, one row, one update, no fan-out, no possibility of divergence — while reads became expensive, because an answer that used to sit in one row is now scattered across several tables and must be reassembled by a join on every single request. On one machine with warm indexes this is a fine trade and usually invisible. It stops being fine in two specific situations, and naming them is what makes your interview answer concrete: when <strong>join depth</strong> grows (a page assembling user → profile → org → plan → entitlements on every load), and when the joined tables live on <strong>different shards</strong>, converting a local index lookup into a cross-network scatter-gather whose latency is set by the slowest node (7.7). Normalization's guarantee is paid for, per read, forever.</p>
+
+    <h3>Denormalization Patterns — buying the reads back</h3>
+    <p>Once you see the cost as <em>relocated</em> rather than eliminated, denormalization stops looking like a mistake and starts looking like the other direction on the same dial: you move work back to write time by storing a fact in every place that reads it. What matters in an interview is naming the specific pattern rather than waving at "denormalize." A <strong>copied column</strong> duplicates one hot attribute onto the child row (<code>orders.customer_name</code> beside <code>customer_id</code>) so the common render needs no join. An <strong>embedded document</strong> nests children inside the parent (an order carrying its line items as one document) — correct only when the child collection has a known ceiling. A <strong>precomputed counter</strong> stores <code>post.comment_count</code> instead of running <code>COUNT(*)</code>, converting an O(n) scan into an O(1) read. A <strong>materialized view</strong> has the engine maintain a precomputed join or aggregate for you (a Postgres <code>MATERIALIZED VIEW</code>, or a DynamoDB GSI acting as a purpose-built read model). And <strong>fan-out-on-write</strong> goes furthest, writing the finished result into every reader's own row at write time — the pattern behind precomputed timelines in 24.1.</p>
+
+    <h3>Sync or Drift — the part candidates forget</h3>
+    <p>Every one of those patterns creates a second copy of a fact, which reintroduces exactly the anomaly risk §3 spent its whole argument eliminating. The difference between a competent denormalization and a data-corruption incident is that the competent one names two things explicitly. First, the <strong>source of truth</strong>: exactly one copy is authoritative, and every other copy is a derived cache that can be rebuilt from it. Second, the <strong>sync mechanism</strong>: a transaction that updates all copies atomically (correct, but limits you to one shard or one database), a CDC stream that tails the write-ahead log and propagates changes asynchronously (scales, but is eventually consistent), or a background job with a periodic <strong>reconciliation pass</strong> that detects and repairs drift. Drift is not an <em>if</em>, it is a <em>when</em> — pipelines lag, jobs fail halfway, messages arrive out of order — so a mature design assumes copies will diverge and includes the repair path from the start.</p>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">A table <code>order_items(order_id, product_id, quantity, product_name, product_category)</code> has a composite primary key of <code>(order_id, product_id)</code>. Which normal form does it violate, exactly which attributes cause the violation, and what concrete anomaly does that permit?</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read §4 — Normal Forms, the 2NF paragraph.</div>
+      </div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">2</span>
+          <span class="qtext">Explain why the <em>cost relocation</em> framing (third block) is what makes the <em>denormalization patterns</em> (fourth block) coherent rather than contradictory. Why isn't denormalizing simply undoing normalization?</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the build chain above and trace the "therefore → which means → so" links.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> You know the two directions and why they exist. What physically happens inside the database when you read and write each shape?</div>
+  </section>
+
+  <!-- ══════════════════ §5 ══════════════════ -->
+  <section id="s5">
+    <h2 class="section-title"><span class="num">§5</span> ⚙️ How It Actually Works</h2>
+
+    <h3>The normalized read path (happy path)</h3>
+    <ol class="steps">
+      <li>The query planner parses the join and picks an order — typically the most selective table first, to shrink the working set before joining anything else.</li>
+      <li>It probes the driving table's index (B-tree) to locate the qualifying rows.</li>
+      <li>For each row, it resolves the foreign key into the next table. With a small outer set it uses a <strong>nested-loop join</strong> (index probe per row); with large sets it builds a <strong>hash join</strong> (hash the smaller side in memory, stream the larger side past it).</li>
+      <li>It repeats per additional table. Latency compounds roughly with join depth, and each step's cost is dominated by whether that table's index and pages are already in the buffer pool.</li>
+      <li>Rows are stitched and projected. On one machine with warm indexes, a 2–3 table join here is routinely sub-millisecond.</li>
+    </ol>
+
+    <div class="mental-model">
+      🗺️ <span class="mm-name">Mental model — The library catalogue.</span> A normalized database is a library where the catalogue holds a card per book pointing at a shelf location, and the shelf holds the book. Nothing is written twice, so nothing can contradict itself — but every lookup is two trips, and a question spanning five catalogues is five trips.
+      <span class="mm-break">Where it breaks down: it suggests the trips are the only cost. The real killer isn't trip <em>count</em>, it's trip <em>distance</em> — when the shelves are in different buildings (shards), the same query changes character entirely.</span>
+    </div>
+
+    <h3>The denormalized read path (happy path)</h3>
+    <ol class="steps">
+      <li>The query fetches by primary key or partition key.</li>
+      <li>One page (row store) or one item (document/wide-column store) is returned containing the whole answer — copied columns, embedded children, precomputed aggregates already materialized.</li>
+      <li>No join, no fan-out, no cross-shard coordination. Latency is one I/O and is essentially flat regardless of how many logical entities the answer spans — which is why p99 is so much tighter here, and why it's the default in stores that have no join operator at all.</li>
+    </ol>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Read paths compared — and where the write cost went</div>
+      <svg viewBox="0 0 1040 470" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="flArrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#6b6861"/>
+          </marker>
+          <marker id="flArrowRed" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#c92a2a"/>
+          </marker>
+        </defs>
+
+        <!-- LANE 1: normalized read -->
+        <rect x="14" y="14" width="1012" height="128" rx="10" fill="#f8fafc" stroke="#e5e3de"/>
+        <text x="32" y="38" font-size="13" font-weight="800" fill="#1e3a8a">① NORMALIZED READ — reassemble on every request</text>
+        <g>
+          <rect x="32" y="52" width="128" height="46" rx="7" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.8"/>
+          <text x="96" y="72" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1e3a8a">query planner</text>
+          <text x="96" y="88" text-anchor="middle" font-size="10.5" fill="#3b5bdb">picks join order</text>
+
+          <line x1="166" y1="75" x2="196" y2="75" stroke="#6b6861" stroke-width="2" marker-end="url(#flArrow)"/>
+          <rect x="202" y="52" width="128" height="46" rx="7" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.8"/>
+          <text x="266" y="72" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1e3a8a">B-tree probe</text>
+          <text x="266" y="88" text-anchor="middle" font-size="10.5" fill="#3b5bdb">driving table</text>
+
+          <line x1="336" y1="75" x2="366" y2="75" stroke="#6b6861" stroke-width="2" marker-end="url(#flArrow)"/>
+          <rect x="372" y="52" width="150" height="46" rx="7" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.8"/>
+          <text x="447" y="72" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1e3a8a">nested-loop / hash</text>
+          <text x="447" y="88" text-anchor="middle" font-size="10.5" fill="#3b5bdb">join table 2</text>
+
+          <line x1="528" y1="75" x2="558" y2="75" stroke="#6b6861" stroke-width="2" marker-end="url(#flArrow)"/>
+          <rect x="564" y="52" width="150" height="46" rx="7" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.8"/>
+          <text x="639" y="72" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1e3a8a">… join table N</text>
+          <text x="639" y="88" text-anchor="middle" font-size="10.5" fill="#3b5bdb">cost ∝ join depth</text>
+
+          <line x1="720" y1="75" x2="750" y2="75" stroke="#6b6861" stroke-width="2" marker-end="url(#flArrow)"/>
+          <rect x="756" y="52" width="120" height="46" rx="7" fill="#b2f2bb" stroke="#2f9e44" stroke-width="1.8"/>
+          <text x="816" y="79" text-anchor="middle" font-size="11.5" font-weight="700" fill="#14532d">answer</text>
+        </g>
+        <text x="32" y="122" font-size="11.5" fill="#c92a2a">⚠ if tables sit on different shards, each join becomes a network scatter-gather (7.7) — latency set by the slowest node</text>
+
+        <!-- LANE 2: denormalized read -->
+        <rect x="14" y="158" width="1012" height="104" rx="10" fill="#fffbeb" stroke="#e5e3de"/>
+        <text x="32" y="182" font-size="13" font-weight="800" fill="#7c2d12">② DENORMALIZED READ — already assembled</text>
+        <g>
+          <rect x="32" y="196" width="180" height="46" rx="7" fill="#ffd8a8" stroke="#e67700" stroke-width="1.8"/>
+          <text x="122" y="216" text-anchor="middle" font-size="11.5" font-weight="700" fill="#7c2d12">fetch by key</text>
+          <text x="122" y="232" text-anchor="middle" font-size="10.5" fill="#e67700">PK / partition key</text>
+
+          <line x1="218" y1="219" x2="256" y2="219" stroke="#6b6861" stroke-width="2" marker-end="url(#flArrow)"/>
+          <rect x="262" y="196" width="180" height="46" rx="7" fill="#b2f2bb" stroke="#2f9e44" stroke-width="1.8"/>
+          <text x="352" y="223" text-anchor="middle" font-size="11.5" font-weight="700" fill="#14532d">answer — 1 I/O</text>
+        </g>
+        <text x="470" y="212" font-size="11.5" fill="#14532d">✓ no join · no fan-out · no cross-shard coordination</text>
+        <text x="470" y="232" font-size="11.5" fill="#14532d">✓ p99 flat regardless of how many entities the answer spans</text>
+
+        <!-- LANE 3: the write path -->
+        <rect x="14" y="278" width="1012" height="178" rx="10" fill="#fef2f2" stroke="#e5e3de"/>
+        <text x="32" y="302" font-size="13" font-weight="800" fill="#7f1d1d">③ THE DENORMALIZED WRITE PATH — this is where the cost actually went</text>
+        <g>
+          <rect x="32" y="330" width="170" height="52" rx="7" fill="#ffc9c9" stroke="#c92a2a" stroke-width="2"/>
+          <text x="117" y="352" text-anchor="middle" font-size="11.5" font-weight="800" fill="#7f1d1d">SOURCE OF TRUTH</text>
+          <text x="117" y="370" text-anchor="middle" font-size="10.5" fill="#c92a2a">exactly one row</text>
+
+          <line x1="208" y1="356" x2="246" y2="330" stroke="#c92a2a" stroke-width="2" marker-end="url(#flArrowRed)"/>
+          <line x1="208" y1="356" x2="246" y2="384" stroke="#c92a2a" stroke-width="2" marker-end="url(#flArrowRed)"/>
+          <line x1="208" y1="356" x2="246" y2="356" stroke="#c92a2a" stroke-width="2" marker-end="url(#flArrowRed)"/>
+
+          <rect x="252" y="308" width="210" height="42" rx="7" fill="#fff" stroke="#c92a2a" stroke-width="1.5"/>
+          <text x="357" y="325" text-anchor="middle" font-size="11.5" font-weight="700" fill="#7f1d1d">transactional fan-out</text>
+          <text x="357" y="341" text-anchor="middle" font-size="10.5" fill="#6b6861">strong · capped at 1 shard/db</text>
+
+          <rect x="252" y="356" width="210" height="42" rx="7" fill="#fff" stroke="#d97706" stroke-width="1.5"/>
+          <text x="357" y="373" text-anchor="middle" font-size="11.5" font-weight="700" fill="#92400e">CDC / event-driven</text>
+          <text x="357" y="389" text-anchor="middle" font-size="10.5" fill="#6b6861">scales · seconds of lag</text>
+
+          <rect x="252" y="404" width="210" height="42" rx="7" fill="#fff" stroke="#6b6861" stroke-width="1.5"/>
+          <text x="357" y="421" text-anchor="middle" font-size="11.5" font-weight="700" fill="#3f3f46">async job + reconciler</text>
+          <text x="357" y="437" text-anchor="middle" font-size="10.5" fill="#6b6861">the part people omit</text>
+
+          <line x1="468" y1="356" x2="506" y2="356" stroke="#6b6861" stroke-width="2" marker-end="url(#flArrow)"/>
+
+          <rect x="512" y="326" width="150" height="60" rx="7" fill="#ffe8cc" stroke="#e67700" stroke-width="1.8"/>
+          <text x="587" y="350" text-anchor="middle" font-size="11.5" font-weight="700" fill="#7c2d12">copy 1 … copy N</text>
+          <text x="587" y="368" text-anchor="middle" font-size="10.5" fill="#e67700">derived, rebuildable</text>
+
+          <line x1="668" y1="356" x2="706" y2="356" stroke="#c92a2a" stroke-width="2" marker-end="url(#flArrowRed)"/>
+          <rect x="712" y="320" width="300" height="72" rx="7" fill="#ffc9c9" stroke="#c92a2a" stroke-width="2"/>
+          <text x="862" y="344" text-anchor="middle" font-size="12" font-weight="800" fill="#7f1d1d">WRITE AMPLIFICATION = # of copies</text>
+          <text x="862" y="364" text-anchor="middle" font-size="11" fill="#7f1d1d">1 logical update on 10M rows</text>
+          <text x="862" y="381" text-anchor="middle" font-size="11" fill="#7f1d1d">= a backfill job, not an UPDATE</text>
+        </g>
+      </svg>
+      <p class="caption">Denormalization never deletes work — it relocates it from read time to write time.</p>
+    </div>
+
+    <h3>The denormalized write path — where the cost actually went</h3>
+    <ol class="steps">
+      <li>A write updates the source-of-truth row.</li>
+      <li>It must then propagate to every copy. Three mechanisms, in ascending order of scale and descending order of guarantee:
+        <ul class="plain">
+          <li><strong>Transactional fan-out</strong> — update all copies in one ACID transaction. Strong guarantee, but every copy must be reachable in one transaction scope, so this caps you at a single database or shard.</li>
+          <li><strong>CDC / event-driven</strong> — tail the write-ahead log (Debezium, DynamoDB Streams) and propagate changes downstream. Scales across systems; copies are eventually consistent, typically seconds behind.</li>
+          <li><strong>Async job + reconciliation</strong> — enqueue the fan-out, and run a periodic sweeper that recomputes derived values from the source of truth and repairs mismatches. The sweeper is the part people omit and the part that saves you.</li>
+        </ul>
+      </li>
+      <li><strong>Write amplification is the number of copies.</strong> Denormalizing a field onto ten million rows means one logical update becomes ten million physical writes — an offline backfill, not an <code>UPDATE</code> statement. Say this out loud in an interview; it demonstrates you've thought past the design into the migration.</li>
+    </ol>
+
+    <div class="mental-model">
+      🗺️ <span class="mm-name">Mental model — Denormalization is a cache you cannot flush.</span> Every duplicated field is a cache of a fact, so all of Topic 5 applies: it needs an invalidation strategy, it can go stale, and it can serve wrong answers confidently. The one crucial difference is that a cache miss falls back to the source of truth, whereas a stale denormalized column <em>is</em> the value the application reads — there is no miss, so nothing self-corrects.
+      <span class="mm-break">Where it breaks down: materialized views and GSIs are engine-maintained, so the invalidation is handled for you; the analogy applies fully only to hand-rolled duplication.</span>
+    </div>
+
+    <h3>Failure and edge cases</h3>
+    <ul class="plain">
+      <li><strong>Drift.</strong> Copies diverge after a partially-failed fan-out or a lagging pipeline. Detectable only if something recomputes from the source of truth and compares — which is why the reconciliation pass is part of the design, not an operational nicety.</li>
+      <li><strong>Unbounded embedded collections.</strong> Embedding works only for bounded children. Embedding a user's posts means the user document grows without limit until it hits the item-size ceiling (400KB in DynamoDB, 16MB in MongoDB) and writes start failing — and every small update rewrites the whole document.</li>
+      <li><strong>Hot rows on precomputed counters.</strong> A single <code>comment_count</code> on a viral post becomes a contended row; every commenter serializes on the same lock. Mitigations are sharded counters (N sub-counters summed on read) or buffered increments — this is the 5.7 hot-key problem wearing a schema costume.</li>
+      <li><strong>Backfill and schema evolution.</strong> Adding a denormalized column to an existing large table is an online backfill with throttling and a dual-write window, not a migration you run in a deploy.</li>
+      <li><strong>Over-normalization in a store that can't join.</strong> Applying 3NF to DynamoDB or Cassandra produces a schema the engine physically cannot serve; the application ends up doing N sequential round trips to emulate a join — an N+1 problem (8.8) built directly into the data model.</li>
+    </ul>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">The decomposition, structurally — unnormalized → 3NF</div>
+      <svg viewBox="0 0 1040 430" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="dcArrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#2563eb"/>
+          </marker>
+        </defs>
+
+        <!-- column headers -->
+        <text x="120" y="26" text-anchor="middle" font-size="13" font-weight="800" fill="#7f1d1d">UNNORMALIZED</text>
+        <text x="370" y="26" text-anchor="middle" font-size="13" font-weight="800" fill="#92400e">1NF</text>
+        <text x="640" y="26" text-anchor="middle" font-size="13" font-weight="800" fill="#3b5bdb">2NF</text>
+        <text x="915" y="26" text-anchor="middle" font-size="13" font-weight="800" fill="#14532d">3NF</text>
+
+        <line x1="238" y1="120" x2="268" y2="120" stroke="#2563eb" stroke-width="2.5" marker-end="url(#dcArrow)"/>
+        <line x1="490" y1="120" x2="520" y2="120" stroke="#2563eb" stroke-width="2.5" marker-end="url(#dcArrow)"/>
+        <line x1="768" y1="120" x2="798" y2="120" stroke="#2563eb" stroke-width="2.5" marker-end="url(#dcArrow)"/>
+
+        <!-- UNNORMALIZED -->
+        <rect x="20" y="42" width="200" height="150" rx="8" fill="#ffe3e3" stroke="#c92a2a" stroke-width="2"/>
+        <text x="34" y="62" font-size="11.5" font-weight="800" fill="#7f1d1d">orders</text>
+        <g font-size="11" fill="#7f1d1d" font-family="SF Mono, Menlo, monospace">
+          <text x="34" y="82">id</text>
+          <text x="34" y="99">customer</text>
+          <text x="34" y="116">cust_zip</text>
+          <text x="34" y="133">cust_city</text>
+          <text x="34" y="150">items "pen,mug,pad"</text>
+          <text x="34" y="167">prod_name</text>
+        </g>
+        <text x="34" y="186" font-size="10.5" font-weight="700" fill="#c92a2a">✗ non-atomic cell</text>
+
+        <!-- 1NF -->
+        <rect x="272" y="42" width="200" height="150" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+        <text x="286" y="62" font-size="11.5" font-weight="800" fill="#92400e">orders</text>
+        <g font-size="11" fill="#92400e" font-family="SF Mono, Menlo, monospace">
+          <text x="286" y="82">id</text>
+          <text x="286" y="99">customer</text>
+          <text x="286" y="116">cust_zip / cust_city</text>
+          <text x="286" y="133">item</text>
+          <text x="286" y="150">qty</text>
+          <text x="286" y="167">prod_name, prod_category</text>
+        </g>
+        <text x="286" y="186" font-size="10.5" font-weight="700" fill="#d97706">✓ atomic ✗ partial dep.</text>
+
+        <!-- 2NF -->
+        <rect x="524" y="42" width="230" height="70" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+        <text x="538" y="60" font-size="11.5" font-weight="800" fill="#1e3a8a">orders / order_items / products</text>
+        <g font-size="10.5" fill="#1e3a8a" font-family="SF Mono, Menlo, monospace">
+          <text x="538" y="78">order_items(order_id, product_id, qty)</text>
+          <text x="538" y="94">products(product_id, name, category)</text>
+        </g>
+        <rect x="524" y="120" width="230" height="72" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+        <text x="538" y="138" font-size="11.5" font-weight="800" fill="#1e3a8a">customers</text>
+        <g font-size="10.5" fill="#1e3a8a" font-family="SF Mono, Menlo, monospace">
+          <text x="538" y="156">id, name</text>
+          <text x="538" y="172">zip, city   ◄── still together</text>
+        </g>
+        <text x="538" y="188" font-size="10.5" font-weight="700" fill="#c92a2a">✗ transitive dep.</text>
+
+        <!-- 3NF -->
+        <rect x="802" y="42" width="220" height="70" rx="8" fill="#dcfce7" stroke="#2f9e44" stroke-width="2"/>
+        <text x="816" y="60" font-size="11.5" font-weight="800" fill="#14532d">orders / order_items / products</text>
+        <g font-size="10.5" fill="#14532d" font-family="SF Mono, Menlo, monospace">
+          <text x="816" y="78">unchanged from 2NF</text>
+          <text x="816" y="94">each fact in its own table</text>
+        </g>
+        <rect x="802" y="120" width="220" height="52" rx="8" fill="#dcfce7" stroke="#2f9e44" stroke-width="2"/>
+        <text x="816" y="138" font-size="11.5" font-weight="800" fill="#14532d">customers</text>
+        <text x="816" y="156" font-size="10.5" fill="#14532d" font-family="SF Mono, Menlo, monospace">id, name, zip</text>
+        <rect x="802" y="180" width="220" height="52" rx="8" fill="#dcfce7" stroke="#2f9e44" stroke-width="2"/>
+        <text x="816" y="198" font-size="11.5" font-weight="800" fill="#14532d">zip_codes</text>
+        <text x="816" y="216" font-size="10.5" fill="#14532d" font-family="SF Mono, Menlo, monospace">zip, city</text>
+        <text x="816" y="250" font-size="11" font-weight="800" fill="#2f9e44">✓ 3NF — every fact has one home</text>
+
+        <!-- annotations row -->
+        <rect x="20" y="290" width="1002" height="122" rx="10" fill="#f8fafc" stroke="#e5e3de"/>
+        <text x="40" y="316" font-size="12.5" font-weight="800" fill="#1a1917">What each step actually fixed</text>
+        <text x="40" y="342" font-size="12" fill="#7f1d1d"><tspan font-weight="700">1NF</tspan> — split "pen,mug,pad" into one row per item. You cannot index, constrain, or independently update a value buried inside another value.</text>
+        <text x="40" y="366" font-size="12" fill="#92400e"><tspan font-weight="700">2NF</tspan> — prod_name depended on product_id alone, not on the whole key (order_id, product_id). Moved to products, so a rename is one write.</text>
+        <text x="40" y="390" font-size="12" fill="#1e3a8a"><tspan font-weight="700">3NF</tspan> — city depended on zip, not on customer id (a transitive dependency). Moved to zip_codes, so a zip→city correction is one write.</text>
+      </svg>
+      <p class="caption">Key · whole key · nothing but the key — in that order.</p>
+    </div>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">Trace what physically happens when a denormalized <code>orders.customer_name</code> column is updated because a customer changed their name — from the first write through to the last copy — and name where in that sequence the data can be left permanently inconsistent.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the denormalized write path above, steps 1–3.</div>
+      </div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">2</span>
+          <span class="qtext">A team embeds a user's posts inside the user document because "it makes the profile page one fetch." Name the failure mode this creates, the specific limit it eventually hits, and the rule that would have prevented the choice.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the failure cases — unbounded embedded collections.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> You know both mechanisms and how each fails. So in a live design, which do you actually pick — and what exactly are you giving up?</div>
+  </section>
+
+  <!-- ══════════════════ §6 ══════════════════ -->
+  <section id="s6">
+    <h2 class="section-title"><span class="num">§6</span> ⚖️ The Decision — When, and What It Costs</h2>
+
+    <p>The default is normalize. It is the correct starting position because it is the only one that gives a structural correctness guarantee, and because early in a design you usually do not yet know the access patterns well enough to optimize for them — a normalized schema keeps every future query cheap to <em>write</em>, even if some are expensive to <em>run</em>. You retreat from that default locally, on specific fields, when you can point at a measured read path and name what you're buying.</p>
+
+    <p>Four signals decide it. <strong>Read:write ratio</strong> is the strongest: heavily read-skewed data (roughly 100:1 or more) amortizes the write-side fan-out across a huge number of cheap reads, while near-1:1 data pays the fan-out constantly and gains little. <strong>Join depth and shard-crossing</strong> is the second: a two-table same-shard join almost never justifies denormalizing, whereas a five-table join or any cross-shard join on a hot path frequently does. <strong>Mutability</strong> is the third and is the one most often skipped: duplicating an immutable or slow-changing fact (a product's category, an order's shipping address <em>at time of purchase</em>) is nearly free of drift risk, while duplicating a volatile, widely-shared fact multiplies both write cost and divergence risk with every copy. Note the subtlety in that example — an order's shipping address is not really a duplicate at all, it's a <strong>point-in-time snapshot</strong>, a genuinely different fact from the customer's current address, and recognizing that distinction is a strong signal in an interview. <strong>Store capability</strong> is the fourth and can be decisive on its own: DynamoDB and Cassandra have no join operator, so access-pattern-first modeling with deliberate duplication isn't an optimization there, it's the only way to model at all (8.1).</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Decision tree</div>
+      <svg viewBox="0 0 1040 520" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="dtArrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" fill="#6b6861"/>
+          </marker>
+        </defs>
+
+        <!-- Q1 -->
+        <rect x="360" y="14" width="320" height="52" rx="26" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+        <text x="520" y="36" text-anchor="middle" font-size="12.5" font-weight="700" fill="#4c1d95">Is this the system of record?</text>
+        <text x="520" y="54" text-anchor="middle" font-size="11" fill="#7c3aed">money · identity · inventory · permissions</text>
+
+        <path d="M400,68 L180,104" stroke="#6b6861" stroke-width="2" fill="none" marker-end="url(#dtArrow)"/>
+        <text x="270" y="80" font-size="11.5" font-weight="800" fill="#2f9e44">yes</text>
+        <path d="M640,68 L790,104" stroke="#6b6861" stroke-width="2" fill="none" marker-end="url(#dtArrow)"/>
+        <text x="730" y="80" font-size="11.5" font-weight="800" fill="#c92a2a">no</text>
+
+        <!-- yes leaf -->
+        <rect x="30" y="110" width="290" height="76" rx="10" fill="#dcfce7" stroke="#2f9e44" stroke-width="2"/>
+        <text x="175" y="134" text-anchor="middle" font-size="13" font-weight="800" fill="#14532d">NORMALIZE</text>
+        <text x="175" y="153" text-anchor="middle" font-size="11.5" fill="#14532d">Correctness is the requirement.</text>
+        <text x="175" y="171" text-anchor="middle" font-size="11.5" fill="#14532d">Denormalize only into a separate read model.</text>
+
+        <!-- Q2 -->
+        <rect x="660" y="110" width="340" height="46" rx="23" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+        <text x="830" y="139" text-anchor="middle" font-size="12.5" font-weight="700" fill="#4c1d95">Can the store even join?</text>
+
+        <path d="M700,158 L560,196" stroke="#6b6861" stroke-width="2" fill="none" marker-end="url(#dtArrow)"/>
+        <text x="612" y="172" font-size="11.5" font-weight="800" fill="#c92a2a">no</text>
+        <path d="M900,158 L900,196" stroke="#6b6861" stroke-width="2" fill="none" marker-end="url(#dtArrow)"/>
+        <text x="912" y="180" font-size="11.5" font-weight="800" fill="#2f9e44">yes</text>
+
+        <!-- no-join leaf -->
+        <rect x="380" y="200" width="300" height="76" rx="10" fill="#ffd8a8" stroke="#e67700" stroke-width="2"/>
+        <text x="530" y="224" text-anchor="middle" font-size="13" font-weight="800" fill="#7c2d12">DENORMALIZE</text>
+        <text x="530" y="243" text-anchor="middle" font-size="11.5" fill="#7c2d12">Model by access pattern.</text>
+        <text x="530" y="261" text-anchor="middle" font-size="11.5" fill="#7c2d12">It is the only option (8.1).</text>
+
+        <!-- Q3 -->
+        <rect x="716" y="200" width="310" height="62" rx="20" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+        <text x="871" y="224" text-anchor="middle" font-size="12" font-weight="700" fill="#4c1d95">Join on a hot path AND</text>
+        <text x="871" y="244" text-anchor="middle" font-size="12" font-weight="700" fill="#4c1d95">(depth ≥ 5 OR cross-shard)?</text>
+
+        <path d="M760,264 L640,306" stroke="#6b6861" stroke-width="2" fill="none" marker-end="url(#dtArrow)"/>
+        <text x="686" y="280" font-size="11.5" font-weight="800" fill="#c92a2a">no</text>
+        <path d="M930,264 L930,306" stroke="#6b6861" stroke-width="2" fill="none" marker-end="url(#dtArrow)"/>
+        <text x="942" y="288" font-size="11.5" font-weight="800" fill="#2f9e44">yes</text>
+
+        <rect x="440" y="310" width="270" height="66" rx="10" fill="#dcfce7" stroke="#2f9e44" stroke-width="2"/>
+        <text x="575" y="334" text-anchor="middle" font-size="13" font-weight="800" fill="#14532d">NORMALIZE</text>
+        <text x="575" y="356" text-anchor="middle" font-size="11.5" fill="#14532d">The join is not your problem.</text>
+
+        <!-- Q4 -->
+        <rect x="760" y="310" width="266" height="62" rx="20" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+        <text x="893" y="334" text-anchor="middle" font-size="12" font-weight="700" fill="#4c1d95">Slow-changing AND</text>
+        <text x="893" y="354" text-anchor="middle" font-size="12" font-weight="700" fill="#4c1d95">read:write ≥ ~100:1?</text>
+
+        <path d="M800,374 L680,416" stroke="#6b6861" stroke-width="2" fill="none" marker-end="url(#dtArrow)"/>
+        <text x="726" y="390" font-size="11.5" font-weight="800" fill="#c92a2a">no</text>
+        <path d="M950,374 L950,416" stroke="#6b6861" stroke-width="2" fill="none" marker-end="url(#dtArrow)"/>
+        <text x="962" y="398" font-size="11.5" font-weight="800" fill="#2f9e44">yes</text>
+
+        <rect x="420" y="420" width="300" height="80" rx="10" fill="#dcfce7" stroke="#2f9e44" stroke-width="2"/>
+        <text x="570" y="444" text-anchor="middle" font-size="13" font-weight="800" fill="#14532d">NORMALIZE</text>
+        <text x="570" y="465" text-anchor="middle" font-size="11.5" fill="#14532d">Fan-out cost and drift risk</text>
+        <text x="570" y="483" text-anchor="middle" font-size="11.5" fill="#14532d">exceed the read win.</text>
+
+        <rect x="740" y="420" width="290" height="90" rx="10" fill="#ffd8a8" stroke="#e67700" stroke-width="2.5"/>
+        <text x="885" y="444" text-anchor="middle" font-size="13" font-weight="800" fill="#7c2d12">DENORMALIZE</text>
+        <text x="885" y="465" text-anchor="middle" font-size="11.5" fill="#7c2d12">Name the pattern, the source</text>
+        <text x="885" y="483" text-anchor="middle" font-size="11.5" fill="#7c2d12">of truth, and the sync mechanism.</text>
+        <text x="885" y="501" text-anchor="middle" font-size="11" font-style="italic" fill="#e67700">all three, or the answer is incomplete</text>
+      </svg>
+      <p class="caption">Default is normalize. Every path to "denormalize" ends with naming the sync mechanism.</p>
+    </div>
+
+    <h3>Trade-offs</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>✅ Benefit</th><th>❌ Cost / Limitation</th></tr></thead>
+        <tbody>
+          <tr><td><span class="benefit">Normalization: anomalies become structurally impossible</span> — one fact, one home, no sequence of concurrent or partial writes can create disagreement</td><td>Every read reassembles the answer via joins, paid per request forever; and the schema degrades badly the moment those tables are sharded onto different nodes</td></tr>
+          <tr><td><span class="benefit">Normalization: storage efficiency and cheap writes</span> — a fact is updated in exactly one place, so no fan-out and no write amplification</td><td>Read latency is the least predictable part of the system; p99 is set by join depth and buffer-pool warmth, both of which drift as data grows</td></tr>
+          <tr><td><span class="benefit">Denormalization: flat, predictable single-fetch reads</span> — no join, no scatter-gather, p99 largely independent of how many entities the answer spans</td><td>You have reintroduced the update anomaly by choice; correctness now depends on a sync mechanism that can lag, fail partially, or silently drift</td></tr>
+          <tr><td><span class="benefit">Denormalization: works in stores with no join operator</span> — the only viable model for DynamoDB, Cassandra, and similar</td><td>Write amplification equals the number of copies; a schema change becomes an online backfill with a dual-write window, not a migration</td></tr>
+          <tr><td><span class="benefit">Precomputed aggregates: O(1) instead of O(n)</span> — <code>comment_count</code> beats <code>COUNT(*)</code> at any scale</td><td>Creates a contended hot row on popular entities, requiring sharded counters or buffered increments (5.7)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>In production</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>System</th><th>How it applies</th><th>The nuance</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Postgres / MySQL as system of record</strong></td><td>Normalized to 3NF for orders, payments, inventory, identity — anywhere a wrong value costs money or trust. Denormalization appears narrowly, as a counter cache or a <code>MATERIALIZED VIEW</code></td><td><code>MATERIALIZED VIEW</code> is engine-maintained but <strong>not</strong> auto-refreshed in Postgres — you schedule <code>REFRESH</code>, so staleness is your explicit choice, not a default</td></tr>
+          <tr><td><strong>DynamoDB single-table design</strong></td><td>No join operator, so the model is built access-pattern-first: entities are deliberately duplicated across items and GSIs so every query is a single partition fetch</td><td>The design is only possible if you enumerate access patterns <em>before</em> modeling; adding an unforeseen pattern later often means a new GSI and a full backfill</td></tr>
+          <tr><td><strong>Twitter / X home timelines</strong></td><td>Fan-out-on-write: a tweet is copied into each follower's materialized timeline at post time, so reading a timeline is one sequential fetch instead of a join across everyone you follow</td><td>Breaks for celebrity accounts, where one post fans out to 100M+ rows — hence the hybrid model that merges precomputed timelines with pull-on-read for high-follower accounts (24.3)</td></tr>
+          <tr><td><strong>Reddit / Instagram counters</strong></td><td><code>comment_count</code>, <code>like_count</code> stored on the parent rather than aggregated at read time</td><td>On viral content the counter row becomes a contention hot spot; mitigated with sharded counters or buffered async increments, and the displayed value is often deliberately approximate</td></tr>
+          <tr><td><strong>Amazon order history</strong></td><td>The shipping address and item price are copied onto the order at purchase time rather than joined from <code>customers</code> and <code>products</code></td><td>This is a <strong>point-in-time snapshot</strong>, not denormalization — the order must preserve what was true at purchase. Correctness <em>requires</em> the copy here; joining live would actively produce the wrong answer</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">A product catalogue service stores <code>product.category_name</code> copied onto every one of 50 million product rows for fast filtering. Categories are renamed roughly twice a year. Is this a good denormalization? Justify using at least three of the four decision signals, and name what you would still need to build.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the four signals at the top of §6 and the decision tree.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> You can defend the choice. How does an interviewer actually put pressure on it?</div>
+  </section>
+
+  <!-- ══════════════════ §7 ══════════════════ -->
+  <section id="s7">
+    <h2 class="section-title"><span class="num">§7</span> 🎯 In the Interview</h2>
+
+    <h3>When an interviewer asks / says</h3>
+    <ul class="trigger-list">
+      <li>"Walk me through the schema you'd use for this."</li>
+      <li>"This page currently does a six-table join on every load — what would you do?"</li>
+      <li>"How would you keep those two copies in sync?"</li>
+      <li>"We're moving this off Postgres onto DynamoDB. What changes about your data model?"</li>
+      <li>"How do you count the likes on a post?"</li>
+    </ul>
+
+    <h3>What you say / do</h3>
+    <p>This lands in the <strong>data model</strong> phase, immediately after you've chosen the store (8.1) and classified the workload (8.2), and it resurfaces in the <strong>deep dive</strong> the moment the interviewer probes a hot read path. Lead with your default and make it explicit — "I'd normalize the system of record to 3NF" — then denormalize <em>narrowly and out loud</em>, naming the specific pattern, the field, the read path it serves, and the sync mechanism. The signal you're sending is that duplication is a decision you priced, not a shortcut you took.</p>
+
+    <h3>The trade-off statement (memorize this pattern)</h3>
+    <div class="tradeoff-box">"I'd keep <code>customers</code> and <code>orders</code> normalized, since the order table is the system of record and an incorrect address costs a real delivery. But the order list page renders customer name on every row, and that's a join on our hottest read path, so I'd denormalize <code>customer_name</code> onto <code>orders</code> as a copied column. <code>customers</code> stays the source of truth; the copy is maintained by a CDC stream off the customers table with a nightly reconciliation job to repair drift. I'm trading a few seconds of staleness on a display name — which is tolerable — for removing a join from a path that runs on every page load. If instead this were the billing address, I wouldn't denormalize it; I'd snapshot it onto the order at purchase time, because there the historical value is the correct value."</div>
+
+    <h3>⚠️ Traps</h3>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "We'd denormalize for read performance." — and then stopping there.</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> This is the single most common depth failure on this subtopic. Duplication is not free; you have traded a structural correctness guarantee for latency. A complete answer always names three things: which copy is the <strong>source of truth</strong>, the <strong>sync mechanism</strong> (transaction, CDC, or async job), and the <strong>reconciliation path</strong> for when sync fails. Interviewers ask "how do you keep those in sync?" precisely because most candidates never volunteer it.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "Normalization is for SQL; NoSQL means denormalized."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Normalization is a property of the <em>data model</em>, not of the engine. You can build a fully normalized model in MongoDB with manual reference resolution, and you can heavily denormalize in Postgres with materialized views and copied columns. What actually differs is that document and wide-column stores have no join operator, so a normalized model there forces the <em>application</em> to emulate joins with sequential round trips — which is why access-pattern-first modeling dominates in those stores. The reason is capability, not category.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "Third normal form is always the right target."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> 3NF is the right <em>default</em> for a system of record, not a universal goal. Two large classes of system correctly sit elsewhere: analytical stores deliberately use denormalized star schemas because their workload is scan-and-aggregate (8.2), and high-scale read paths deliberately precompute. Reciting normal forms as an unconditional target reads as textbook knowledge rather than design judgment.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "Storing the shipping address on the order is denormalization."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> It's a <strong>point-in-time snapshot</strong>, which is a different fact from the customer's current address — the order must preserve what was true at purchase. Here the copy is not a performance optimization at all; joining to the live customer record would actively produce the <em>wrong</em> answer on any historical query. Recognizing that some apparent duplication is really temporal versioning is a strong depth signal, and it's the distinction most candidates miss.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "Embed the child records — it makes the read one fetch."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Only when the child collection is <strong>bounded</strong>. Order → line items is bounded and embeds well. User → posts is unbounded: the document grows until it hits the engine's item-size ceiling (400KB in DynamoDB, 16MB in MongoDB) and writes begin failing outright, and long before that every small update is rewriting the entire document. The bounded-children rule is what separates a correct embed from a time bomb.</div></div>
+    </div>
+
+    <div class="checkpoint gate">
+      <div class="cp-title">🚨 Checkpoint — adversarial stress test (the gate)</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">You've denormalized <code>customer_name</code> onto <code>orders</code> and you're maintaining it with a CDC stream. The interviewer says: <em>"Your CDC pipeline is down for six hours during a customer-name migration, then recovers and replays events out of order. Some orders now show names that were never current. Walk me through how you detect this, how you repair it, and what you'd have designed differently so this class of bug can't silently persist."</em></span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 A complete answer covers: why last-write-wins on the copy is insufficient when events are reordered, the role of a version or timestamp on the source row, how the reconciliation sweeper recomputes from the source of truth rather than from the stream, and the honest observation that if this data could not tolerate any staleness it should never have been denormalized. If you can't answer this cleanly, you are not done.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> Can you combine what you've learned across sections, not just recall each one?</div>
+  </section>
+
+  <!-- ══════════════════ §8 ══════════════════ -->
+  <section id="s8">
+    <h2 class="section-title"><span class="num">§8</span> 🧪 Mastery Gate</h2>
+    <div class="callout callout-quote">Synthesis only. Each question requires combining two or more sections.</div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">1</span>
+        <span class="qtext">A social app stores <code>follower_count</code> on the user row. Explain why this is a denormalization, which anomaly class from §3 it reintroduces, the specific failure mode it creates under load from §5, and the decision signals from §6 that nonetheless make it the right call.</span>
+        <span class="quiz-toggle">▼ Hint</span>
+      </div>
+      <div class="quiz-hint">💡 Sections combined: §3 + §5 + §6.</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">2</span>
+        <span class="qtext">A team is porting a 3NF Postgres schema to DynamoDB and plans to keep the table structure identical, resolving foreign keys in application code. Explain what will go wrong, connect it to the N+1 problem (8.8), and describe the modeling process they should follow instead.</span>
+        <span class="quiz-toggle">▼ Hint</span>
+      </div>
+      <div class="quiz-hint">💡 Sections combined: §4 + §7 + subtopic 8.1.</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">3</span>
+        <span class="qtext">Design the data model for a hotel booking system's "my reservations" page, which shows the hotel name, room type, nightly rate, and guest name for each booking. Decide for each field whether it is normalized, denormalized, or a point-in-time snapshot — and justify each choice separately. At least one field should fall into each of the three categories.</span>
+        <span class="quiz-toggle">▼ Hint</span>
+      </div>
+      <div class="quiz-hint">💡 Sections combined: §5 + §6, applied to a system not mentioned anywhere in this doc.</div>
+    </div>
+
+    <h3>Mastery criteria — tick only what you can demonstrate on demand</h3>
+    <ul class="checklist">
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can state the functional-dependency rule and use it to place any given attribute in the correct table</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can identify 1NF, 2NF, and 3NF violations in an unfamiliar schema and name the specific anomaly each one permits</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can explain why application-level discipline cannot substitute for structural normalization, giving all three reasons</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can name at least four denormalization patterns and the access pattern each one serves</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can explain why denormalization is sometimes necessary and state its trade-offs, always naming the source of truth and the sync mechanism</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can design a schema for a novel use case with appropriate primary keys, foreign keys, indexes, and justified denormalization</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can distinguish a performance denormalization from a point-in-time snapshot and explain why the latter is a correctness requirement</span></li>
+    </ul>
+
+    <div class="callout callout-tip">💡 <strong>Rule of thumb:</strong> If you can teach it to someone else and field their follow-up questions, you've mastered it.</div>
+  </section>
+
+  <!-- ══════════════════ §9 ══════════════════ -->
+  <section id="s9">
+    <h2 class="section-title"><span class="num">§9</span> 🔗 Connections &amp; Sources</h2>
+
+    <div class="connections">
+      <div class="conn-card">
+        <span class="conn-icon">⬅️</span>
+        <div><div class="conn-label">Builds on</div><strong>8.1 SQL vs. NoSQL</strong> — the store's join capability is one of the four decision signals, and it can be decisive on its own, since a store with no join operator forces access-pattern-first modeling regardless of what the data would ideally look like. Also <strong>8.2 OLTP vs. OLAP</strong>, which established that the star schema is a deliberate denormalization justified by scan-shaped workloads.</div>
+      </div>
+      <div class="conn-card">
+        <span class="conn-icon">➡️</span>
+        <div><div class="conn-label">Enables</div><strong>8.4 Indexing</strong> — a normalized schema's read cost is largely a question of whether the join columns are properly indexed, so index design is the direct follow-on. Also <strong>8.8 N+1 query problem</strong>, which is what over-normalization looks like in a store that can't join; <strong>7.7 Cross-shard queries</strong>, since shard-crossing joins are the strongest structural argument for denormalizing; and <strong>24.1–24.3 Fan-out</strong>, which is this subtopic's most aggressive pattern applied at social-network scale.</div>
+      </div>
+      <div class="conn-card">
+        <span class="conn-icon">⚡</span>
+        <div><div class="conn-label">Tension with</div><strong>8.6 ACID transactions</strong> — transactional fan-out is the strongest sync mechanism but caps you at a single database or shard, so scaling denormalization means giving up the atomicity that made it safe. Also with <strong>Topic 5 Caching</strong>, in a revealing way: a denormalized column is a cache with no miss path, so unlike a real cache it never self-corrects from the source of truth and instead requires an explicit reconciliation pass.</div>
+      </div>
+    </div>
+
+    <h3>📚 Further reading</h3>
+    <ul class="reading-list">
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Designing Data-Intensive Applications, Chapter 2 — Data Models and Query Languages</strong> — Kleppmann — normalization, the document/relational split, and why join support drives modeling</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>"The Relational Model of Data for Large Shared Data Banks"</strong> — E.F. Codd (1970) — <a href="https://www.seas.upenn.edu/~zives/03f/cis550/codd.pdf">paper</a> — the original anomaly argument; skim §1 for the reasoning, not the algebra</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>AWS — "Single-table design with DynamoDB"</strong> — <a href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-general-nosql-design.html">docs</a> — access-pattern-first modeling in a store with no joins</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Instagram Engineering — "Sharding &amp; IDs at Instagram"</strong> — <a href="https://instagram-engineering.com/sharding-ids-at-instagram-1cf5a71e5a5c">article</a> — a real normalized-then-sharded schema and what shard boundaries did to it</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Martin Fowler — "CQRS"</strong> — <a href="https://martinfowler.com/bliki/CQRS.html">article</a> — the read-model-vs-write-model framing, which is denormalization taken to its architectural conclusion</span></li>
+    </ul>
+  </section>
+
+  <!-- ══════════════════ §10 ══════════════════ -->
+  <section id="s10">
+    <h2 class="section-title"><span class="num">§10</span> ✍️ My Notes</h2>
+    <div class="callout callout-quote">Personal observations, model answers from drilling sessions, things that confused me. Saved locally in this browser.</div>
+    <textarea class="notes-area" placeholder="Your notes, model answers, and annotations…"></textarea>
+  </section>
+
+</article>
+</main>
+
+<script>
+// TOC active state
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('#toc nav a');
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(a => a.classList.remove('active'));
+      const a = document.querySelector(`#toc nav a[href="#${e.target.id}"]`);
+      if (a) a.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+sections.forEach(s => obs.observe(s));
+
+function toggle(cb) { cb.closest('li').classList.toggle('checked'); }
+function toggleReading(cb) { cb.closest('li').classList.toggle('checked'); }
+function toggleQuiz(q) {
+  const item = q.closest('.quiz-item');
+  item.classList.toggle('open');
+  q.querySelector('.quiz-toggle').textContent = item.classList.contains('open') ? '▲ Hide' : '▼ Hint';
+}
+
+// Notes auto-save
+const notesArea = document.querySelector('.notes-area');
+const NOTES_KEY = 'notes_8_3';
+if (localStorage.getItem(NOTES_KEY)) notesArea.value = localStorage.getItem(NOTES_KEY);
+notesArea.addEventListener('input', () => {
+  try { localStorage.setItem(NOTES_KEY, notesArea.value); } catch(e) {}
+});
+</script>
+</body>
+</html>
