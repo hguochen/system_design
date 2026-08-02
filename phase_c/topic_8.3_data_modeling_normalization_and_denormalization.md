@@ -208,6 +208,33 @@ So the field arrived at the position it holds today: normalization is the correc
 
    > 💡 *Answer out loud before reading on. If you hesitate, re-read the third paragraph — the difference between procedural and structural correctness.*
 
+MODEL ANSWER — §3 Checkpoint
+
+Why procedural discipline can't eliminate update anomalies:
+
+1. EVERY FUTURE WRITER must remember the invariant — every service,
+   migration script, hotfix, intern. Forever. Failure is a WHEN,
+   not an IF.
+
+2. CONCURRENT WRITERS INTERLEAVE — two transactions each updating a
+   different subset of the copies can commit in an order that leaves
+   the copies permanently mismatched.
+
+3. PARTIAL FAILURE IS NORMAL — a process dies mid-fan-out, and the
+   schema cannot detect the resulting split-brain because BOTH values
+   are equally legal. No constraint says these two must agree, so the
+   DB has no basis to reject either. Not a lost write — a lost
+   DISTINCTION.
+
+THE ONE-SENTENCE VERSION:
+  All three fail because the invariant lives in APPLICATION CODE,
+  outside the data — and an invariant outside the data isn't enforced
+  by the data. Normalization moves it INSIDE: one fact, one home, no
+  second copy to disagree.
+
+  Procedural correctness is a promise. Structural correctness is a
+  guarantee.
+
 > **→ Next:** If a fact should have exactly one home, what's the actual rule for deciding where that home is — and what do you call the schema that follows it?
 
 ---
@@ -253,9 +280,82 @@ Every one of those patterns creates a second copy of a fact, which reintroduces 
 
    > 💡 *If you hesitate, re-read §4 — Normal Forms, the 2NF paragraph.*
 
+MODEL ANSWER — §4 Checkpoint 1
+
+TABLE   order_items(order_id, product_id, quantity,
+                    product_name, product_category)
+PK      (order_id, product_id)  ← composite, so 2NF is in play
+
+VIOLATION   2NF — partial dependency.
+OFFENDERS   product_name AND product_category.
+            Both are determined by product_id ALONE — half the key.
+            (product_id is the DETERMINANT, not the offender.)
+
+WHY quantity IS FINE
+  Cover order_id  → product_id alone doesn't determine quantity
+  Cover product_id → order_id alone doesn't determine quantity
+  Neither half determines it; both together do → whole key → OK.
+
+ANOMALIES PERMITTED (all three)
+  UPDATE  rename a product → fan-out across every line item that
+          sold it; partial failure leaves two legal names, no way
+          to tell which is current
+  INSERT  cannot record a product nobody has ordered yet — it has
+          no order_id to hang on
+  DELETE  removing the last order line for a product erases its
+          name and category as collateral damage
+
+FIX
+  order_items(order_id, product_id, quantity)
+  products(product_id, product_name, product_category)
+
+THE TEST, RESTATED
+  2NF is only ever violated when the PK is composite. Cover half
+  the key with your thumb — if a non-key column is still fully
+  determined by what's left, it's in the wrong table.
+
 2. Explain why the *cost relocation* framing (third block) is what makes the *denormalization patterns* (fourth block) coherent rather than contradictory. Why isn't denormalizing simply undoing normalization?
 
    > 💡 *If you hesitate, re-read the build chain above and trace the "therefore → which means → so" links.*
+
+MODEL ANSWER — §4 Checkpoint 2
+
+WHY COST RELOCATION MAKES DENORMALIZATION COHERENT
+
+Normalization did not remove work — it MOVED it. Writes became
+cheap and safe (one fact, one row, no fan-out); reads became
+expensive (reassemble via joins, paid per request, forever).
+
+So there is one dial with two directions, not a right answer and
+a wrong answer. Denormalization pushes the dial back toward write
+time: store the fact in every place that reads it, so the read is
+one fetch and the write pays the fan-out.
+
+WHY IT ISN'T "UNDOING" NORMALIZATION — three reasons
+
+1. SOURCE OF TRUTH SURVIVES
+   The normalized copy stays authoritative; every duplicate is
+   DERIVED and rebuildable from it. §3's flat table had no
+   authoritative copy at all — that's why its divergence was
+   unresolvable.
+
+2. THE FAILURE MODE IS DIFFERENT IN KIND
+   Unnormalized divergence = CORRUPTION (unrecoverable, both
+   values equally legal).
+   Denormalized drift    = STALENESS (recoverable, recompute
+   from the source of truth).
+
+3. IT'S LOCAL AND PRICED
+   You denormalize specific fields on specific hot read paths,
+   with a named pattern and a named sync mechanism — not as a
+   global schema philosophy. Undoing normalization is a schema
+   that never had the guarantee. Denormalizing is a schema that
+   has it and spends it, narrowly, on purpose.
+
+THE SOUNDBITE
+  Normalization relocates cost to reads. Denormalization
+  relocates it back to writes — but keeps the source of truth,
+  so what used to be corruption is now only staleness.
 
 > **→ Next:** You know the two directions and why they exist. What physically happens inside the database when you read and write each shape?
 
@@ -373,10 +473,70 @@ Every one of those patterns creates a second copy of a fact, which reintroduces 
 1. Trace what physically happens when a denormalized `orders.customer_name` column is updated because a customer changed their name — from the first write through to the last copy — and name where in that sequence the data can be left permanently inconsistent.
 
    > 💡 *If you hesitate, re-read the denormalized write path above, steps 1–3.*
+MODEL ANSWER — §5 Checkpoint 1
+
+TRACE: customer renames, orders.customer_name is denormalized
+
+1. Write lands on the SOURCE OF TRUTH row (customers).
+
+2. Fan-out to every copy. Mechanism decides the risk:
+   TRANSACTIONAL   atomic — all copies commit or all roll back.
+                   NO permanent-inconsistency window. Cost: every
+                   copy must sit in one transaction scope, so this
+                   caps you at one shard / one database.
+   CDC / ASYNC     copies converge eventually, seconds behind.
+                   THIS is where the window opens.
+
+3. Copies updated. Cost is proportional to that customer's order
+   count — NOT a backfill. (Backfill = adding a denormalized
+   column onto 10M existing rows; different operation.)
+
+WHERE IT BECOMES PERMANENTLY INCONSISTENT
+  Any partial failure in the async fan-out — dropped event, dead
+  worker, reordered replay — leaves some copies stale.
+
+WHY PERMANENT, NOT MERELY STALE
+  A denormalized column has NO MISS PATH.
+    Cache:  entry can be ABSENT → absence triggers a fallback read
+            to the source → self-heals on the next request.
+    Column: value is ALWAYS PRESENT → no fallback is ever triggered
+            → the app reads the wrong value confidently, forever.
+  Nothing self-corrects. Presence is the hazard.
+
+WHAT YOU MUST BUILD
+  A reconciliation sweeper that RECOMPUTES copies from the source
+  of truth — never by replaying the stream, because the stream is
+  what failed. Sync path and repair path are two different things;
+  naming only the sync path is the incomplete answer.
 
 2. A team embeds a user's posts inside the user document because "it makes the profile page one fetch." Name the failure mode this creates, the specific limit it eventually hits, and the rule that would have prevented the choice.
 
    > 💡 *If you hesitate, re-read the failure cases — unbounded embedded collections.*
+MODEL ANSWER — §5 Checkpoint 2
+
+FAILURE MODE
+  Unbounded embedded collection. user → posts has no ceiling,
+  so the document grows without limit.
+
+WHAT BITES FIRST (before the hard limit)
+  WRITE  every update rewrites the ENTIRE document — adding one
+         post rewrites all N. Write cost grows with history.
+  READ   no pagination inside an embedded array — rendering 10
+         posts fetches all of them.
+
+WHAT BITES EVENTUALLY
+  Hard item-size ceiling → writes fail outright.
+    DynamoDB  400 KB
+    MongoDB   16 MB
+
+THE RULE
+  Bounded-children rule — embed ONLY when the child collection
+  has a known ceiling.
+    order → line items    bounded    ✓ embed
+    user  → posts         unbounded  ✗ reference
+
+  The ceiling must be a property of the DOMAIN, not a guess.
+  "Probably won't get big" is not a bound.
 
 > **→ Next:** You know both mechanisms and how each fails. So in a live design, which do you actually pick — and what exactly are you giving up?
 
@@ -443,6 +603,44 @@ Four signals decide it. **Read:write ratio** is the strongest: heavily read-skew
 1. A product catalogue service stores `product.category_name` copied onto every one of 50 million product rows for fast filtering. Categories are renamed roughly twice a year. Is this a good denormalization? Justify using at least three of the four decision signals, and name what you would still need to build.
 
    > 💡 *If you hesitate, re-read the four signals at the top of §6 and the decision tree.*
+MODEL ANSWER — §6 Checkpoint
+
+VERDICT  Yes — a good denormalization.
+
+SIGNALS (3 of 4)
+  READ:WRITE RATIO   Extreme. 50M products read continuously;
+                     categories written ~2×/year. Orders of
+                     magnitude past the ~100:1 threshold.
+                     ← THE STRONGEST ARGUMENT. Lead with this.
+  MUTABILITY         Categories are near-immutable. Drift risk is
+                     tiny because there is almost nothing to drift.
+  JOIN / STORE       Weakest here. A single join to a small
+                     dimension table is sub-ms on a warm index.
+                     Do NOT lead with "it avoids a join" — an
+                     interviewer will push back and be right.
+                     (Would become decisive if the store had no
+                     join operator at all.)
+
+WRITE COST, SCOPED CORRECTLY
+  Renaming one category fans out to the rows IN THAT CATEGORY —
+  not all 50M. Twice a year, amortizable. But it is a genuine
+  online backfill with throttling and a dual-write window, not an
+  UPDATE statement.
+
+WHAT YOU MUST STILL BUILD — THE TRIPLE
+  1. SOURCE OF TRUTH   categories is authoritative;
+                       product.category_name is DERIVED and
+                       rebuildable from it.
+  2. SYNC MECHANISM    transaction if all copies fit one scope;
+                       CDC / async otherwise.
+  3. REPAIR PATH       periodic reconciliation sweeper that
+                       RECOMPUTES from the source of truth —
+                       never by replaying the stream, because the
+                       stream is what failed.
+
+THE RULE
+  Never say "we'd denormalize" without naming all three.
+  Naming only #2 is the most common depth failure on this subtopic.
 
 > **→ Next:** You can defend the choice. How does an interviewer actually put pressure on it?
 
@@ -488,6 +686,41 @@ This lands in the **data model** phase, immediately after you've chosen the stor
 1. You've denormalized `customer_name` onto `orders` and you're maintaining it with a CDC stream. The interviewer says: *"Your CDC pipeline is down for six hours during a customer-name migration, then recovers and replays events out of order. Some orders now show names that were never current. Walk me through how you detect this, how you repair it, and what you'd have designed differently so this class of bug can't silently persist."*
 
    > 💡 *This is the gate. A complete answer covers: why last-write-wins on the copy is insufficient when events are reordered, the role of a version or timestamp on the source row, how the reconciliation sweeper recomputes from the source of truth rather than from the stream, and the honest observation that if this data could not tolerate any staleness it should never have been denormalized. If you can't answer this cleanly, you are not done.*
+
+MODEL ANSWER — §7 Adversarial Stress Test
+
+DETECT — two signals, because the hazard is ABSENCE, not error
+  BEFORE  Pipeline health: consumer lag against the log + heartbeat.
+          Alert on ABSENCE OF PROGRESS, not presence of an error —
+          a dead connector emits no error, it just stops. A 6-hour
+          outage must page immediately.
+  AFTER   Data health: stamp each copy with the source version it
+          was derived from (orders.customer_name_synced_version —
+          NOT the order's own updated_at, which changes for
+          unrelated reasons). Sample continuously for
+          copy_version < source_version. Emit drift count as a
+          METRIC and alert on it — a sweeper that silently repairs
+          40k rows nightly is a broken pipeline nobody knows about.
+
+REPAIR
+  Reconciliation sweeper that RECOMPUTES from the source of truth —
+  never by replaying the stream, because the stream is what failed.
+  Throttled, off-peak, isolated from live traffic.
+
+REDESIGN — so it can't silently persist
+  1. MONOTONIC VERSION GUARD. Conditional write: reject any event
+     whose version is older than the copy's. Kills "names that were
+     never current" outright, and makes the sync path IDEMPOTENT
+     and ORDER-INSENSITIVE — replays and duplicates become no-ops.
+  2. DRIFT AS A FIRST-CLASS METRIC, not a silent repair.
+  3. DON'T DENORMALIZE AT ALL if the field cannot tolerate
+     staleness. CDC's floor is seconds, not zero. Cost arguments
+     say "not worth it"; the staleness argument says "impossible."
+
+THE THROUGH-LINE
+  Denormalized column fails silently — no miss.
+  Dead pipeline fails silently — no error.
+  Both hazards are the ABSENCE of a signal. Design for absence.
 
 > **→ Next:** Can you combine what you've learned across sections, not just recall each one?
 

@@ -326,6 +326,45 @@
   .tier-t1 { background:#fef3c7; color:#b45309; }
   .tier-t2 { background:#dbeafe; color:#1d4ed8; }
   .tier-t3 { background:#f3f2ef; color:#8a867e; }
+  .tier-none { background:transparent; color:#c9c5bd; border:1px dashed #ddd9d1; }
+
+  /* ── design-problem tags ───────────────────────────── */
+  .prob-pill { display:inline-block; font-size:9px; font-weight:700; padding:1px 4px;
+               border-radius:3px; margin-left:4px; vertical-align:1px; white-space:nowrap;
+               border:1px solid transparent; }
+  .prob-a { background:#ecfdf5; color:#047857; border-color:#a7f3d0; }
+  .prob-b { background:#f5f3ff; color:#6d28d9; border-color:#ddd6fe; }
+  .prob-c { background:#fafaf9; color:#a8a29e; border-color:#e7e5e4; }
+  .nav-subtopic .prob-pill { font-size:8px; padding:0 3px; }
+
+  /* ── filter bar ────────────────────────────────────── */
+  .filter-bar { display:flex; flex-wrap:wrap; gap:6px; align-items:center;
+                margin:14px 0 22px; padding:10px 12px; background:var(--surface,#faf9f7);
+                border:1px solid #e7e5e4; border-radius:8px; }
+  .filter-label { font-size:11px; font-weight:700; color:var(--text-muted,#8a867e);
+                  text-transform:uppercase; letter-spacing:.05em; margin-right:2px; }
+  .filter-btn { font-size:11px; font-weight:600; padding:3px 9px; border-radius:12px;
+                border:1px solid #e7e5e4; background:#fff; color:#57534e; cursor:pointer;
+                transition:all .12s; }
+  .filter-btn:hover { border-color:#d6d3d1; background:#fafaf9; }
+  .filter-btn.active { background:#1c1917; color:#fff; border-color:#1c1917; }
+  .filter-btn.dim { opacity:.4; }
+  .filter-count { font-size:11px; color:var(--text-muted,#8a867e); margin-left:auto; }
+  .topic-card.filtered-out { display:none; }
+  .subtopic-pill.filtered-out { opacity:.15; }
+
+  /* tier accent on home-view pills — left edge encodes T1/T2/T3 */
+  .subtopic-pill { border-left:3px solid transparent; }
+  .subtopic-pill.pt-t1 { border-left-color:#f59e0b; }
+  .subtopic-pill.pt-t2 { border-left-color:#3b82f6; }
+  .subtopic-pill.pt-t3 { border-left-color:#d6d3d1; }
+  .subtopic-pill.pt-none { border-left-style:dotted; border-left-color:#e7e5e4; }
+
+  .tier-legend { display:flex; flex-wrap:wrap; gap:12px; align-items:center;
+                 margin:-8px 0 20px; font-size:11px; color:var(--text-muted,#8a867e); }
+  .tier-legend b { font-weight:700; color:#57534e; }
+  .legend-swatch { display:inline-block; width:9px; height:9px; border-radius:2px;
+                   margin-right:4px; vertical-align:-1px; }
 </style>
 </head>
 <body>
@@ -392,516 +431,589 @@
 const PHASES = [
   {
     id: 'foundation',
-    label: 'Foundation',
+    label: "Foundation",
     topics: [
       {
         num: 1, emoji: '📐',
-        label: 'Back-of-the-Envelope Estimation',
+        label: "Back-of-the-Envelope Estimation",
         subtopics: [
-          { id: '1.1',  label: 'Unit conversions', file: null, done: true },
-          { id: '1.2',  label: 'Time & data size memorization', file: null, done: true },
-          { id: '1.3',  label: 'Traffic estimation', file: null, done: true },
-          { id: '1.4',  label: 'Peak traffic estimation', file: null, done: true },
-          { id: '1.5',  label: 'Read/write ratio estimation', file: null, done: true },
-          { id: '1.6',  label: 'Storage estimation', file: null, done: true },
-          { id: '1.7',  label: 'Bandwidth estimation', file: null, done: true },
-          { id: '1.8',  label: 'Cache size estimation', file: null, done: true },
-          { id: '1.9',  label: 'Server count estimation', file: null, done: true },
-          { id: '1.10', label: 'Database size estimation', file: null, done: true },
-          { id: '1.11', label: 'Replication overhead', file: null, done: true },
-          { id: '1.12', label: 'Retention & growth modeling', file: null, done: true },
-          { id: '1.13', label: 'Concurrent user estimation', file: null, done: true },
-          { id: '1.14', label: 'Object size estimation', file: null, done: true },
-          { id: '1.15', label: 'Assumption setting', file: null, done: true },
-          { id: '1.16', label: 'Sanity checking', file: null, done: true },
-          { id: '1.17', label: 'Interview communication', file: null, done: true },
-          { id: '1.18', label: 'System-specific estimation practice', file: null, done: true },
+          { id: '1.1', label: "Unit conversions", file: null, done: true, tier: null },
+          { id: '1.2', label: "Time & data size memorization", file: null, done: true, tier: null },
+          { id: '1.3', label: "Traffic estimation", file: null, done: true, tier: null, probs: ['1A','2A'] },
+          { id: '1.4', label: "Peak traffic estimation", file: null, done: true, tier: null, probs: ['1A','2A'] },
+          { id: '1.5', label: "Read/write ratio estimation", file: null, done: true, tier: null, probs: ['1A'] },
+          { id: '1.6', label: "Storage estimation", file: null, done: true, tier: null, probs: ['1A'] },
+          { id: '1.7', label: "Bandwidth estimation", file: null, done: true, tier: null, probs: ['1A'] },
+          { id: '1.8', label: "Cache size estimation", file: null, done: true, tier: null, probs: ['1A','2A'] },
+          { id: '1.9', label: "Server count estimation", file: null, done: true, tier: null },
+          { id: '1.10', label: "Database size estimation", file: null, done: true, tier: null, probs: ['1A'] },
+          { id: '1.11', label: "Replication overhead", file: null, done: true, tier: null },
+          { id: '1.12', label: "Retention & growth modeling", file: null, done: true, tier: null, probs: ['1A'] },
+          { id: '1.13', label: "Concurrent user estimation", file: null, done: true, tier: null, probs: ['2A'] },
+          { id: '1.14', label: "Object size estimation", file: null, done: true, tier: null },
+          { id: '1.15', label: "Assumption setting", file: null, done: true, tier: null, probs: ['1A','2A'] },
+          { id: '1.16', label: "Sanity checking", file: null, done: true, tier: null, probs: ['1A'] },
+          { id: '1.17', label: "Interview communication", file: null, done: true, tier: null },
+          { id: '1.18', label: "System-specific estimation practice", file: null, done: true, tier: null },
         ]
-      }
+      },
     ]
   },
   {
     id: 'phase-a',
-    label: 'Phase A — Core First Principles',
+    label: "Phase A — Core First Principles",
     topics: [
       {
         num: 2, emoji: '🧠',
-        label: 'System Design Core Principles & Scalability Fundamentals',
+        label: "System Design Core Principles & Scalability Fundamentals",
         subtopics: [
-          { id: '2.1',  label: 'CAP theorem and its three properties', file: null, done: true },
-          { id: '2.2',  label: 'PACELC — extending CAP with latency', file: null, done: true },
-          { id: '2.3',  label: 'Latency vs. throughput — definitions and relationship', file: null, done: true },
-          { id: '2.4',  label: "Little's Law and its application", file: null, done: true },
-          { id: '2.5',  label: 'Consistency vs. availability — spectrum of trade-offs', file: null, done: true },
-          { id: '2.6',  label: 'Horizontal vs. vertical scaling — when each applies', file: null, done: true },
-          { id: '2.7',  label: 'Stateless vs. stateful systems', file: null, done: true },
-          { id: '2.8',  label: 'Bottleneck identification and resource constraints', file: null, done: true },
-          { id: '2.9',  label: 'Backpressure fundamentals', file: null, done: true },
-          { id: '2.10', label: 'Design trade-off reasoning framework', file: null, done: true },
+          { id: '2.1', label: "CAP theorem and its three properties", file: null, done: true, tier: null, probs: ['1A','2A'] },
+          { id: '2.2', label: "PACELC — extending CAP with latency", file: null, done: true, tier: null },
+          { id: '2.3', label: "Latency vs. throughput — definitions and relationship", file: null, done: true, tier: null, probs: ['1A','2A'] },
+          { id: '2.4', label: "Little's Law and its application", file: null, done: true, tier: null },
+          { id: '2.5', label: "Consistency vs. availability — spectrum of trade-offs", file: null, done: true, tier: null, probs: ['1A','2A'] },
+          { id: '2.6', label: "Horizontal vs. vertical scaling — when each applies", file: null, done: true, tier: null, probs: ['1A'] },
+          { id: '2.7', label: "Stateless vs. stateful systems", file: null, done: true, tier: null, probs: ['1A','2A'] },
+          { id: '2.8', label: "Bottleneck identification and resource constraints (CPU, memory, disk, network)", file: null, done: true, tier: null, probs: ['1A'] },
+          { id: '2.9', label: "Backpressure fundamentals", file: null, done: true, tier: null, probs: ['2A'] },
+          { id: '2.10', label: "Design trade-off reasoning framework", file: null, done: true, tier: null },
         ]
-      }
+      },
     ]
   },
   {
     id: 'phase-b',
-    label: 'Phase B — Scalability Branch',
+    label: "Phase B — Scalability Branch",
     topics: [
       {
         num: 3, emoji: '🔄',
-        label: 'Stateless Services',
+        label: "Stateless Services",
         subtopics: [
-          { id: '3.1', label: 'Stateless vs. stateful architecture — definitions and scaling implications', file: 'topic_3.1_stateless_vs_stateful_architecture_definitions_and_scaling_implications.html', done: true },
-          { id: '3.2', label: 'Session management approaches', file: 'topic_3.2_session_management_approaches.html', done: true },
-          { id: '3.3', label: 'Externalizing state to Redis / distributed stores', file: 'topic_3.3_externalizing_state_to_redis_distributed_stores.html', done: true },
-          { id: '3.4', label: 'JWT as stateless session token', file: 'topic_3.4_jwt_as_stateless_session_token.html', done: true },
-          { id: '3.5', label: 'Idempotency — definition, importance, and design patterns', file: 'topic_3.5_idempotency_definition_importance_and_design_patterns.html', done: true },
-          { id: '3.6', label: 'Share-nothing architecture', file: 'topic_3.6_share_nothing_architecture.html', done: true },
-          { id: '3.7', label: 'Horizontal scaling of stateless tiers', file: 'topic_3.7_horizontal_scaling_of_stateless_tiers.html', done: true },
+          { id: '3.1', label: "Stateless vs. stateful architecture — definitions and scaling implications", file: "topic_3.1_stateless_vs_stateful_architecture_definitions_and_scaling_implications.html", done: true, tier: null, probs: ['1A','2A'] },
+          { id: '3.2', label: "Session management approaches (server-side, cookie-based, token-based)", file: "topic_3.2_session_management_approaches.html", done: true, tier: null },
+          { id: '3.3', label: "Externalizing state to Redis / distributed stores", file: "topic_3.3_externalizing_state_to_redis_distributed_stores.html", done: true, tier: null, probs: ['2A'] },
+          { id: '3.4', label: "JWT as stateless session token", file: "topic_3.4_jwt_as_stateless_session_token.html", done: true, tier: null },
+          { id: '3.5', label: "Idempotency — definition, importance, and design patterns", file: "topic_3.5_idempotency_definition_importance_and_design_patterns.html", done: true, tier: null, probs: ['1A'] },
+          { id: '3.6', label: "Share-nothing architecture", file: "topic_3.6_share_nothing_architecture.html", done: true, tier: null, probs: ['1A'] },
+          { id: '3.7', label: "Horizontal scaling of stateless tiers", file: "topic_3.7_horizontal_scaling_of_stateless_tiers.html", done: true, tier: null, probs: ['1A','2A'] },
         ]
       },
       {
         num: 4, emoji: '⚖️',
-        label: 'Load Balancing',
+        label: "Load Balancing",
         subtopics: [
-          { id: '4.1', label: 'L4 vs. L7 load balancers', file: 'topic_4.1_l4_vs_l7_load_balancers.html', done: true },
-          { id: '4.2', label: 'Routing algorithms (round robin, least connections, IP hash, weighted)', file: 'topic_4.2_routing_algorithms.html', done: true },
-          { id: '4.3', label: 'Health checks and failure detection', file: 'topic_4.3_health_checks_and_failure_detection.html', done: true },
-          { id: '4.4', label: 'Failover and redundancy', file: 'topic_4.4_failover_and_redundancy.html', done: true },
-          { id: '4.5', label: 'Reverse proxies', file: 'topic_4.5_reverse_proxies.html', done: true },
-          { id: '4.6', label: 'Sticky sessions — trade-offs and alternatives', file: 'topic_4.6_sticky_sessions_trade_offs_and_alternatives.html', done: true },
-          { id: '4.7', label: 'Global vs. local load balancing', file: 'topic_4.7_global_vs_local_load_balancing.html', done: true },
+          { id: '4.1', label: "L4 vs. L7 load balancers", file: "topic_4.1_l4_vs_l7_load_balancers.html", done: true, tier: null, probs: ['1A','2A'] },
+          { id: '4.2', label: "Routing algorithms (round robin, least connections, IP hash, weighted)", file: "topic_4.2_routing_algorithms.html", done: true, tier: null, probs: ['1A','2A'] },
+          { id: '4.3', label: "Health checks and failure detection", file: "topic_4.3_health_checks_and_failure_detection.html", done: true, tier: null, probs: ['1A'] },
+          { id: '4.4', label: "Failover and redundancy", file: "topic_4.4_failover_and_redundancy.html", done: true, tier: null },
+          { id: '4.5', label: "Reverse proxies", file: "topic_4.5_reverse_proxies.html", done: true, tier: null },
+          { id: '4.6', label: "Sticky sessions — trade-offs and alternatives", file: "topic_4.6_sticky_sessions_trade_offs_and_alternatives.html", done: true, tier: null, probs: ['2A'] },
+          { id: '4.7', label: "Global vs. local load balancing", file: "topic_4.7_global_vs_local_load_balancing.html", done: true, tier: null, probs: ['1A'] },
         ]
       },
       {
         num: 5, emoji: '⚡',
-        label: 'Caching Systems',
+        label: "Caching Systems",
         subtopics: [
-          { id: '5.1', label: 'Cache-aside (lazy loading)', file: 'topic_5.1_cache_aside_lazy_loading.html', done: true },
-          { id: '5.2', label: 'Write-through caching', file: 'topic_5.2_write_through_caching.html', done: true },
-          { id: '5.3', label: 'Write-back (write-behind) caching', file: 'topic_5.3_write_back_caching.html', done: true },
-          { id: '5.4', label: 'Eviction policies — LRU, LFU, TTL', file: 'topic_5.4_eviction_policies_lru_lfu_ttl.html', done: true },
-          { id: '5.5', label: 'Cache consistency and invalidation strategies', file: 'topic_5.5_cache_consistency_and_invalidation_strategies.html', done: true },
-          { id: '5.6', label: 'Cache stampede and thundering herd', file: 'topic_5.6_cache_stampede_and_thundering_herd.html', done: true },
-          { id: '5.7', label: 'Hot key problem and mitigation', file: 'topic_5.7_hot_key_problem_and_mitigation.html', done: true },
-          { id: '5.8', label: 'Multi-level caching (L1/L2, local + distributed)', file: 'topic_5.8_multi_level_caching.html', done: true },
+          { id: '5.1', label: "Cache-aside (lazy loading)", file: "topic_5.1_cache_aside_lazy_loading.html", done: true, tier: null, probs: ['1A','2A'] },
+          { id: '5.2', label: "Write-through caching", file: "topic_5.2_write_through_caching.html", done: true, tier: null },
+          { id: '5.3', label: "Write-back (write-behind) caching", file: "topic_5.3_write_back_caching.html", done: true, tier: null },
+          { id: '5.4', label: "Eviction policies — LRU, LFU, TTL", file: "topic_5.4_eviction_policies_lru_lfu_ttl.html", done: true, tier: null, probs: ['1A','2A'] },
+          { id: '5.5', label: "Cache consistency and invalidation strategies", file: "topic_5.5_cache_consistency_and_invalidation_strategies.html", done: true, tier: null, probs: ['1A'] },
+          { id: '5.6', label: "Cache stampede and thundering herd", file: "topic_5.6_cache_stampede_and_thundering_herd.html", done: true, tier: null, probs: ['1A'] },
+          { id: '5.7', label: "Hot key problem and mitigation", file: "topic_5.7_hot_key_problem_and_mitigation.html", done: true, tier: null, probs: ['1A','2A'] },
+          { id: '5.8', label: "Multi-level caching (L1/L2, local + distributed)", file: "topic_5.8_multi_level_caching.html", done: true, tier: null, probs: ['1A','2A'] },
         ]
       },
       {
         num: 6, emoji: '🌍',
-        label: 'CDN',
+        label: "CDN",
         subtopics: [
-          { id: '6.1', label: 'CDN architecture — PoPs and edge servers', file: 'topic_6.1_cdn_architecture_pops_and_edge_servers.html', done: true },
-          { id: '6.2', label: 'Pull CDN vs. push CDN', file: 'topic_6.2_pull_cdn_vs_push_cdn.html', done: true },
-          { id: '6.3', label: 'Cache invalidation at the edge', file: 'topic_6.3_cache_invalidation_at_the_edge.html', done: true },
-          { id: '6.4', label: 'Geo-routing and anycast', file: 'topic_6.4_geo_routing_and_anycast.html', done: true },
-          { id: '6.5', label: 'CDN for static assets vs. dynamic content', file: 'topic_6.5_cdn_for_static_assets_vs_dynamic_content.html', done: true },
-          { id: '6.6', label: 'CDN for media delivery (images, video)', file: 'topic_6.6_cdn_for_media_delivery.html', done: true },
-          { id: '6.7', label: 'CDN as DDoS mitigation layer', file: 'topic_6.7_cdn_as_ddos_mitigation_layer.html', done: true },
+          { id: '6.1', label: "CDN architecture — PoPs and edge servers", file: "topic_6.1_cdn_architecture_pops_and_edge_servers.html", done: true, tier: null, probs: ['1A','2A'] },
+          { id: '6.2', label: "Pull CDN vs. push CDN", file: "topic_6.2_pull_cdn_vs_push_cdn.html", done: true, tier: null },
+          { id: '6.3', label: "Cache invalidation at the edge", file: "topic_6.3_cache_invalidation_at_the_edge.html", done: true, tier: null },
+          { id: '6.4', label: "Geo-routing and anycast", file: "topic_6.4_geo_routing_and_anycast.html", done: true, tier: null, probs: ['1A'] },
+          { id: '6.5', label: "CDN for static assets vs. dynamic content", file: "topic_6.5_cdn_for_static_assets_vs_dynamic_content.html", done: true, tier: null, probs: ['1A'] },
+          { id: '6.6', label: "CDN for media delivery (images, video)", file: "topic_6.6_cdn_for_media_delivery.html", done: true, tier: null },
+          { id: '6.7', label: "CDN as DDoS mitigation layer", file: "topic_6.7_cdn_as_ddos_mitigation_layer.html", done: true, tier: null, probs: ['1A','2A'] },
         ]
       },
       {
         num: 7, emoji: '🔀',
-        label: 'Data Partitioning / Sharding',
+        label: "Data Partitioning / Sharding",
         subtopics: [
-          { id: '7.1', label: 'Horizontal partitioning vs. vertical partitioning', file: 'topic_7.1_horizontal_partitioning_vs_vertical_partitioning.html', done: true },
-          { id: '7.2', label: 'Hash partitioning', file: 'topic_7.2_hash_partitioning.html', done: true },
-          { id: '7.3', label: 'Range partitioning', file: 'topic_7.3_range_partitioning.html', done: true },
-          { id: '7.4', label: 'Consistent hashing — algorithm and virtual nodes', file: 'topic_7.4_consistent_hashing_algorithm_and_virtual_nodes.html', done: true },
-          { id: '7.5', label: 'Rebalancing — adding and removing nodes', file: 'topic_7.5_rebalancing_adding_and_removing_nodes.html', done: true },
-          { id: '7.6', label: 'Hot partitions — detection and mitigation', file: 'topic_7.6_hot_partitions_detection_and_mitigation.html', done: true },
-          { id: '7.7', label: 'Cross-shard queries and distributed joins', file: 'topic_7.7_cross_shard_queries_and_distributed_joins.html', done: true },
+          { id: '7.1', label: "Horizontal partitioning vs. vertical partitioning", file: "topic_7.1_horizontal_partitioning_vs_vertical_partitioning.html", done: true, tier: null },
+          { id: '7.2', label: "Hash partitioning", file: "topic_7.2_hash_partitioning.html", done: true, tier: null, probs: ['1A','2A'] },
+          { id: '7.3', label: "Range partitioning", file: "topic_7.3_range_partitioning.html", done: true, tier: null },
+          { id: '7.4', label: "Consistent hashing — algorithm and virtual nodes", file: "topic_7.4_consistent_hashing_algorithm_and_virtual_nodes.html", done: true, tier: null, probs: ['1A','2A'] },
+          { id: '7.5', label: "Rebalancing — adding and removing nodes", file: "topic_7.5_rebalancing_adding_and_removing_nodes.html", done: true, tier: null, probs: ['1A'] },
+          { id: '7.6', label: "Hot partitions — detection and mitigation", file: "topic_7.6_hot_partitions_detection_and_mitigation.html", done: true, tier: null, probs: ['1A','2A'] },
+          { id: '7.7', label: "Cross-shard queries and distributed joins", file: "topic_7.7_cross_shard_queries_and_distributed_joins.html", done: true, tier: null },
         ]
       },
     ]
   },
   {
     id: 'phase-c',
-    label: 'Phase C — Data Storage Branch',
+    label: "Phase C — Data Storage Branch",
     topics: [
       {
         num: 8, emoji: '🗄️',
-        label: 'Database Fundamentals',
+        label: "Database Fundamentals",
         subtopics: [
-          { id: '8.1', label: 'SQL vs. NoSQL — when to use each', file: 'topic_8.1_sql_vs_nosql_when_to_use_each.html', done: true , tier: 'T1' },
-          { id: '8.2', label: 'OLTP vs. OLAP workloads', file: 'topic_8.2_oltp_vs_olap_workloads.html', done: true , tier: 'T1' },
-          { id: '8.3', label: 'Data modeling — normalization and denormalization', file: 'topic_8.3_data_modeling_normalization_and_denormalization.html', done: false , tier: 'T1' },
-          { id: '8.4', label: 'Indexing — B-tree, LSM-tree, composite indexes', file: null, done: false , tier: 'T1' },
-          { id: '8.5', label: 'Query patterns and optimization', file: null, done: false , tier: 'T2' },
-          { id: '8.6', label: 'ACID transactions — properties and enforcement', file: null, done: false , tier: 'T1' },
-          { id: '8.7', label: 'Read vs. write optimization', file: null, done: false , tier: 'T2' },
-          { id: '8.8', label: 'N+1 query problem', file: null, done: false , tier: 'T3' },
+          { id: '8.1', label: "SQL vs. NoSQL — when to use each", file: "topic_8.1_sql_vs_nosql_when_to_use_each.html", done: true, tier: "T1", probs: ['1A','2A'] },
+          { id: '8.2', label: "OLTP vs. OLAP workloads", file: "topic_8.2_oltp_vs_olap_workloads.html", done: true, tier: "T1", probs: ['1B'] },
+          { id: '8.3', label: "Data modeling — normalization and denormalization", file: "topic_8.3_data_modeling_normalization_and_denormalization.html", done: true, tier: "T1", probs: ['1A'] },
+          { id: '8.4', label: "Indexing — B-tree, LSM-tree, composite indexes", file: "topic_8.4_indexing_b_tree_lsm_tree_composite_indexes.html", done: false, tier: "T1", probs: ['1A'] },
+          { id: '8.5', label: "Query patterns and optimization", file: null, done: false, tier: "T2" },
+          { id: '8.6', label: "ACID transactions — properties and enforcement", file: null, done: false, tier: "T1", probs: ['1A'] },
+          { id: '8.7', label: "Read vs. write optimization", file: null, done: false, tier: "T2", probs: ['1A'] },
+          { id: '8.8', label: "N+1 query problem", file: null, done: false, tier: "T3" },
+          { id: '8.9', label: "Unique ID generation — base62, ticket servers, Snowflake, collision math", file: null, done: false, tier: "T1", probs: ['1A'] },
+          { id: '8.10', label: "Bloom filters — probabilistic membership testing", file: null, done: false, tier: "T2", probs: ['1B'] },
         ]
       },
       {
         num: 9, emoji: '📦',
-        label: 'Blob / Object Storage',
+        label: "Blob / Object Storage",
         subtopics: [
-          { id: '9.1', label: 'Object store architecture — metadata vs. data separation', file: null, done: false , tier: 'T1' },
-          { id: '9.2', label: 'Chunk servers and data nodes', file: null, done: false , tier: 'T2' },
-          { id: '9.3', label: 'Multipart and resumable uploads', file: null, done: false , tier: 'T1' },
-          { id: '9.4', label: 'Durability through erasure coding and replication', file: null, done: false , tier: 'T1' },
-          { id: '9.5', label: 'Object versioning', file: null, done: false , tier: 'T3' },
-          { id: '9.6', label: 'Object store vs. block store vs. file storage', file: null, done: false , tier: 'T2' },
-          { id: '9.7', label: 'Content-addressable storage', file: null, done: false , tier: 'T3' },
+          { id: '9.1', label: "Object store architecture — metadata vs. data separation", file: null, done: false, tier: "T1" },
+          { id: '9.2', label: "Chunk servers and data nodes", file: null, done: false, tier: "T2" },
+          { id: '9.3', label: "Multipart and resumable uploads", file: null, done: false, tier: "T1" },
+          { id: '9.4', label: "Durability through erasure coding and replication", file: null, done: false, tier: "T1" },
+          { id: '9.5', label: "Object versioning", file: null, done: false, tier: "T3" },
+          { id: '9.6', label: "Object store vs. block store vs. file storage — when to use each", file: null, done: false, tier: "T2" },
+          { id: '9.7', label: "Content-addressable storage", file: null, done: false, tier: "T3" },
         ]
       },
       {
         num: 10, emoji: '📊',
-        label: 'Data Warehouse & Analytics Storage',
+        label: "Data Warehouse & Analytics Storage",
         subtopics: [
-          { id: '10.1', label: 'Columnar vs. row storage — I/O trade-offs', file: null, done: false , tier: 'T2' },
-          { id: '10.2', label: 'OLAP data modeling — star schema and snowflake schema', file: null, done: false , tier: 'T2' },
-          { id: '10.3', label: 'Data lake vs. data warehouse vs. lakehouse', file: null, done: false , tier: 'T2' },
-          { id: '10.4', label: 'ETL vs. ELT patterns', file: null, done: false , tier: 'T3' },
-          { id: '10.5', label: 'Partitioning strategies in analytical storage', file: null, done: false , tier: 'T3' },
-          { id: '10.6', label: 'Query engines (Presto, Spark SQL, BigQuery)', file: null, done: false , tier: 'T3' },
+          { id: '10.1', label: "Columnar vs. row storage — I/O trade-offs", file: null, done: false, tier: "T2", probs: ['1B'] },
+          { id: '10.2', label: "OLAP data modeling — star schema and snowflake schema", file: null, done: false, tier: "T2" },
+          { id: '10.3', label: "Data lake vs. data warehouse vs. lakehouse", file: null, done: false, tier: "T2" },
+          { id: '10.4', label: "ETL vs. ELT patterns", file: null, done: false, tier: "T3" },
+          { id: '10.5', label: "Partitioning strategies in analytical storage", file: null, done: false, tier: "T3" },
+          { id: '10.6', label: "Query engines (overview: Presto, Spark SQL, BigQuery)", file: null, done: false, tier: "T3" },
         ]
       },
     ]
   },
   {
     id: 'phase-d',
-    label: 'Phase D — Networking Branch',
+    label: "Phase D — Networking Branch",
     topics: [
       {
         num: 11, emoji: '🔌',
-        label: 'API Design & Service Boundaries',
+        label: "API Design & Service Boundaries",
         subtopics: [
-          { id: '11.1', label: 'REST — principles, resource design, HTTP methods, status codes', file: null, done: false , tier: 'T1' },
-          { id: '11.2', label: 'gRPC — Protocol Buffers, streaming, when to use over REST', file: null, done: false , tier: 'T1' },
-          { id: '11.3', label: 'GraphQL — query flexibility, N+1 problem, when to use', file: null, done: false , tier: 'T2' },
-          { id: '11.4', label: 'Microservice decomposition — domain boundaries and ownership', file: null, done: false , tier: 'T1' },
-          { id: '11.5', label: 'API versioning strategies', file: null, done: false , tier: 'T2' },
-          { id: '11.6', label: 'API contracts and backward compatibility', file: null, done: false , tier: 'T3' },
-          { id: '11.7', label: 'API gateway patterns', file: null, done: false , tier: 'T1' },
+          { id: '11.1', label: "REST — principles, resource design, HTTP methods, status codes", file: null, done: false, tier: "T1", probs: ['1A','2A'] },
+          { id: '11.2', label: "gRPC — Protocol Buffers, streaming, when to use over REST", file: null, done: false, tier: "T1" },
+          { id: '11.3', label: "GraphQL — query flexibility, N+1 problem, when to use", file: null, done: false, tier: "T2" },
+          { id: '11.4', label: "Microservice decomposition — domain boundaries and ownership", file: null, done: false, tier: "T1" },
+          { id: '11.5', label: "API versioning strategies", file: null, done: false, tier: "T2" },
+          { id: '11.6', label: "API contracts and backward compatibility", file: null, done: false, tier: "T3" },
+          { id: '11.7', label: "API gateway patterns", file: null, done: false, tier: "T1", probs: ['1A','2A'] },
         ]
       },
       {
         num: 12, emoji: '📨',
-        label: 'Message Queues & Event Systems',
+        label: "Message Queues & Event Systems",
         subtopics: [
-          { id: '12.1', label: 'Message queue vs. event stream semantics', file: null, done: false , tier: 'T1' },
-          { id: '12.2', label: 'Pub/sub model', file: null, done: false , tier: 'T1' },
-          { id: '12.3', label: 'Delivery guarantees — at-most-once, at-least-once, exactly-once', file: null, done: false , tier: 'T1' },
-          { id: '12.4', label: 'Backpressure — how consumers signal and producers respond', file: null, done: false , tier: 'T2' },
-          { id: '12.5', label: 'Retry mechanisms and exponential backoff', file: null, done: false , tier: 'T2' },
-          { id: '12.6', label: 'Dead-letter queues', file: null, done: false , tier: 'T2' },
-          { id: '12.7', label: 'Kafka vs. RabbitMQ vs. SQS — comparison', file: null, done: false , tier: 'T1' },
+          { id: '12.1', label: "Message queue vs. event stream semantics", file: null, done: false, tier: "T1", probs: ['1B'] },
+          { id: '12.2', label: "Pub/sub model", file: null, done: false, tier: "T1", probs: ['1B'] },
+          { id: '12.3', label: "Delivery guarantees — at-most-once, at-least-once, exactly-once", file: null, done: false, tier: "T1", probs: ['1B'] },
+          { id: '12.4', label: "Backpressure — how consumers signal and producers respond", file: null, done: false, tier: "T2", probs: ['2B'] },
+          { id: '12.5', label: "Retry mechanisms and exponential backoff", file: null, done: false, tier: "T2" },
+          { id: '12.6', label: "Dead-letter queues", file: null, done: false, tier: "T2" },
+          { id: '12.7', label: "Kafka vs. RabbitMQ vs. SQS — comparison", file: null, done: false, tier: "T1" },
         ]
       },
       {
         num: 13, emoji: '📡',
-        label: 'Protocols',
+        label: "Protocols",
         subtopics: [
-          { id: '13.1', label: 'HTTP/1.1 — keep-alive, pipelining, limitations', file: null, done: false , tier: 'T3' },
-          { id: '13.2', label: 'HTTP/2 — multiplexing, header compression, server push', file: null, done: false , tier: 'T2' },
-          { id: '13.3', label: 'HTTP/3 and QUIC', file: null, done: false , tier: 'T3' },
-          { id: '13.4', label: 'WebSockets — full-duplex, handshake, use cases', file: null, done: false , tier: 'T1' },
-          { id: '13.5', label: 'Server-Sent Events (SSE) — unidirectional streaming', file: null, done: false , tier: 'T2' },
-          { id: '13.6', label: 'Long polling — mechanics and trade-offs', file: null, done: false , tier: 'T2' },
-          { id: '13.7', label: 'WebRTC — signaling, ICE, STUN/TURN', file: null, done: false , tier: 'T3' },
-          { id: '13.8', label: 'TCP vs. UDP trade-offs', file: null, done: false , tier: 'T2' },
+          { id: '13.1', label: "HTTP/1.1 — keep-alive, pipelining, limitations", file: null, done: false, tier: "T3", probs: ['1C'] },
+          { id: '13.2', label: "HTTP/2 — multiplexing, header compression, server push", file: null, done: false, tier: "T2", probs: ['1C','2C'] },
+          { id: '13.3', label: "HTTP/3 and QUIC", file: null, done: false, tier: "T3" },
+          { id: '13.4', label: "WebSockets — full-duplex, handshake, use cases", file: null, done: false, tier: "T1" },
+          { id: '13.5', label: "Server-Sent Events (SSE) — unidirectional streaming", file: null, done: false, tier: "T2" },
+          { id: '13.6', label: "Long polling — mechanics and trade-offs", file: null, done: false, tier: "T2" },
+          { id: '13.7', label: "WebRTC — signaling, ICE, STUN/TURN", file: null, done: false, tier: "T3" },
+          { id: '13.8', label: "TCP vs. UDP trade-offs", file: null, done: false, tier: "T2" },
         ]
       },
       {
         num: 14, emoji: '🕸️',
-        label: 'Service Mesh',
+        label: "Service Mesh",
         subtopics: [
-          { id: '14.1', label: 'What service meshes solve — observability, security, traffic management', file: null, done: false , tier: 'T2' },
-          { id: '14.2', label: 'Sidecar proxy pattern — data plane vs. control plane', file: null, done: false , tier: 'T2' },
-          { id: '14.3', label: 'Envoy and Istio — architecture overview', file: null, done: false , tier: 'T3' },
-          { id: '14.4', label: 'mTLS — establishment and certificate management in a mesh', file: null, done: false , tier: 'T3' },
-          { id: '14.5', label: 'Service discovery — DNS-based vs. registry-based', file: null, done: false , tier: 'T2' },
-          { id: '14.6', label: 'Traffic management — circuit breaking, retries, canary routing', file: null, done: false , tier: 'T2' },
-          { id: '14.7', label: 'When service mesh is and is not appropriate', file: null, done: false , tier: 'T3' },
+          { id: '14.1', label: "What service meshes solve — observability, security, traffic management", file: null, done: false, tier: "T2", probs: ['2B'] },
+          { id: '14.2', label: "Sidecar proxy pattern — data plane vs. control plane", file: null, done: false, tier: "T2", probs: ['2B'] },
+          { id: '14.3', label: "Envoy and Istio — architecture overview", file: null, done: false, tier: "T3" },
+          { id: '14.4', label: "mTLS — establishment and certificate management in a mesh", file: null, done: false, tier: "T3" },
+          { id: '14.5', label: "Service discovery — DNS-based vs. registry-based", file: null, done: false, tier: "T2" },
+          { id: '14.6', label: "Traffic management — circuit breaking, retries, canary routing in a mesh", file: null, done: false, tier: "T2", probs: ['2B'] },
+          { id: '14.7', label: "When service mesh is and is not appropriate", file: null, done: false, tier: "T3" },
         ]
       },
     ]
   },
   {
     id: 'phase-e',
-    label: 'Phase E — Reliability Branch',
+    label: "Phase E — Reliability Branch",
     topics: [
       {
         num: 15, emoji: '🖥️',
-        label: 'Distributed Storage Systems',
+        label: "Distributed Storage Systems",
         subtopics: [
-          { id: '15.1', label: 'Replication — why and how', file: null, done: false , tier: 'T1' },
-          { id: '15.2', label: 'Leader/follower model', file: null, done: false , tier: 'T1' },
-          { id: '15.3', label: 'Quorum reads and writes — R + W > N', file: null, done: false , tier: 'T1' },
-          { id: '15.4', label: 'Durability guarantees and replication factor', file: null, done: false , tier: 'T2' },
-          { id: '15.5', label: 'Synchronous vs. asynchronous replication trade-offs', file: null, done: false , tier: 'T1' },
-          { id: '15.6', label: 'Replication lag and read anomalies', file: null, done: false , tier: 'T1' },
+          { id: '15.1', label: "Replication — why and how", file: null, done: false, tier: "T1" },
+          { id: '15.2', label: "Leader/follower model", file: null, done: false, tier: "T1", probs: ['1A'] },
+          { id: '15.3', label: "Quorum reads and writes — R + W > N", file: null, done: false, tier: "T1", probs: ['1A','2B'] },
+          { id: '15.4', label: "Durability guarantees and replication factor", file: null, done: false, tier: "T2" },
+          { id: '15.5', label: "Synchronous vs. asynchronous replication trade-offs", file: null, done: false, tier: "T1", probs: ['1A'] },
+          { id: '15.6', label: "Replication lag and read anomalies", file: null, done: false, tier: "T1", probs: ['1A'] },
         ]
       },
       {
         num: 16, emoji: '🔁',
-        label: 'Replication Strategies',
+        label: "Replication Strategies",
         subtopics: [
-          { id: '16.1', label: 'Single-leader replication — recap and failure modes', file: null, done: false , tier: 'T2' },
-          { id: '16.2', label: 'Multi-leader replication — use cases and conflict potential', file: null, done: false , tier: 'T2' },
-          { id: '16.3', label: 'Conflict resolution — LWW, vector clocks, CRDTs', file: null, done: false , tier: 'T1' },
-          { id: '16.4', label: 'Leaderless replication — Dynamo-style', file: null, done: false , tier: 'T2' },
-          { id: '16.5', label: 'Read replicas — architecture and failover', file: null, done: false , tier: 'T1' },
-          { id: '16.6', label: 'Write propagation and replication lag', file: null, done: false , tier: 'T2' },
+          { id: '16.1', label: "Single-leader replication — recap and failure modes", file: null, done: false, tier: "T2" },
+          { id: '16.2', label: "Multi-leader replication — use cases and conflict potential", file: null, done: false, tier: "T2" },
+          { id: '16.3', label: "Conflict resolution — LWW, vector clocks, CRDTs", file: null, done: false, tier: "T1" },
+          { id: '16.4', label: "Leaderless replication — Dynamo-style", file: null, done: false, tier: "T2" },
+          { id: '16.5', label: "Read replicas — architecture and failover", file: null, done: false, tier: "T1", probs: ['1A','2B'] },
+          { id: '16.6', label: "Write propagation and replication lag", file: null, done: false, tier: "T2", probs: ['1A','2B'] },
         ]
       },
       {
         num: 17, emoji: '🎚️',
-        label: 'Consistency Models',
+        label: "Consistency Models",
         subtopics: [
-          { id: '17.1', label: 'Linearizability (strong consistency)', file: null, done: false , tier: 'T1' },
-          { id: '17.2', label: 'Sequential consistency', file: null, done: false , tier: 'T3' },
-          { id: '17.3', label: 'Causal consistency', file: null, done: false , tier: 'T2' },
-          { id: '17.4', label: 'Eventual consistency', file: null, done: false , tier: 'T1' },
-          { id: '17.5', label: 'Read-after-write consistency — failure modes and solutions', file: null, done: false , tier: 'T1' },
-          { id: '17.6', label: 'CAP theorem in practice — mapping real systems to CP vs. AP', file: null, done: false , tier: 'T1' },
-          { id: '17.7', label: 'PACELC applied to real system choices', file: null, done: false , tier: 'T2' },
+          { id: '17.1', label: "Linearizability (strong consistency)", file: null, done: false, tier: "T1" },
+          { id: '17.2', label: "Sequential consistency", file: null, done: false, tier: "T3" },
+          { id: '17.3', label: "Causal consistency", file: null, done: false, tier: "T2" },
+          { id: '17.4', label: "Eventual consistency", file: null, done: false, tier: "T1", probs: ['1A','2A'] },
+          { id: '17.5', label: "Read-after-write consistency — failure modes and solutions", file: null, done: false, tier: "T1", probs: ['1A'] },
+          { id: '17.6', label: "CAP theorem in practice — mapping real systems to CP vs. AP", file: null, done: false, tier: "T1", probs: ['1A','2A'] },
+          { id: '17.7', label: "PACELC applied to real system choices", file: null, done: false, tier: "T2" },
         ]
       },
       {
         num: 18, emoji: '🗳️',
-        label: 'Consensus & Leader Election',
+        label: "Consensus & Leader Election",
         subtopics: [
-          { id: '18.1', label: 'The consensus problem — safety, liveness, FLP impossibility intuition', file: null, done: false , tier: 'T2' },
-          { id: '18.2', label: 'Raft — leader election', file: null, done: false , tier: 'T1' },
-          { id: '18.3', label: 'Raft — log replication and commitment', file: null, done: false , tier: 'T2' },
-          { id: '18.4', label: 'Paxos — intuition and comparison to Raft', file: null, done: false , tier: 'T3' },
-          { id: '18.5', label: 'Split-brain — cause and prevention', file: null, done: false , tier: 'T1' },
-          { id: '18.6', label: 'When consensus is and is not needed', file: null, done: false , tier: 'T1' },
+          { id: '18.1', label: "The consensus problem — safety, liveness, FLP impossibility intuition", file: null, done: false, tier: "T2" },
+          { id: '18.2', label: "Raft — leader election", file: null, done: false, tier: "T1" },
+          { id: '18.3', label: "Raft — log replication and commitment", file: null, done: false, tier: "T2" },
+          { id: '18.4', label: "Paxos — intuition and comparison to Raft", file: null, done: false, tier: "T3" },
+          { id: '18.5', label: "Split-brain — cause and prevention", file: null, done: false, tier: "T1" },
+          { id: '18.6', label: "When consensus is and is not needed", file: null, done: false, tier: "T1", probs: ['2C'] },
         ]
       },
       {
         num: 19, emoji: '🛡️',
-        label: 'Fault Tolerance & Resilience',
+        label: "Fault Tolerance & Resilience",
         subtopics: [
-          { id: '19.1', label: 'Retries — naive vs. exponential backoff', file: null, done: false , tier: 'T1' },
-          { id: '19.2', label: 'Jitter — why it matters and how to add it', file: null, done: false , tier: 'T1' },
-          { id: '19.3', label: 'Circuit breaker — states, thresholds, and state machine', file: null, done: false , tier: 'T1' },
-          { id: '19.4', label: 'Graceful degradation — critical path vs. non-critical features', file: null, done: false , tier: 'T1' },
-          { id: '19.5', label: 'Redundancy patterns — active-active, active-passive', file: null, done: false , tier: 'T2' },
-          { id: '19.6', label: 'Bulkhead pattern', file: null, done: false , tier: 'T2' },
-          { id: '19.7', label: 'Timeout strategies', file: null, done: false , tier: 'T2' },
+          { id: '19.1', label: "Retries — naive vs. exponential backoff", file: null, done: false, tier: "T1", probs: ['1A','2A'] },
+          { id: '19.2', label: "Jitter — why it matters and how to add it", file: null, done: false, tier: "T1", probs: ['1A','2A'] },
+          { id: '19.3', label: "Circuit breaker — states, thresholds, and state machine", file: null, done: false, tier: "T1", probs: ['1A','2A'] },
+          { id: '19.4', label: "Graceful degradation — critical path vs. non-critical features", file: null, done: false, tier: "T1", probs: ['1A','2A'] },
+          { id: '19.5', label: "Redundancy patterns — active-active, active-passive", file: null, done: false, tier: "T2", probs: ['1B'] },
+          { id: '19.6', label: "Bulkhead pattern", file: null, done: false, tier: "T2" },
+          { id: '19.7', label: "Timeout strategies", file: null, done: false, tier: "T2", probs: ['1B','2A'] },
         ]
       },
       {
         num: 20, emoji: '💾',
-        label: 'Backup & Recovery',
+        label: "Backup & Recovery",
         subtopics: [
-          { id: '20.1', label: 'RPO vs. RTO — definitions and business implications', file: null, done: false , tier: 'T1' },
-          { id: '20.2', label: 'Full, incremental, and differential backups', file: null, done: false , tier: 'T3' },
-          { id: '20.3', label: 'Point-in-time recovery — WAL/binary log replay', file: null, done: false , tier: 'T2' },
-          { id: '20.4', label: 'Backup storage — location, encryption, and retention', file: null, done: false , tier: 'T3' },
-          { id: '20.5', label: 'Disaster recovery patterns — pilot light, warm standby, active-active', file: null, done: false , tier: 'T2' },
-          { id: '20.6', label: 'Backup vs. replication — complementary roles', file: null, done: false , tier: 'T1' },
+          { id: '20.1', label: "RPO vs. RTO — definitions and business implications", file: null, done: false, tier: "T1", probs: ['1B','2C'] },
+          { id: '20.2', label: "Full, incremental, and differential backups", file: null, done: false, tier: "T3" },
+          { id: '20.3', label: "Point-in-time recovery — WAL/binary log replay", file: null, done: false, tier: "T2" },
+          { id: '20.4', label: "Backup storage — location, encryption, and retention", file: null, done: false, tier: "T3" },
+          { id: '20.5', label: "Disaster recovery patterns — pilot light, warm standby, active-active", file: null, done: false, tier: "T2" },
+          { id: '20.6', label: "Backup vs. replication — complementary roles", file: null, done: false, tier: "T1", probs: ['1B'] },
         ]
       },
       {
         num: 21, emoji: '🌪️',
-        label: 'Chaos Engineering',
+        label: "Chaos Engineering",
         subtopics: [
-          { id: '21.1', label: 'Chaos engineering principles — hypothesis-driven experimentation', file: null, done: false , tier: 'T2' },
-          { id: '21.2', label: 'Chaos Monkey and the Simian Army', file: null, done: false , tier: 'T3' },
-          { id: '21.3', label: 'Designing a chaos experiment — steady state, blast radius, rollback', file: null, done: false , tier: 'T2' },
-          { id: '21.4', label: 'Failure injection patterns — node kill, network partition, latency injection', file: null, done: false , tier: 'T3' },
-          { id: '21.5', label: 'Chaos in production vs. staging', file: null, done: false , tier: 'T3' },
-          { id: '21.6', label: 'Gamedays and chaos as an SRE practice', file: null, done: false , tier: 'T3' },
+          { id: '21.1', label: "Chaos engineering principles — hypothesis-driven experimentation", file: null, done: false, tier: "T2" },
+          { id: '21.2', label: "Chaos Monkey and the Simian Army", file: null, done: false, tier: "T3" },
+          { id: '21.3', label: "Designing a chaos experiment — steady state, blast radius, rollback", file: null, done: false, tier: "T2" },
+          { id: '21.4', label: "Failure injection patterns — node kill, network partition, latency injection", file: null, done: false, tier: "T3" },
+          { id: '21.5', label: "Chaos in production vs. staging", file: null, done: false, tier: "T3" },
+          { id: '21.6', label: "Gamedays and chaos as an SRE practice", file: null, done: false, tier: "T3" },
         ]
       },
     ]
   },
   {
     id: 'phase-f',
-    label: 'Phase F — Observability Branch',
+    label: "Phase F — Observability Branch",
     topics: [
       {
         num: 22, emoji: '👁️',
-        label: 'Observability Systems',
+        label: "Observability Systems",
         subtopics: [
-          { id: '22.1', label: 'Logging — structured logging, log levels, correlation IDs', file: null, done: false , tier: 'T2' },
-          { id: '22.2', label: 'Log aggregation and storage (ELK Stack, Splunk, Loki)', file: null, done: false , tier: 'T3' },
-          { id: '22.3', label: 'Metrics — counters, gauges, histograms, and summaries', file: null, done: false , tier: 'T2' },
-          { id: '22.4', label: 'Metrics systems (Prometheus, Grafana, Datadog)', file: null, done: false , tier: 'T3' },
-          { id: '22.5', label: 'SLO, SLA, SLI — definitions and alert design', file: null, done: false , tier: 'T1' },
-          { id: '22.6', label: 'Distributed tracing — trace IDs, spans, propagation', file: null, done: false , tier: 'T1' },
-          { id: '22.7', label: 'Tracing systems (Jaeger, Zipkin, OpenTelemetry)', file: null, done: false , tier: 'T3' },
-          { id: '22.8', label: 'Alerting — what to alert on vs. what to log', file: null, done: false , tier: 'T2' },
+          { id: '22.1', label: "Logging — structured logging, log levels, correlation IDs", file: null, done: false, tier: "T2" },
+          { id: '22.2', label: "Log aggregation and storage (ELK Stack, Splunk, Loki)", file: null, done: false, tier: "T3" },
+          { id: '22.3', label: "Metrics — counters, gauges, histograms, and summaries", file: null, done: false, tier: "T2", probs: ['1C','2A'] },
+          { id: '22.4', label: "Metrics systems (Prometheus, Grafana, Datadog)", file: null, done: false, tier: "T3" },
+          { id: '22.5', label: "SLO, SLA, SLI — definitions and alert design", file: null, done: false, tier: "T1", probs: ['1A','2A'] },
+          { id: '22.6', label: "Distributed tracing — trace IDs, spans, propagation", file: null, done: false, tier: "T1", probs: ['1A','2B'] },
+          { id: '22.7', label: "Tracing systems (Jaeger, Zipkin, OpenTelemetry)", file: null, done: false, tier: "T3" },
+          { id: '22.8', label: "Alerting — what to alert on vs. what to log", file: null, done: false, tier: "T2", probs: ['2A'] },
         ]
       },
     ]
   },
   {
     id: 'phase-g',
-    label: 'Phase G — Security Branch',
+    label: "Phase G — Security Branch",
     topics: [
       {
         num: 23, emoji: '🔐',
-        label: 'Security',
+        label: "Security",
         subtopics: [
-          { id: '23.1', label: 'Authentication vs. authorization', file: null, done: false , tier: 'T1' },
-          { id: '23.2', label: 'OAuth2 — authorization code flow, client credentials, token refresh', file: null, done: false , tier: 'T1' },
-          { id: '23.3', label: 'JWT — structure, signing, validation, and security pitfalls', file: null, done: false , tier: 'T1' },
-          { id: '23.4', label: 'RBAC — roles, permissions, policy enforcement points', file: null, done: false , tier: 'T2' },
-          { id: '23.5', label: 'API keys — issuance, scoping, rotation', file: null, done: false , tier: 'T3' },
-          { id: '23.6', label: 'TLS/SSL — handshake, certificates, mTLS', file: null, done: false , tier: 'T2' },
-          { id: '23.7', label: 'Encryption at rest — key management, envelope encryption', file: null, done: false , tier: 'T2' },
-          { id: '23.8', label: 'DDoS protection — CDN, rate limiting, CAPTCHA, geo-blocking', file: null, done: false , tier: 'T2' },
-          { id: '23.9', label: 'Secrets management (Vault, AWS Secrets Manager)', file: null, done: false , tier: 'T3' },
+          { id: '23.1', label: "Authentication vs. authorization", file: null, done: false, tier: "T1", probs: ['1A','2A'] },
+          { id: '23.2', label: "OAuth2 — authorization code flow, client credentials, token refresh", file: null, done: false, tier: "T1" },
+          { id: '23.3', label: "JWT — structure, signing, validation, and security pitfalls", file: null, done: false, tier: "T1", probs: ['1A'] },
+          { id: '23.4', label: "RBAC — roles, permissions, policy enforcement points", file: null, done: false, tier: "T2" },
+          { id: '23.5', label: "API keys — issuance, scoping, rotation", file: null, done: false, tier: "T3", probs: ['2A'] },
+          { id: '23.6', label: "TLS/SSL — handshake, certificates, mTLS", file: null, done: false, tier: "T2", probs: ['1C','2C'] },
+          { id: '23.7', label: "Encryption at rest — key management, envelope encryption", file: null, done: false, tier: "T2" },
+          { id: '23.8', label: "DDoS protection — CDN, rate limiting, CAPTCHA, geo-blocking", file: null, done: false, tier: "T2", probs: ['1A','2A'] },
+          { id: '23.9', label: "Secrets management (Vault, AWS Secrets Manager)", file: null, done: false, tier: "T3" },
         ]
       },
     ]
   },
   {
     id: 'phase-h',
-    label: 'Phase H — System Archetypes',
+    label: "Phase H — System Archetypes",
     topics: [
       {
         num: 24, emoji: '📰',
-        label: 'Feed / Timeline Systems',
+        label: "Feed / Timeline Systems",
         subtopics: [
-          { id: '24.1', label: 'Fan-out-on-write — pre-computed feed delivery', file: null, done: false , tier: 'T1' },
-          { id: '24.2', label: 'Fan-out-on-read — pull model', file: null, done: false , tier: 'T1' },
-          { id: '24.3', label: 'Hybrid fan-out — handling celebrities and high-follower accounts', file: null, done: false , tier: 'T1' },
-          { id: '24.4', label: 'Feed storage — timeline tables, Redis sorted sets', file: null, done: false , tier: 'T1' },
-          { id: '24.5', label: 'Ranking and scoring pipelines', file: null, done: false , tier: 'T2' },
-          { id: '24.6', label: 'Feed pagination and cursor design', file: null, done: false , tier: 'T1' },
+          { id: '24.1', label: "Fan-out-on-write — pre-computed feed delivery", file: null, done: false, tier: "T1" },
+          { id: '24.2', label: "Fan-out-on-read — pull model", file: null, done: false, tier: "T1" },
+          { id: '24.3', label: "Hybrid fan-out — handling celebrities and high-follower accounts", file: null, done: false, tier: "T1" },
+          { id: '24.4', label: "Feed storage — timeline tables, Redis sorted sets", file: null, done: false, tier: "T1" },
+          { id: '24.5', label: "Ranking and scoring pipelines", file: null, done: false, tier: "T2" },
+          { id: '24.6', label: "Feed pagination and cursor design", file: null, done: false, tier: "T1" },
         ]
       },
       {
         num: 25, emoji: '🚦',
-        label: 'Rate Limiting Systems',
+        label: "Rate Limiting Systems",
         subtopics: [
-          { id: '25.1', label: 'Token bucket algorithm', file: null, done: false , tier: 'T1' },
-          { id: '25.2', label: 'Leaky bucket algorithm', file: null, done: false , tier: 'T2' },
-          { id: '25.3', label: 'Fixed window counter', file: null, done: false , tier: 'T2' },
-          { id: '25.4', label: 'Sliding window log and sliding window counter', file: null, done: false , tier: 'T1' },
-          { id: '25.5', label: 'Distributed rate limiting with Redis', file: null, done: false , tier: 'T1' },
-          { id: '25.6', label: 'Rate limiting at CDN, gateway, and service layers', file: null, done: false , tier: 'T2' },
-          { id: '25.7', label: 'Client-facing rate limit headers and retry guidance', file: null, done: false , tier: 'T3' },
+          { id: '25.1', label: "Token bucket algorithm", file: null, done: false, tier: "T1", probs: ['1A','2A'] },
+          { id: '25.2', label: "Leaky bucket algorithm", file: null, done: false, tier: "T2", probs: ['2A'] },
+          { id: '25.3', label: "Fixed window counter", file: null, done: false, tier: "T2", probs: ['2A'] },
+          { id: '25.4', label: "Sliding window log and sliding window counter", file: null, done: false, tier: "T1", probs: ['1A','2A'] },
+          { id: '25.5', label: "Distributed rate limiting with Redis", file: null, done: false, tier: "T1", probs: ['1A','2A'] },
+          { id: '25.6', label: "Rate limiting at CDN, gateway, and service layers", file: null, done: false, tier: "T2", probs: ['2A'] },
+          { id: '25.7', label: "Client-facing rate limit headers and retry guidance", file: null, done: false, tier: "T3", probs: ['2A'] },
         ]
       },
       {
         num: 26, emoji: '🔴',
-        label: 'Realtime Systems',
+        label: "Realtime Systems",
         subtopics: [
-          { id: '26.1', label: 'WebSockets at scale — connection servers, session affinity', file: null, done: false , tier: 'T1' },
-          { id: '26.2', label: 'Message fan-out across connection servers using pub/sub', file: null, done: false , tier: 'T1' },
-          { id: '26.3', label: 'Long polling — mechanics and resource implications', file: null, done: false , tier: 'T2' },
-          { id: '26.4', label: 'SSE — use cases and limitations', file: null, done: false , tier: 'T2' },
-          { id: '26.5', label: 'Presence systems — tracking, propagation, and TTL-based expiry', file: null, done: false , tier: 'T2' },
-          { id: '26.6', label: 'Reconnection logic and message deduplication', file: null, done: false , tier: 'T2' },
+          { id: '26.1', label: "WebSockets at scale — connection servers, session affinity", file: null, done: false, tier: "T1" },
+          { id: '26.2', label: "Message fan-out across connection servers using pub/sub", file: null, done: false, tier: "T1" },
+          { id: '26.3', label: "Long polling — mechanics and resource implications", file: null, done: false, tier: "T2" },
+          { id: '26.4', label: "SSE — use cases and limitations", file: null, done: false, tier: "T2" },
+          { id: '26.5', label: "Presence systems — tracking, propagation, and TTL-based expiry", file: null, done: false, tier: "T2" },
+          { id: '26.6', label: "Reconnection logic and message deduplication", file: null, done: false, tier: "T2" },
         ]
       },
       {
         num: 27, emoji: '🔔',
-        label: 'Notification Systems',
+        label: "Notification Systems",
         subtopics: [
-          { id: '27.1', label: 'Push notification architecture — APNs and FCM', file: null, done: false , tier: 'T2' },
-          { id: '27.2', label: 'Fan-out strategies for large subscriber bases', file: null, done: false , tier: 'T1' },
-          { id: '27.3', label: 'Delivery guarantees and at-least-once with deduplication', file: null, done: false , tier: 'T1' },
-          { id: '27.4', label: 'Notification preferences — opt-out, quiet hours, batching', file: null, done: false , tier: 'T3' },
-          { id: '27.5', label: 'Delivery receipts and read status tracking', file: null, done: false , tier: 'T3' },
-          { id: '27.6', label: 'Email and SMS notification channels', file: null, done: false , tier: 'T3' },
+          { id: '27.1', label: "Push notification architecture — APNs and FCM", file: null, done: false, tier: "T2" },
+          { id: '27.2', label: "Fan-out strategies for large subscriber bases", file: null, done: false, tier: "T1" },
+          { id: '27.3', label: "Delivery guarantees and at-least-once with deduplication", file: null, done: false, tier: "T1" },
+          { id: '27.4', label: "Notification preferences — opt-out, quiet hours, batching", file: null, done: false, tier: "T3" },
+          { id: '27.5', label: "Delivery receipts and read status tracking", file: null, done: false, tier: "T3" },
+          { id: '27.6', label: "Email and SMS notification channels", file: null, done: false, tier: "T3" },
         ]
       },
       {
         num: 28, emoji: '🔒',
-        label: 'Distributed Locking & Coordination',
+        label: "Distributed Locking & Coordination",
         subtopics: [
-          { id: '28.1', label: 'When distributed locking is needed', file: null, done: false , tier: 'T1' },
-          { id: '28.2', label: 'Redis SET NX — naive lock and its failure modes', file: null, done: false , tier: 'T1' },
-          { id: '28.3', label: 'Redlock algorithm — multi-node quorum locking', file: null, done: false , tier: 'T2' },
-          { id: '28.4', label: 'Fencing tokens — preventing stale lock holders', file: null, done: false , tier: 'T1' },
-          { id: '28.5', label: 'ZooKeeper and etcd — use cases and architecture overview', file: null, done: false , tier: 'T2' },
-          { id: '28.6', label: 'Alternatives to locking — idempotency and optimistic concurrency', file: null, done: false , tier: 'T1' },
+          { id: '28.1', label: "When distributed locking is needed", file: null, done: false, tier: "T1", probs: ['1A','2A'] },
+          { id: '28.2', label: "Redis SET NX — naive lock and its failure modes", file: null, done: false, tier: "T1", probs: ['1A','2A'] },
+          { id: '28.3', label: "Redlock algorithm — multi-node quorum locking", file: null, done: false, tier: "T2" },
+          { id: '28.4', label: "Fencing tokens — preventing stale lock holders", file: null, done: false, tier: "T1" },
+          { id: '28.5', label: "ZooKeeper and etcd — use cases and architecture overview", file: null, done: false, tier: "T2" },
+          { id: '28.6', label: "Alternatives to locking — idempotency and optimistic concurrency", file: null, done: false, tier: "T1", probs: ['1A','2A'] },
         ]
       },
       {
         num: 29, emoji: '⚙️',
-        label: 'Background Processing Systems',
+        label: "Background Processing Systems",
         subtopics: [
-          { id: '29.1', label: 'Job queue design — data model and enqueueing', file: null, done: false , tier: 'T1' },
-          { id: '29.2', label: 'Priority queues', file: null, done: false , tier: 'T2' },
-          { id: '29.3', label: 'Retry logic and dead-letter queues', file: null, done: false , tier: 'T2' },
-          { id: '29.4', label: 'Idempotent jobs — design for safe retry', file: null, done: false , tier: 'T1' },
-          { id: '29.5', label: 'Distributed cron scheduler — avoiding double-fire', file: null, done: false , tier: 'T1' },
-          { id: '29.6', label: 'Worker pool scaling — queue depth as signal', file: null, done: false , tier: 'T2' },
-          { id: '29.7', label: 'Job checkpointing and partial completion', file: null, done: false , tier: 'T3' },
+          { id: '29.1', label: "Job queue design — data model and enqueueing", file: null, done: false, tier: "T1", probs: ['1B'] },
+          { id: '29.2', label: "Priority queues", file: null, done: false, tier: "T2" },
+          { id: '29.3', label: "Retry logic and dead-letter queues", file: null, done: false, tier: "T2" },
+          { id: '29.4', label: "Idempotent jobs — design for safe retry", file: null, done: false, tier: "T1", probs: ['1B'] },
+          { id: '29.5', label: "Distributed cron scheduler — avoiding double-fire", file: null, done: false, tier: "T1", probs: ['1B'] },
+          { id: '29.6', label: "Worker pool scaling — queue depth as signal", file: null, done: false, tier: "T2" },
+          { id: '29.7', label: "Job checkpointing and partial completion", file: null, done: false, tier: "T3" },
         ]
       },
     ]
   },
   {
     id: 'phase-i',
-    label: 'Phase I — Search & Location Systems',
+    label: "Phase I — Search & Location Systems",
     topics: [
       {
         num: 30, emoji: '🔍',
-        label: 'Search Systems',
+        label: "Search Systems",
         subtopics: [
-          { id: '30.1', label: 'Inverted index — construction and structure', file: null, done: false , tier: 'T1' },
-          { id: '30.2', label: 'Tokenization, stemming, and normalization', file: null, done: false , tier: 'T2' },
-          { id: '30.3', label: 'Query processing — lookup, intersection, ranking', file: null, done: false , tier: 'T2' },
-          { id: '30.4', label: 'TF-IDF and BM25 — relevance scoring concepts', file: null, done: false , tier: 'T2' },
-          { id: '30.5', label: 'Search indexing pipeline — ingestion to query readiness', file: null, done: false , tier: 'T2' },
-          { id: '30.6', label: 'Handling document updates and deletes', file: null, done: false , tier: 'T2' },
-          { id: '30.7', label: 'Autocomplete / typeahead — trie, ranked prefix search', file: null, done: false , tier: 'T1' },
-          { id: '30.8', label: 'Fuzzy matching and typo tolerance', file: null, done: false , tier: 'T3' },
+          { id: '30.1', label: "Inverted index — construction and structure", file: null, done: false, tier: "T1" },
+          { id: '30.2', label: "Tokenization, stemming, and normalization", file: null, done: false, tier: "T2" },
+          { id: '30.3', label: "Query processing — lookup, intersection, ranking", file: null, done: false, tier: "T2" },
+          { id: '30.4', label: "TF-IDF and BM25 — relevance scoring concepts", file: null, done: false, tier: "T2" },
+          { id: '30.5', label: "Search indexing pipeline — ingestion to query readiness", file: null, done: false, tier: "T2" },
+          { id: '30.6', label: "Handling document updates and deletes", file: null, done: false, tier: "T2" },
+          { id: '30.7', label: "Autocomplete / typeahead — trie, ranked prefix search", file: null, done: false, tier: "T1" },
+          { id: '30.8', label: "Fuzzy matching and typo tolerance", file: null, done: false, tier: "T3" },
         ]
       },
       {
         num: 31, emoji: '🗂️',
-        label: 'Massive Distributed Search',
+        label: "Massive Distributed Search",
         subtopics: [
-          { id: '31.1', label: 'Distributed indexing — sharding strategies for search', file: null, done: false },
-          { id: '31.2', label: 'Scatter-gather query execution', file: null, done: false },
-          { id: '31.3', label: 'Result merging and re-ranking across shards', file: null, done: false },
-          { id: '31.4', label: 'Index freshness vs. query latency trade-off', file: null, done: false },
-          { id: '31.5', label: 'Segment-based index architecture (Lucene / Elasticsearch model)', file: null, done: false },
-          { id: '31.6', label: 'Web-scale crawl-index-serve pipeline overview', file: null, done: false },
+          { id: '31.1', label: "Distributed indexing — sharding strategies for search", file: null, done: false, tier: null },
+          { id: '31.2', label: "Scatter-gather query execution", file: null, done: false, tier: null },
+          { id: '31.3', label: "Result merging and re-ranking across shards", file: null, done: false, tier: null },
+          { id: '31.4', label: "Index freshness vs. query latency trade-off", file: null, done: false, tier: null },
+          { id: '31.5', label: "Segment-based index architecture (Lucene / Elasticsearch model)", file: null, done: false, tier: null },
+          { id: '31.6', label: "Web-scale crawl-index-serve pipeline overview", file: null, done: false, tier: null },
         ]
       },
       {
         num: 32, emoji: '📍',
-        label: 'Location & Geospatial Systems',
+        label: "Location & Geospatial Systems",
         subtopics: [
-          { id: '32.1', label: 'Geohashing — encoding, precision, and neighbor queries', file: null, done: false },
-          { id: '32.2', label: 'Quadtree indexing — structure and range queries', file: null, done: false },
-          { id: '32.3', label: 'H3 hexagonal indexing — uniform area and hierarchical queries', file: null, done: false },
-          { id: '32.4', label: 'Proximity search at scale — "find nearby X" pattern', file: null, done: false },
-          { id: '32.5', label: 'Real-time location updates — high-frequency write design', file: null, done: false },
-          { id: '32.6', label: 'Map tile serving — zoom levels, tile generation, CDN caching', file: null, done: false },
-          { id: '32.7', label: 'Routing algorithms overview (Dijkstra, A*, contraction hierarchies)', file: null, done: false },
+          { id: '32.1', label: "Geohashing — encoding, precision, and neighbor queries", file: null, done: false, tier: null },
+          { id: '32.2', label: "Quadtree indexing — structure and range queries", file: null, done: false, tier: null },
+          { id: '32.3', label: "H3 hexagonal indexing — uniform area and hierarchical queries", file: null, done: false, tier: null },
+          { id: '32.4', label: "Proximity search at scale — \"find nearby X\" pattern", file: null, done: false, tier: null },
+          { id: '32.5', label: "Real-time location updates — high-frequency write design", file: null, done: false, tier: null },
+          { id: '32.6', label: "Map tile serving — zoom levels, tile generation, CDN caching", file: null, done: false, tier: null },
+          { id: '32.7', label: "Routing algorithms overview (Dijkstra, A*, contraction hierarchies)", file: null, done: false, tier: null },
         ]
       },
     ]
   },
   {
     id: 'phase-j',
-    label: 'Phase J — Data & Analytics Systems',
+    label: "Phase J — Data & Analytics Systems",
     topics: [
       {
         num: 33, emoji: '🌊',
-        label: 'Stream Processing Systems',
+        label: "Stream Processing Systems",
         subtopics: [
-          { id: '33.1', label: 'Kafka architecture — brokers, topics, partitions, consumer groups', file: null, done: false },
-          { id: '33.2', label: 'Kafka throughput — sequential I/O, zero-copy, compression', file: null, done: false },
-          { id: '33.3', label: 'Flink / Spark Streaming — stateful stream processing', file: null, done: false },
-          { id: '33.4', label: 'Windowing — tumbling, sliding, session', file: null, done: false },
-          { id: '33.5', label: 'Watermarks and late-arriving data', file: null, done: false },
-          { id: '33.6', label: 'Stream-table joins and stateful operators', file: null, done: false },
-          { id: '33.7', label: 'Real-time pipeline design patterns', file: null, done: false },
+          { id: '33.1', label: "Kafka architecture — brokers, topics, partitions, consumer groups", file: null, done: false, tier: null, probs: ['1C'] },
+          { id: '33.2', label: "Kafka throughput — sequential I/O, zero-copy, compression", file: null, done: false, tier: null },
+          { id: '33.3', label: "Flink / Spark Streaming — stateful stream processing", file: null, done: false, tier: null },
+          { id: '33.4', label: "Windowing — tumbling, sliding, session", file: null, done: false, tier: null, probs: ['1C'] },
+          { id: '33.5', label: "Watermarks and late-arriving data", file: null, done: false, tier: null },
+          { id: '33.6', label: "Stream-table joins and stateful operators", file: null, done: false, tier: null },
+          { id: '33.7', label: "Real-time pipeline design patterns", file: null, done: false, tier: null },
         ]
       },
       {
         num: 34, emoji: '🏭',
-        label: 'Batch Processing Systems',
+        label: "Batch Processing Systems",
         subtopics: [
-          { id: '34.1', label: 'MapReduce — map phase, shuffle/sort, reduce phase', file: null, done: false },
-          { id: '34.2', label: 'ETL pipeline design — transformation stages and failure handling', file: null, done: false },
-          { id: '34.3', label: 'ETL vs. ELT for cloud data warehouses', file: null, done: false },
-          { id: '34.4', label: 'Partitioning, parallelism, and idempotent reprocessing', file: null, done: false },
-          { id: '34.5', label: 'Data lineage and quality checks in batch pipelines', file: null, done: false },
+          { id: '34.1', label: "MapReduce — map phase, shuffle/sort, reduce phase", file: null, done: false, tier: null },
+          { id: '34.2', label: "Spark — RDDs, DAG execution, shuffle optimization", file: null, done: false, tier: null },
+          { id: '34.3', label: "ETL pipeline design — extraction, transformation, loading", file: null, done: false, tier: null },
+          { id: '34.4', label: "ETL vs. ELT — when each applies", file: null, done: false, tier: null },
+          { id: '34.5', label: "Batch job failure handling — checkpointing and idempotent reprocessing", file: null, done: false, tier: null },
+          { id: '34.6', label: "Data quality checks and lineage", file: null, done: false, tier: null },
+          { id: '34.7', label: "Scheduling batch pipelines (Airflow overview)", file: null, done: false, tier: null },
+        ]
+      },
+      {
+        num: 35, emoji: '🎯',
+        label: "Recommendation Systems",
+        subtopics: [
+          { id: '35.1', label: "Two-stage pipeline — retrieval and ranking", file: null, done: false, tier: null },
+          { id: '35.2', label: "Collaborative filtering — user-based and item-based", file: null, done: false, tier: null },
+          { id: '35.3', label: "Matrix factorization and embeddings", file: null, done: false, tier: null },
+          { id: '35.4', label: "Content-based filtering", file: null, done: false, tier: null },
+          { id: '35.5', label: "Feature store — offline vs. online serving", file: null, done: false, tier: null },
+          { id: '35.6', label: "Cold-start problem and mitigation strategies", file: null, done: false, tier: null },
+          { id: '35.7', label: "A/B testing and experimentation for recommendations", file: null, done: false, tier: null },
+        ]
+      },
+      {
+        num: 36, emoji: '🤖',
+        label: "ML Infrastructure Systems",
+        subtopics: [
+          { id: '36.1', label: "Model serving — versioning, rollback, and traffic splitting", file: null, done: false, tier: null },
+          { id: '36.2', label: "Online vs. batch inference", file: null, done: false, tier: null },
+          { id: '36.3', label: "Training pipeline — feature engineering to model registry", file: null, done: false, tier: null },
+          { id: '36.4', label: "Shadow deployment and canary deployment for ML", file: null, done: false, tier: null },
+          { id: '36.5', label: "Training-serving skew — causes and prevention", file: null, done: false, tier: null },
+          { id: '36.6', label: "Model monitoring — data drift and performance degradation", file: null, done: false, tier: null },
+        ]
+      },
+    ]
+  },
+  {
+    id: 'phase-k',
+    label: "Phase K — Advanced Distributed Systems",
+    topics: [
+      {
+        num: 37, emoji: '🗺️',
+        label: "Global Multi-Region Systems",
+        subtopics: [
+          { id: '37.1', label: "Active-active vs. active-passive multi-region architectures", file: null, done: false, tier: null, probs: ['1B'] },
+          { id: '37.2', label: "Geo-replication — data consistency and conflict resolution", file: null, done: false, tier: null, probs: ['2B'] },
+          { id: '37.3', label: "Latency-based and geo-aware routing", file: null, done: false, tier: null, probs: ['1B','2B'] },
+          { id: '37.4', label: "Multi-region failover — triggers, traffic cutover, data sync", file: null, done: false, tier: null },
+          { id: '37.5', label: "Data sovereignty and compliance constraints", file: null, done: false, tier: null },
+          { id: '37.6', label: "Cost trade-offs of multi-region deployments", file: null, done: false, tier: null },
+        ]
+      },
+      {
+        num: 38, emoji: '💳',
+        label: "Distributed Transactions",
+        subtopics: [
+          { id: '38.1', label: "Two-phase commit — protocol and failure modes", file: null, done: false, tier: null },
+          { id: '38.2', label: "Why 2PC is avoided at scale", file: null, done: false, tier: null },
+          { id: '38.3', label: "Saga pattern — definition and motivation", file: null, done: false, tier: null },
+          { id: '38.4', label: "Choreography-based Saga — event-driven coordination", file: null, done: false, tier: null },
+          { id: '38.5', label: "Orchestration-based Saga — central coordinator", file: null, done: false, tier: null },
+          { id: '38.6', label: "Compensation logic — designing rollback steps", file: null, done: false, tier: null },
+          { id: '38.7', label: "Idempotency in Saga steps", file: null, done: false, tier: null },
+        ]
+      },
+      {
+        num: 39, emoji: '🎬',
+        label: "Large Media Systems",
+        subtopics: [
+          { id: '39.1', label: "Video upload pipeline — chunked upload and storage", file: null, done: false, tier: null },
+          { id: '39.2', label: "Transcoding pipeline — parallelism and job management", file: null, done: false, tier: null },
+          { id: '39.3', label: "Adaptive bitrate streaming — HLS and DASH", file: null, done: false, tier: null },
+          { id: '39.4', label: "Video segment caching at CDN", file: null, done: false, tier: null },
+          { id: '39.5', label: "Live streaming pipeline — latency sources and optimization", file: null, done: false, tier: null },
+          { id: '39.6', label: "Resumable uploads and fault-tolerant ingestion", file: null, done: false, tier: null },
+          { id: '39.7', label: "WebRTC for ultra-low-latency live video", file: null, done: false, tier: null },
         ]
       },
     ]
@@ -931,6 +1043,45 @@ const PHASES = [
   let activeSubtopicId = null;
   let openTopicNums = new Set();
 
+  // ── DESIGN PROBLEMS REGISTRY ─────────────
+  // Sourced from design_problems/NN_*.md coverage docs.
+  const PROBLEMS = {
+    '1': { name: 'URL Shortener',  short: 'P1' },
+    '2': { name: 'Rate Limiter',   short: 'P2' },
+  };
+  const PROB_TIER_NAME = { A: 'Spine', B: 'Differentiator', C: 'Awareness' };
+  let activeFilter = null;   // e.g. '1' → show only Problem 1 coverage
+
+  const parseProb = p => ({ n: p.slice(0, -1), t: p.slice(-1) });
+
+  function tierBadgeHTML(sub) {
+    if (!sub.tier) return `<span class="tier-pill tier-none" title="Not yet tiered in the roadmap">—</span>`;
+    return `<span class="tier-pill tier-${sub.tier.toLowerCase()}">${sub.tier}</span>`;
+  }
+
+  function probPillsHTML(sub) {
+    if (!sub.probs || !sub.probs.length) return '';
+    return sub.probs.map(p => {
+      const { n, t } = parseProb(p);
+      const meta = PROBLEMS[n];
+      if (!meta) return '';
+      return `<span class="prob-pill prob-${t.toLowerCase()}" title="${meta.name} — Tier ${t} (${PROB_TIER_NAME[t]})">${meta.short}${t}</span>`;
+    }).join('');
+  }
+
+  function subTitle(sub) {
+    const parts = [sub.label];
+    if (sub.tier) parts.push(`Tier ${sub.tier}`);
+    if (sub.probs) sub.probs.forEach(p => {
+      const { n, t } = parseProb(p);
+      if (PROBLEMS[n]) parts.push(`${PROBLEMS[n].name}: Tier ${t}`);
+    });
+    return parts.join('  •  ');
+  }
+
+  const matchesFilter = sub =>
+    !activeFilter || (sub.probs || []).some(p => parseProb(p).n === activeFilter);
+
   // ── PROGRESS SUMMARY ─────────────────────
   function calcProgress() {
     let total = 0, done = 0, hasFile = 0;
@@ -942,12 +1093,70 @@ const PHASES = [
     return { total, done, hasFile };
   }
 
+  // ── FILTER BAR ───────────────────────────
+  function buildFilterBar() {
+    const bar = document.createElement('div');
+    bar.className = 'filter-bar';
+
+    const lbl = document.createElement('span');
+    lbl.className = 'filter-label';
+    lbl.textContent = 'Design problem';
+    bar.appendChild(lbl);
+
+    const mk = (key, text, titleText) => {
+      const b = document.createElement('button');
+      b.className = 'filter-btn' + (activeFilter === key ? ' active' : '');
+      b.textContent = text;
+      b.title = titleText;
+      b.addEventListener('click', () => { activeFilter = key; buildHome(); });
+      bar.appendChild(b);
+    };
+
+    mk(null, 'All', 'Show every subtopic');
+    Object.entries(PROBLEMS).forEach(([n, meta]) =>
+      mk(n, `${meta.short} · ${meta.name}`, `Show only subtopics in the ${meta.name} coverage map`));
+
+    const all = PHASES.flatMap(p => p.topics).flatMap(t => t.subtopics);
+    const count = document.createElement('span');
+    count.className = 'filter-count';
+    if (activeFilter) {
+      const m = all.filter(matchesFilter);
+      const byTier = t => m.filter(s => (s.probs || []).some(p => p === activeFilter + t)).length;
+      count.textContent = `${m.length} subtopics · ${byTier('A')} spine / ${byTier('B')} depth / ${byTier('C')} awareness · ${m.filter(s => s.done).length} done`;
+    } else {
+      count.textContent = `${all.filter(s => s.probs).length} of ${all.length} mapped to a design problem`;
+    }
+    bar.appendChild(count);
+    return bar;
+  }
+
+  // ── TIER LEGEND ──────────────────────────
+  function buildTierLegend() {
+    const all = PHASES.flatMap(p => p.topics).flatMap(t => t.subtopics);
+    const n = k => all.filter(s => (s.tier || 'none').toLowerCase() === k).length;
+    const el = document.createElement('div');
+    el.className = 'tier-legend';
+    el.innerHTML = `
+      <span><span class="legend-swatch" style="background:#f59e0b"></span><b>T1</b> Core · ~3h · ${n('t1')}</span>
+      <span><span class="legend-swatch" style="background:#3b82f6"></span><b>T2</b> Depth · ~1.75h · ${n('t2')}</span>
+      <span><span class="legend-swatch" style="background:#d6d3d1"></span><b>T3</b> Awareness · ~30m · ${n('t3')}</span>
+      <span><span class="legend-swatch" style="background:#f5f5f4;border:1px dotted #d6d3d1"></span>untiered · ${n('none')}</span>
+      <span style="margin-left:auto">
+        <span class="prob-pill prob-a">P#A</span> spine
+        <span class="prob-pill prob-b">P#B</span> differentiator
+        <span class="prob-pill prob-c">P#C</span> awareness
+      </span>`;
+    return el;
+  }
+
   // ── BUILD HOME VIEW ───────────────────────
   function buildHome() {
     const { total, done, hasFile } = calcProgress();
     progressEl.innerHTML = `✅ ${done} / ${total} subtopics completed &nbsp;·&nbsp; 📄 ${hasFile} notes available`;
 
     phaseList.innerHTML = '';
+    phaseList.appendChild(buildFilterBar());
+    phaseList.appendChild(buildTierLegend());
 
     PHASES.forEach(phase => {
       const section = document.createElement('div');
@@ -975,13 +1184,17 @@ const PHASES = [
           </div>`;
         card.appendChild(header);
 
+        if (activeFilter && !topic.subtopics.some(matchesFilter)) card.classList.add('filtered-out');
+
         const pills = document.createElement('div');
         pills.className = 'subtopic-pills';
         topic.subtopics.forEach(sub => {
           const pill = document.createElement('span');
-          pill.className = 'subtopic-pill';
-          pill.textContent = sub.id;
-          pill.title = sub.label;
+          pill.className = 'subtopic-pill'
+            + ` pt-${sub.tier ? sub.tier.toLowerCase() : 'none'}`
+            + (matchesFilter(sub) ? '' : ' filtered-out');
+          pill.innerHTML = `${sub.id}${probPillsHTML(sub)}`;
+          pill.title = subTitle(sub);
 
           if (sub.done && sub.file) {
             pill.classList.add('done');
@@ -1047,9 +1260,8 @@ const PHASES = [
           subEl.className = 'nav-subtopic' + (sub.file ? '' : ' no-file');
           if (sub.id === activeId) subEl.classList.add('active');
 
-          const tierBadge = sub.tier ? `<span class="tier-pill tier-${sub.tier.toLowerCase()}">${sub.tier}</span>` : '';
-          subEl.innerHTML = `${tierBadge}${sub.id} ${sub.label}${sub.done ? '<span class="badge-done"></span>' : ''}`;
-          subEl.title = sub.label;
+          subEl.innerHTML = `${tierBadgeHTML(sub)}${sub.id} ${sub.label}${sub.done ? '<span class="badge-done"></span>' : ''}${probPillsHTML(sub)}`;
+          subEl.title = subTitle(sub);
 
           if (sub.file) {
             subEl.addEventListener('click', () => {

@@ -1,0 +1,1238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.4 Indexing — B-tree, LSM-tree, Composite Indexes</title>
+<style>
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface-alt: #f3f2ef;
+    --border: #e5e3de; --text: #1a1917; --text-muted: #6b6861;
+    --accent: #2563eb; --accent-light: #dbeafe;
+    --green: #16a34a; --green-light: #dcfce7;
+    --red: #dc2626; --red-light: #fee2e2;
+    --yellow: #d97706; --yellow-light: #fef3c7;
+    --purple: #7c3aed; --purple-light: #ede9fe;
+    --orange: #ea580c; --orange-light: #ffedd5;
+    --teal: #0d9488; --teal-light: #ccfbf1;
+    --code-bg: #1e1e2e; --code-text: #cdd6f4;
+    --sidebar-w: 240px; --content-max: 820px;
+    font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; }
+  #toc { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0 48px; z-index: 100; }
+  #toc-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  #toc-header .phase-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-bottom: 6px; }
+  #toc-header h2 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  #toc-header .tier-tag { font-size: 10px; font-weight: 800; letter-spacing: .06em; color: var(--yellow); background: var(--yellow-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-top: 8px; }
+  #toc nav a { display: block; padding: 5px 16px 5px 20px; font-size: 12.5px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+  main { margin-left: var(--sidebar-w); padding: 48px 48px 96px; max-width: calc(var(--sidebar-w) + var(--content-max) + 96px); width: 100%; }
+  article { max-width: var(--content-max); }
+  .doc-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 2px solid var(--border); }
+  .doc-header .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+  .tag-phase { background: var(--accent-light); color: var(--accent); }
+  .tag-topic { background: var(--purple-light); color: var(--purple); }
+  .tag-tier  { background: var(--yellow-light); color: var(--yellow); }
+  .tag-prereq{ background: var(--teal-light); color: var(--teal); }
+  .tag-date  { background: var(--surface-alt);  color: var(--text-muted); }
+  .doc-header h1 { font-size: 30px; font-weight: 800; line-height: 1.25; letter-spacing: -.02em; color: var(--text); }
+  section { margin-bottom: 52px; scroll-margin-top: 32px; }
+  h2.section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -.01em; }
+  h2.section-title .num { font-size: 11px; font-weight: 800; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; letter-spacing: .04em; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 24px 0 10px; }
+  h4 { font-size: 13.5px; font-weight: 700; color: var(--text); margin: 18px 0 8px; }
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+  code { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-family: "SF Mono","Fira Code",Menlo,monospace; font-size: 12.5px; }
+  ul.plain { margin: 0 0 14px 20px; }
+  ul.plain li { margin-bottom: 7px; font-size: 14.5px; line-height: 1.6; }
+  ol.steps { margin: 0 0 14px 22px; }
+  ol.steps li { margin-bottom: 8px; font-size: 14.5px; line-height: 1.6; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 14px; border-left: 3px solid; }
+  .callout-goal  { background: var(--accent-light); border-color: var(--accent); color: #1e40af; }
+  .callout-tip   { background: var(--yellow-light); border-color: var(--yellow); color: #92400e; }
+  .callout-warn  { background: var(--red-light); border-color: var(--red); color: #7f1d1d; }
+  .callout-quote { background: var(--surface-alt); border-color: var(--border); color: var(--text-muted); font-style: italic; }
+  .callout-teal  { background: var(--teal-light); border-color: var(--teal); color: #134e4a; }
+  .the-question { background: var(--surface); border: 2px solid var(--accent); border-radius: 12px; padding: 16px 20px; margin-top: 18px; font-size: 15.5px; }
+  .the-question .lbl { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); display: block; margin-bottom: 5px; }
+  .the-question em { color: var(--text); font-weight: 600; }
+  .definition { background: var(--purple-light); border-left: 4px solid var(--purple); border-radius: 8px; padding: 16px 20px; margin: 18px 0 24px; font-size: 15px; font-weight: 600; color: #4c1d95; line-height: 1.6; }
+  .mental-model { background: var(--teal-light); border-left: 3px solid var(--teal); border-radius: 8px; padding: 14px 18px; margin: 18px 0; font-size: 14px; color: #134e4a; }
+  .mental-model .mm-name { font-weight: 800; }
+  .mental-model .mm-break { display: block; margin-top: 7px; font-style: italic; opacity: .85; }
+  .bridge { background: linear-gradient(90deg, var(--accent-light), transparent); border-left: 4px solid var(--accent); border-radius: 8px; padding: 13px 18px; margin-top: 28px; font-size: 14.5px; color: #1e40af; font-weight: 600; }
+  .bridge .arrow { font-weight: 800; margin-right: 6px; }
+  .checkpoint { background: var(--surface); border: 2px solid var(--green); border-radius: 12px; padding: 16px 20px; margin-top: 26px; }
+  .checkpoint > .cp-title { font-size: 12px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--green); margin-bottom: 12px; display: flex; align-items: center; gap: 7px; }
+  .checkpoint.gate { border-color: var(--red); }
+  .checkpoint.gate > .cp-title { color: var(--red); }
+  .cheatsheet { background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 24px 28px; font-family: "SF Mono","Fira Code","Cascadia Code",Menlo,monospace; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-x: auto; margin-top: 16px; }
+  .cheatsheet .label { color: #cba6f7; font-weight: 700; letter-spacing: .08em; display: block; margin-top: 18px; margin-bottom: 4px; border-bottom: 1px solid #313244; padding-bottom: 3px; }
+  .cheatsheet .label:first-child { margin-top: 0; }
+  .diagram-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 16px 14px; margin: 20px 0 28px; overflow-x: auto; }
+  .diagram-wrap .diagram-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); margin-bottom: 12px; }
+  .diagram-wrap svg { display: block; width: 100%; height: auto; }
+  .diagram-wrap p.caption { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 10px; margin-bottom: 0; font-style: italic; }
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; font-size: 14.5px; line-height: 1.55; }
+  .checklist li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 2px; background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .checklist li.checked .cb { background: var(--green); border-color: var(--green); }
+  .checklist li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .checklist li.checked .text { color: var(--text-muted); text-decoration: line-through; }
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: var(--surface-alt); padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.5; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+  .misconception { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .misconception .wrong { background: var(--red-light); padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; }
+  .misconception .right { padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; color: #065f46; background: var(--green-light); }
+  .misconception .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .quiz-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .quiz-q { padding: 14px 18px; font-size: 14.5px; font-weight: 600; cursor: pointer; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .quiz-q:hover { background: var(--surface-alt); }
+  .quiz-num { flex-shrink: 0; width: 24px; height: 24px; background: var(--accent); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; margin-top: 1px; }
+  .checkpoint.gate .quiz-num { background: var(--red); }
+  .quiz-q .qtext { flex: 1; font-weight: 500; }
+  .quiz-toggle { font-size: 11px; color: var(--text-muted); flex-shrink: 0; margin-top: 3px; }
+  .quiz-hint { display: none; padding: 10px 18px 14px; font-size: 13px; color: #92400e; background: var(--yellow-light); border-top: 1px solid var(--border); line-height: 1.6; }
+  .quiz-item.open .quiz-hint { display: block; }
+  .reading-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .reading-list li { display: flex; align-items: flex-start; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; font-size: 14px; }
+  .reading-list li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 1px; cursor: pointer; background: var(--surface); display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .reading-list li.checked .cb { background: var(--green); border-color: var(--green); }
+  .reading-list li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .reading-list li.checked .rtext { color: var(--text-muted); text-decoration: line-through; }
+  .notes-area { width: 100%; min-height: 200px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: inherit; font-size: 14px; color: var(--text); resize: vertical; line-height: 1.6; }
+  .notes-area:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .connections { display: flex; flex-direction: column; gap: 12px; }
+  .conn-card { display: flex; align-items: flex-start; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14px; }
+  .conn-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .conn-label { font-weight: 700; margin-bottom: 3px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .tradeoff-box { background: var(--surface-alt); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 16px 20px; font-size: 14.5px; font-style: italic; color: var(--text); margin-top: 14px; line-height: 1.65; }
+  .trigger-list { list-style: none; display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+  .trigger-list li { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--orange); border-radius: 8px; padding: 10px 16px; font-size: 14px; font-style: italic; color: var(--text); }
+  @media (max-width: 900px) { #toc { display: none; } main { margin-left: 0; padding: 24px 20px 60px; } }
+</style>
+</head>
+<body>
+
+<aside id="toc">
+  <div id="toc-header">
+    <span class="phase-tag">Phase C · Topic 8</span>
+    <h2>8.4 Indexing — B-tree, LSM-tree, Composite</h2>
+    <span class="tier-tag">🥇 T1 · ~3h</span>
+  </div>
+  <nav>
+    <a href="#s0">🧭 The Question</a>
+    <a href="#s1">📋 Cheatsheet</a>
+    <a href="#s2">🧠 The Mindmap</a>
+    <a href="#s3">🔥 The Problem</a>
+    <a href="#s4">💡 The Core Idea</a>
+    <a href="#s5">⚙️ How It Works</a>
+    <a href="#s6">⚖️ The Decision</a>
+    <a href="#s7">🎯 In the Interview</a>
+    <a href="#s8">🧪 Mastery Gate</a>
+    <a href="#s9">🔗 Connections</a>
+    <a href="#s10">✍️ My Notes</a>
+  </nav>
+</aside>
+
+<main>
+<article>
+
+  <header class="doc-header">
+    <div class="meta">
+      <span class="tag tag-phase">Phase C — Data Storage</span>
+      <span class="tag tag-topic">Topic 8 — Database Fundamentals</span>
+      <span class="tag tag-tier">🥇 T1 Core · ~3h</span>
+      <span class="tag tag-prereq">Prereqs: 8.1, 8.2, 8.3</span>
+      <span class="tag tag-date">Not yet studied</span>
+    </div>
+    <h1>8.4 Indexing — B-tree, LSM-tree, Composite Indexes</h1>
+  </header>
+
+  <!-- ══════════════════ §0 ══════════════════ -->
+  <section id="s0">
+    <h2 class="section-title"><span class="num">§0</span> 🧭 The Question This Answers</h2>
+
+    <p>8.3 settled <strong>where a fact lives</strong>. This subtopic asks the question that immediately follows: given that the fact lives somewhere among a hundred million rows, <strong>how does the database find it without reading all of them?</strong> The answer is always the same shape — you build a second, redundant, <em>ordered</em> structure whose only job is to narrow the search. That structure is an index, and choosing which ones to build is one of the few database decisions a candidate is asked to make concretely, on a whiteboard, with real column names.</p>
+
+    <p>The tension is that an index is not a free accelerator. It is a copy of your data, sorted differently, that must be kept correct on every single write. Every index you add makes some reads dramatically cheaper and makes <em>all</em> writes to that table more expensive, permanently. And the two dominant index engines — the B-tree and the LSM-tree — resolve that tension in opposite directions, which is why the same schema can be the right answer on Postgres and the wrong answer on Cassandra.</p>
+
+    <div class="the-question">
+      <span class="lbl">The question</span>
+      <em>What is the smallest set of index structures that makes my hot queries fast — and what exactly am I paying for each one on the write path?</em>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> Before we can price an index, we need to see what the world looks like without one — and why the obvious fixes don't work. What actually breaks?</div>
+  </section>
+
+  <!-- ══════════════════ §1 ══════════════════ -->
+  <section id="s1">
+    <h2 class="section-title"><span class="num">§1</span> 📋 Cheatsheet</h2>
+
+    <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+    <div class="callout callout-tip">⏭️ <strong>First time through this topic?</strong> Skip to §2 and come back here for revision.</div>
+
+<div class="cheatsheet"><span class="label">§ 1  WHY IT EXISTS</span>Without an index, answering "find the row where email = X" means reading every
+row — O(n), and n grows forever. The obvious fix is to keep the table itself
+sorted, but that fails twice: a table can only be physically sorted one way,
+and inserting into the middle of a sorted file means rewriting everything
+after it. The second obvious fix, an in-memory hash table, gives O(1) point
+lookups but cannot answer range or ORDER BY queries at all and must hold the
+whole keyspace in RAM. The resolution is to leave the table alone and build a
+SEPARATE, ORDERED, DISK-PAGE-SHAPED map from key → row location. Because it is
+separate, you can have several of them, sorted different ways. Because it is
+ordered, it answers ranges. Because it is page-shaped and shallow, it finds
+any row in three or four disk reads no matter how big the table gets.
+<span class="label">§ 2  WHAT IT IS</span>INDEX        A redundant, ordered, auxiliary structure mapping column values
+             to row locations, trading write throughput and storage for a
+             reduction in the number of rows a query must examine.
+SELECTIVITY  The fraction of rows a predicate keeps. An index only pays when
+             that fraction is small (roughly under 5–10%); on a low-selectivity
+             predicate the planner will correctly ignore your index and scan.
+B-TREE       Balanced, sorted, page-oriented tree. Updated IN PLACE. Reads are
+             predictable (3–4 page hops); writes are random I/O plus page
+             splits. Default in Postgres, InnoDB, Oracle, SQL Server, WiredTiger.
+LSM-TREE     Log-structured merge tree. Writes go to an in-memory sorted
+             memtable + WAL, flush as immutable SSTables, and are merged by
+             background COMPACTION. Writes are sequential and fast; reads may
+             touch several levels. Used by RocksDB, LevelDB, Cassandra,
+             ScyllaDB, HBase, MyRocks.
+COMPOSITE    One index over several columns, sorted by the first, then the
+             second within it, and so on. Usable only left-to-right.
+<span class="label">§ 3  THE MECHANISM</span>B-TREE READ   Root page (almost always cached) → binary search inside the
+              page → child pointer → repeat. Fanout is in the hundreds, so
+              100M rows is ~4 levels; typically 1 physical I/O because the
+              upper levels live in the buffer pool.
+B-TREE WRITE  Write-ahead log first, then locate the leaf and modify it in
+              place. A full leaf SPLITS and the split can propagate upward.
+              You rewrite an entire 8–16KB page to change 100 bytes — that is
+              write amplification, and it is random I/O.
+LSM WRITE     Append to WAL, insert into the in-memory memtable (a sorted
+              skip list). When the memtable fills it is frozen and flushed as
+              an immutable, sorted SSTable. Purely sequential. Very fast.
+LSM READ      Check memtable, then each level newest-first. Each SSTable has a
+              BLOOM FILTER that says "definitely not here" cheaply, so most
+              levels are skipped without I/O. Bloom filters have false
+              positives, never false negatives — and they do NOT help ranges.
+COMPACTION    Background merge of overlapping SSTables into fewer, larger,
+              non-overlapping ones. It is what keeps read amplification bounded
+              and what reclaims space from overwrites and tombstones. It is
+              also a background I/O consumer that competes with live traffic.
+<span class="label">§ 4  USE / AVOID</span>INDEX when: the column appears in a WHERE, JOIN, or ORDER BY on a hot path AND
+  the predicate is selective; you need a covering index so the query never
+  touches the table; you need to enforce uniqueness.
+DON'T index when: the table is small enough to scan; the column has few
+  distinct values (a boolean, a status with 3 values) so the scan wins anyway;
+  the write path is already the bottleneck; nothing queries it.
+CHOOSE B-TREE when: mixed read/write OLTP, predictable p99 matters, range
+  scans and ORDER BY are common, the working set fits in RAM.
+CHOOSE LSM when: write throughput dominates (ingest, time series, event logs,
+  counters), the dataset is far larger than RAM, and you can tolerate a
+  read path whose tail latency moves with compaction.
+<span class="label">§ 5  COMPOSITE INDEX RULES (the part candidates get wrong)</span>LEFTMOST PREFIX  An index on (a, b, c) serves queries on (a), (a,b), (a,b,c).
+                 It does NOT serve a query on (b), (c), or (b,c).
+ESR ORDER        Equality columns first, then Sort columns, then Range columns.
+                 A range predicate is a STOPPER: once the engine hits a range,
+                 no column after it can be used to seek — only to filter rows
+                 it already read.
+COVERING INDEX   If the index contains every column the query needs, the row
+                 itself is never fetched. Postgres calls this an index-only
+                 scan; MySQL says "Using index" in EXPLAIN.
+ONE COMPOSITE ≠ SEVERAL SINGLES. Three single-column indexes usually cannot be
+                 combined as efficiently as one correctly ordered composite.
+<span class="label">§ 6  NUMBERS TO ANCHOR THE DISCUSSION</span>Page size: 8KB Postgres, 16KB InnoDB. Fanout with a small key ≈ 300–500 keys
+  per page, so 4 levels covers ~10^9–10^11 rows. Depth is effectively constant.
+An index lookup is 3–4 logical page reads and usually 1 physical read — the
+  upper levels are cached. Call it sub-millisecond warm.
+Selectivity break-even: the planner typically abandons an index somewhere
+  around 5–20% of rows returned. Below ~1% the index is a clear win.
+Write cost: N secondary indexes turn one INSERT into N+1 structure writes.
+  A table with 10 indexes is an 11x write-path multiplier.
+LSM write amplification with leveled compaction is roughly 10–30x; the level
+  size ratio is typically 10. Bloom filter at ~10 bits/key ≈ 1% false positive.
+Index storage is real: a secondary index on a wide table often costs 10–30%
+  of the table's size, and they add up.
+<span class="label">§ 7  INTERVIEW TRIGGERS + GOTCHA</span>→ "How would you make this query fast?"        → name the composite index and
+                                                  its column ORDER, not just
+                                                  the columns
+→ "What indexes go on this table?"             → derive them from the access
+                                                  patterns, ESR order, and say
+                                                  what each costs on write
+→ "Write throughput degrades as it grows"      → B-tree random I/O + page
+                                                  splits + index count → LSM
+→ "Ingest 500k events/sec, query by device"    → LSM engine, partition key
+                                                  first, time second
+GOTCHA: Two failures dominate here. First, listing columns without an ORDER —
+  an index on (a,b) and an index on (b,a) are different objects serving
+  different queries, and a range predicate stops the seek dead. Second,
+  treating indexes as free: they are a write-path tax paid on every insert,
+  update, and delete, forever, and "add an index on everything in the WHERE
+  clause" is the answer of someone who has never watched p99 write latency
+  after a deploy.</div>
+  </section>
+
+  <!-- ══════════════════ §2 ══════════════════ -->
+  <section id="s2">
+    <h2 class="section-title"><span class="num">§2</span> 🧠 The Mindmap</h2>
+
+    <div class="callout callout-quote">The picture to hold in your head while you study. Everything below hangs off this.</div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Concept map — indexing</div>
+      <svg viewBox="0 0 1060 660" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="mmArrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" fill="#b8b4ac"/>
+          </marker>
+        </defs>
+
+        <!-- connectors -->
+        <g stroke="#b8b4ac" stroke-width="1.8" fill="none" marker-end="url(#mmArrow)">
+          <path d="M470,300 L215,205"/>
+          <path d="M530,292 L530,210"/>
+          <path d="M590,300 L845,205"/>
+          <path d="M470,372 L215,462"/>
+          <path d="M530,380 L530,455"/>
+          <path d="M590,372 L845,462"/>
+        </g>
+
+        <!-- centre -->
+        <ellipse cx="530" cy="336" rx="158" ry="52" fill="#a5d8ff" stroke="#1971c2" stroke-width="2.5"/>
+        <text x="530" y="330" text-anchor="middle" font-size="18" font-weight="800" fill="#0b3d66">INDEXING</text>
+        <text x="530" y="354" text-anchor="middle" font-size="12.5" font-style="italic" fill="#1971c2">"find it without reading all of it"</text>
+
+        <!-- TOP LEFT : the problem -->
+        <rect x="30" y="30" width="270" height="176" rx="10" fill="#ffc9c9" stroke="#c92a2a" stroke-width="2"/>
+        <text x="46" y="55" font-size="13.5" font-weight="800" fill="#7f1d1d">🔥 THE PROBLEM (why scan fails)</text>
+        <text x="46" y="82"  font-size="12.5" fill="#7f1d1d">O(n) scan — grows forever</text>
+        <text x="46" y="105" font-size="12.5" fill="#7f1d1d">a table has ONE physical order</text>
+        <text x="46" y="128" font-size="12.5" fill="#7f1d1d">sorted file → rewrite on insert</text>
+        <text x="46" y="151" font-size="12.5" fill="#7f1d1d">hash → no ranges, no ORDER BY</text>
+        <text x="46" y="182" font-size="11.5" font-style="italic" fill="#c92a2a">so: a SEPARATE ordered structure</text>
+
+        <!-- TOP CENTRE : B-tree -->
+        <rect x="395" y="30" width="270" height="176" rx="10" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+        <text x="411" y="55" font-size="13.5" font-weight="800" fill="#1e3a8a">🌲 B-TREE (read-optimised)</text>
+        <text x="411" y="82"  font-size="12.5" fill="#1e3a8a">sorted · balanced · page-shaped</text>
+        <text x="411" y="105" font-size="12.5" fill="#1e3a8a">fanout 300–500 → 3–4 hops</text>
+        <text x="411" y="128" font-size="12.5" fill="#1e3a8a">linked leaves → ranges are cheap</text>
+        <text x="411" y="151" font-size="12.5" fill="#1e3a8a">IN-PLACE update → random write</text>
+        <text x="411" y="182" font-size="11.5" font-style="italic" fill="#3b5bdb">predictable p99, expensive writes</text>
+
+        <!-- TOP RIGHT : LSM -->
+        <rect x="760" y="30" width="270" height="176" rx="10" fill="#ffd8a8" stroke="#e67700" stroke-width="2"/>
+        <text x="776" y="55" font-size="13.5" font-weight="800" fill="#7c2d12">🪵 LSM-TREE (write-optimised)</text>
+        <text x="776" y="82"  font-size="12.5" fill="#7c2d12">WAL + memtable (sorted skiplist)</text>
+        <text x="776" y="105" font-size="12.5" fill="#7c2d12">flush → immutable SSTables</text>
+        <text x="776" y="128" font-size="12.5" fill="#7c2d12">compaction merges levels ×10</text>
+        <text x="776" y="151" font-size="12.5" fill="#7c2d12">bloom filter skips files</text>
+        <text x="776" y="182" font-size="11.5" font-style="italic" fill="#e67700">fast writes, read amp, p99 moves</text>
+
+        <!-- BOTTOM LEFT : composite rules -->
+        <rect x="30" y="470" width="270" height="164" rx="10" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+        <text x="46" y="495" font-size="13.5" font-weight="800" fill="#4c1d95">🧩 COMPOSITE RULES</text>
+        <text x="46" y="521" font-size="12.5" fill="#4c1d95">LEFTMOST PREFIX only</text>
+        <text x="46" y="543" font-size="12.5" fill="#4c1d95">ESR: Equality → Sort → Range</text>
+        <text x="46" y="565" font-size="12.5" fill="#4c1d95">a RANGE is a stopper</text>
+        <text x="46" y="587" font-size="12.5" fill="#4c1d95">covering → never touch the row</text>
+        <text x="46" y="615" font-size="11.5" font-style="italic" fill="#7c3aed">(a,b) ≠ (b,a) — order is the answer</text>
+
+        <!-- BOTTOM CENTRE : the cost -->
+        <rect x="395" y="470" width="270" height="164" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+        <text x="411" y="495" font-size="13.5" font-weight="800" fill="#92400e">💰 THE COST</text>
+        <text x="411" y="521" font-size="12.5" fill="#92400e">N indexes → N+1 writes per insert</text>
+        <text x="411" y="543" font-size="12.5" fill="#92400e">page splits + index bloat</text>
+        <text x="411" y="565" font-size="12.5" fill="#92400e">storage: 10–30% of the table each</text>
+        <text x="411" y="587" font-size="12.5" fill="#92400e">selectivity gate: &lt;~10% or useless</text>
+        <text x="411" y="615" font-size="11.5" font-style="italic" fill="#d97706">an unused index is pure tax</text>
+
+        <!-- BOTTOM RIGHT : real engines -->
+        <rect x="760" y="470" width="270" height="164" rx="10" fill="#b2f2bb" stroke="#2f9e44" stroke-width="2"/>
+        <text x="776" y="495" font-size="13.5" font-weight="800" fill="#14532d">🏭 REAL ENGINES</text>
+        <text x="776" y="521" font-size="12.5" fill="#14532d">Postgres — heap + ctid pointers</text>
+        <text x="776" y="543" font-size="12.5" fill="#14532d">InnoDB — clustered PK, PK in 2ndary</text>
+        <text x="776" y="565" font-size="12.5" fill="#14532d">RocksDB / Cassandra — LSM</text>
+        <text x="776" y="587" font-size="12.5" fill="#14532d">DynamoDB — GSI, no planner</text>
+        <text x="776" y="615" font-size="11.5" font-style="italic" fill="#2f9e44">engine ≠ data model</text>
+      </svg>
+      <p class="caption">Left to right is the argument, not just a grouping.</p>
+    </div>
+
+    <p><strong>How to read it:</strong> <strong>the problem</strong> forces an auxiliary ordered structure; the <strong>B-tree</strong> is the read-optimised answer and the <strong>LSM-tree</strong> is the write-optimised answer to the <em>same</em> problem, so they are alternatives, not a hierarchy. <strong>Composite</strong> rules apply to both and are where most interview points are won or lost. <strong>The cost</strong> is what makes indexing a decision rather than a reflex, and <strong>real engines</strong> are how you check your reasoning against systems that actually shipped.</p>
+  </section>
+
+  <!-- ══════════════════ §3 ══════════════════ -->
+  <section id="s3">
+    <h2 class="section-title"><span class="num">§3</span> 🔥 The Problem</h2>
+
+    <p>Before indexes, finding a row meant looking at every row. A query like <code>SELECT * FROM users WHERE email = 'ada@x.com'</code> opens the table file at the beginning and reads forward until it finds a match or hits the end — a <strong>full table scan</strong>, O(n) in the number of rows and, more importantly, O(n) in <em>disk pages read</em>. On a 10,000-row table this is invisible; the whole thing is one buffer-pool worth of pages. On a 100-million-row table it is tens of gigabytes of I/O for a query that returns one row, and it gets worse every day the table grows. Worse still, the cost is paid per <em>concurrent</em> query, so a scan-driven system doesn't degrade gracefully — it collapses, because every user's scan evicts every other user's cached pages.</p>
+
+    <p>The first fix everyone reaches for is to keep the table itself sorted by the column you search on. This fails for two independent reasons, and being able to state both is what separates understanding from recitation. First, <strong>a table has exactly one physical order</strong>. Sort <code>users</code> by email and you have made email lookups fast and lookups by <code>created_at</code>, <code>country</code>, and <code>id</code> exactly as slow as before — and real systems query by more than one column. Second, <strong>maintaining sort order on insert is catastrophic</strong>. Inserting a row whose key sorts into the middle of a 40GB file means shifting everything after it; even amortised with gaps and free space, you are rewriting large contiguous regions of the file on a random insert. Sorted storage optimises the read you already had at the cost of the write you do constantly.</p>
+
+    <p>The second fix is an in-memory hash table from key to row offset. This is genuinely fast — O(1) point lookups, no tree traversal — and it is a real design (Bitcask uses it). But it fails on three counts that matter for a general-purpose database. It cannot answer <strong>range queries or <code>ORDER BY</code></strong> at all, because a hash destroys ordering by construction; <code>WHERE created_at &gt; '2026-01-01'</code> degenerates to a scan again. It requires <strong>the entire keyspace to fit in RAM</strong>, because a hash table with half its buckets on disk is a random-I/O generator. And it gives you nothing for <strong>prefix or partial matching</strong>. Hashing solves point lookups by throwing away the very property — order — that most of the other queries depend on.</p>
+
+    <p>The insight that resolved it has two halves. First, <strong>stop trying to reorganise the table and build a separate structure instead</strong>: a small, redundant map from key values to row locations, which you can build several of, each sorted differently, without the table itself having any opinion about order. Second, <strong>shape that structure like the disk</strong>. Disks and SSDs are addressed in blocks — 4KB, 8KB, 16KB — so a binary tree with one key per node is a pathological design that pays a full page read per comparison. Instead, make each node a whole page holding <em>hundreds</em> of keys, so a single page read eliminates hundreds of alternatives at once. That is a B-tree, and it is why a lookup in a billion-row table costs three or four page reads instead of thirty.</p>
+
+    <p>That resolution held for decades, and then a second problem appeared underneath it. The B-tree's in-place update means every write is a <strong>random</strong> write to a specific page, plus a possible page split, plus rewriting an entire 8–16KB page to change 100 bytes. As write-heavy workloads grew — event ingest, time series, metrics, message logs — that random-write cost, not the read cost, became the ceiling. The LSM-tree answers the same "find it fast" problem while inverting the write path: never modify anything in place, buffer writes in memory, flush them as immutable sorted files, and pay for the resulting mess later, in the background, sequentially. Two structures, one problem, opposite trade-offs — which is exactly why "which index" and "which engine" are the same question asked at different altitudes.</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Before / after — full table scan vs. B-tree index</div>
+      <svg viewBox="0 0 1040 420" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="baArrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#2563eb"/>
+          </marker>
+        </defs>
+
+        <!-- LEFT PANEL -->
+        <rect x="20" y="20" width="440" height="380" rx="12" fill="#fff5f5" stroke="#c92a2a" stroke-width="2" stroke-dasharray="6 4"/>
+        <text x="40" y="48" font-size="14" font-weight="800" fill="#7f1d1d">BEFORE — full table scan</text>
+
+        <rect x="40" y="66" width="400" height="26" fill="#ffc9c9" stroke="#c92a2a"/>
+        <text x="52" y="84" font-size="12" font-weight="700" fill="#7f1d1d">users — 100,000,000 rows</text>
+        <g font-size="11.5" fill="#1a1917" font-family="SF Mono, Menlo, monospace">
+          <rect x="40" y="92" width="400" height="22" fill="#fff" stroke="#e5e3de"/>
+          <text x="52" y="107">row 1                     read</text>
+          <rect x="40" y="114" width="400" height="22" fill="#fff" stroke="#e5e3de"/>
+          <text x="52" y="129">row 2                     read</text>
+          <rect x="40" y="136" width="400" height="22" fill="#fff" stroke="#e5e3de"/>
+          <text x="52" y="151">…                         read</text>
+          <rect x="40" y="158" width="400" height="22" fill="#dcfce7" stroke="#2f9e44" stroke-width="1.5"/>
+          <text x="52" y="173">row 61,204,331         ✓ MATCH</text>
+          <rect x="40" y="180" width="400" height="22" fill="#fff" stroke="#e5e3de"/>
+          <text x="52" y="195">…                         read</text>
+          <rect x="40" y="202" width="400" height="22" fill="#fff" stroke="#e5e3de"/>
+          <text x="52" y="217">row 100,000,000           read</text>
+        </g>
+        <text x="40" y="256" font-size="12.5" fill="#c92a2a">✗ O(n) pages read to return 1 row</text>
+        <text x="40" y="280" font-size="12.5" fill="#c92a2a">✗ evicts every other query's cached pages</text>
+        <text x="40" y="304" font-size="12.5" fill="#c92a2a">✗ gets strictly worse every single day</text>
+        <text x="40" y="328" font-size="12.5" fill="#c92a2a">✗ concurrency multiplies the damage</text>
+        <text x="40" y="366" font-size="12" font-style="italic" fill="#7f1d1d">Sorting the table doesn't fix it: one physical</text>
+        <text x="40" y="384" font-size="12" font-style="italic" fill="#7f1d1d">order, and inserts rewrite the file.</text>
+
+        <!-- arrow -->
+        <line x1="470" y1="210" x2="565" y2="210" stroke="#2563eb" stroke-width="3" marker-end="url(#baArrow)"/>
+        <text x="517" y="198" text-anchor="middle" font-size="11.5" font-weight="800" fill="#2563eb">index it</text>
+
+        <!-- RIGHT PANEL -->
+        <rect x="580" y="20" width="440" height="380" rx="12" fill="#f0fdf4" stroke="#2f9e44" stroke-width="2"/>
+        <text x="600" y="48" font-size="14" font-weight="800" fill="#14532d">AFTER — B-tree index</text>
+
+        <!-- tree -->
+        <rect x="740" y="68" width="120" height="30" rx="6" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+        <text x="800" y="88" text-anchor="middle" font-size="12" font-weight="700" fill="#1e3a8a">root</text>
+        <text x="876" y="88" font-size="10.5" font-style="italic" fill="#6b6861">cached</text>
+
+        <line x1="770" y1="98" x2="680" y2="138" stroke="#3b5bdb" stroke-width="1.6"/>
+        <line x1="800" y1="98" x2="800" y2="138" stroke="#3b5bdb" stroke-width="1.6"/>
+        <line x1="830" y1="98" x2="920" y2="138" stroke="#3b5bdb" stroke-width="1.6"/>
+
+        <rect x="620" y="138" width="110" height="28" rx="6" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.6"/>
+        <text x="675" y="157" text-anchor="middle" font-size="11" font-weight="700" fill="#1e3a8a">internal</text>
+        <rect x="745" y="138" width="110" height="28" rx="6" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.6"/>
+        <text x="800" y="157" text-anchor="middle" font-size="11" font-weight="700" fill="#1e3a8a">internal</text>
+        <rect x="870" y="138" width="110" height="28" rx="6" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.6"/>
+        <text x="925" y="157" text-anchor="middle" font-size="11" font-weight="700" fill="#1e3a8a">internal</text>
+        <text x="600" y="157" font-size="10.5" font-style="italic" fill="#6b6861">cached</text>
+
+        <line x1="800" y1="166" x2="720" y2="200" stroke="#3b5bdb" stroke-width="1.6"/>
+        <line x1="800" y1="166" x2="800" y2="200" stroke="#3b5bdb" stroke-width="1.6"/>
+        <line x1="800" y1="166" x2="880" y2="200" stroke="#3b5bdb" stroke-width="1.6"/>
+
+        <rect x="660" y="200" width="100" height="28" rx="6" fill="#fff" stroke="#3b5bdb" stroke-width="1.6"/>
+        <text x="710" y="219" text-anchor="middle" font-size="11" font-weight="700" fill="#1e3a8a">leaf</text>
+        <rect x="770" y="200" width="100" height="28" rx="6" fill="#fef3c7" stroke="#d97706" stroke-width="2.2"/>
+        <text x="820" y="219" text-anchor="middle" font-size="11" font-weight="800" fill="#92400e">leaf ✓</text>
+        <rect x="880" y="200" width="100" height="28" rx="6" fill="#fff" stroke="#3b5bdb" stroke-width="1.6"/>
+        <text x="930" y="219" text-anchor="middle" font-size="11" font-weight="700" fill="#1e3a8a">leaf</text>
+        <line x1="660" y1="214" x2="620" y2="214" stroke="#3b5bdb" stroke-width="1.2" stroke-dasharray="3 3"/>
+        <line x1="980" y1="214" x2="1010" y2="214" stroke="#3b5bdb" stroke-width="1.2" stroke-dasharray="3 3"/>
+        <text x="600" y="245" font-size="10.5" font-style="italic" fill="#6b6861">1 physical read · leaves linked in sorted order</text>
+
+        <line x1="820" y1="228" x2="820" y2="258" stroke="#2f9e44" stroke-width="2" marker-end="url(#baArrow)"/>
+        <rect x="740" y="258" width="160" height="26" rx="6" fill="#dcfce7" stroke="#2f9e44" stroke-width="1.8"/>
+        <text x="820" y="276" text-anchor="middle" font-size="11.5" font-weight="700" fill="#14532d">row pointer → row</text>
+
+        <text x="600" y="312" font-size="12.5" fill="#2f9e44">✓ 3–4 page reads at ANY table size</text>
+        <text x="600" y="336" font-size="12.5" fill="#2f9e44">✓ ordered → ranges and ORDER BY work</text>
+        <text x="600" y="360" font-size="12.5" fill="#2f9e44">✓ several indexes, each sorted differently</text>
+        <text x="600" y="384" font-size="12.5" fill="#c92a2a">✗ every write must now maintain it too</text>
+      </svg>
+      <p class="caption">Depth is effectively constant. The bill arrives on the write path.</p>
+    </div>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">Why can't you get the benefit of an index by simply storing the table itself in sorted order on the search column? Give the two independent reasons — and then explain why an in-memory hash table, which fixes the insert problem, still isn't a general answer.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 Answer out loud before reading on. If you hesitate, re-read the second and third paragraphs — the one-physical-order argument and the ordering-destroyed-by-hashing argument.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> If the answer is a separate ordered structure, what exactly is that structure, and what are the ideas you need in order to reason about it?</div>
+  </section>
+
+  <!-- ══════════════════ §4 ══════════════════ -->
+  <section id="s4">
+    <h2 class="section-title"><span class="num">§4</span> 💡 The Core Idea</h2>
+
+    <div class="definition">An index is a redundant, ordered, auxiliary data structure that maps the values of one or more columns to the locations of the rows containing them — bought with storage and with write throughput on every insert, update, and delete, and worth buying only when it eliminates a large fraction of the rows a hot query would otherwise examine.</div>
+
+    <p>The five ideas below build on each other. Each one only makes sense because of the one before it.</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">The build chain</div>
+      <svg viewBox="0 0 1040 190" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="bcArrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#7c3aed"/>
+          </marker>
+        </defs>
+        <g>
+          <rect x="10" y="30" width="176" height="58" rx="9" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+          <text x="98" y="64" text-anchor="middle" font-size="12.5" font-weight="800" fill="#92400e">SELECTIVITY</text>
+          <text x="98" y="110" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">because an index only</text>
+          <text x="98" y="126" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">pays when it excludes</text>
+          <text x="98" y="142" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">most rows</text>
+        </g>
+        <line x1="192" y1="59" x2="222" y2="59" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow)"/>
+        <g>
+          <rect x="228" y="30" width="176" height="58" rx="9" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+          <text x="316" y="64" text-anchor="middle" font-size="12.5" font-weight="800" fill="#1e3a8a">B-TREE</text>
+          <text x="316" y="110" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">therefore we need an</text>
+          <text x="316" y="126" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">ordered, page-shaped</text>
+          <text x="316" y="142" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">structure</text>
+        </g>
+        <line x1="410" y1="59" x2="440" y2="59" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow)"/>
+        <g>
+          <rect x="446" y="30" width="176" height="58" rx="9" fill="#c3fae8" stroke="#0ca678" stroke-width="2"/>
+          <text x="534" y="55" text-anchor="middle" font-size="12.5" font-weight="800" fill="#134e4a">CLUSTERED vs</text>
+          <text x="534" y="73" text-anchor="middle" font-size="12.5" font-weight="800" fill="#134e4a">SECONDARY</text>
+          <text x="534" y="110" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">which means the</text>
+          <text x="534" y="126" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">index's link to the</text>
+          <text x="534" y="142" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">row matters</text>
+        </g>
+        <line x1="628" y1="59" x2="658" y2="59" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow)"/>
+        <g>
+          <rect x="664" y="30" width="176" height="58" rx="9" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+          <text x="752" y="55" text-anchor="middle" font-size="12.5" font-weight="800" fill="#4c1d95">COMPOSITE +</text>
+          <text x="752" y="73" text-anchor="middle" font-size="12.5" font-weight="800" fill="#4c1d95">LEFTMOST</text>
+          <text x="752" y="110" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">so one index serves</text>
+          <text x="752" y="126" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">many predicates —</text>
+          <text x="752" y="142" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">but only in order</text>
+        </g>
+        <line x1="846" y1="59" x2="876" y2="59" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow)"/>
+        <g>
+          <rect x="882" y="30" width="150" height="58" rx="9" fill="#ffd8a8" stroke="#e67700" stroke-width="2"/>
+          <text x="957" y="64" text-anchor="middle" font-size="12.5" font-weight="800" fill="#7c2d12">LSM-TREE</text>
+          <text x="957" y="110" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">because that in-place</text>
+          <text x="957" y="126" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">write is the cost the</text>
+          <text x="957" y="142" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">LSM inverts</text>
+        </g>
+      </svg>
+      <p class="caption">Read the connective words under the arrows — the chain is the argument.</p>
+    </div>
+
+    <h3>Selectivity — what an index actually buys</h3>
+    <p>An index does not make a query "fast" in the abstract; it reduces the number of rows the engine must examine, and that reduction is only valuable if it is large. <strong>Selectivity</strong> is the fraction of the table a predicate keeps — <code>WHERE user_id = 4821</code> on a table of 50 million orders across 2 million users might keep 0.000005% of rows, while <code>WHERE is_active = true</code> might keep 95% of them. For the first, an index turns a 50-million-row scan into a handful of page reads. For the second, the index is actively harmful: following it means a random row fetch for nearly every row in the table, which is <em>slower</em> than reading the table sequentially, and a competent query planner will correctly ignore the index you built. The practical break-even is somewhere around 5–20% of rows returned depending on how physically clustered those rows are, and below about 1% an index is an unambiguous win. This is why "index the boolean column" is a red flag in an interview: it is a column with two distinct values and therefore almost no selectivity to offer.</p>
+
+    <h3>The B-tree — an ordered map the disk can walk in four hops</h3>
+    <p>Because selectivity is only realisable if the engine can <em>jump</em> to the qualifying rows rather than filter its way to them, we need a structure that is both ordered and cheap to descend. The B-tree (in practice the B+tree, where all values live in the leaves and the leaves are linked) achieves this by making every node a <strong>full disk page</strong> holding hundreds of keys with child pointers between them. Searching means reading one page, binary-searching within it in memory, following one pointer, and repeating — so the <strong>fanout</strong>, typically 300–500 for a small key on an 8KB page, is what collapses the tree's depth. Four levels of 400-way fanout addresses 25 billion entries, which is why B-tree depth is effectively constant across every table size you will meet, and why the top one or two levels are permanently resident in the buffer pool. Two properties fall out of the ordering and matter enormously in practice: the leaves are linked in sorted order, so <strong>range scans and <code>ORDER BY</code> are nearly free</strong> once you've located the start, and the tree is kept <strong>balanced</strong> on insert, so worst-case and average-case lookups are the same — which is what gives B-tree systems their predictable p99.</p>
+
+    <h3>Clustered vs. secondary — where the row actually lives</h3>
+    <p>The B-tree gives you an ordered key; it does not by itself tell you what sits at the leaf, and that detail decides how many I/Os your query really costs. In a <strong>clustered index</strong> the leaf <em>is</em> the row: the table is physically stored in primary-key order inside the index, so a PK lookup returns the data with no second fetch. InnoDB works this way, which has a consequence candidates rarely volunteer — an InnoDB <strong>secondary index stores the primary key</strong>, not a physical row pointer, so a secondary lookup is <em>two</em> B-tree descents (index → PK, then PK → row), and a fat primary key inflates every secondary index on the table. In a <strong>heap-organised</strong> table like Postgres's, the table is an unordered heap and every index, including the primary key's, stores a pointer (a <code>ctid</code>) into it, so every index lookup that needs row data pays one extra random read. The escape hatch in both worlds is a <strong>covering index</strong>: if the index itself contains every column the query needs, the engine never touches the table at all — Postgres calls this an index-only scan, MySQL reports <code>Using index</code> — which is often the single largest win available on a hot read path, and it is the reason <code>INCLUDE</code> columns exist.</p>
+
+    <h3>Composite indexes — one index, several columns, one direction</h3>
+    <p>Once you accept that the leaf-to-row hop is what you want to avoid, the natural move is to put more columns <em>into</em> the index — and multi-column indexes come with the rule that generates more interview mistakes than anything else in this subtopic. A composite index on <code>(a, b, c)</code> is sorted by <code>a</code>, then by <code>b</code> within equal <code>a</code>, then by <code>c</code> within equal <code>(a, b)</code>; it is a phone book sorted by last name then first name. That means it serves <code>WHERE a = ?</code>, <code>WHERE a = ? AND b = ?</code>, and <code>WHERE a = ? AND b = ? AND c = ?</code> — the <strong>leftmost prefix</strong> — and it is useless for <code>WHERE b = ?</code> alone, exactly as a phone book is useless for finding everyone named "Ada". The second rule is subtler and is the one that separates candidates: a <strong>range predicate is a stopper</strong>. Given <code>(a, b, c)</code> and <code>WHERE a = 1 AND b &gt; 5 AND c = 9</code>, the engine seeks on <code>a</code>, then scans the <code>b &gt; 5</code> range, and <em>cannot</em> seek on <code>c</code> at all — <code>c</code> values are only sorted within a fixed <code>b</code>, so all it can do is filter rows it has already read. The rule that falls out is <strong>ESR: Equality columns first, then the Sort column, then Range columns</strong>, and stating that ordering rule out loud is worth more in an interview than naming five index types.</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Leftmost prefix and the range stopper — index on (a, b, c)</div>
+      <svg viewBox="0 0 1040 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <!-- sorted key layout -->
+        <text x="20" y="30" font-size="13" font-weight="800" fill="#1a1917">Physical key order in the index — sorted by a, then b within a, then c within (a,b)</text>
+        <g font-family="SF Mono, Menlo, monospace" font-size="11.5">
+          <rect x="20" y="44" width="140" height="26" fill="#dbe4ff" stroke="#3b5bdb"/><text x="34" y="62" fill="#1e3a8a">a=1 b=2 c=7</text>
+          <rect x="160" y="44" width="140" height="26" fill="#dbe4ff" stroke="#3b5bdb"/><text x="174" y="62" fill="#1e3a8a">a=1 b=2 c=9</text>
+          <rect x="300" y="44" width="140" height="26" fill="#dbe4ff" stroke="#3b5bdb"/><text x="314" y="62" fill="#1e3a8a">a=1 b=6 c=3</text>
+          <rect x="440" y="44" width="140" height="26" fill="#dbe4ff" stroke="#3b5bdb"/><text x="454" y="62" fill="#1e3a8a">a=1 b=6 c=9</text>
+          <rect x="580" y="44" width="140" height="26" fill="#dbe4ff" stroke="#3b5bdb"/><text x="594" y="62" fill="#1e3a8a">a=1 b=8 c=1</text>
+          <rect x="720" y="44" width="140" height="26" fill="#f3f2ef" stroke="#b8b4ac"/><text x="734" y="62" fill="#6b6861">a=2 b=1 c=4</text>
+          <rect x="860" y="44" width="140" height="26" fill="#f3f2ef" stroke="#b8b4ac"/><text x="874" y="62" fill="#6b6861">a=2 b=3 c=2</text>
+        </g>
+        <text x="20" y="92" font-size="11.5" font-style="italic" fill="#6b6861">c is only sorted inside a fixed (a, b). That single fact is the whole rule.</text>
+
+        <!-- WORKS -->
+        <rect x="20" y="110" width="480" height="170" rx="10" fill="#f0fdf4" stroke="#2f9e44" stroke-width="2"/>
+        <text x="40" y="136" font-size="13" font-weight="800" fill="#14532d">✓ SERVED — leftmost prefix</text>
+        <g font-family="SF Mono, Menlo, monospace" font-size="12" fill="#14532d">
+          <text x="40" y="164">WHERE a = ?</text>
+          <text x="40" y="188">WHERE a = ? AND b = ?</text>
+          <text x="40" y="212">WHERE a = ? AND b = ? AND c = ?</text>
+          <text x="40" y="236">WHERE a = ? AND b = ? ORDER BY c</text>
+        </g>
+        <text x="40" y="264" font-size="11.5" font-style="italic" fill="#2f9e44">seek straight to the range, then walk the linked leaves</text>
+
+        <!-- FAILS -->
+        <rect x="520" y="110" width="500" height="170" rx="10" fill="#fff5f5" stroke="#c92a2a" stroke-width="2"/>
+        <text x="540" y="136" font-size="13" font-weight="800" fill="#7f1d1d">✗ NOT SERVED — or only partly</text>
+        <g font-family="SF Mono, Menlo, monospace" font-size="12" fill="#7f1d1d">
+          <text x="540" y="164">WHERE b = ?</text>
+          <text x="540" y="188">WHERE c = ?</text>
+          <text x="540" y="212">WHERE a = ? AND b &gt; ? AND c = ?</text>
+        </g>
+        <text x="700" y="164" font-size="11" font-style="italic" fill="#c92a2a">← no leading a: full scan</text>
+        <text x="700" y="188" font-size="11" font-style="italic" fill="#c92a2a">← same</text>
+        <text x="540" y="236" font-size="11.5" font-weight="700" fill="#c92a2a">RANGE STOPPER: seeks on a, scans the b range,</text>
+        <text x="540" y="254" font-size="11.5" font-weight="700" fill="#c92a2a">can only FILTER on c — index "used", still slow.</text>
+        <text x="540" y="274" font-size="11.5" font-style="italic" fill="#c92a2a">Fix: reorder to (a, c, b) — Equality → Sort → Range.</text>
+      </svg>
+      <p class="caption">An index on (a,b) and an index on (b,a) are different objects serving different queries.</p>
+    </div>
+
+    <h3>The LSM-tree — the same problem, the write path inverted</h3>
+    <p>Everything above optimises the read; the bill lands on the write, and the LSM-tree is what you build when that bill is the one you cannot pay. A B-tree write is an <strong>in-place</strong> modification: locate the leaf, rewrite the whole 8–16KB page to change 100 bytes, split it if it's full, propagate the split upward, and do all of that as <em>random</em> I/O at whatever offset the key happens to live. The LSM-tree refuses to modify anything in place. A write is appended to a WAL and inserted into an in-memory sorted structure (the <strong>memtable</strong>, usually a skip list); when the memtable fills, it is frozen and written out as an immutable, sorted <strong>SSTable</strong> in one sequential pass; and a background <strong>compaction</strong> process periodically merges overlapping SSTables into fewer, larger, non-overlapping ones, discarding superseded values and tombstones as it goes. Writes become sequential and extremely fast; the cost moves to reads, which may have to consult the memtable plus several levels of SSTables — mitigated by a per-SSTable <strong>Bloom filter</strong> that answers "definitely not in this file" for a few bits per key — and to background I/O, since compaction is real work competing with your live traffic. Notice the shape of this: it is 8.3's argument again in a different costume. You did not remove the work; you moved it from the write path to a background process, and the honest version of the trade-off names where it went.</p>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">A query is <code>WHERE tenant_id = ? AND created_at &gt; ? ORDER BY created_at DESC LIMIT 50</code>, and a colleague proposes three separate single-column indexes on <code>tenant_id</code>, <code>created_at</code>, and <code>status</code>. Explain precisely why that is worse than one index, state the index you would build with its column order, and explain what the engine can do with each column in it.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read §4 — the composite indexes block, specifically the leftmost-prefix and range-stopper paragraphs.</div>
+      </div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">2</span>
+          <span class="qtext">Explain why the <strong>selectivity</strong> block is what makes the <strong>clustered vs. secondary</strong> block matter, rather than the two being unrelated facts. Why does a heap-organised secondary index lookup make a marginally-selective predicate <em>worse</em>, not just no better?</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the build chain above and trace the "because → therefore → which means" links between blocks one, two, and three.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> You know the structures and the rules. What physically happens inside each one when you read and when you write — and how does each one fail?</div>
+  </section>
+
+  <!-- ══════════════════ §5 ══════════════════ -->
+  <section id="s5">
+    <h2 class="section-title"><span class="num">§5</span> ⚙️ How It Actually Works</h2>
+
+    <h4>The B-tree read path (happy path)</h4>
+    <ol class="steps">
+      <li>The planner decides an index is worth using, based on the estimated selectivity of the predicate against the column's statistics (histogram, distinct-value count, physical correlation).</li>
+      <li>It reads the <strong>root page</strong> — essentially always already in the buffer pool — and binary-searches within that page's few hundred keys to pick a child pointer.</li>
+      <li>It descends one internal level at a time. Each hop is one page read, and the upper levels are hot, so they are memory hits.</li>
+      <li>It arrives at a <strong>leaf page</strong>, which is typically the only physical I/O in the whole descent.</li>
+      <li>If the index is covering, it returns from the leaf and stops. Otherwise it follows the leaf entry to the row — a second random read in Postgres's heap, or a second B-tree descent on the primary key in InnoDB.</li>
+      <li>For a range or <code>ORDER BY</code>, it walks the <strong>linked leaf pages</strong> sequentially from the start point, which is why an index that matches the sort order removes the sort step entirely.</li>
+    </ol>
+
+    <div class="mental-model">🗺️ <span class="mm-name">Mental model — the tabbed phone book.</span> A B-tree is a phone book with tabbed dividers: the tabs let you skip to "Ma–Mc" without reading anything before it, and once there the names are in order so a range ("everyone from Ma to Mo") is just reading forward.<span class="mm-break">Where it breaks down: a phone book is printed once and never changes, and it is exactly the change that costs. The real B-tree difficulty is inserting a new name into a page that is already full — the split, the propagation upward, and the fragmentation left behind — none of which the phone book image contains.</span></div>
+
+    <h4>The B-tree write path</h4>
+    <ol class="steps">
+      <li>The change is written to the <strong>write-ahead log</strong> first, so it survives a crash before it is applied anywhere.</li>
+      <li>The engine descends to the target leaf and modifies it <strong>in place</strong> in the buffer pool; the dirty page is flushed later by a checkpoint.</li>
+      <li>If the leaf is full, it <strong>splits</strong> into two half-full pages and a new separator key is inserted into the parent — which may itself split, cascading upward, in the worst case growing the tree by a level.</li>
+      <li>Every <strong>secondary index</strong> that contains the affected column must be updated too. One <code>INSERT</code> into a table with ten indexes is eleven structure modifications.</li>
+      <li>The cost profile: <strong>random</strong> I/O at an arbitrary offset, plus <strong>write amplification</strong> — an entire 8–16KB page rewritten to change a small row, plus the WAL record, plus (in InnoDB) the doublewrite buffer. Page splits also leave pages half-full, so the index physically bloats over time and needs periodic rebuilding.</li>
+    </ol>
+
+    <h4>The LSM write and read paths</h4>
+    <ol class="steps">
+      <li><strong>Write:</strong> append to the WAL, then insert into the in-memory <strong>memtable</strong> (a sorted skip list). That is the entire foreground cost — one sequential append and one in-memory insert. This is why LSM engines sustain write rates B-trees cannot.</li>
+      <li><strong>Flush:</strong> when the memtable exceeds its size threshold it is frozen, a new one takes over, and the frozen one is written out as an immutable sorted <strong>SSTable</strong> in a single sequential pass. Nothing is ever updated in place; an overwrite is just a newer entry, and a delete is a <strong>tombstone</strong>.</li>
+      <li><strong>Compaction:</strong> a background process merges SSTables — in leveled compaction, level <em>L</em> is roughly ten times the size of level <em>L−1</em> and its files are non-overlapping — discarding superseded values and tombstones and keeping the number of files a read must consult bounded.</li>
+      <li><strong>Read:</strong> check the memtable first, then each level newest-first, taking the first value found. Before touching a file, consult its <strong>Bloom filter</strong>, which at ~10 bits per key answers "definitely not here" with about a 1% false-positive rate and never a false negative — so most files are skipped without any I/O at all.</li>
+      <li><strong>Range read:</strong> here the Bloom filter is useless, because it can only answer questions about specific keys. A range scan must open an iterator on every level that could overlap the range and merge them, which is why range-heavy workloads are the weak point of LSM engines.</li>
+    </ol>
+
+    <div class="mental-model">🗺️ <span class="mm-name">Mental model — the stack of dated ledgers.</span> An LSM-tree is a pile of ledgers, newest on top. Writing is easy: scribble in today's ledger. Reading means checking today's ledger, then yesterday's, and so on until you find the entry — the newest wins. Periodically a clerk rewrites the whole pile into one clean book, dropping every entry that was later corrected or crossed out.<span class="mm-break">Where it breaks down: it implies the clerk works in idle time. Compaction runs on the same disks and CPUs as your live traffic, and a compaction backlog is a real, observable production incident — the analogy hides the fact that the cleanup competes with the thing it's cleaning up for.</span></div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Mechanism flow — four paths</div>
+      <svg viewBox="0 0 1040 660" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="mfArrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#2563eb"/>
+          </marker>
+          <marker id="mfArrowO" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#e67700"/>
+          </marker>
+        </defs>
+
+        <!-- ① B-TREE READ -->
+        <text x="20" y="26" font-size="13" font-weight="800" fill="#1e3a8a">① B-TREE READ — descend, few hops, mostly cached</text>
+        <g>
+          <rect x="20" y="40" width="150" height="52" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+          <text x="95" y="62" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1e3a8a">planner picks</text>
+          <text x="95" y="79" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1e3a8a">index (stats)</text>
+          <line x1="176" y1="66" x2="204" y2="66" stroke="#2563eb" stroke-width="2.2" marker-end="url(#mfArrow)"/>
+          <rect x="210" y="40" width="150" height="52" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+          <text x="285" y="62" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1e3a8a">root page</text>
+          <text x="285" y="79" text-anchor="middle" font-size="10.5" font-style="italic" fill="#6b6861">cached</text>
+          <line x1="366" y1="66" x2="394" y2="66" stroke="#2563eb" stroke-width="2.2" marker-end="url(#mfArrow)"/>
+          <rect x="400" y="40" width="160" height="52" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+          <text x="480" y="62" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1e3a8a">internal pages</text>
+          <text x="480" y="79" text-anchor="middle" font-size="10.5" font-style="italic" fill="#6b6861">cached</text>
+          <line x1="566" y1="66" x2="594" y2="66" stroke="#2563eb" stroke-width="2.2" marker-end="url(#mfArrow)"/>
+          <rect x="600" y="40" width="150" height="52" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+          <text x="675" y="62" text-anchor="middle" font-size="11.5" font-weight="700" fill="#92400e">leaf page</text>
+          <text x="675" y="79" text-anchor="middle" font-size="10.5" font-style="italic" fill="#92400e">1 physical I/O</text>
+          <line x1="756" y1="66" x2="784" y2="66" stroke="#2563eb" stroke-width="2.2" marker-end="url(#mfArrow)"/>
+          <rect x="790" y="40" width="150" height="52" rx="8" fill="#dcfce7" stroke="#2f9e44" stroke-width="2"/>
+          <text x="865" y="70" text-anchor="middle" font-size="11.5" font-weight="700" fill="#14532d">row fetch</text>
+        </g>
+        <text x="20" y="112" font-size="11.5" fill="#2f9e44">✓ covering index → stop at the leaf, never fetch the row</text>
+        <text x="20" y="132" font-size="11.5" fill="#2f9e44">✓ leaves are linked → range scan and ORDER BY are a sequential walk</text>
+
+        <!-- ② B-TREE WRITE -->
+        <text x="20" y="176" font-size="13" font-weight="800" fill="#7f1d1d">② B-TREE WRITE — in place, random, amplified</text>
+        <g>
+          <rect x="20" y="190" width="120" height="50" rx="8" fill="#f3f2ef" stroke="#6b6861" stroke-width="2"/>
+          <text x="80" y="220" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1a1917">WAL first</text>
+          <line x1="146" y1="215" x2="174" y2="215" stroke="#2563eb" stroke-width="2.2" marker-end="url(#mfArrow)"/>
+          <rect x="180" y="190" width="170" height="50" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+          <text x="265" y="220" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1e3a8a">descend to leaf</text>
+          <line x1="356" y1="215" x2="384" y2="215" stroke="#2563eb" stroke-width="2.2" marker-end="url(#mfArrow)"/>
+          <rect x="390" y="190" width="180" height="50" rx="8" fill="#ffd8a8" stroke="#e67700" stroke-width="2"/>
+          <text x="480" y="220" text-anchor="middle" font-size="11.5" font-weight="700" fill="#7c2d12">modify IN PLACE</text>
+          <line x1="576" y1="215" x2="604" y2="215" stroke="#2563eb" stroke-width="2.2" marker-end="url(#mfArrow)"/>
+          <rect x="610" y="184" width="330" height="62" rx="8" fill="#ffc9c9" stroke="#c92a2a" stroke-width="2"/>
+          <text x="775" y="208" text-anchor="middle" font-size="11.5" font-weight="700" fill="#7f1d1d">page FULL → SPLIT →</text>
+          <text x="775" y="228" text-anchor="middle" font-size="11.5" font-weight="700" fill="#7f1d1d">propagate to parent (may cascade)</text>
+        </g>
+        <line x1="265" y1="246" x2="265" y2="272" stroke="#c92a2a" stroke-width="2" marker-end="url(#mfArrow)"/>
+        <text x="285" y="270" font-size="11.5" font-style="italic" fill="#c92a2a">… and repeat for EVERY secondary index</text>
+        <text x="20" y="296" font-size="11.5" fill="#c92a2a">⚠ 1 INSERT + 10 indexes = 11 structure writes · random I/O</text>
+        <text x="20" y="316" font-size="11.5" fill="#c92a2a">⚠ rewrite an 8–16KB page to change 100 bytes · splits leave permanent bloat</text>
+
+        <!-- ③ LSM WRITE -->
+        <text x="20" y="360" font-size="13" font-weight="800" fill="#7c2d12">③ LSM WRITE — sequential now, cleaned up later</text>
+        <g>
+          <rect x="20" y="374" width="120" height="56" rx="8" fill="#f3f2ef" stroke="#6b6861" stroke-width="2"/>
+          <text x="80" y="408" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1a1917">WAL append</text>
+          <line x1="146" y1="402" x2="174" y2="402" stroke="#e67700" stroke-width="2.2" marker-end="url(#mfArrowO)"/>
+          <rect x="180" y="374" width="190" height="56" rx="8" fill="#ffd8a8" stroke="#e67700" stroke-width="2"/>
+          <text x="275" y="398" text-anchor="middle" font-size="11.5" font-weight="700" fill="#7c2d12">MEMTABLE</text>
+          <text x="275" y="416" text-anchor="middle" font-size="10.5" font-style="italic" fill="#7c2d12">sorted skip list, in RAM</text>
+          <line x1="376" y1="402" x2="424" y2="402" stroke="#e67700" stroke-width="2.2" marker-end="url(#mfArrowO)"/>
+          <text x="400" y="392" text-anchor="middle" font-size="10" font-weight="700" fill="#e67700">flush</text>
+          <rect x="430" y="374" width="180" height="56" rx="8" fill="#fff3bf" stroke="#e67700" stroke-width="2"/>
+          <text x="520" y="398" text-anchor="middle" font-size="11.5" font-weight="700" fill="#7c2d12">SSTable — L0</text>
+          <text x="520" y="416" text-anchor="middle" font-size="10.5" font-style="italic" fill="#7c2d12">immutable, sorted</text>
+          <line x1="616" y1="402" x2="678" y2="402" stroke="#e67700" stroke-width="2.2" marker-end="url(#mfArrowO)"/>
+          <text x="647" y="392" text-anchor="middle" font-size="10" font-weight="700" fill="#e67700">compaction</text>
+          <rect x="684" y="374" width="256" height="56" rx="8" fill="#ffd8a8" stroke="#e67700" stroke-width="2"/>
+          <text x="812" y="398" text-anchor="middle" font-size="11.5" font-weight="700" fill="#7c2d12">L1 … Ln — ×10 size per level</text>
+          <text x="812" y="416" text-anchor="middle" font-size="10.5" font-style="italic" fill="#7c2d12">merge, drop overwrites + tombstones</text>
+        </g>
+        <text x="20" y="454" font-size="11.5" fill="#2f9e44">✓ foreground cost = 1 sequential append + 1 in-memory insert</text>
+        <text x="20" y="474" font-size="11.5" fill="#c92a2a">⚠ compaction is background I/O COMPETING with live traffic — this is where p99 goes</text>
+
+        <!-- ④ LSM READ -->
+        <text x="20" y="518" font-size="13" font-weight="800" fill="#7c2d12">④ LSM READ — newest first, Bloom filters skip the rest</text>
+        <g>
+          <rect x="20" y="532" width="170" height="52" rx="8" fill="#ffd8a8" stroke="#e67700" stroke-width="2"/>
+          <text x="105" y="563" text-anchor="middle" font-size="11.5" font-weight="700" fill="#7c2d12">memtable</text>
+          <line x1="196" y1="558" x2="224" y2="558" stroke="#e67700" stroke-width="2.2" marker-end="url(#mfArrowO)"/>
+          <rect x="230" y="532" width="170" height="52" rx="8" fill="#fff3bf" stroke="#e67700" stroke-width="2"/>
+          <text x="315" y="554" text-anchor="middle" font-size="11.5" font-weight="700" fill="#7c2d12">L0</text>
+          <text x="315" y="572" text-anchor="middle" font-size="10.5" font-style="italic" fill="#7c2d12">[bloom]</text>
+          <line x1="406" y1="558" x2="434" y2="558" stroke="#e67700" stroke-width="2.2" marker-end="url(#mfArrowO)"/>
+          <rect x="440" y="532" width="170" height="52" rx="8" fill="#fff3bf" stroke="#e67700" stroke-width="2"/>
+          <text x="525" y="554" text-anchor="middle" font-size="11.5" font-weight="700" fill="#7c2d12">L1</text>
+          <text x="525" y="572" text-anchor="middle" font-size="10.5" font-style="italic" fill="#7c2d12">[bloom]</text>
+          <line x1="616" y1="558" x2="644" y2="558" stroke="#e67700" stroke-width="2.2" marker-end="url(#mfArrowO)"/>
+          <rect x="650" y="532" width="170" height="52" rx="8" fill="#fff3bf" stroke="#e67700" stroke-width="2"/>
+          <text x="735" y="554" text-anchor="middle" font-size="11.5" font-weight="700" fill="#7c2d12">Ln</text>
+          <text x="735" y="572" text-anchor="middle" font-size="10.5" font-style="italic" fill="#7c2d12">[bloom]</text>
+          <rect x="840" y="532" width="180" height="52" rx="8" fill="#dcfce7" stroke="#2f9e44" stroke-width="2"/>
+          <text x="930" y="563" text-anchor="middle" font-size="11.5" font-weight="700" fill="#14532d">first hit wins</text>
+        </g>
+        <text x="20" y="608" font-size="11.5" fill="#2f9e44">✓ bloom = "definitely not here" for ~10 bits/key, ~1% false positive, never a false negative</text>
+        <text x="20" y="628" font-size="11.5" fill="#c92a2a">✗ bloom does NOTHING for RANGE scans — you must merge iterators across every overlapping level</text>
+      </svg>
+      <p class="caption">Same problem, opposite directions: the B-tree pays on write, the LSM pays in the background.</p>
+    </div>
+
+    <h4>Failure and edge cases</h4>
+    <ul class="plain">
+      <li><strong>The index exists and is not used.</strong> Wrapping the column in a function (<code>WHERE lower(email) = ?</code>), a leading-wildcard <code>LIKE '%foo'</code>, an implicit type cast, or an <code>OR</code> across unindexed columns all defeat the seek. The fix is usually an expression index or a rewritten predicate — but first you have to notice, which means reading <code>EXPLAIN</code> rather than assuming (8.5).</li>
+      <li><strong>Stale or skewed statistics.</strong> The planner chooses based on estimated selectivity. After a bulk load, or on a column with a skewed distribution, the estimate can be wrong by orders of magnitude and the planner picks a scan over a perfectly good index — or the reverse.</li>
+      <li><strong>The leftmost-prefix miss.</strong> An index on <code>(a, b, c)</code> cannot serve <code>WHERE b = ?</code>. Teams commonly have three composites that all start with the same column and none that serves the query they actually run.</li>
+      <li><strong>The range stopper.</strong> Columns after the first range predicate cannot be used for seeking, only for filtering rows already read. This shows up as an index that "is being used" while still reading a million rows.</li>
+      <li><strong>Write amplification from index count.</strong> Every added index taxes every insert, update, and delete on that table, forever. This is the most common cause of "writes got slower and nobody knows why" after a performance-tuning sprint.</li>
+      <li><strong>Right-edge contention on monotonic keys.</strong> An auto-increment or timestamp primary key means every insert targets the same rightmost leaf page, making it a lock and latch hot spot — the same shape as the hot-partition problem in 7.6, one level down. UUIDv7/ULID or hashed prefixes trade some locality for spread.</li>
+      <li><strong>Compaction backlog (LSM).</strong> If ingest outruns compaction, the number of levels a read must consult grows, read latency degrades, and eventually the engine applies <strong>write stalls</strong> to let compaction catch up. Tail latency on an LSM engine is a function of background work, not just query shape.</li>
+      <li><strong>Delete-heavy LSM workloads.</strong> Deletes write tombstones rather than removing data, so a queue-like table can accumulate millions of tombstones that every range scan must read through — the classic Cassandra tombstone incident.</li>
+      <li><strong>Index bloat and rebuild.</strong> Page splits and dead tuples leave B-tree indexes physically larger than their content; Postgres needs <code>REINDEX</code>/<code>pg_repack</code> occasionally, and building an index on a large live table needs the concurrent/online path or it takes a blocking lock.</li>
+    </ul>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Structure — B-tree vs. LSM-tree side by side</div>
+      <svg viewBox="0 0 1040 480" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="stArrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#e67700"/>
+          </marker>
+        </defs>
+
+        <!-- LEFT: B-TREE -->
+        <rect x="20" y="20" width="480" height="440" rx="12" fill="#f8faff" stroke="#3b5bdb" stroke-width="2"/>
+        <text x="40" y="48" font-size="14" font-weight="800" fill="#1e3a8a">B-TREE — in place, read-optimised</text>
+
+        <rect x="200" y="66" width="120" height="30" rx="6" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+        <text x="260" y="86" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1e3a8a">root</text>
+        <line x1="230" y1="96" x2="130" y2="132" stroke="#3b5bdb" stroke-width="1.6"/>
+        <line x1="260" y1="96" x2="260" y2="132" stroke="#3b5bdb" stroke-width="1.6"/>
+        <line x1="290" y1="96" x2="390" y2="132" stroke="#3b5bdb" stroke-width="1.6"/>
+
+        <rect x="70" y="132" width="120" height="28" rx="6" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.6"/>
+        <text x="130" y="151" text-anchor="middle" font-size="11" font-weight="700" fill="#1e3a8a">internal</text>
+        <rect x="200" y="132" width="120" height="28" rx="6" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.6"/>
+        <text x="260" y="151" text-anchor="middle" font-size="11" font-weight="700" fill="#1e3a8a">internal</text>
+        <rect x="330" y="132" width="120" height="28" rx="6" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.6"/>
+        <text x="390" y="151" text-anchor="middle" font-size="11" font-weight="700" fill="#1e3a8a">internal</text>
+
+        <line x1="130" y1="160" x2="95" y2="196" stroke="#3b5bdb" stroke-width="1.4"/>
+        <line x1="130" y1="160" x2="180" y2="196" stroke="#3b5bdb" stroke-width="1.4"/>
+        <line x1="260" y1="160" x2="245" y2="196" stroke="#3b5bdb" stroke-width="1.4"/>
+        <line x1="260" y1="160" x2="310" y2="196" stroke="#3b5bdb" stroke-width="1.4"/>
+        <line x1="390" y1="160" x2="375" y2="196" stroke="#3b5bdb" stroke-width="1.4"/>
+        <line x1="390" y1="160" x2="435" y2="196" stroke="#3b5bdb" stroke-width="1.4"/>
+
+        <g>
+          <rect x="55" y="196" width="76" height="26" rx="5" fill="#fff" stroke="#3b5bdb" stroke-width="1.4"/><text x="93" y="214" text-anchor="middle" font-size="10.5" fill="#1e3a8a">leaf</text>
+          <rect x="141" y="196" width="76" height="26" rx="5" fill="#fff" stroke="#3b5bdb" stroke-width="1.4"/><text x="179" y="214" text-anchor="middle" font-size="10.5" fill="#1e3a8a">leaf</text>
+          <rect x="227" y="196" width="76" height="26" rx="5" fill="#fff" stroke="#3b5bdb" stroke-width="1.4"/><text x="265" y="214" text-anchor="middle" font-size="10.5" fill="#1e3a8a">leaf</text>
+          <rect x="313" y="196" width="76" height="26" rx="5" fill="#fff" stroke="#3b5bdb" stroke-width="1.4"/><text x="351" y="214" text-anchor="middle" font-size="10.5" fill="#1e3a8a">leaf</text>
+          <rect x="399" y="196" width="76" height="26" rx="5" fill="#fff" stroke="#3b5bdb" stroke-width="1.4"/><text x="437" y="214" text-anchor="middle" font-size="10.5" fill="#1e3a8a">leaf</text>
+          <line x1="131" y1="209" x2="141" y2="209" stroke="#2f9e44" stroke-width="2"/>
+          <line x1="217" y1="209" x2="227" y2="209" stroke="#2f9e44" stroke-width="2"/>
+          <line x1="303" y1="209" x2="313" y2="209" stroke="#2f9e44" stroke-width="2"/>
+          <line x1="389" y1="209" x2="399" y2="209" stroke="#2f9e44" stroke-width="2"/>
+        </g>
+        <text x="265" y="242" text-anchor="middle" font-size="11" font-style="italic" fill="#2f9e44">leaves linked in sorted order</text>
+
+        <text x="45" y="286" font-size="12" fill="#1e3a8a">fanout 300–500 → depth 3–4 at ANY table size</text>
+        <text x="45" y="312" font-size="12" fill="#2f9e44">RANGE: walk the linked leaves ✓ cheap</text>
+        <text x="45" y="338" font-size="12" fill="#2f9e44">ORDER BY: free when the index matches the sort</text>
+        <text x="45" y="364" font-size="12" fill="#c92a2a">WRITE: random · in place · split · amplify ✗</text>
+        <text x="45" y="390" font-size="12" fill="#c92a2a">1 insert × N indexes = N+1 structure writes</text>
+        <text x="45" y="424" font-size="12" font-weight="700" fill="#1e3a8a">p99: predictable — depth is bounded and balanced</text>
+
+        <!-- RIGHT: LSM -->
+        <rect x="520" y="20" width="500" height="440" rx="12" fill="#fffaf3" stroke="#e67700" stroke-width="2"/>
+        <text x="540" y="48" font-size="14" font-weight="800" fill="#7c2d12">LSM-TREE — out of place, write-optimised</text>
+
+        <text x="540" y="82" font-size="11.5" font-weight="700" fill="#7c2d12">WRITE</text>
+        <line x1="580" y1="76" x2="620" y2="76" stroke="#e67700" stroke-width="2.2" marker-end="url(#stArrow)"/>
+        <rect x="628" y="62" width="360" height="42" rx="8" fill="#ffd8a8" stroke="#e67700" stroke-width="2"/>
+        <text x="808" y="80" text-anchor="middle" font-size="11.5" font-weight="700" fill="#7c2d12">MEMTABLE — sorted skip list</text>
+        <text x="808" y="96" text-anchor="middle" font-size="10.5" font-style="italic" fill="#7c2d12">in RAM · WAL-backed</text>
+
+        <line x1="808" y1="104" x2="808" y2="132" stroke="#e67700" stroke-width="2.2" marker-end="url(#stArrow)"/>
+        <text x="820" y="122" font-size="10.5" font-style="italic" fill="#e67700">flush (sequential)</text>
+
+        <rect x="560" y="136" width="440" height="52" rx="8" fill="#fff3bf" stroke="#e67700" stroke-width="2"/>
+        <text x="578" y="156" font-size="11.5" font-weight="700" fill="#7c2d12">L0</text>
+        <g>
+          <rect x="610" y="146" width="90" height="30" rx="4" fill="#ffe8cc" stroke="#e67700"/><text x="655" y="166" text-anchor="middle" font-size="10" fill="#7c2d12">sst [bloom]</text>
+          <rect x="710" y="146" width="90" height="30" rx="4" fill="#ffe8cc" stroke="#e67700"/><text x="755" y="166" text-anchor="middle" font-size="10" fill="#7c2d12">sst [bloom]</text>
+          <rect x="810" y="146" width="90" height="30" rx="4" fill="#ffe8cc" stroke="#e67700"/><text x="855" y="166" text-anchor="middle" font-size="10" fill="#7c2d12">sst [bloom]</text>
+        </g>
+        <text x="915" y="166" font-size="10" font-style="italic" fill="#c92a2a">overlapping</text>
+
+        <rect x="560" y="196" width="440" height="52" rx="8" fill="#fff3bf" stroke="#e67700" stroke-width="2"/>
+        <text x="578" y="216" font-size="11.5" font-weight="700" fill="#7c2d12">L1</text>
+        <g>
+          <rect x="610" y="206" width="180" height="30" rx="4" fill="#ffe8cc" stroke="#e67700"/><text x="700" y="226" text-anchor="middle" font-size="10" fill="#7c2d12">sst [bloom]</text>
+          <rect x="800" y="206" width="180" height="30" rx="4" fill="#ffe8cc" stroke="#e67700"/><text x="890" y="226" text-anchor="middle" font-size="10" fill="#7c2d12">sst [bloom]</text>
+        </g>
+
+        <rect x="560" y="256" width="440" height="52" rx="8" fill="#fff3bf" stroke="#e67700" stroke-width="2"/>
+        <text x="578" y="276" font-size="11.5" font-weight="700" fill="#7c2d12">L2</text>
+        <g>
+          <rect x="610" y="266" width="380" height="30" rx="4" fill="#ffe8cc" stroke="#e67700"/><text x="800" y="286" text-anchor="middle" font-size="10" fill="#7c2d12">sst [bloom] — non-overlapping, ×10 size per level</text>
+        </g>
+
+        <line x1="545" y1="300" x2="545" y2="150" stroke="#c92a2a" stroke-width="2.2" marker-end="url(#stArrow)" stroke-dasharray="5 4"/>
+        <text x="536" y="330" font-size="10.5" font-weight="700" fill="#c92a2a">compaction</text>
+
+        <text x="560" y="356" font-size="12" fill="#2f9e44">WRITE: append + memtable insert ✓ fast, sequential</text>
+        <text x="560" y="382" font-size="12" fill="#c92a2a">RANGE: merge iterators across levels ✗ blooms don't help</text>
+        <text x="560" y="408" font-size="12" fill="#c92a2a">DELETE: tombstone, not removal — read through until compacted</text>
+        <text x="560" y="440" font-size="12" font-weight="700" fill="#7c2d12">p99: moves with compaction pressure — background work is the tail</text>
+      </svg>
+      <p class="caption">The B-tree keeps one tidy structure and pays on every write. The LSM keeps a pile and pays a clerk later.</p>
+    </div>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">Trace what physically happens when a single row is inserted into a table that has a clustered primary key and four secondary indexes, and the target leaf page of one of those indexes is already full. Name every structure touched and identify the two distinct sources of write amplification.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the B-tree write path above, steps 1–5.</div>
+      </div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">2</span>
+          <span class="qtext">An LSM-backed service ingesting sensor readings has healthy p50 read latency but p99 that spikes to seconds several times an hour, and disk utilisation is pinned. Explain the mechanism causing this, why a Bloom filter does not prevent it, and what specifically would look different if the same workload's reads were range scans rather than point lookups.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the compaction step and the compaction-backlog failure case — and the sentence about what Bloom filters cannot do.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> You know both mechanisms and how each fails. So in a live design, which indexes do you actually create, and which engine family do you pick?</div>
+  </section>
+
+  <!-- ══════════════════ §6 ══════════════════ -->
+  <section id="s6">
+    <h2 class="section-title"><span class="num">§6</span> ⚖️ The Decision — When, and What It Costs</h2>
+
+    <p>The default is <strong>index the access path, not the table</strong>. You do not start from the schema and ask which columns look important; you start from the two or three queries that run on the hot path, write down their <code>WHERE</code>, <code>JOIN</code>, and <code>ORDER BY</code> clauses, and build the smallest set of composite indexes that serves them — then stop. Every index beyond that set is a permanent write-path tax with no reader. The corollary matters just as much: an index that no query uses is strictly worse than no index at all, and most mature systems carry several.</p>
+
+    <p>Four signals decide the specifics. <strong>Selectivity</strong> is the gate: if the predicate keeps more than roughly 10–20% of the table, no index will help and the planner will ignore the one you built, so a boolean or a three-value status column is almost never worth indexing alone (though it can be a fine <em>later</em> column in a composite). <strong>Column order</strong> is decided by ESR — equality columns first, then the column you sort by, then range columns — because a range predicate stops the engine from seeking on anything after it. <strong>Coverage</strong> is the cheap win people forget: if adding one more column to an index lets the query be answered from the index alone, you have removed a random row fetch per result row, which on a hot path often beats every other optimisation available. And <strong>read:write shape</strong> decides the engine family: a mixed OLTP workload with predictable latency requirements wants a B-tree, while sustained high-volume ingest against a dataset far larger than RAM wants an LSM — and that choice is usually made once, at store selection (8.1), which is why it is worth raising early rather than after you've drawn the schema.</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Decision tree — which index, and which engine</div>
+      <svg viewBox="0 0 1040 700" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="dtArrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#6b6861"/>
+          </marker>
+        </defs>
+
+        <!-- Q1 -->
+        <rect x="330" y="16" width="380" height="52" rx="20" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+        <text x="520" y="38" text-anchor="middle" font-size="12.5" font-weight="700" fill="#4c1d95">Does a hot query filter, join, or sort</text>
+        <text x="520" y="57" text-anchor="middle" font-size="12.5" font-weight="700" fill="#4c1d95">on this column?</text>
+
+        <path d="M380,70 L200,110" stroke="#6b6861" stroke-width="2" fill="none" marker-end="url(#dtArrow)"/>
+        <text x="272" y="84" font-size="11.5" font-weight="800" fill="#c92a2a">no</text>
+        <path d="M640,70 L760,110" stroke="#6b6861" stroke-width="2" fill="none" marker-end="url(#dtArrow)"/>
+        <text x="712" y="84" font-size="11.5" font-weight="800" fill="#2f9e44">yes</text>
+
+        <rect x="30" y="114" width="300" height="70" rx="10" fill="#ffc9c9" stroke="#c92a2a" stroke-width="2"/>
+        <text x="180" y="140" text-anchor="middle" font-size="13" font-weight="800" fill="#7f1d1d">DON'T INDEX IT</text>
+        <text x="180" y="160" text-anchor="middle" font-size="11.5" fill="#7f1d1d">An unused index is pure write-path</text>
+        <text x="180" y="176" text-anchor="middle" font-size="11.5" fill="#7f1d1d">tax paid forever.</text>
+
+        <!-- Q2 -->
+        <rect x="620" y="114" width="380" height="52" rx="20" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+        <text x="810" y="136" text-anchor="middle" font-size="12.5" font-weight="700" fill="#4c1d95">Is the predicate selective?</text>
+        <text x="810" y="155" text-anchor="middle" font-size="12" fill="#4c1d95">(keeps roughly &lt; 10% of rows)</text>
+
+        <path d="M680,168 L470,212" stroke="#6b6861" stroke-width="2" fill="none" marker-end="url(#dtArrow)"/>
+        <text x="560" y="184" font-size="11.5" font-weight="800" fill="#c92a2a">no</text>
+        <path d="M900,168 L900,212" stroke="#6b6861" stroke-width="2" fill="none" marker-end="url(#dtArrow)"/>
+        <text x="912" y="194" font-size="11.5" font-weight="800" fill="#2f9e44">yes</text>
+
+        <rect x="180" y="216" width="330" height="86" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+        <text x="345" y="242" text-anchor="middle" font-size="13" font-weight="800" fill="#92400e">DON'T INDEX IT ALONE</text>
+        <text x="345" y="262" text-anchor="middle" font-size="11.5" fill="#92400e">The scan wins. But it may still earn</text>
+        <text x="345" y="279" text-anchor="middle" font-size="11.5" fill="#92400e">a place as a LATER column inside a</text>
+        <text x="345" y="296" text-anchor="middle" font-size="11.5" fill="#92400e">composite.</text>
+
+        <!-- Q3 -->
+        <rect x="640" y="216" width="380" height="52" rx="20" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+        <text x="830" y="238" text-anchor="middle" font-size="12.5" font-weight="700" fill="#4c1d95">Do several hot queries share</text>
+        <text x="830" y="257" text-anchor="middle" font-size="12.5" font-weight="700" fill="#4c1d95">a leading column?</text>
+
+        <path d="M700,270 L640,314" stroke="#6b6861" stroke-width="2" fill="none" marker-end="url(#dtArrow)"/>
+        <text x="646" y="290" font-size="11.5" font-weight="800" fill="#c92a2a">no</text>
+        <path d="M950,270 L950,314" stroke="#6b6861" stroke-width="2" fill="none" marker-end="url(#dtArrow)"/>
+        <text x="962" y="296" font-size="11.5" font-weight="800" fill="#2f9e44">yes</text>
+
+        <rect x="470" y="318" width="270" height="76" rx="10" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+        <text x="605" y="344" text-anchor="middle" font-size="12.5" font-weight="800" fill="#1e3a8a">SINGLE-COLUMN</text>
+        <text x="605" y="364" text-anchor="middle" font-size="11.5" fill="#1e3a8a">or a narrow composite —</text>
+        <text x="605" y="381" text-anchor="middle" font-size="11.5" fill="#1e3a8a">whatever the one query needs.</text>
+
+        <rect x="770" y="318" width="250" height="96" rx="10" fill="#ede9fe" stroke="#7c3aed" stroke-width="2.5"/>
+        <text x="895" y="344" text-anchor="middle" font-size="12.5" font-weight="800" fill="#4c1d95">ONE COMPOSITE</text>
+        <text x="895" y="364" text-anchor="middle" font-size="11.5" fill="#4c1d95">in ESR order:</text>
+        <text x="895" y="382" text-anchor="middle" font-size="11.5" font-weight="700" fill="#4c1d95">Equality → Sort → Range</text>
+        <text x="895" y="403" text-anchor="middle" font-size="10.5" font-style="italic" fill="#7c3aed">a range stops every column after it</text>
+
+        <path d="M605,398 L700,434" stroke="#6b6861" stroke-width="2" fill="none" marker-end="url(#dtArrow)"/>
+        <path d="M895,418 L790,434" stroke="#6b6861" stroke-width="2" fill="none" marker-end="url(#dtArrow)"/>
+
+        <rect x="560" y="438" width="400" height="52" rx="20" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+        <text x="760" y="460" text-anchor="middle" font-size="12.5" font-weight="700" fill="#4c1d95">Can you add the remaining selected</text>
+        <text x="760" y="479" text-anchor="middle" font-size="12.5" font-weight="700" fill="#4c1d95">columns to make it COVERING?</text>
+
+        <path d="M620,492 L500,530" stroke="#6b6861" stroke-width="2" fill="none" marker-end="url(#dtArrow)"/>
+        <text x="546" y="508" font-size="11.5" font-weight="800" fill="#c92a2a">no</text>
+        <path d="M880,492 L880,530" stroke="#6b6861" stroke-width="2" fill="none" marker-end="url(#dtArrow)"/>
+        <text x="892" y="514" font-size="11.5" font-weight="800" fill="#2f9e44">yes</text>
+
+        <rect x="330" y="534" width="270" height="62" rx="10" fill="#f3f2ef" stroke="#6b6861" stroke-width="2"/>
+        <text x="465" y="558" text-anchor="middle" font-size="12.5" font-weight="800" fill="#1a1917">Accept the row fetch</text>
+        <text x="465" y="578" text-anchor="middle" font-size="11.5" fill="#6b6861">one extra random read per row</text>
+
+        <rect x="720" y="534" width="300" height="76" rx="10" fill="#dcfce7" stroke="#2f9e44" stroke-width="2.5"/>
+        <text x="870" y="558" text-anchor="middle" font-size="12.5" font-weight="800" fill="#14532d">ADD THEM (INCLUDE)</text>
+        <text x="870" y="578" text-anchor="middle" font-size="11.5" fill="#14532d">You just deleted a random read</text>
+        <text x="870" y="595" text-anchor="middle" font-size="11.5" fill="#14532d">per result row.</text>
+
+        <!-- engine choice band -->
+        <line x1="20" y1="634" x2="1020" y2="634" stroke="#e5e3de" stroke-width="2"/>
+        <text x="20" y="656" font-size="12" font-weight="800" fill="#6b6861">AND, ONCE — AT STORE-SELECTION TIME (8.1):</text>
+        <rect x="330" y="640" width="330" height="50" rx="10" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+        <text x="495" y="660" text-anchor="middle" font-size="12" font-weight="800" fill="#1e3a8a">B-TREE ENGINE</text>
+        <text x="495" y="678" text-anchor="middle" font-size="11" fill="#1e3a8a">mixed OLTP · predictable p99 · cheap ranges</text>
+        <rect x="680" y="640" width="340" height="50" rx="10" fill="#ffd8a8" stroke="#e67700" stroke-width="2"/>
+        <text x="850" y="660" text-anchor="middle" font-size="12" font-weight="800" fill="#7c2d12">LSM ENGINE</text>
+        <text x="850" y="678" text-anchor="middle" font-size="11" fill="#7c2d12">write throughput binds · data ≫ RAM · accept read amp</text>
+      </svg>
+      <p class="caption">Default is: index the access path, not the table. Every branch ends with a cost you must name.</p>
+    </div>
+
+    <h3>Trade-offs</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>✅ Benefit</th><th>❌ Cost / Limitation</th></tr></thead>
+        <tbody>
+          <tr><td><span class="benefit">B-tree: predictable, bounded lookup cost</span> — 3–4 page hops at any table size, mostly served from the buffer pool, with balanced worst and average cases</td><td>Writes are random, in-place, and amplified: an entire 8–16KB page is rewritten to change a small row, page splits cascade upward, and the index physically bloats until it is rebuilt</td></tr>
+          <tr><td><span class="benefit">B-tree: ordering is free</span> — linked sorted leaves make range scans and <code>ORDER BY</code> a sequential walk, and an index matching the sort order removes the sort step entirely</td><td>That ordering must be maintained on every write, so high-throughput ingest hits a random-write ceiling that no amount of hardware entirely removes</td></tr>
+          <tr><td><span class="benefit">LSM: sequential writes and very high ingest rates</span> — foreground cost is one WAL append plus one in-memory insert, and the dataset can far exceed RAM</td><td>Reads may consult several levels, and p99 is coupled to background compaction: a compaction backlog degrades read latency and eventually triggers write stalls, which is a class of incident B-trees don't have</td></tr>
+          <tr><td><span class="benefit">LSM: overwrites and deletes are cheap</span> — no in-place mutation, so an update is just a newer entry</td><td>Space amplification until compaction runs, and delete-heavy workloads accumulate tombstones that every range scan must read through; range scans get no help from Bloom filters at all</td></tr>
+          <tr><td><span class="benefit">Covering index: the row is never fetched</span> — removes one random read per result row, often the single largest available win on a hot read path</td><td>The index grows wider, so it costs more storage and more write bandwidth, and it silently stops covering the moment someone adds a column to the <code>SELECT</code> list</td></tr>
+          <tr><td><span class="benefit">Composite index: one structure serves several predicates</span> — fewer indexes to maintain than one per column</td><td>Usable only left-to-right, so it serves a specific query shape; a range predicate stops the seek, and column order is a design decision that is expensive to change on a large live table</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>In production</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>System</th><th>How it applies</th><th>The nuance</th></tr></thead>
+        <tbody>
+          <tr><td><strong>PostgreSQL</strong></td><td>Heap-organised: the table is unordered and <em>every</em> index, including the primary key's, stores a <code>ctid</code> pointer into the heap, so a non-covering lookup pays one extra random read</td><td>An index-only scan still consults the <strong>visibility map</strong> to confirm the tuple is visible to your snapshot; if the page isn't marked all-visible the heap fetch happens anyway, which is why an index-only scan can quietly stop being index-only after a heavy write burst until <code>VACUUM</code> runs</td></tr>
+          <tr><td><strong>MySQL / InnoDB</strong></td><td>Clustered by primary key — the leaf of the PK index <em>is</em> the row — so PK lookups are one descent, but every <strong>secondary index stores the primary key</strong> rather than a row pointer</td><td>This makes a secondary lookup two descents, and it makes primary-key width a table-wide cost: a 36-byte UUID PK inflates every secondary index on the table. It is also why a random UUID PK hurts twice — wide keys <em>and</em> random insert positions destroying the right-edge locality a monotonic key would have given</td></tr>
+          <tr><td><strong>RocksDB / LevelDB / MyRocks</strong></td><td>The reference LSM implementations; MyRocks is MySQL with RocksDB underneath, deployed at Facebook specifically to cut write amplification and storage versus InnoDB</td><td>Compaction style is a real tuning decision: <strong>leveled</strong> compaction minimises space and read amplification at the cost of write amplification, <strong>universal/tiered</strong> does the reverse. "We use an LSM" is not a complete answer; which compaction and why is the follow-up</td></tr>
+          <tr><td><strong>Apache Cassandra / ScyllaDB</strong></td><td>LSM by design: memtable → SSTable → compaction, with per-SSTable Bloom filters, and a data model where the partition key and clustering columns <em>are</em> the index — you model tables per query</td><td>Deletes are tombstones with a <code>gc_grace_seconds</code> window before they can be removed, so queue-shaped workloads accumulate tombstones and range reads slow down or trip the tombstone-threshold failure. This is the canonical Cassandra production incident</td></tr>
+          <tr><td><strong>MongoDB / WiredTiger</strong></td><td>B-tree by default, with an LSM option, and composite indexes that follow exactly the same leftmost-prefix and range-stopper rules as SQL engines</td><td>The ESR guidance (Equality, Sort, Range) is written down explicitly in MongoDB's own docs — useful in an interview because it shows the rule is engine-independent, not SQL folklore</td></tr>
+          <tr><td><strong>DynamoDB</strong></td><td>No query planner and no ad-hoc indexes: you get the partition/sort key plus <strong>GSIs</strong> and <strong>LSIs</strong>, and a query that no key or index serves is a scan you should never run</td><td>A GSI is a fully separate, asynchronously-maintained, eventually-consistent copy of the table with its own provisioned throughput — so adding one is a storage and write-cost decision made <em>before</em> launch, and adding an unforeseen access pattern later means a new GSI plus a backfill (8.3)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">An events table receives 30,000 inserts/sec and serves one hot query: <code>WHERE tenant_id = ? AND event_type = ? AND ts BETWEEN ? AND ? ORDER BY ts DESC LIMIT 100</code>, returning about 100 of 8 billion rows. The team wants to add indexes on <code>tenant_id</code>, <code>event_type</code>, <code>ts</code>, and <code>user_id</code> "to be safe." State the index you would actually build and its exact column order, justify the order using the range-stopper rule, say which proposed index you would drop and why, and name the engine family you would push for at this write rate.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the four signals at the top of §6 and the ESR paragraph in §4.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> You can defend the choice. How does an interviewer actually put pressure on it?</div>
+  </section>
+
+  <!-- ══════════════════ §7 ══════════════════ -->
+  <section id="s7">
+    <h2 class="section-title"><span class="num">§7</span> 🎯 In the Interview</h2>
+
+    <h3>When an interviewer asks / says</h3>
+    <ul class="trigger-list">
+      <li>"This query takes eight seconds. How would you make it fast?"</li>
+      <li>"What indexes would you put on this table?"</li>
+      <li>"We're ingesting half a million events a second. Which database, and why?"</li>
+      <li>"Write latency has been climbing for months and the table has doubled. What's happening?"</li>
+      <li>"What's the difference between a B-tree and an LSM-tree, and which engines use each?"</li>
+    </ul>
+
+    <h3>What you say / do</h3>
+    <p>Indexing lands in the <strong>data model</strong> phase, right after the schema (8.3), and it returns in the <strong>deep dive</strong> the moment the interviewer picks one endpoint and asks why it's slow. Do it in a fixed order so it sounds like engineering rather than recall: name the hot query, name its predicate columns and sort, state the composite index <strong>with its column order and the reason for that order</strong>, say whether you can make it covering, and then — unprompted — price it: "that's one more structure written on every insert into a table taking 30k writes/sec." The unprompted cost statement is the signal. Then, if write throughput is the binding constraint, escalate from index design to engine choice and say why an LSM inverts the trade rather than removing it.</p>
+
+    <h3>The trade-off statement (memorize this pattern)</h3>
+    <div class="tradeoff-box">"The hot query filters on <code>tenant_id</code> and <code>status</code> by equality, sorts by <code>created_at</code>, and ranges over it — so I'd build one composite index on <code>(tenant_id, status, created_at)</code>: equality columns first so the engine can seek, then <code>created_at</code>, which both satisfies the sort and bounds the range. I would <em>not</em> build separate indexes on each column, because three single-column indexes can't be combined as efficiently as one correctly ordered composite and each one taxes every write. If the query only selects <code>id</code> and <code>created_at</code> I'd make it covering so we never touch the heap — that removes one random read per result row. The price is that every insert now maintains this index too, and with the table at 30k writes/sec that's real: B-tree writes are random, in place, and rewrite a full 8KB page to change 100 bytes. If write throughput became the binding constraint rather than read latency, I'd move this table to an LSM engine — RocksDB or Cassandra — where writes are a WAL append plus a memtable insert. But I'd say clearly that this doesn't make the cost vanish: it moves it to background compaction, so my p99 reads now move with compaction pressure, and range scans lose the Bloom-filter shortcut entirely."</div>
+
+    <h3>⚠️ Traps</h3>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "Add an index on every column in the <code>WHERE</code> clause."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Separate single-column indexes are not the same as one composite and usually cannot be combined as efficiently — most engines will pick exactly one, or do a comparatively expensive bitmap/index-merge. The correct answer is <em>one</em> composite in ESR order, and it must include the column order and the reasoning behind it. An index list without an order is not an answer to the question that was asked.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "Indexes make the database faster."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> They make <em>some reads</em> faster and <em>all writes</em> to that table slower, permanently. One <code>INSERT</code> on a table with ten indexes is eleven structure modifications, each with its own random I/O and possible page split. And on a low-selectivity predicate an index is not merely useless — following it means a random row fetch for most of the table, which is slower than a sequential scan, which is why the planner refuses to use it. "Faster" without naming which operation is the giveaway.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "B-trees are for SQL and LSM-trees are for NoSQL."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> This is a storage-engine property, not a data-model property, and the counterexamples are load-bearing. MyRocks is MySQL — full SQL, ACID transactions — running on RocksDB's LSM. MongoDB is a document store running WiredTiger's B-tree. TiDB and CockroachDB are distributed SQL databases on LSM storage. What actually correlates is <em>workload shape</em>: sustained write-heavy ingest against a dataset larger than RAM pushes you to LSM regardless of query language.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "LSM-trees are just faster than B-trees."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Faster on the <em>write</em> path, and the cost is paid in three places you must name: read amplification (a point read may consult several levels, mitigated but not eliminated by Bloom filters), background compaction competing with live traffic for I/O — which couples your read p99 to background work and can escalate to write stalls — and range scans, which get no help from Bloom filters at all and must merge iterators across levels. B-trees trade lower write throughput for a much more predictable tail.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "The order of columns in a composite index doesn't really matter — the engine will figure it out."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> <code>(a, b)</code> and <code>(b, a)</code> are different objects serving different queries. Only the <strong>leftmost prefix</strong> is usable, so <code>(a, b, c)</code> does nothing for <code>WHERE b = ?</code>. And a <strong>range predicate is a stopper</strong>: in <code>(a, b, c)</code> with <code>a = ? AND b &gt; ? AND c = ?</code>, the engine seeks on <code>a</code>, scans the <code>b</code> range, and can only <em>filter</em> on <code>c</code> — so the index "is being used" while still reading far more rows than you think. Reordering to put equality columns before range columns is frequently a 100x change with no schema change at all.</div></div>
+    </div>
+
+    <div class="checkpoint gate">
+      <div class="cp-title">🚨 Checkpoint — adversarial stress test (the gate)</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">You have <code>orders(id, user_id, status, created_at, amount, …)</code> and the hot query is <code>WHERE user_id = ? AND status = 'PENDING' AND created_at &gt; ? ORDER BY created_at DESC LIMIT 20</code>. A teammate added an index on <code>(user_id, created_at, status)</code>. The query is still reading hundreds of thousands of rows, and since the deploy, p99 <strong>write</strong> latency on the table has roughly doubled. The interviewer says: <em>"Explain exactly which columns of that index the engine can seek on and which it can only filter on, give me the index you'd build instead and why, explain the write-latency regression at the level of what physically happens on disk, and then tell me at what point you'd stop tuning indexes and change storage engines — and what you'd be giving up if you did."</em></span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 A complete answer covers: <code>user_id</code> seeks, <code>created_at &gt;</code> is a range that stops the seek so <code>status</code> can only filter rows already read; the correct index is <code>(user_id, status, created_at)</code> with equality first, which also satisfies the <code>ORDER BY</code> and makes the range a bounded leaf walk; the write regression is one more B-tree maintained per insert, in-place random writes, full-page rewrites and page splits; and the engine switch is justified only when sustained write throughput — not read latency — is the binding constraint, at the price of read amplification, compaction-coupled p99, and worse range scans. If you can't answer this cleanly, you are not done.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> Can you combine what you've learned across sections, not just recall each one?</div>
+  </section>
+
+  <!-- ══════════════════ §8 ══════════════════ -->
+  <section id="s8">
+    <h2 class="section-title"><span class="num">§8</span> 🧪 Mastery Gate</h2>
+    <div class="callout callout-quote">Synthesis only. Each question requires combining two or more sections.</div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">1</span>
+        <span class="qtext">A covering index and a denormalized copied column both remove work from the read path. Compare them precisely: what each one eliminates, what each costs on the write path, which failure modes each is exposed to, and the specific situation in which you would choose the denormalized column even though a covering index is available.</span>
+        <span class="quiz-toggle">▼ Hint</span>
+      </div>
+      <div class="quiz-hint">💡 Sections combined: §4 + §6 + subtopic 8.3.</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">2</span>
+        <span class="qtext">A table uses an auto-increment integer primary key and takes 50,000 inserts/sec on a B-tree engine. Explain the contention that develops, why it is the same <em>shape</em> of problem as a hot partition even though it lives inside one machine, what changing to a random UUID primary key fixes and what it breaks — including what it does to every secondary index in InnoDB — and what you would actually choose.</span>
+        <span class="quiz-toggle">▼ Hint</span>
+      </div>
+      <div class="quiz-hint">💡 Sections combined: §5 + §6 + subtopic 7.6.</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">3</span>
+        <span class="qtext">Design the storage and index strategy for a flight-search price-history service: roughly 400,000 price observations per second written continuously, and two read patterns — "the last 30 days of prices for route X on date Y" (hundreds of times per second, latency-sensitive) and "all observations for an analyst's ad-hoc query over any 6-month window" (a few per hour, latency-tolerant). Choose an engine family and justify it, specify the index or key structure for each read pattern including exact column order, and name the one failure mode your design is most exposed to and how you would detect it.</span>
+        <span class="quiz-toggle">▼ Hint</span>
+      </div>
+      <div class="quiz-hint">💡 Sections combined: §5 + §6, applied to a system not mentioned anywhere in this doc.</div>
+    </div>
+
+    <h3>Mastery criteria — tick only what you can demonstrate on demand</h3>
+    <ul class="checklist">
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can explain why a full scan fails and why neither a sorted table nor an in-memory hash table is a general replacement for an index</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can explain the difference between a B-tree index and an LSM-tree — mechanism, write path, read path, failure modes — and name which storage engines use each</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can state the leftmost-prefix rule and the range-stopper rule, and use ESR to derive the correct column order for an unfamiliar query</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can explain what a covering index is, what it eliminates, and the engine-specific catch (Postgres visibility map, InnoDB's PK-in-secondary-index)</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can price an index on the write path in concrete terms — structures written per insert, page rewrites, page splits, random I/O</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can decide, for a given read:write shape and dataset size, whether a B-tree or LSM engine is correct and name exactly what the LSM choice costs</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can design the indexes for a novel schema from its access patterns, and name the indexes they would <em>not</em> build and why</span></li>
+    </ul>
+
+    <div class="callout callout-tip">💡 <strong>Rule of thumb:</strong> If you can teach it to someone else and field their follow-up questions, you've mastered it.</div>
+  </section>
+
+  <!-- ══════════════════ §9 ══════════════════ -->
+  <section id="s9">
+    <h2 class="section-title"><span class="num">§9</span> 🔗 Connections &amp; Sources</h2>
+
+    <div class="connections">
+      <div class="conn-card">
+        <span class="conn-icon">⬅️</span>
+        <div><div class="conn-label">Builds on</div><strong>8.3 Normalization and Denormalization</strong> — a normalized schema's read cost is almost entirely a question of whether the join columns are indexed, so index design is the direct continuation of schema design, and a covering index is the <em>non-duplicating</em> alternative to a denormalized column. Also <strong>8.2 OLTP vs. OLAP</strong>, since selective point-and-range lookups are the OLTP access shape that B-trees serve, while scan-and-aggregate workloads are served by columnar layouts rather than more indexes. And <strong>8.1 SQL vs. NoSQL</strong>, because the engine's index family is often decided at store selection.</div>
+      </div>
+      <div class="conn-card">
+        <span class="conn-icon">➡️</span>
+        <div><div class="conn-label">Enables</div><strong>8.5 Query patterns and optimization</strong> — <code>EXPLAIN</code> is how you verify every claim in this document against a real planner. <strong>8.7 Read vs. write optimization</strong>, which is this subtopic's trade-off generalised to the whole system. <strong>8.8 N+1 query problem</strong>, where the fix is frequently an index plus a batched query rather than a schema change. <strong>8.6 ACID transactions</strong>, since index structures are where range locks and next-key locks physically live, making index design a concurrency decision too.</div>
+      </div>
+      <div class="conn-card">
+        <span class="conn-icon">⚡</span>
+        <div><div class="conn-label">Tension with</div><strong>8.3 denormalization</strong> — both a covering index and a copied column remove work from the read path, but the index keeps a single source of truth and the engine maintains it, while the column adds a copy you must keep in sync; knowing when to reach for which is a genuine judgment call. Also <strong>7.6 Hot partitions</strong> — the locality that makes monotonic keys efficient for B-tree inserts is the same locality that creates right-edge contention and hot shards, so the fixes at the two levels pull against each other.</div>
+      </div>
+    </div>
+
+    <h3>📚 Further reading</h3>
+    <ul class="reading-list">
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Designing Data-Intensive Applications, Chapter 3 — Storage and Retrieval</strong> — Kleppmann — the canonical B-tree vs. LSM comparison, including write amplification and compaction; read this one first</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Use The Index, Luke</strong> — Markus Winand — <a href="https://use-the-index-luke.com/">site</a> — the clearest treatment anywhere of composite index column order, the range-stopper rule, and covering indexes; start with "Anatomy of an Index" and "The Where Clause"</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>PostgreSQL docs — Index-Only Scans</strong> — <a href="https://www.postgresql.org/docs/current/indexes-index-only-scans.html">docs</a> — the visibility-map catch that makes index-only scans conditional</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>RocksDB Wiki — Leveled Compaction</strong> — <a href="https://github.com/facebook/rocksdb/wiki/Leveled-Compaction">wiki</a> — what compaction actually does, and the write/read/space amplification triangle</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>MongoDB — "The ESR Rule"</strong> — <a href="https://www.mongodb.com/docs/manual/tutorial/equality-sort-range-rule/">docs</a> — the equality/sort/range ordering rule stated explicitly, and evidence that it is engine-independent</span></li>
+    </ul>
+  </section>
+
+  <!-- ══════════════════ §10 ══════════════════ -->
+  <section id="s10">
+    <h2 class="section-title"><span class="num">§10</span> ✍️ My Notes</h2>
+    <div class="callout callout-quote">Personal observations, model answers from drilling sessions, things that confused me. Saved locally in this browser.</div>
+    <textarea class="notes-area" placeholder="Your notes, model answers, and annotations…"></textarea>
+  </section>
+
+</article>
+</main>
+
+<script>
+// TOC active state
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('#toc nav a');
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(a => a.classList.remove('active'));
+      const a = document.querySelector(`#toc nav a[href="#${e.target.id}"]`);
+      if (a) a.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+sections.forEach(s => obs.observe(s));
+
+function toggle(cb) { cb.closest('li').classList.toggle('checked'); }
+function toggleReading(cb) { cb.closest('li').classList.toggle('checked'); }
+function toggleQuiz(q) {
+  const item = q.closest('.quiz-item');
+  item.classList.toggle('open');
+  q.querySelector('.quiz-toggle').textContent = item.classList.contains('open') ? '▲ Hide' : '▼ Hint';
+}
+
+// Notes auto-save
+const notesArea = document.querySelector('.notes-area');
+const NOTES_KEY = 'notes_8_4';
+if (localStorage.getItem(NOTES_KEY)) notesArea.value = localStorage.getItem(NOTES_KEY);
+notesArea.addEventListener('input', () => {
+  try { localStorage.setItem(NOTES_KEY, notesArea.value); } catch(e) {}
+});
+</script>
+</body>
+</html>
