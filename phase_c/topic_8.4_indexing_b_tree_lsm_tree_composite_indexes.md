@@ -4,7 +4,7 @@
 > **Phase:** C — Data Storage Branch
 > **Depth Tier:** 🥇 T1 (Core) — budget ~3h
 > **Prereqs:** 8.1 (SQL vs. NoSQL), 8.2 (OLTP vs. OLAP), 8.3 (Normalization & Denormalization)
-> **Date studied:** _____
+> **Date studied:** 2026-08-03
 
 ---
 
@@ -216,6 +216,51 @@ That resolution held for decades, and then a second problem appeared underneath 
 
    > 💡 *Answer out loud before reading on. If you hesitate, re-read the second and third paragraphs — the one-physical-order argument and the ordering-destroyed-by-hashing argument.*
 
+MODEL ANSWER — §3 Checkpoint
+
+WHY NOT JUST SORT THE TABLE? — two independent reasons
+
+1. ONE PHYSICAL ORDER
+   A table can be sorted exactly one way. Sort by email and every
+   query on created_at, country, or id is back to O(n). Real
+   systems query by more than one column — not a corner case.
+
+2. INSERTS REWRITE THE FILE
+   A key sorting into the middle means shifting the rows after it.
+   Fill factor and free-space gaps AMORTISE this; they do not
+   escape it. A random insert still rewrites large contiguous
+   regions of the file.
+
+   INDEPENDENT? Yes — #1 is a READ-COVERAGE limit, #2 is a
+   WRITE-COST limit. Fixing either leaves the other untouched.
+   That independence is the point of the question.
+
+WHY NOT AN IN-MEMORY HASH TABLE? — two counts
+
+1. ORDERING IS DESTROYED BY CONSTRUCTION
+   No range queries, no ORDER BY, no prefix or partial matching.
+   Hashing solves the point lookup by throwing away the exact
+   property most other queries depend on.
+
+2. THE WHOLE KEYSPACE MUST FIT IN RAM
+   NOT a full scan when it doesn't — you still know the bucket.
+   The failure is that you can't read it EFFICIENTLY: hashing
+   scatters keys uniformly BY DESIGN, so there is zero locality
+   and every out-of-RAM lookup is an independent random seek.
+   Mechanism: a hash table is FLAT — no "top" to keep cached.
+   All-or-nothing.
+   Contrast: a B-tree is HIERARCHICAL and SHALLOW, so its upper
+   levels stay pinned in the buffer pool and you pay ~1 physical
+   read at ANY table size. That is the whole design point.
+
+THE ONE-SENTENCE VERSION
+  Sorting the table optimises one read at the cost of every write
+  and every other query. Hashing optimises the point lookup by
+  destroying order and betting the structure fits in RAM.
+  The answer is a SEPARATE, ORDERED, SHALLOW, PAGE-SHAPED
+  structure — build several, each sorted differently, and none of
+  them touch the table.
+
 > **→ Next:** If the answer is a separate ordered structure, what exactly is that structure, and what are the ideas you need in order to reason about it?
 
 ---
@@ -283,9 +328,99 @@ Everything above optimises the read; the bill lands on the write, and the LSM-tr
 
    > 💡 *If you hesitate, re-read §4 — the composite indexes block, specifically the leftmost-prefix and range-stopper paragraphs.*
 
+MODEL ANSWER — §4 Checkpoint 1
+
+THE INDEX
+  (tenant_id, created_at)      equality first, then sort/range
+
+WHAT THE ENGINE DOES WITH EACH COLUMN
+  tenant_id    SEEK. Equality on the leading column — jump
+               straight to that tenant's slice of the leaves.
+  created_at   SCAN + SORT-SATISFY. Sorted within the tenant, so
+               (a) the range is a bounded walk, and
+               (b) the ORDER BY is already satisfied: seek to the
+                   tenant's upper bound, walk BACKWARDS 50
+                   entries. Leaves are doubly-linked.
+
+WHY THREE SINGLE-COLUMN INDEXES LOSE — three separate reasons
+  1. ONLY ONE GETS USED. The engine picks tenant_id, narrows to
+     that tenant, then FILTERS created_at on every row returned.
+     Index-merge / bitmap intersection exists but costs more
+     than one correctly ordered composite.
+  2. THE SORT SURVIVES. Nothing is ordered by created_at within
+     a tenant, so every matching row must be materialised and
+     top-N sorted before LIMIT applies. A million rows sorted to
+     return 50, versus reading 50 index entries.
+  3. 3x WRITE COST. Three structures on every insert, update and
+     delete. The composite is one.
+
+THE status INDEX — DROP IT
+  The query never references status. An index with no reader is
+  pure write-path tax for zero benefit — the easiest point on
+  the board, and routinely missed.
+  Secondary: status is typically 3–5 distinct values, so even a
+  query that DID filter on it is too unselective for the planner
+  to bother.
+
+"SHOULD status GO INTO THE COMPOSITE?" — also no, both ways:
+  (tenant_id, created_at, status)  the created_at RANGE stops
+      the seek — status can only filter, never seek.
+  (tenant_id, status, created_at)  now every query MUST supply
+      status to reach anything past tenant_id.
+  POSITION, not count, is what decides.
+
 2. Explain why the **selectivity** block is what makes the **clustered vs. secondary** block matter, rather than the two being unrelated facts. Why does a heap-organised secondary index lookup make a marginally-selective predicate *worse*, not just no better?
 
    > 💡 *If you hesitate, re-read the build chain above and trace the "because → therefore → which means" links between blocks one, two, and three.*
+
+MODEL ANSWER — §4 Checkpoint 2
+
+THE COMPARISON THAT MATTERS
+  Not secondary vs. clustered. It is INDEX+HOPS vs. FULL SCAN.
+  An index is only worth using if it beats ignoring it.
+
+WHY A MARGINAL PREDICATE GETS ACTIVELY WORSE
+  Index path  2M index entries, each followed by a hop to a row
+              scattered across the file → RANDOM reads.
+  Scan path   10M rows read front to back → SEQUENTIAL reads,
+              with OS and DB readahead prefetching large chunks.
+  Random costs ~20x more per access (2–3 orders of magnitude on
+  HDD; 5–20x on SSD, where random also defeats prefetch and
+  thrashes the buffer pool).
+
+      index  =  0.20 × 20  =  4.0
+      scan   =  1.00 ×  1  =  1.0
+
+  The scan wins by 4x while reading 5x more data. The index is
+  HARMFUL, not merely useless. The planner refusing it is the
+  planner doing this multiplication correctly.
+
+WHERE THE RULE OF THUMB COMES FROM
+      break-even ≈ 1 ÷ random-penalty
+  A 20x penalty puts the crossover near 5%. That is the origin
+  of "an index pays below ~5–10% selectivity" — arithmetic, not
+  folklore.
+
+THE LINK — WHY THESE ARE ONE IDEA, NOT TWO
+  The random penalty is NOT a constant. It depends on
+  CORRELATION: how closely physical row order matches the
+  index's logical order.
+    CLUSTERED   correlation = 1.0 BY CONSTRUCTION — the leaf IS
+                the row. Fetches are sequential no matter how
+                many rows qualify, so selectivity nearly stops
+                mattering and low-selectivity ranges stay cheap.
+    HEAP +      uncorrelated. Every qualifying row is an
+    SECONDARY   independent seek, so cost scales linearly with
+                rows returned and selectivity dominates.
+
+  So: clustering sets the random penalty → the penalty sets the
+  break-even → the break-even is what selectivity is measured
+  against. Selectivity has no meaning without knowing which
+  architecture you are in.
+
+  AND (§3 again): one physical order per table means AT MOST ONE
+  index can be correlated. Every other index pays the penalty
+  forever.
 
 > **→ Next:** You know the structures and the rules. What physically happens inside each one when you read and when you write — and how does each one fail?
 
@@ -404,9 +539,81 @@ Everything above optimises the read; the bill lands on the write, and the LSM-tr
 
    > 💡 *If you hesitate, re-read the B-tree write path above, steps 1–5.*
 
+MODEL ANSWER — §5 Checkpoint 1
+
+STRUCTURES TOUCHED
+  1  redo log (WAL)          — sequential, small
+  1  clustered index leaf    — the row itself lands here
+  3  secondary index leaves  — one (col_value → PK) entry each
+  2  split secondary index   — original page + new half
+  1  parent of split page    — separator key inserted
+  ── 7 data pages × 16KB = 112 KB
+  ×2 doublewrite buffer      = 224 KB
+  + redo record              ~ a few hundred bytes
+
+  224 KB written for a 200-byte row  →  >1000 : 1
+
+THE TWO SOURCES — they MULTIPLY, they do not add
+  1. PAGE GRANULARITY (per structure)
+     The minimum unit of I/O is a page. 200 bytes costs 16KB;
+     a ~30-byte secondary entry also costs 16KB. ~80–550x on
+     its own, and it applies to EVERY structure — including
+     the parent page. No exceptions, ever.
+  2. STRUCTURE COUNT (how many structures)
+     One logical insert becomes N+1 structure writes. Five
+     indexes here, seven pages once the split lands.
+
+     ~80x  ×  ~7  ×  2 (doublewrite)  ≈  1000x+
+
+WHERE THE PAGE LIVES BEFORE DISK
+  Dirty in the BUFFER POOL, in memory. It is NOT written at
+  commit. A background CHECKPOINT flushes it later.
+  Durability at commit comes from the redo log, not the data
+  page — which is the entire reason a WAL exists: turn an
+  expensive random page write into a cheap sequential append,
+  and defer the page.
+
 2. An LSM-backed service ingesting sensor readings has healthy p50 read latency but p99 that spikes to seconds several times an hour, and disk utilisation is pinned. Explain the mechanism causing this, why a Bloom filter does not prevent it, and what specifically would look different if the same workload's reads were range scans rather than point lookups.
 
    > 💡 *If you hesitate, re-read the compaction step and the compaction-backlog failure case — and the sentence about what Bloom filters cannot do.*
+
+MODEL ANSWER — §5 Checkpoint 2
+
+(a) MECHANISM
+  Compaction is bursty, I/O-intensive background work reading
+  and rewriting GBs of SSTables. During a burst it saturates
+  disk bandwidth and foreground reads queue behind it.
+  PERIODIC, not gradual — "several times an hour" is the tell.
+  p50 SURVIVES because most reads never touch disk (memtable,
+  block cache, page cache). Only reads needing physical I/O
+  during a burst pay, so the damage is confined to the tail.
+  ESCALATION: if ingest outruns compaction persistently, the
+  engine applies WRITE STALLS — deliberately throttling clients
+  so compaction can catch up.
+
+(b) WHY BLOOM FILTERS DON'T HELP
+  They solve READ AMPLIFICATION — which files to skip. The
+  problem here is I/O CONTENTION — the disk is busy. A read
+  that legitimately needs a file still waits behind compaction.
+  Fewer lookups ≠ a less busy disk. Wrong problem.
+  MISCONCEPTION TO AVOID: compaction does NOT make SSTables
+  unavailable. Inputs stay readable; new outputs are written
+  alongside; the engine atomically swaps versions and deletes
+  inputs once unreferenced. Readers are never blocked.
+
+(c) IF READS WERE RANGE SCANS
+  Bloom filters answer questions about ONE key, so they are
+  useless for ranges. Every level that could overlap must be
+  opened and its iterator merged.
+  The difference in kind: this degrades p50, not just p99. A
+  tail problem becomes a median problem.
+
+WHAT YOU'D ACTUALLY DO
+  Rate-limit compaction I/O (RocksDB rate limiter); schedule
+  major compactions off-peak; reconsider compaction strategy —
+  tiered/universal merges less often and less aggressively than
+  levelled, trading space and read amp for calmer foreground
+  latency; and separate the WAL onto its own device.
 
 > **→ Next:** You know both mechanisms and how each fails. So in a live design, which indexes do you actually create, and which engine family do you pick?
 
@@ -540,6 +747,61 @@ Indexing lands in the **data model** phase, right after the schema (8.3), and it
    > 💡 *This is the gate. A complete answer covers: `user_id` seeks, `created_at >` is a range that stops the seek so `status` can only filter rows already read; the correct index is `(user_id, status, created_at)` with equality first, which also satisfies the `ORDER BY` and makes the range a bounded leaf walk; the write regression is one more B-tree maintained per insert, in-place random writes, full-page rewrites and page splits; and the engine switch is justified only when sustained write throughput — not read latency — is the binding constraint, at the price of read amplification, compaction-coupled p99, and worse range scans. If you can't answer this cleanly, you are not done.*
 
 > **→ Next:** Can you combine what you've learned across sections, not just recall each one?
+
+MODEL ANSWER — §7 Adversarial Stress Test
+
+1. SEEK vs FILTER on (user_id, created_at, status)
+   user_id      SEEK — equality on the leading column
+   created_at   RANGE — bounded walk, and it STOPS the seek
+   status       FILTER ONLY, despite having an equality
+                predicate. status is sorted only within a fixed
+                created_at, so there is nothing to seek into.
+                The index "is used" and still reads hundreds of
+                thousands of rows.
+
+2. THE CORRECT INDEX
+   (user_id, status, created_at)
+   Both equality columns first, so both seek. created_at then
+   does three jobs at once: bounds the range, satisfies
+   ORDER BY created_at DESC (walk linked leaves backwards), and
+   bounds LIMIT 20 to ~20 entries examined.   ESR.
+
+3. THE WRITE REGRESSION, PHYSICALLY
+   One more B-tree maintained on every insert/update/delete.
+   DOUBLING implies ~1 structure before (the clustered PK):
+   1 → 2 structures.
+   Per write, per structure:
+     - descend to the leaf; the key picks the page and keys
+       arrive in arbitrary order → RANDOM I/O
+     - rewrite a full 8–16KB page to change ~100 bytes
+     - if full: SPLIT into two pages, plus a full rewrite of
+       the parent, possibly cascading
+     - InnoDB writes every data page TWICE (doublewrite)
+     - redo record appended; the dirty page sits in the buffer
+       pool until a checkpoint flushes it
+   RANDOM explains the latency. The rest explains the volume.
+
+4. WHEN TO CHANGE ENGINES — a workload condition
+   a. Exhaust index tuning first: drop unused indexes, merge
+      redundant ones, fix column order.
+   b. Only if AFTER that write latency degrades CONTINUOUSLY as
+      the table grows, disk pinned on random I/O, nothing left
+      to shed — then throughput is the binding constraint and
+      the problem is architectural.
+   A one-time step change after a deliberate index addition is
+   a PURCHASE, not a ceiling.
+
+   WHAT YOU GIVE UP
+     - read amplification across levels
+     - p99 coupled to compaction contention; write stalls if
+       ingest outruns compaction
+     - THE KILLER HERE: this hot query IS a range query. Bloom
+       filters answer single-key questions only, so every
+       overlapping level must be opened and merged. You would
+       degrade the exact query you set out to fix.
+
+   SO THE HONEST RECOMMENDATION FOR THIS TABLE:
+   fix the index order, keep the B-tree.
 
 ---
 

@@ -1,0 +1,1219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.9 Unique ID Generation — base62, Ticket Servers, Snowflake, Collision Math</title>
+<style>
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface-alt: #f3f2ef;
+    --border: #e5e3de; --text: #1a1917; --text-muted: #6b6861;
+    --accent: #2563eb; --accent-light: #dbeafe;
+    --green: #16a34a; --green-light: #dcfce7;
+    --red: #dc2626; --red-light: #fee2e2;
+    --yellow: #d97706; --yellow-light: #fef3c7;
+    --purple: #7c3aed; --purple-light: #ede9fe;
+    --orange: #ea580c; --orange-light: #ffedd5;
+    --teal: #0d9488; --teal-light: #ccfbf1;
+    --code-bg: #1e1e2e; --code-text: #cdd6f4;
+    --sidebar-w: 240px; --content-max: 820px;
+    font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; }
+  #toc { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0 48px; z-index: 100; }
+  #toc-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  #toc-header .phase-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-bottom: 6px; }
+  #toc-header h2 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  #toc-header .tier-tag { font-size: 10px; font-weight: 800; letter-spacing: .06em; color: var(--yellow); background: var(--yellow-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-top: 8px; }
+  #toc nav a { display: block; padding: 5px 16px 5px 20px; font-size: 12.5px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+  main { margin-left: var(--sidebar-w); padding: 48px 48px 96px; max-width: calc(var(--sidebar-w) + var(--content-max) + 96px); width: 100%; }
+  article { max-width: var(--content-max); }
+  .doc-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 2px solid var(--border); }
+  .doc-header .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+  .tag-phase { background: var(--accent-light); color: var(--accent); }
+  .tag-topic { background: var(--purple-light); color: var(--purple); }
+  .tag-tier  { background: var(--yellow-light); color: var(--yellow); }
+  .tag-prereq{ background: var(--teal-light); color: var(--teal); }
+  .tag-date  { background: var(--surface-alt);  color: var(--text-muted); }
+  .doc-header h1 { font-size: 30px; font-weight: 800; line-height: 1.25; letter-spacing: -.02em; color: var(--text); }
+  section { margin-bottom: 52px; scroll-margin-top: 32px; }
+  h2.section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -.01em; }
+  h2.section-title .num { font-size: 11px; font-weight: 800; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; letter-spacing: .04em; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 24px 0 10px; }
+  h4 { font-size: 13.5px; font-weight: 700; color: var(--text); margin: 18px 0 8px; }
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+  code { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-family: "SF Mono","Fira Code",Menlo,monospace; font-size: 12.5px; }
+  ul.plain { margin: 0 0 14px 20px; }
+  ul.plain li { margin-bottom: 7px; font-size: 14.5px; line-height: 1.6; }
+  ol.steps { margin: 0 0 14px 22px; }
+  ol.steps li { margin-bottom: 8px; font-size: 14.5px; line-height: 1.6; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 14px; border-left: 3px solid; }
+  .callout-goal  { background: var(--accent-light); border-color: var(--accent); color: #1e40af; }
+  .callout-tip   { background: var(--yellow-light); border-color: var(--yellow); color: #92400e; }
+  .callout-warn  { background: var(--red-light); border-color: var(--red); color: #7f1d1d; }
+  .callout-quote { background: var(--surface-alt); border-color: var(--border); color: var(--text-muted); font-style: italic; }
+  .callout-teal  { background: var(--teal-light); border-color: var(--teal); color: #134e4a; }
+  .the-question { background: var(--surface); border: 2px solid var(--accent); border-radius: 12px; padding: 16px 20px; margin-top: 18px; font-size: 15.5px; }
+  .the-question .lbl { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); display: block; margin-bottom: 5px; }
+  .the-question em { color: var(--text); font-weight: 600; }
+  .definition { background: var(--purple-light); border-left: 4px solid var(--purple); border-radius: 8px; padding: 16px 20px; margin: 18px 0 24px; font-size: 15px; font-weight: 600; color: #4c1d95; line-height: 1.6; }
+  .mental-model { background: var(--teal-light); border-left: 3px solid var(--teal); border-radius: 8px; padding: 14px 18px; margin: 18px 0; font-size: 14px; color: #134e4a; }
+  .mental-model .mm-name { font-weight: 800; }
+  .mental-model .mm-break { display: block; margin-top: 7px; font-style: italic; opacity: .85; }
+  .bridge { background: linear-gradient(90deg, var(--accent-light), transparent); border-left: 4px solid var(--accent); border-radius: 8px; padding: 13px 18px; margin-top: 28px; font-size: 14.5px; color: #1e40af; font-weight: 600; }
+  .bridge .arrow { font-weight: 800; margin-right: 6px; }
+  .checkpoint { background: var(--surface); border: 2px solid var(--green); border-radius: 12px; padding: 16px 20px; margin-top: 26px; }
+  .checkpoint > .cp-title { font-size: 12px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--green); margin-bottom: 12px; display: flex; align-items: center; gap: 7px; }
+  .checkpoint.gate { border-color: var(--red); }
+  .checkpoint.gate > .cp-title { color: var(--red); }
+  .cheatsheet { background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 24px 28px; font-family: "SF Mono","Fira Code","Cascadia Code",Menlo,monospace; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-x: auto; margin-top: 16px; }
+  .cheatsheet .label { color: #cba6f7; font-weight: 700; letter-spacing: .08em; display: block; margin-top: 18px; margin-bottom: 4px; border-bottom: 1px solid #313244; padding-bottom: 3px; }
+  .cheatsheet .label:first-child { margin-top: 0; }
+  .diagram-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 16px 14px; margin: 20px 0 28px; overflow-x: auto; }
+  .diagram-wrap .diagram-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); margin-bottom: 12px; }
+  .diagram-wrap svg { display: block; width: 100%; height: auto; }
+  .diagram-wrap p.caption { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 10px; margin-bottom: 0; font-style: italic; }
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; font-size: 14.5px; line-height: 1.55; }
+  .checklist li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 2px; background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .checklist li.checked .cb { background: var(--green); border-color: var(--green); }
+  .checklist li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .checklist li.checked .text { color: var(--text-muted); text-decoration: line-through; }
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: var(--surface-alt); padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.5; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+  .misconception { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .misconception .wrong { background: var(--red-light); padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; }
+  .misconception .right { padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; color: #065f46; background: var(--green-light); }
+  .misconception .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .quiz-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .quiz-q { padding: 14px 18px; font-size: 14.5px; font-weight: 600; cursor: pointer; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .quiz-q:hover { background: var(--surface-alt); }
+  .quiz-num { flex-shrink: 0; width: 24px; height: 24px; background: var(--accent); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; margin-top: 1px; }
+  .checkpoint.gate .quiz-num { background: var(--red); }
+  .quiz-q .qtext { flex: 1; font-weight: 500; }
+  .quiz-toggle { font-size: 11px; color: var(--text-muted); flex-shrink: 0; margin-top: 3px; }
+  .quiz-hint { display: none; padding: 10px 18px 14px; font-size: 13px; color: #92400e; background: var(--yellow-light); border-top: 1px solid var(--border); line-height: 1.6; }
+  .quiz-item.open .quiz-hint { display: block; }
+  .reading-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .reading-list li { display: flex; align-items: flex-start; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; font-size: 14px; }
+  .reading-list li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 1px; cursor: pointer; background: var(--surface); display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .reading-list li.checked .cb { background: var(--green); border-color: var(--green); }
+  .reading-list li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .reading-list li.checked .rtext { color: var(--text-muted); text-decoration: line-through; }
+  .notes-area { width: 100%; min-height: 200px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: inherit; font-size: 14px; color: var(--text); resize: vertical; line-height: 1.6; }
+  .notes-area:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .connections { display: flex; flex-direction: column; gap: 12px; }
+  .conn-card { display: flex; align-items: flex-start; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14px; }
+  .conn-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .conn-label { font-weight: 700; margin-bottom: 3px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .tradeoff-box { background: var(--surface-alt); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 16px 20px; font-size: 14.5px; font-style: italic; color: var(--text); margin-top: 14px; line-height: 1.65; }
+  .trigger-list { list-style: none; display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+  .trigger-list li { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--orange); border-radius: 8px; padding: 10px 16px; font-size: 14px; font-style: italic; color: var(--text); }
+  @media (max-width: 900px) { #toc { display: none; } main { margin-left: 0; padding: 24px 20px 60px; } }
+</style>
+</head>
+<body>
+
+<aside id="toc">
+  <div id="toc-header">
+    <span class="phase-tag">Phase C · Topic 8</span>
+    <h2>8.9 Unique ID Generation</h2>
+    <span class="tier-tag">🥇 T1 · ~3h</span>
+  </div>
+  <nav>
+    <a href="#s0">🧭 The Question</a>
+    <a href="#s1">📋 Cheatsheet</a>
+    <a href="#s2">🧠 The Mindmap</a>
+    <a href="#s3">🔥 The Problem</a>
+    <a href="#s4">💡 The Core Idea</a>
+    <a href="#s5">⚙️ How It Works</a>
+    <a href="#s6">⚖️ The Decision</a>
+    <a href="#s7">🎯 In the Interview</a>
+    <a href="#s8">🧪 Mastery Gate</a>
+    <a href="#s9">🔗 Connections</a>
+    <a href="#s10">✍️ My Notes</a>
+  </nav>
+</aside>
+
+<main>
+<article>
+
+  <header class="doc-header">
+    <div class="meta">
+      <span class="tag tag-phase">Phase C — Data Storage</span>
+      <span class="tag tag-topic">Topic 8 — Database Fundamentals</span>
+      <span class="tag tag-tier">🥇 T1 Core · ~3h</span>
+      <span class="tag tag-prereq">Prereqs: 8.1, 8.4</span>
+      <span class="tag tag-date">Not yet studied</span>
+    </div>
+    <h1>8.9 Unique ID Generation — base62, Ticket Servers, Snowflake, Collision Math</h1>
+  </header>
+
+  <!-- ══════════════════ §0 ══════════════════ -->
+  <section id="s0">
+    <h2 class="section-title"><span class="num">§0</span> 🧭 The Question This Answers</h2>
+
+    <p>8.4 established that a B-tree's insert cost depends entirely on <em>where in the key space the insert lands</em> — a sequential key appends to the rightmost leaf and touches one hot page, a random key scatters across the whole index and touches a cold one every time. That was a statement about indexes. This subtopic asks where the key itself comes from, and it turns out the two questions are the same question: <strong>the shape of your ID is a write-path performance decision disguised as a naming decision.</strong></p>
+
+    <p>The tension is that uniqueness is a <em>global</em> property — to know an ID is unique you need to know about every other ID ever minted — but you want to mint it <em>locally</em>, on one machine, with no network round trip, millions of times a second. Every scheme in this subtopic is a different answer to how you get a global guarantee without a global read, and each one pays for it in a different currency: latency, availability, index locality, or a residual probability of collision.</p>
+
+    <div class="the-question">
+      <span class="lbl">The question</span>
+      <em>How do you mint an identifier that is unique across every machine in the fleet without any of them talking to each other on the write path — and what does the ID's shape cost you at the index?</em>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> Before we compare schemes, we need to see what actually broke. What was wrong with just asking the database for the next number?</div>
+  </section>
+
+  <!-- ══════════════════ §1 ══════════════════ -->
+  <section id="s1">
+    <h2 class="section-title"><span class="num">§1</span> 📋 Cheatsheet</h2>
+
+    <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+    <div class="callout callout-tip">⏭️ <strong>First time through this topic?</strong> Skip to §2 and come back here for revision.</div>
+
+<div class="cheatsheet"><span class="label">§ 1  WHY IT EXISTS</span>A single database's AUTO_INCREMENT is a perfect ID generator: unique,
+monotonic, 8 bytes, free. It works because the database is a single
+coordinator that remembers every ID it has ever issued. Shard that database
+and the coordinator disappears — each shard's counter restarts at 1 and the
+shards collide. The instinctive replacements both fail in instructive ways.
+A central ID service puts a network hop and a shared fate in front of every
+single insert, so its availability becomes a ceiling on your write
+availability. Random UUIDv4 removes coordination entirely but destroys the
+index locality 8.4 spent its whole argument on — a random primary key means
+every insert lands in a random B-tree leaf. The resolution is to PARTITION
+the ID space rather than SERIALIZE access to it, and to put time in the high
+bits so the keys stay roughly ordered anyway.
+<span class="label">§ 2  WHAT IT IS — THE COORDINATION DIAL, FOUR POSITIONS</span>COORDINATE PER WRITE   AUTO_INCREMENT, central ID service. Perfect order,
+                       8 bytes. Costs a round trip and shared fate per insert.
+COORDINATE PER BATCH   Ticket server. Lease a block of 1000, mint locally
+                       from it. Amortizes the round trip 1000:1. Costs gaps
+                       on crash and loss of global monotonicity.
+PARTITION THE SPACE    Snowflake. Each machine owns a disjoint slice by
+                       construction, so collision is impossible with zero
+                       runtime coordination. Costs you a worker-ID assignment
+                       problem, moved from write time to deploy time.
+REPLACE WITH           UUIDv4 — 122 random bits. No coordination ever.
+PROBABILITY            Costs all ordering, so no index locality, and 16 bytes.
+UUIDv7 sits between the last two: a 48-bit ms timestamp in the high bits plus
+74 random bits — client-mintable like v4, k-sorted like Snowflake.
+<span class="label">§ 3  THE MECHANISM — THE SNOWFLAKE BIT BUDGET</span>   1 bit  sign, unused (keeps the ID positive in a signed BIGINT / Java long)
+  41 bits millisecond timestamp since a CUSTOM epoch → 2^41 ms ≈ 69.7 years
+  10 bits machine id                                 → 1024 nodes
+  12 bits sequence, per machine per millisecond      → 4096 IDs/ms/machine
+  id = (ts &lt;&lt; 22) | (machine_id &lt;&lt; 12) | sequence
+FLEET CEILING  1024 × 4096 = 4.19M IDs per millisecond ≈ 4.19 BILLION/sec.
+THE FIELDS ARE A BUDGET, NOT A CONSTANT. Need 4096 machines? Take two bits
+from the sequence: 41/12/10 gives 1024 IDs/ms/machine. Say this out loud —
+it demonstrates you understand it as a parameterized design.
+THE ONE INVARIANT  The timestamp must stay in the HIGH bits. Move it and you
+lose the sort order, and with it the entire index-locality argument.
+<span class="label">§ 4  USE / AVOID</span>AUTO_INCREMENT when: one logical database, not sharded. It is free, compact,
+  and index-optimal. Reaching for Snowflake on a single-Postgres design is
+  over-engineering and interviewers notice.
+SNOWFLAKE when: sharded or multi-writer, the server mints the ID, you want
+  8 bytes and k-sorted keys, and you can assign worker IDs authoritatively.
+UUIDv7 when: the CLIENT must mint the ID before the write reaches a server
+  (offline drafts, idempotency keys) but you still want index locality.
+TICKET SERVER when: you want compact monotonic 64-bit integers and can accept
+  one coordinator, amortized 1000:1. The cheap, boring, still-correct answer.
+AVOID UUIDv4 as a clustered primary key in InnoDB — random inserts thrash the
+  buffer pool, and the 16-byte PK is copied into every secondary index.
+AVOID monotonic IDs as the PARTITION KEY of a hash-partitioned store. There
+  the rule inverts: sequential keys concentrate every write on one partition.
+AVOID hash-and-truncate for short codes unless you also build the retry loop.
+<span class="label">§ 5  THE MATH — SIZING AND COLLISION</span>BASE62 SIZING (assigned keys — no collision possible)
+  62^6 = 56.8 BILLION      62^7 = 3.52 TRILLION      62^8 = 218 TRILLION
+  1B keys (100M/yr × 10yr) fits in 6 chars with room; 7 gives headroom.
+BIRTHDAY BOUND (drawn keys — hashing, truncation, random codes)
+  P(collision) ≈ 1 − e^(−k²/2N) ≈ k²/2N     50% point ≈ 1.177·√N
+  THE POINT: collisions bite at √N, NOT at N.
+  7-char truncated hash: N = 3.52e12, but 50% collision at ~2.2 MILLION keys.
+  8-char: 50% at ~17 million. UUIDv4: N = 2^122, 50% at ~2.7e18 — never.
+  At 1 billion keys in a 7-char space, k²/2N ≈ 142,000 — collisions certain.
+<span class="label">§ 6  NUMBERS TO ANCHOR THE DISCUSSION</span>UUID 16 bytes vs. BIGINT 8 bytes — and in InnoDB the clustered PK is embedded
+  in EVERY secondary index, so the 8 bytes are paid many times over.
+Snowflake epoch: Twitter used 2010-11-04. Pick your own; it buys the full 69
+  years starting now instead of burning 40 of them on the Unix epoch.
+Instagram: 41 bits ms + 13 bits logical shard (8192 shards) + 10 bits sequence.
+Worker-ID by hash(hostname) % 1024 with only 40 pods collides ~53% of the time.
+Ticket server refill at ~80% of the block; blocks of 1000 amortize 1000:1.
+<span class="label">§ 7  INTERVIEW TRIGGERS + GOTCHA</span>→ "How do you generate the short code?"          → size base62 FIRST, then
+                                                    say how the number is made
+→ "What's the primary key, and where does        → name the scheme AND the
+   it come from?"                                   index consequence
+→ "You're sharded across 50 DBs — how do you     → partition the ID space,
+   avoid two shards issuing the same ID?"           don't centralize it
+→ "Can the client generate the ID?"              → UUIDv7, and say why not v4
+GOTCHA #1: Saying "I'd use UUIDs, they're globally unique." Uniqueness was
+  never the hard part. The hard part is uniqueness WITHOUT coordination AND
+  WITHOUT destroying index locality, and UUIDv4 solves only the first half.
+GOTCHA #2: "62^7 is 3.5 trillion, so 7 characters handles trillions of
+  links." Only if you ASSIGN them. If you hash into them, the birthday bound
+  puts your 50% collision point at 2.2 million.
+GOTCHA #3: Naming clock skew as Snowflake's main risk. Clock skew fails
+  LOUDLY — the generator refuses to issue. Duplicate worker IDs fail
+  SILENTLY, producing perfectly well-formed IDs that collide occasionally.</div>
+  </section>
+
+  <!-- ══════════════════ §2 ══════════════════ -->
+  <section id="s2">
+    <h2 class="section-title"><span class="num">§2</span> 🧠 The Mindmap</h2>
+    <div class="callout callout-quote">The picture to hold in your head while you study. Everything below hangs off this.</div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Concept map — where uniqueness comes from</div>
+      <svg viewBox="0 0 1060 700" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="mmArrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" fill="#b8b4ac"/>
+          </marker>
+        </defs>
+
+        <!-- connectors -->
+        <g stroke="#b8b4ac" stroke-width="1.8" fill="none" marker-end="url(#mmArrow)">
+          <path d="M468,318 L215,222"/>
+          <path d="M530,308 L530,225"/>
+          <path d="M592,318 L845,222"/>
+          <path d="M468,392 L215,482"/>
+          <path d="M530,400 L530,475"/>
+          <path d="M592,392 L845,482"/>
+        </g>
+
+        <!-- centre -->
+        <ellipse cx="530" cy="355" rx="170" ry="55" fill="#a5d8ff" stroke="#1971c2" stroke-width="2.5"/>
+        <text x="530" y="345" text-anchor="middle" font-size="16" font-weight="800" fill="#0b3d66">UNIQUE ID GENERATION</text>
+        <text x="530" y="368" text-anchor="middle" font-size="12.5" font-style="italic" fill="#1971c2">"where does uniqueness come from —</text>
+        <text x="530" y="385" text-anchor="middle" font-size="12.5" font-style="italic" fill="#1971c2">and what does its shape cost?"</text>
+
+        <!-- TOP LEFT : the constraints -->
+        <rect x="30" y="30" width="270" height="190" rx="10" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+        <text x="46" y="55" font-size="13.5" font-weight="800" fill="#1e3a8a">🎯 THE CONSTRAINTS</text>
+        <text x="46" y="81"  font-size="12.5" fill="#1e3a8a">globally unique</text>
+        <text x="46" y="102" font-size="12.5" fill="#1e3a8a">k-sorted (8.4 index locality)</text>
+        <text x="46" y="123" font-size="12.5" fill="#1e3a8a">compact — 8 bytes vs. 16</text>
+        <text x="46" y="144" font-size="12.5" fill="#1e3a8a">mintable offline (no network)</text>
+        <text x="46" y="165" font-size="12.5" fill="#1e3a8a">unguessable</text>
+        <text x="46" y="196" font-size="11.5" font-style="italic" fill="#3b5bdb">⚠ mutually hostile — there is no</text>
+        <text x="46" y="211" font-size="11.5" font-style="italic" fill="#3b5bdb">best ID, only a resolved conflict</text>
+
+        <!-- TOP CENTRE : the coordination dial -->
+        <rect x="395" y="30" width="270" height="190" rx="10" fill="#ffc9c9" stroke="#c92a2a" stroke-width="2"/>
+        <text x="411" y="55" font-size="13.5" font-weight="800" fill="#7f1d1d">🎚️ THE COORDINATION DIAL</text>
+        <text x="411" y="81"  font-size="12.5" fill="#7f1d1d">① per write — central service</text>
+        <text x="411" y="102" font-size="12.5" fill="#7f1d1d">② per batch — ticket server</text>
+        <text x="411" y="123" font-size="12.5" fill="#7f1d1d">③ partition the space — Snowflake</text>
+        <text x="411" y="144" font-size="12.5" fill="#7f1d1d">④ probability — UUIDv4</text>
+        <text x="411" y="177" font-size="11.5" font-style="italic" fill="#c92a2a">four positions, not two — naming</text>
+        <text x="411" y="192" font-size="11.5" font-style="italic" fill="#c92a2a">all four is the depth signal</text>
+
+        <!-- TOP RIGHT : the schemes -->
+        <rect x="760" y="30" width="270" height="190" rx="10" fill="#ffd8a8" stroke="#e67700" stroke-width="2"/>
+        <text x="776" y="55" font-size="13.5" font-weight="800" fill="#7c2d12">🧩 THE SCHEMES</text>
+        <text x="776" y="81"  font-size="12.5" fill="#7c2d12">AUTO_INCREMENT — the default</text>
+        <text x="776" y="102" font-size="12.5" fill="#7c2d12">ticket server — Flickr</text>
+        <text x="776" y="123" font-size="12.5" fill="#7c2d12">Snowflake — 41/10/12</text>
+        <text x="776" y="144" font-size="12.5" fill="#7c2d12">UUIDv4 — 122 random bits</text>
+        <text x="776" y="165" font-size="12.5" fill="#7c2d12">UUIDv7 / ULID — sortable UUID</text>
+        <text x="776" y="196" font-size="11.5" font-style="italic" fill="#e67700">⚠ hash + truncate — collisions</text>
+        <text x="776" y="211" font-size="11.5" font-style="italic" fill="#e67700">    unless you build the retry loop</text>
+
+        <!-- BOTTOM LEFT : the bit budget -->
+        <rect x="30" y="490" width="270" height="180" rx="10" fill="#c3fae8" stroke="#0ca678" stroke-width="2"/>
+        <text x="46" y="515" font-size="13.5" font-weight="800" fill="#134e4a">🧮 THE BIT BUDGET</text>
+        <text x="46" y="541" font-size="12.5" fill="#134e4a">41b timestamp → ≈ 69.7 years</text>
+        <text x="46" y="562" font-size="12.5" fill="#134e4a">10b machine id → 1024 nodes</text>
+        <text x="46" y="583" font-size="12.5" fill="#134e4a">12b sequence → 4096 per ms</text>
+        <text x="46" y="604" font-size="12.5" fill="#134e4a">custom epoch — document it</text>
+        <text x="46" y="635" font-size="11.5" font-style="italic" fill="#0ca678">RE-CUT the fields — it's a budget,</text>
+        <text x="46" y="650" font-size="11.5" font-style="italic" fill="#0ca678">not a constant. Time stays high.</text>
+
+        <!-- BOTTOM CENTRE : the math -->
+        <rect x="395" y="490" width="270" height="180" rx="10" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+        <text x="411" y="515" font-size="13.5" font-weight="800" fill="#4c1d95">📐 THE MATH</text>
+        <text x="411" y="541" font-size="12.5" fill="#4c1d95">62^6 = 56.8B · 62^7 = 3.52T</text>
+        <text x="411" y="562" font-size="12.5" fill="#4c1d95">birthday bound — bites at √N</text>
+        <text x="411" y="583" font-size="12.5" fill="#4c1d95">7 chars → 50% at 2.2M keys</text>
+        <text x="411" y="604" font-size="12.5" fill="#4c1d95">UUIDv4 safe to ~2.7e18</text>
+        <text x="411" y="635" font-size="11.5" font-style="italic" fill="#7c3aed">ASSIGNED ≠ DRAWN — only drawn</text>
+        <text x="411" y="650" font-size="11.5" font-style="italic" fill="#7c3aed">keys have collision math at all</text>
+
+        <!-- BOTTOM RIGHT : real systems -->
+        <rect x="760" y="490" width="270" height="180" rx="10" fill="#b2f2bb" stroke="#2f9e44" stroke-width="2"/>
+        <text x="776" y="515" font-size="13.5" font-weight="800" fill="#14532d">🏭 REAL SYSTEMS</text>
+        <text x="776" y="541" font-size="12.5" fill="#14532d">Twitter — Snowflake 41/10/12</text>
+        <text x="776" y="562" font-size="12.5" fill="#14532d">Instagram — per-shard in Postgres</text>
+        <text x="776" y="583" font-size="12.5" fill="#14532d">Flickr — ticket servers, odd/even</text>
+        <text x="776" y="604" font-size="12.5" fill="#14532d">MongoDB — 12-byte ObjectId</text>
+        <text x="776" y="625" font-size="12.5" fill="#14532d">UUIDv7 — RFC 9562 · bit.ly base62</text>
+        <text x="776" y="655" font-size="11.5" font-style="italic" fill="#2f9e44">each chose which conflict to lose</text>
+      </svg>
+      <p class="caption">The constraints fight each other; everything else is a way of resolving the fight.</p>
+    </div>
+
+    <p><strong>How to read it:</strong> the <strong>constraints</strong> are mutually hostile — compact fights unguessable, ordered fights unguessable, no-coordination fights compact — so there is no best ID, only a resolved conflict. The <strong>coordination dial</strong> is the axis on which you resolve it, and each position on it produces one of <strong>the schemes</strong>. Choosing "partition the space" forces you into <strong>the bit budget</strong>, which is pure accounting. Choosing "probability" forces you into <strong>the math</strong>, which is the birthday bound. <strong>Real systems</strong> are the record of which conflict each company decided to lose.</p>
+  </section>
+
+  <!-- ══════════════════ §3 ══════════════════ -->
+  <section id="s3">
+    <h2 class="section-title"><span class="num">§3</span> 🔥 The Problem</h2>
+
+    <p>For twenty years the primary key was a solved problem: <code>id BIGINT AUTO_INCREMENT PRIMARY KEY</code>. It is genuinely excellent. Eight bytes, perfectly monotonic, dense with no gaps, and index-optimal — every insert appends to the rightmost leaf page of the B-tree, so the hot working set is one page regardless of how large the table grows. It works for exactly one reason: <strong>the database is a single coordinator that remembers every ID it has ever issued.</strong> The counter <em>is</em> the memory of the entire ID history.</p>
+
+    <p>Shard that database and the coordinator vanishes. Each of your fifty shards now runs its own counter starting at 1, and within an hour every shard has issued an <code>id = 7</code>. The classic patch — set <code>auto_increment_offset</code> and <code>auto_increment_increment</code> so shard <em>n</em> issues only IDs congruent to <em>n</em> — works, and Flickr shipped it, but it is brittle: the increment is baked into every shard's config, so adding the fifty-first shard means the whole scheme has to be re-cut and existing IDs no longer fit the pattern. The counter was never designed to be sharded.</p>
+
+    <p>The first instinctive fix is to keep the coordinator but pull it out into its own service: one box, one counter, everyone asks it. This fails for a precise reason worth being able to state. It converts a <strong>local</strong> operation into a <strong>distributed</strong> one. Every insert in the entire system now carries a network round trip before it can begin, that service's p99 is added to every write's p99, and — the part that actually kills it — <strong>its availability becomes a hard ceiling on your write availability.</strong> If the ID service is down, nothing in the system can create anything. Replicating it doesn't help, because the counter is shared mutable state: the replicas must either coordinate on every ID (now you have consensus latency on the write path, which is worse) or partition the counter space between them — at which point you have abandoned the central service and arrived, accidentally, at the real answer.</p>
+
+    <p>The second instinctive fix is to abolish coordination entirely with a random UUIDv4 — 122 random bits, and the birthday bound says you will never see a collision. This is genuinely correct on uniqueness, and it is where most candidates stop. But 8.4's argument comes due immediately: a random primary key means every insert lands in a <strong>random leaf page</strong> of the B-tree. The working set is no longer the right edge of the index, it is the entire index; the buffer pool thrashes; and instead of cheap right-edge appends you get page splits in the middle of the tree, which fragment it. In InnoDB it is worse still, because the table <em>is</em> the clustered primary key index, and that 16-byte key is copied into every secondary index on the table. You solved uniqueness and paid for it in write throughput.</p>
+
+    <p>The insight that resolves it is small and worth memorizing: <strong>uniqueness does not require serializing access to a counter — it requires that no two minters can produce the same value.</strong> You can get that by giving each machine its own disjoint slice of the ID space, decided once at startup rather than once per write. And if you then spend the ID's high bits on a timestamp, the keys remain roughly ordered, so you keep 8.4's index locality for free. That is Snowflake, and everything else in this subtopic is a variation on where you put that dividing line.</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Before / after — serialize access vs. partition the space</div>
+      <svg viewBox="0 0 1040 430" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="baArrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#2563eb"/>
+          </marker>
+          <marker id="baArrowR" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" fill="#c92a2a"/>
+          </marker>
+        </defs>
+
+        <!-- LEFT PANEL -->
+        <rect x="20" y="20" width="440" height="390" rx="12" fill="#fff5f5" stroke="#c92a2a" stroke-width="2" stroke-dasharray="6 4"/>
+        <text x="40" y="48" font-size="14" font-weight="800" fill="#7f1d1d">BEFORE — one counter, everyone asks it</text>
+
+        <g font-size="11.5" font-weight="700">
+          <rect x="42" y="66" width="112" height="34" rx="6" fill="#ffc9c9" stroke="#c92a2a"/>
+          <text x="98" y="88" text-anchor="middle" fill="#7f1d1d">app 1</text>
+          <rect x="184" y="66" width="112" height="34" rx="6" fill="#ffc9c9" stroke="#c92a2a"/>
+          <text x="240" y="88" text-anchor="middle" fill="#7f1d1d">app 2</text>
+          <rect x="326" y="66" width="112" height="34" rx="6" fill="#ffc9c9" stroke="#c92a2a"/>
+          <text x="382" y="88" text-anchor="middle" fill="#7f1d1d">app 3</text>
+        </g>
+        <g stroke="#c92a2a" stroke-width="1.8" fill="none" marker-end="url(#baArrowR)">
+          <path d="M98,102 L98,120 L240,120 L240,148"/>
+          <path d="M240,102 L240,148"/>
+          <path d="M382,102 L382,120 L240,120 L240,148"/>
+        </g>
+        <text x="240" y="139" text-anchor="middle" font-size="10.5" font-style="italic" fill="#c92a2a">round trip on EVERY insert</text>
+
+        <rect x="130" y="152" width="220" height="52" rx="8" fill="#ffe3e3" stroke="#c92a2a" stroke-width="2"/>
+        <text x="240" y="174" text-anchor="middle" font-size="12.5" font-weight="800" fill="#7f1d1d">ID SERVICE / DB</text>
+        <text x="240" y="193" text-anchor="middle" font-size="12" font-family="SF Mono, Menlo, monospace" fill="#7f1d1d">counter = 41 302</text>
+
+        <text x="42" y="234" font-size="12.5" fill="#2f9e44">✓ perfectly monotonic, dense, 8 bytes</text>
+        <text x="42" y="262" font-size="12.5" fill="#c92a2a">✗ a network hop before every write</text>
+        <text x="42" y="286" font-size="12.5" fill="#c92a2a">✗ ITS availability caps YOUR write availability</text>
+        <text x="42" y="310" font-size="12.5" fill="#c92a2a">✗ its throughput caps your write throughput</text>
+        <text x="42" y="334" font-size="12.5" fill="#c92a2a">✗ replicas don't help — the counter is</text>
+        <text x="56" y="352" font-size="12.5" fill="#c92a2a">SHARED MUTABLE STATE</text>
+        <text x="42" y="382" font-size="11.5" font-style="italic" fill="#7f1d1d">replicas must either run consensus per ID</text>
+        <text x="42" y="398" font-size="11.5" font-style="italic" fill="#7f1d1d">(worse) or partition the space (→ Snowflake)</text>
+
+        <!-- arrow -->
+        <line x1="470" y1="215" x2="565" y2="215" stroke="#2563eb" stroke-width="3" marker-end="url(#baArrow)"/>
+        <text x="517" y="203" text-anchor="middle" font-size="11" font-weight="800" fill="#2563eb">partition</text>
+
+        <!-- RIGHT PANEL -->
+        <rect x="580" y="20" width="440" height="390" rx="12" fill="#f0fdf4" stroke="#2f9e44" stroke-width="2"/>
+        <text x="600" y="48" font-size="14" font-weight="800" fill="#14532d">AFTER — partition the space</text>
+
+        <g font-family="SF Mono, Menlo, monospace" font-size="11.5">
+          <rect x="602" y="66" width="396" height="44" rx="7" fill="#dcfce7" stroke="#2f9e44" stroke-width="1.5"/>
+          <text x="616" y="84" font-weight="700" fill="#14532d">app 1   worker id = 001</text>
+          <text x="616" y="102" fill="#14532d">mints  [ ts | 001 | seq ]</text>
+
+          <rect x="602" y="118" width="396" height="44" rx="7" fill="#dcfce7" stroke="#2f9e44" stroke-width="1.5"/>
+          <text x="616" y="136" font-weight="700" fill="#14532d">app 2   worker id = 002</text>
+          <text x="616" y="154" fill="#14532d">mints  [ ts | 002 | seq ]</text>
+
+          <rect x="602" y="170" width="396" height="44" rx="7" fill="#dcfce7" stroke="#2f9e44" stroke-width="1.5"/>
+          <text x="616" y="188" font-weight="700" fill="#14532d">app 3   worker id = 003</text>
+          <text x="616" y="206" fill="#14532d">mints  [ ts | 003 | seq ]</text>
+        </g>
+
+        <text x="602" y="242" font-size="12.5" fill="#2f9e44">✓ zero coordination at write time</text>
+        <text x="602" y="268" font-size="12.5" fill="#2f9e44">✓ collision impossible BY CONSTRUCTION,</text>
+        <text x="616" y="286" font-size="12.5" fill="#2f9e44">not by luck</text>
+        <text x="602" y="312" font-size="12.5" fill="#2f9e44">✓ time in the high bits → still k-sorted →</text>
+        <text x="616" y="330" font-size="12.5" fill="#2f9e44">8.4's index locality is preserved</text>
+        <text x="602" y="358" font-size="12.5" fill="#c92a2a">✗ worker IDs must be assigned ONCE,</text>
+        <text x="616" y="376" font-size="12.5" fill="#c92a2a">AUTHORITATIVELY, at startup</text>
+        <text x="602" y="400" font-size="11.5" font-style="italic" fill="#14532d">coordination moved to deploy time, not removed</text>
+      </svg>
+      <p class="caption">Uniqueness never required serializing access to a counter — only that no two minters can produce the same value.</p>
+    </div>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">Why can't you fix the central ID service's single-point-of-failure problem by putting three replicas behind a load balancer? Name the property of the counter that makes replication not a solution here, and explain what each of the two escape routes from that problem actually costs you.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read §3 paragraph three — the sentence about shared mutable state and what the replicas are forced to do.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> If the answer is to partition the ID space instead of serializing access to it, what exactly is being partitioned — and what are the other places on that same dial?</div>
+  </section>
+
+  <!-- ══════════════════ §4 ══════════════════ -->
+  <section id="s4">
+    <h2 class="section-title"><span class="num">§4</span> 💡 The Core Idea</h2>
+
+    <div class="definition">A unique ID scheme is a decision about where uniqueness comes from: you either coordinate on every write, coordinate once per batch, partition the ID space so that coordination is unnecessary, or replace coordination with a probability bound — and each choice buys uniqueness in a different currency: write latency, availability, index locality, or a residual collision risk.</div>
+
+    <p>The five ideas below build on each other. Each one only makes sense because of the one before it.</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">The build chain</div>
+      <svg viewBox="0 0 1040 190" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="bcArrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#7c3aed"/>
+          </marker>
+        </defs>
+        <g>
+          <rect x="8" y="30" width="176" height="58" rx="9" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+          <text x="96" y="55" text-anchor="middle" font-size="12.5" font-weight="800" fill="#4c1d95">UNIQUENESS IS</text>
+          <text x="96" y="73" text-anchor="middle" font-size="12.5" font-weight="800" fill="#4c1d95">GLOBAL</text>
+          <text x="96" y="110" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">because you must</text>
+          <text x="96" y="126" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">know something about</text>
+          <text x="96" y="142" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">every other ID</text>
+        </g>
+        <line x1="190" y1="59" x2="218" y2="59" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow)"/>
+        <g>
+          <rect x="224" y="30" width="176" height="58" rx="9" fill="#ffc9c9" stroke="#c92a2a" stroke-width="2"/>
+          <text x="312" y="55" text-anchor="middle" font-size="12.5" font-weight="800" fill="#7f1d1d">THE COORDINATION</text>
+          <text x="312" y="73" text-anchor="middle" font-size="12.5" font-weight="800" fill="#7f1d1d">DIAL</text>
+          <text x="312" y="110" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">therefore there are</text>
+          <text x="312" y="126" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">exactly four places</text>
+          <text x="312" y="142" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">to buy it, not two</text>
+        </g>
+        <line x1="406" y1="59" x2="434" y2="59" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow)"/>
+        <g>
+          <rect x="440" y="30" width="176" height="58" rx="9" fill="#c3fae8" stroke="#0ca678" stroke-width="2"/>
+          <text x="528" y="55" text-anchor="middle" font-size="12.5" font-weight="800" fill="#134e4a">THE BIT</text>
+          <text x="528" y="73" text-anchor="middle" font-size="12.5" font-weight="800" fill="#134e4a">BUDGET</text>
+          <text x="528" y="110" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">so partitioning means</text>
+          <text x="528" y="126" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">slicing a fixed-width</text>
+          <text x="528" y="142" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">integer into fields</text>
+        </g>
+        <line x1="622" y1="59" x2="650" y2="59" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow)"/>
+        <g>
+          <rect x="656" y="30" width="176" height="58" rx="9" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+          <text x="744" y="55" text-anchor="middle" font-size="12.5" font-weight="800" fill="#92400e">SORTABILITY IS</text>
+          <text x="744" y="73" text-anchor="middle" font-size="12.5" font-weight="800" fill="#92400e">A BYPRODUCT</text>
+          <text x="744" y="110" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">which means time in</text>
+          <text x="744" y="126" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">the HIGH bits buys</text>
+          <text x="744" y="142" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">8.4's locality free</text>
+        </g>
+        <line x1="838" y1="59" x2="866" y2="59" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow)"/>
+        <g>
+          <rect x="872" y="30" width="160" height="58" rx="9" fill="#ffd8a8" stroke="#e67700" stroke-width="2"/>
+          <text x="952" y="55" text-anchor="middle" font-size="12.5" font-weight="800" fill="#7c2d12">ENCODING IS</text>
+          <text x="952" y="73" text-anchor="middle" font-size="12.5" font-weight="800" fill="#7c2d12">SEPARATE</text>
+          <text x="952" y="110" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">so base62 is</text>
+          <text x="952" y="126" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">presentation, never</text>
+          <text x="952" y="142" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">generation</text>
+        </g>
+        <text x="520" y="178" text-anchor="middle" font-size="11.5" font-style="italic" fill="#7c3aed">read the connective words under the arrows — each block exists because of the one before it</text>
+      </svg>
+      <p class="caption">Five ideas, one chain. Skip a link and the next block stops making sense.</p>
+    </div>
+
+    <h3>One Home for Uniqueness — why this is hard at all</h3>
+    <p>Uniqueness is not a property of an ID. It is a property of the <strong>set</strong> of all IDs. To assert that the value you just generated is unique, you need to know something about every other value ever generated — which is why the naive implementation is a shared counter, and why the counter has to be shared. Every scheme that follows is a technique for obtaining that global guarantee without performing a global read. Hold on to that framing: when an interviewer asks how you'd generate IDs, they are asking <em>how you're going to avoid the global read</em>, and candidates who answer "UUIDs, they're unique" have answered a question nobody asked.</p>
+
+    <h3>The Coordination Dial — four positions, not two</h3>
+    <p>Because the guarantee is global but the mint must be local, there are exactly four places to buy it, and naming all four (rather than the usual two) is what separates a designed answer from a recalled one.</p>
+    <p><strong>Coordinate on every write.</strong> <code>AUTO_INCREMENT</code> on a single database, or a dedicated ID service. Perfect monotonic order, 8 bytes, dense. The price is a round trip and shared fate on every insert, as §3 laid out.</p>
+    <p><strong>Coordinate once per batch — the ticket server.</strong> A writer leases a block of, say, 1000 IDs and then mints locally from that block until it runs out. The round trip is amortized 1000:1, and the coordinator is a boring MySQL box you already know how to operate. You pay in two coins: IDs are no longer globally monotonic (writer A holds 1000–1999 while writer B holds 2000–2999, and B may well commit first), and a crash abandons the unused remainder of a block, so the sequence has <strong>gaps</strong>. Both are usually fine; neither is free.</p>
+    <p><strong>Partition the space — Snowflake.</strong> Each machine embeds its own identifier in the ID, so the space each machine can produce is disjoint from every other machine's by construction. Two machines <em>cannot</em> collide, and no runtime coordination is needed at all. The cost is honest and often glossed over: you must assign each machine a distinct worker ID, so you have not eliminated coordination — you have <strong>moved it from write time to deploy time</strong>, where a ZooKeeper ephemeral sequential node, an etcd lease, or a StatefulSet pod ordinal can handle it once per process lifetime instead of once per row.</p>
+    <p><strong>Replace coordination with probability — UUIDv4.</strong> 122 random bits, and the birthday bound (§5) says the collision probability stays negligible past any volume a real system will produce. This is the only position on the dial where the guarantee is statistical rather than structural, and it is a perfectly respectable engineering choice — but it costs you every ordering property, which is where 8.4 comes back to collect.</p>
+
+    <h3>The Bit Budget — what Snowflake actually spends 64 bits on</h3>
+    <p>Once you choose to partition the space, ID design becomes pure accounting: you have a fixed-width integer and you divide it into fields. Twitter's Snowflake spends 64 bits as <strong>1 unused sign bit + 41 bits of millisecond timestamp + 10 bits of machine ID + 12 bits of sequence</strong>, composed as <code>(ts &lt;&lt; 22) | (machine_id &lt;&lt; 12) | sequence</code>. The sign bit is left at zero so the value stays positive in a signed <code>BIGINT</code> or a Java <code>long</code> — which is also the reason the whole thing is 64 bits and not 128.</p>
+    <p>Each field is a capacity decision you should be able to defend. 41 bits of milliseconds is 2<sup>41</sup> ms ≈ <strong>69.7 years</strong>, measured from a <em>custom</em> epoch — Twitter used 2010-11-04, and choosing your own epoch matters because starting from the Unix epoch would burn decades of that budget before your system even launches. 10 bits of machine ID is <strong>1024 nodes</strong>. 12 bits of sequence is <strong>4096 IDs per machine per millisecond</strong>, i.e. 4.1 million per second per machine, giving a fleet ceiling of 1024 × 4096 = <strong>4.19 million IDs per millisecond</strong>, about 4.2 billion per second.</p>
+    <p>The interview-relevant point is that these widths are a <strong>budget, not a constant</strong>. If you need 4096 machines, take two bits from the sequence: 41/12/10 still gives 1024 IDs per millisecond per machine, which is 1 million per second — almost certainly more than one process needs. Saying this unprompted demonstrates you understand Snowflake as a parameterized design rather than a magic number you memorized. The one thing you may not move is the timestamp: it has to stay in the high bits, for the reason the next block gives.</p>
+
+    <h3>Sortability Is a Byproduct — where 8.4 gets paid back</h3>
+    <p>Putting the timestamp in the most significant bits means numeric order approximates chronological order, and that single fact is where all the index benefit comes from. Consecutive inserts land in adjacent B-tree leaf pages near the right edge of the index, so the hot working set is a handful of pages rather than the whole tree, page splits are mostly the cheap right-edge kind rather than mid-tree fragmentation, and the buffer pool holds what you actually need. Two smaller wins come along for free: <code>ORDER BY id</code> is <code>ORDER BY created_at</code>, so a feed does not need a separate timestamp index; and in InnoDB, where the clustered PK is embedded in every secondary index, an 8-byte ordered key rather than a 16-byte random one shrinks every index on the table.</p>
+    <p>Be precise about the limit, because interviewers push here: Snowflake is <strong>k-sorted</strong>, not strictly sorted. Within a single millisecond, IDs from different machines interleave in machine-ID order, not in true issue order, so "roughly ordered to the millisecond" is the honest claim. If you need a strict total order across the fleet, you need a coordinated scheme, and you are back at position one on the dial.</p>
+
+    <h3>The Encoding Is Separate — base62 is not an ID scheme</h3>
+    <p>The most common conceptual muddle on this subtopic is treating base62 as a way to <em>generate</em> IDs. It isn't. Base62 is an <strong>encoding</strong> — a way to render a number in the alphabet <code>[0-9a-zA-Z]</code> — and it generates nothing. It is chosen over base64 because base64's <code>+</code> and <code>/</code> are not URL-safe (and base64url's <code>-</code> and <code>_</code> read badly in a short link and get mangled by autolinkers), and over hex because base16 needs 2.6× more characters for the same key space.</p>
+    <p>What matters is the sizing, and it is arithmetic you should be able to do on a whiteboard: 62<sup>6</sup> ≈ <strong>56.8 billion</strong>, 62<sup>7</sup> ≈ <strong>3.52 trillion</strong>, 62<sup>8</sup> ≈ <strong>218 trillion</strong>. A URL shortener taking 100 million new links a year for ten years needs a billion keys, so six characters is comfortable and seven is generous. Then, separately, you decide where the number comes from — and there are only two options. You either <strong>assign</strong> it (encode a counter, a ticket-server value, or a Snowflake ID), in which case collisions are structurally impossible but the codes are enumerable; or you <strong>draw</strong> it (hash the URL and truncate, or generate randomly), in which case the codes are unguessable but you have entered the birthday-bound regime and owe the collision math in §5. Assigned versus drawn is the distinction that the whole short-code question turns on.</p>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">You are designing a Snowflake variant for a fleet that will grow to 3000 pods, with a peak fleet-wide write rate of 200,000 IDs per second and a requirement that the scheme outlive a 25-year product lifetime. Re-cut the 64-bit budget and justify each field width against a stated number — including why you are <em>not</em> using the standard 41/10/12.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read §4 — The Bit Budget, and note which field is the one you are allowed to shrink.</div>
+      </div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">2</span>
+          <span class="qtext">Both "partition the space" and "replace coordination with probability" eliminate the round trip on the write path — yet only one of them also preserves the B-tree locality from 8.4. Explain why, and say what that difference tells you about which property is actually doing the work in a Snowflake ID.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, trace the build chain above from THE BIT BUDGET to SORTABILITY IS A BYPRODUCT — the answer is about which bits are high-order, not about how many bits there are.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> You know the four positions and the bit layout. What physically happens, instruction by instruction, when a generator mints an ID — and what happens when the clock misbehaves?</div>
+  </section>
+
+  <!-- ══════════════════ §5 ══════════════════ -->
+  <section id="s5">
+    <h2 class="section-title"><span class="num">§5</span> ⚙️ How It Actually Works</h2>
+
+    <h3>The Snowflake mint (happy path)</h3>
+    <ol class="steps">
+      <li>Read the clock and compute <code>ts</code> = milliseconds since the custom epoch.</li>
+      <li>If <code>ts == last_ts</code>, increment the sequence counter and mask it to 12 bits. If it wraps to zero, the machine has already issued 4096 IDs this millisecond — <strong>busy-wait until the clock advances</strong>, then continue.</li>
+      <li>If <code>ts &gt; last_ts</code>, reset the sequence to 0. (Several implementations randomize the starting value instead, so that low-traffic machines don't all emit IDs ending in <code>...000</code>.)</li>
+      <li>If <code>ts &lt; last_ts</code> — the clock went backwards — <strong>refuse to issue and throw.</strong> This is the deliberate choice covered below.</li>
+      <li>Compose <code>(ts &lt;&lt; 22) | (machine_id &lt;&lt; 12) | sequence</code>, store <code>last_ts</code>, return.</li>
+    </ol>
+    <p>There is no I/O, no network call, and no lock beyond a local mutex. A mint is sub-microsecond, which is the entire point: the ID is available before the write even reaches the database.</p>
+
+    <div class="mental-model">
+      🗺️ <span class="mm-name">Mental model — the license plate.</span> A plate is <em>state code + issuing office + sequential number</em>. No two offices ever need to phone each other, because the office code makes their number spaces disjoint, and yet every plate in the country is unique. Snowflake is a license plate where "state code" is a timestamp.
+      <span class="mm-break">Where it breaks down: license plates have no rollover date and no clock you can accidentally wind backwards — and those are precisely Snowflake's two failure modes.</span>
+    </div>
+
+    <h3>The ticket server (the cheap, boring, correct alternative)</h3>
+    <ol class="steps">
+      <li>A writer that needs IDs asks the ticket server for a block. Flickr's implementation is one line of MySQL against a single-row table: <code>REPLACE INTO Tickets64 (stub) VALUES ('a'); SELECT LAST_INSERT_ID();</code> — <code>REPLACE</code> rather than <code>INSERT</code> so the table never grows.</li>
+      <li>The server returns a range, say <code>[n, n+999]</code>.</li>
+      <li>The writer mints locally from that range with no further coordination, and asks for the next block at roughly 80% consumption so it never blocks on a refill.</li>
+      <li>High availability is achieved by partitioning the coordinator itself: two MySQL boxes, one configured <code>auto_increment_offset=1</code>, the other <code>=2</code>, both with <code>auto_increment_increment=2</code>. One serves odd IDs, the other even. Either can die without stopping ID generation — which is the "partition the space" trick applied one level up.</li>
+    </ol>
+    <p>Instagram's variant is worth naming because it removes the service entirely: a Postgres stored procedure on each shard composes 41 bits of millisecond timestamp, 13 bits of <strong>logical shard ID</strong> (8192 shards), and 10 bits of a per-shard sequence. Because the procedure runs inside the same transaction as the insert, there is no window in which a generated ID can be lost, and no external component to keep alive.</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Mechanism flow — the mint, and the block lease</div>
+      <svg viewBox="0 0 1040 470" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="mfArrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#2563eb"/>
+          </marker>
+          <marker id="mfArrowR" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#c92a2a"/>
+          </marker>
+        </defs>
+
+        <text x="20" y="26" font-size="13" font-weight="800" fill="#1a1917">① SNOWFLAKE MINT — no I/O, no network, sub-microsecond</text>
+
+        <rect x="20" y="44" width="176" height="62" rx="9" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+        <text x="108" y="68" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1e3a8a">read clock</text>
+        <text x="108" y="86" text-anchor="middle" font-size="11.5" fill="#1e3a8a">ms since CUSTOM</text>
+        <text x="108" y="100" text-anchor="middle" font-size="11.5" fill="#1e3a8a">epoch → ts</text>
+
+        <line x1="202" y1="75" x2="234" y2="75" stroke="#2563eb" stroke-width="2.5" marker-end="url(#mfArrow)"/>
+
+        <rect x="240" y="44" width="176" height="62" rx="9" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+        <text x="328" y="70" text-anchor="middle" font-size="12.5" font-weight="700" fill="#92400e">ts == last_ts ?</text>
+        <text x="328" y="92" text-anchor="middle" font-size="11.5" font-style="italic" fill="#92400e">the whole state machine</text>
+
+        <line x1="422" y1="66" x2="454" y2="66" stroke="#2563eb" stroke-width="2.5" marker-end="url(#mfArrow)"/>
+        <text x="438" y="56" text-anchor="middle" font-size="10.5" font-weight="700" fill="#2563eb">yes</text>
+
+        <rect x="460" y="36" width="210" height="62" rx="9" fill="#c3fae8" stroke="#0ca678" stroke-width="2"/>
+        <text x="565" y="58" text-anchor="middle" font-size="12" font-weight="700" fill="#134e4a">seq = (seq+1) &amp; 0xFFF</text>
+        <text x="565" y="76" text-anchor="middle" font-size="11.5" fill="#134e4a">wrapped to 0 ? SPIN until</text>
+        <text x="565" y="90" text-anchor="middle" font-size="11.5" fill="#134e4a">the clock advances</text>
+
+        <line x1="676" y1="67" x2="708" y2="67" stroke="#2563eb" stroke-width="2.5" marker-end="url(#mfArrow)"/>
+
+        <rect x="714" y="36" width="200" height="62" rx="9" fill="#b2f2bb" stroke="#2f9e44" stroke-width="2"/>
+        <text x="814" y="58" text-anchor="middle" font-size="12" font-weight="700" fill="#14532d">compose &amp; return</text>
+        <text x="814" y="78" text-anchor="middle" font-size="11" font-family="SF Mono, Menlo, monospace" fill="#14532d">(ts&lt;&lt;22)|(mid&lt;&lt;12)|seq</text>
+        <text x="814" y="92" text-anchor="middle" font-size="10.5" font-style="italic" fill="#2f9e44">store last_ts</text>
+
+        <path d="M328,112 L328,138" stroke="#2563eb" stroke-width="2.5" fill="none" marker-end="url(#mfArrow)"/>
+        <text x="346" y="130" font-size="10.5" font-weight="700" fill="#2563eb">no</text>
+
+        <rect x="240" y="144" width="300" height="46" rx="9" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+        <text x="390" y="163" text-anchor="middle" font-size="12" font-weight="700" fill="#92400e">ts &gt; last_ts ?  → yes: seq = 0, continue</text>
+        <text x="390" y="181" text-anchor="middle" font-size="11.5" fill="#92400e">(some impls randomize the start value)</text>
+
+        <path d="M390,196 L390,218" stroke="#c92a2a" stroke-width="2.5" fill="none" marker-end="url(#mfArrowR)"/>
+        <text x="410" y="212" font-size="10.5" font-weight="700" fill="#c92a2a">NO</text>
+
+        <rect x="240" y="224" width="440" height="52" rx="9" fill="#ffc9c9" stroke="#c92a2a" stroke-width="2.5"/>
+        <text x="460" y="246" text-anchor="middle" font-size="12.5" font-weight="800" fill="#7f1d1d">THE CLOCK WENT BACKWARDS → REFUSE TO ISSUE, THROW</text>
+        <text x="460" y="266" text-anchor="middle" font-size="11.5" font-style="italic" fill="#7f1d1d">availability sacrificed to protect uniqueness — the right trade for a primary key</text>
+
+        <line x1="20" y1="300" x2="1020" y2="300" stroke="#e5e3de" stroke-width="2"/>
+
+        <text x="20" y="328" font-size="13" font-weight="800" fill="#1a1917">② TICKET SERVER — coordinate once per BLOCK, not once per ID</text>
+
+        <rect x="20" y="346" width="150" height="58" rx="9" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+        <text x="95" y="380" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1e3a8a">writer</text>
+
+        <line x1="176" y1="375" x2="278" y2="375" stroke="#2563eb" stroke-width="2.5" marker-end="url(#mfArrow)"/>
+        <text x="227" y="365" text-anchor="middle" font-size="10.5" font-weight="700" fill="#2563eb">1 round trip</text>
+        <text x="227" y="394" text-anchor="middle" font-size="10.5" font-style="italic" fill="#2563eb">per 1000 IDs</text>
+
+        <rect x="284" y="340" width="260" height="70" rx="9" fill="#ffd8a8" stroke="#e67700" stroke-width="2"/>
+        <text x="414" y="362" text-anchor="middle" font-size="12.5" font-weight="700" fill="#7c2d12">ticket server</text>
+        <text x="414" y="381" text-anchor="middle" font-size="11" font-family="SF Mono, Menlo, monospace" fill="#7c2d12">REPLACE INTO Tickets64 …</text>
+        <text x="414" y="398" text-anchor="middle" font-size="11" font-family="SF Mono, Menlo, monospace" fill="#7c2d12">SELECT LAST_INSERT_ID()</text>
+
+        <line x1="550" y1="375" x2="582" y2="375" stroke="#2563eb" stroke-width="2.5" marker-end="url(#mfArrow)"/>
+
+        <rect x="588" y="340" width="250" height="70" rx="9" fill="#b2f2bb" stroke="#2f9e44" stroke-width="2"/>
+        <text x="713" y="362" text-anchor="middle" font-size="12.5" font-weight="700" fill="#14532d">block [n, n+999]</text>
+        <text x="713" y="381" text-anchor="middle" font-size="11.5" fill="#14532d">mint LOCALLY from it</text>
+        <text x="713" y="398" text-anchor="middle" font-size="11.5" fill="#14532d">refill at ~80%</text>
+
+        <text x="20" y="434" font-size="12" font-weight="700" fill="#2f9e44">HA = two servers, offsets 1 and 2, increment 2 → one serves odds, one serves evens</text>
+        <text x="20" y="456" font-size="12" fill="#c92a2a">✗ gaps on crash    ✗ no global monotonic order    <tspan fill="#2f9e44">✓ compact, boring, correct</tspan></text>
+      </svg>
+      <p class="caption">Two mechanisms, one idea: push coordination as far away from the individual write as you can.</p>
+    </div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Structural — the 64-bit Snowflake layout</div>
+      <svg viewBox="0 0 1040 400" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <text x="20" y="26" font-size="13" font-weight="800" fill="#1a1917">64-BIT SNOWFLAKE ID</text>
+
+        <!-- bit ruler -->
+        <g font-size="10.5" fill="#6b6861" font-family="SF Mono, Menlo, monospace">
+          <text x="30" y="52">bit 63</text>
+          <text x="110" y="52">62 ───────────────────────────── 22</text>
+          <text x="640" y="52">21 ──────── 12</text>
+          <text x="830" y="52">11 ──────── 0</text>
+        </g>
+
+        <!-- the fields -->
+        <rect x="20" y="60" width="80" height="76" fill="#f3f2ef" stroke="#6b6861" stroke-width="2"/>
+        <text x="60" y="88" text-anchor="middle" font-size="12" font-weight="800" fill="#6b6861">sign</text>
+        <text x="60" y="107" text-anchor="middle" font-size="12" font-weight="800" fill="#6b6861">0</text>
+        <text x="60" y="126" text-anchor="middle" font-size="10.5" font-style="italic" fill="#6b6861">unused</text>
+
+        <rect x="100" y="60" width="520" height="76" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+        <text x="360" y="88" text-anchor="middle" font-size="13.5" font-weight="800" fill="#1e3a8a">TIMESTAMP (41 bits)</text>
+        <text x="360" y="110" text-anchor="middle" font-size="12" fill="#1e3a8a">milliseconds since a CUSTOM epoch</text>
+        <text x="360" y="128" text-anchor="middle" font-size="11" font-style="italic" fill="#3b5bdb">Twitter used 2010-11-04 — pick your own</text>
+
+        <rect x="620" y="60" width="200" height="76" fill="#ffd8a8" stroke="#e67700" stroke-width="2"/>
+        <text x="720" y="88" text-anchor="middle" font-size="13.5" font-weight="800" fill="#7c2d12">MACHINE ID</text>
+        <text x="720" y="108" text-anchor="middle" font-size="12" fill="#7c2d12">(10 bits)</text>
+        <text x="720" y="127" text-anchor="middle" font-size="11" font-style="italic" fill="#e67700">assigned at startup</text>
+
+        <rect x="820" y="60" width="200" height="76" fill="#c3fae8" stroke="#0ca678" stroke-width="2"/>
+        <text x="920" y="88" text-anchor="middle" font-size="13.5" font-weight="800" fill="#134e4a">SEQUENCE</text>
+        <text x="920" y="108" text-anchor="middle" font-size="12" fill="#134e4a">(12 bits)</text>
+        <text x="920" y="127" text-anchor="middle" font-size="11" font-style="italic" fill="#0ca678">per machine, per ms</text>
+
+        <!-- capacities -->
+        <g font-size="11.5" font-weight="700">
+          <text x="60"  y="158" text-anchor="middle" fill="#6b6861">1</text>
+          <text x="360" y="158" text-anchor="middle" fill="#3b5bdb">41 → 2⁴¹ ms ≈ 69.7 YEARS</text>
+          <text x="720" y="158" text-anchor="middle" fill="#e67700">10 → 1024 NODES</text>
+          <text x="920" y="158" text-anchor="middle" fill="#0ca678">12 → 4096 PER ms</text>
+        </g>
+
+        <rect x="20" y="176" width="1000" height="34" rx="7" fill="#1e1e2e"/>
+        <text x="520" y="199" text-anchor="middle" font-size="13" font-family="SF Mono, Menlo, monospace" fill="#cdd6f4">id = (ts &lt;&lt; 22) | (machine_id &lt;&lt; 12) | sequence</text>
+
+        <rect x="20" y="224" width="480" height="72" rx="9" fill="#b2f2bb" stroke="#2f9e44" stroke-width="2"/>
+        <text x="260" y="248" text-anchor="middle" font-size="12.5" font-weight="800" fill="#14532d">FLEET CEILING</text>
+        <text x="260" y="268" text-anchor="middle" font-size="12" fill="#14532d">1024 × 4096 = 4.19 MILLION IDs per millisecond</text>
+        <text x="260" y="287" text-anchor="middle" font-size="12" font-weight="700" fill="#14532d">≈ 4.19 BILLION per second</text>
+
+        <rect x="540" y="224" width="480" height="72" rx="9" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+        <text x="780" y="248" text-anchor="middle" font-size="12.5" font-weight="800" fill="#4c1d95">RE-CUT IT — the widths are a budget, not a constant</text>
+        <text x="780" y="268" text-anchor="middle" font-size="11.5" fill="#4c1d95">need 4096 nodes?  41 / 12 / 10 → 1024 per ms per machine</text>
+        <text x="780" y="286" text-anchor="middle" font-size="11.5" fill="#4c1d95">need 139 years?   42 / 10 / 11 → 2048 per ms per machine</text>
+
+        <rect x="20" y="312" width="1000" height="66" rx="9" fill="#ffc9c9" stroke="#c92a2a" stroke-width="2.5"/>
+        <text x="520" y="338" text-anchor="middle" font-size="13" font-weight="800" fill="#7f1d1d">THE ONE FIXED RULE — the timestamp stays in the HIGH bits</text>
+        <text x="520" y="360" text-anchor="middle" font-size="12" fill="#7f1d1d">Move it and the IDs stop being k-sorted, and the entire 8.4 locality argument —</text>
+        <text x="520" y="376" text-anchor="middle" font-size="12" fill="#7f1d1d">the reason you chose this over UUIDv4 — evaporates.</text>
+      </svg>
+      <p class="caption">Every field is a capacity decision you should be able to defend against a stated number.</p>
+    </div>
+
+    <h3>The collision math (this is the mastery criterion — be able to do it cold)</h3>
+    <p>When keys are <strong>assigned</strong> — a counter, a ticket-server value, a Snowflake ID — collisions are structurally impossible and there is no math to do. When keys are <strong>drawn</strong> — hashing and truncating, or generating random codes — you are in the birthday regime, and the governing fact is that collisions bite at <strong>√N, not N</strong>.</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">The birthday bound — you get the square root of the key space</div>
+      <svg viewBox="0 0 1040 420" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <rect x="20" y="18" width="1000" height="72" rx="9" fill="#1e1e2e"/>
+        <text x="520" y="46" text-anchor="middle" font-size="14" font-family="SF Mono, Menlo, monospace" fill="#cdd6f4">P(at least one collision)  ≈  1 − e^(−k²∕2N)  ≈  k²∕2N     (when k ≪ √N)</text>
+        <text x="520" y="70" text-anchor="middle" font-size="14" font-family="SF Mono, Menlo, monospace" fill="#a6e3a1">50% point  ≈  1.177 · √N          k = keys drawn,  N = size of key space</text>
+
+        <!-- table header -->
+        <rect x="20" y="104" width="250" height="34" fill="#f3f2ef" stroke="#e5e3de"/>
+        <rect x="270" y="104" width="230" height="34" fill="#f3f2ef" stroke="#e5e3de"/>
+        <rect x="500" y="104" width="230" height="34" fill="#f3f2ef" stroke="#e5e3de"/>
+        <rect x="730" y="104" width="290" height="34" fill="#f3f2ef" stroke="#e5e3de"/>
+        <g font-size="11.5" font-weight="800" fill="#6b6861">
+          <text x="34"  y="126">SCHEME</text>
+          <text x="284" y="126">N (KEY SPACE)</text>
+          <text x="514" y="126">50% COLLISION AT</text>
+          <text x="744" y="126">VERDICT</text>
+        </g>
+
+        <!-- row 1 -->
+        <rect x="20" y="138" width="250" height="52" fill="#fff5f5" stroke="#e5e3de"/>
+        <rect x="270" y="138" width="230" height="52" fill="#fff5f5" stroke="#e5e3de"/>
+        <rect x="500" y="138" width="230" height="52" fill="#fff5f5" stroke="#e5e3de"/>
+        <rect x="730" y="138" width="290" height="52" fill="#fff5f5" stroke="#e5e3de"/>
+        <g font-size="12" fill="#1a1917">
+          <text x="34"  y="158">7-char base62,</text>
+          <text x="34"  y="176">truncated hash</text>
+          <text x="284" y="168" font-family="SF Mono, Menlo, monospace">62⁷ = 3.52e12</text>
+          <text x="514" y="168" font-weight="800" fill="#c92a2a">~2.2 MILLION keys</text>
+          <text x="744" y="168" fill="#7f1d1d">breaks at real product scale</text>
+        </g>
+
+        <!-- row 2 -->
+        <rect x="20" y="190" width="250" height="52" fill="#fffbeb" stroke="#e5e3de"/>
+        <rect x="270" y="190" width="230" height="52" fill="#fffbeb" stroke="#e5e3de"/>
+        <rect x="500" y="190" width="230" height="52" fill="#fffbeb" stroke="#e5e3de"/>
+        <rect x="730" y="190" width="290" height="52" fill="#fffbeb" stroke="#e5e3de"/>
+        <g font-size="12" fill="#1a1917">
+          <text x="34"  y="210">8-char base62,</text>
+          <text x="34"  y="228">truncated hash</text>
+          <text x="284" y="220" font-family="SF Mono, Menlo, monospace">62⁸ = 2.18e14</text>
+          <text x="514" y="220" font-weight="800" fill="#d97706">~17 million keys</text>
+          <text x="744" y="220" fill="#92400e">buys one order of magnitude</text>
+        </g>
+
+        <!-- row 3 -->
+        <rect x="20" y="242" width="250" height="52" fill="#f0fdf4" stroke="#e5e3de"/>
+        <rect x="270" y="242" width="230" height="52" fill="#f0fdf4" stroke="#e5e3de"/>
+        <rect x="500" y="242" width="230" height="52" fill="#f0fdf4" stroke="#e5e3de"/>
+        <rect x="730" y="242" width="290" height="52" fill="#f0fdf4" stroke="#e5e3de"/>
+        <g font-size="12" fill="#1a1917">
+          <text x="34"  y="262">UUIDv4</text>
+          <text x="34"  y="280">(122 random bits)</text>
+          <text x="284" y="272" font-family="SF Mono, Menlo, monospace">2¹²² = 5.3e36</text>
+          <text x="514" y="272" font-weight="800" fill="#2f9e44">~2.7e18 keys</text>
+          <text x="744" y="272" fill="#14532d">never, in any real system</text>
+        </g>
+
+        <!-- row 4 -->
+        <rect x="20" y="294" width="250" height="52" fill="#f0fdf4" stroke="#e5e3de"/>
+        <rect x="270" y="294" width="230" height="52" fill="#f0fdf4" stroke="#e5e3de"/>
+        <rect x="500" y="294" width="230" height="52" fill="#f0fdf4" stroke="#e5e3de"/>
+        <rect x="730" y="294" width="290" height="52" fill="#f0fdf4" stroke="#e5e3de"/>
+        <g font-size="12" fill="#1a1917">
+          <text x="34"  y="314">base62(Snowflake)</text>
+          <text x="34"  y="332">or base62(counter)</text>
+          <text x="284" y="324" font-weight="700" fill="#2f9e44">ASSIGNED, not drawn</text>
+          <text x="514" y="324" font-weight="800" fill="#2f9e44">never</text>
+          <text x="744" y="324" fill="#14532d">structurally impossible</text>
+        </g>
+
+        <rect x="20" y="356" width="1000" height="52" rx="9" fill="#ffc9c9" stroke="#c92a2a" stroke-width="2.5"/>
+        <text x="520" y="378" text-anchor="middle" font-size="12.5" font-weight="800" fill="#7f1d1d">THE TRAP: 62⁷ = 3.5 TRILLION reads as unlimited headroom. √(3.5e12) = 1.9 million.</text>
+        <text x="520" y="398" text-anchor="middle" font-size="12" fill="#7f1d1d">At 1 billion keys drawn into 62⁷, k²/2N ≈ 142,000 — the approximation blows past 1, so collisions are CERTAIN.</text>
+      </svg>
+      <p class="caption">Only <em>drawn</em> keys have collision math at all. Assigned keys have none.</p>
+    </div>
+
+    <div class="mental-model">
+      🗺️ <span class="mm-name">Mental model — the birthday paradox is the whole of collision math.</span> In a room of 23 people there is a ~50% chance two share a birthday, even though there are 365 days — because you are counting <em>pairs</em>, and pairs grow quadratically.
+      <span class="mm-break">Where it breaks down: the classroom version makes the effect sound like a curiosity. At ID-space scale the reduction is brutal — a 3.5-trillion key space gives you 2.2 million safe keys, not 3.5 trillion, and no amount of intuition prepares you for that gap.</span>
+    </div>
+
+    <p>The practical resolution, which is what you actually say in an interview: don't truncate a hash and hope. Either assign the key (base62-encode a Snowflake or a counter, and collisions cannot occur), or — if unguessability requires you to draw it — make the insert conditional and retry with a fresh value on conflict: <code>INSERT ... ON CONFLICT DO NOTHING</code> in Postgres, or an <code>attribute_not_exists(pk)</code> condition expression in DynamoDB. The retry loop is what makes drawing safe; the probability calculation tells you how often you will pay for it. Note that a check-then-insert (<code>SELECT</code> to see if the code is taken, then <code>INSERT</code>) is <em>not</em> the same thing — it has a race window between the two statements, and under concurrency it will let a duplicate through.</p>
+
+    <h3>Failure and edge cases</h3>
+    <ul class="plain">
+      <li><strong>Duplicate worker IDs — the real hazard.</strong> If two processes come up with the same machine ID, they mint identical IDs whenever their clocks and sequences align, and those IDs are perfectly well-formed. This fails <em>silently</em>: it surfaces as an occasional primary-key conflict that looks like a random bug. Assignment must come from something authoritative — a ZooKeeper ephemeral sequential node, an etcd lease with a heartbeat, or a StatefulSet pod ordinal. <code>hash(hostname) % 1024</code> is the tempting shortcut and it has its own birthday problem: with only <strong>40 pods</strong> in 1024 slots, the probability that at least two collide is <strong>≈53%</strong>.</li>
+      <li><strong>Clock skew and NTP steps.</strong> If the wall clock jumps backwards, a naive generator will re-issue IDs it has already handed out. Reference implementations refuse to issue while <code>now &lt; last_ts</code> and throw — trading availability for uniqueness, which is the right trade for a primary key. Mitigations: run NTP in slew mode rather than step mode, read a monotonic clock source where available, persist <code>last_ts</code> across restarts, and alarm on skew. Leap seconds were the classic trigger. This is the single most common Snowflake follow-up question.</li>
+      <li><strong>Sequence exhaustion.</strong> More than 4096 IDs in one millisecond on one machine causes the generator to spin until the clock advances. Under burst this shows up as <em>latency</em>, not as an error, which makes it easy to miss. If it is chronic, take bits from the machine-ID field.</li>
+      <li><strong>Epoch rollover and epoch loss.</strong> 41 bits gives ~69.7 years from your chosen epoch — not a problem you will personally hit, but the epoch is baked into every ID ever issued, so it must be documented and version-controlled. Losing it means you can no longer interpret your own timestamps.</li>
+      <li><strong>Enumerability and information leakage.</strong> Assigned IDs leak volume: <code>/order/1042</code> followed by <code>/order/1109</code> tells a competitor you processed 67 orders (the German tank problem). Snowflake leaks <em>time</em> — anyone holding an ID can extract its creation moment to the millisecond. If IDs are exposed publicly and either fact is sensitive, mint a separate opaque public identifier rather than exposing the internal key.</li>
+    </ul>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">Walk through exactly what a Snowflake generator does when it reads a clock value <strong>lower</strong> than the last one it issued, and explain why the reference implementation chooses to throw rather than to keep counting forward from <code>last_ts</code>. State what is being traded for what, and name the operational settings that make this path rare.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read step 4 of the mint sequence and the clock-skew bullet in the failure cases.</div>
+      </div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">2</span>
+          <span class="qtext">A team deploys 40 Snowflake generator pods and assigns worker IDs with <code>hash(hostname) % 1024</code>. Compute the approximate probability that at least two pods share a worker ID, describe precisely what goes wrong when they do, and explain why this failure is unusually hard to detect in production.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the birthday-bound formula in the collision-math block, then the duplicate-worker-ID bullet — the detection difficulty is about what a duplicate ID looks like, not about how often it happens.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> You know how each scheme works and how each one fails. So in a live design, which do you actually reach for — and what exactly are you giving up?</div>
+  </section>
+
+  <!-- ══════════════════ §6 ══════════════════ -->
+  <section id="s6">
+    <h2 class="section-title"><span class="num">§6</span> ⚖️ The Decision — When, and What It Costs</h2>
+
+    <p>The default is <code>BIGINT AUTO_INCREMENT</code>, and you should say so out loud. If the data lives in one logical database, the built-in counter is free, eight bytes, perfectly monotonic, dense, and index-optimal, and no distributed scheme beats it on any axis. Reaching for Snowflake in a design that has a single Postgres behind it is over-engineering, and an interviewer who sees you do it will read it as pattern-matching rather than judgment. You leave the default at one of three specific boundaries, and each boundary points at a different scheme.</p>
+
+    <p><strong>You shard, or you take writes on more than one master.</strong> The counters now collide, so uniqueness has to come from somewhere else. Snowflake if you want 64 bits, k-sorted keys, and per-machine attribution; a ticket server if you would rather keep one boring coordinator and amortize it; UUIDv7 if you don't need either.</p>
+
+    <p><strong>You need the ID before the write reaches a server.</strong> A mobile client drafting offline, a client-supplied idempotency key (3.5), a multi-service write where downstream calls must reference the row before it exists. Only client-mintable schemes work here, which rules out Snowflake and ticket servers entirely — the phone has no worker ID and no coordinator. UUIDv7 is the modern answer: RFC 9562's 48-bit millisecond timestamp in the high bits plus 74 random bits gives you UUIDv4's zero-coordination property <em>and</em> index locality, which is why it is displacing v4 as the default for new sharded systems.</p>
+
+    <p><strong>The ID is user-visible.</strong> Now two new constraints appear that never mattered internally: it should be short and typeable, and — often — it should not be enumerable. This is the URL-shortener case, and it splits into sizing (base62 arithmetic) and generation (assigned versus drawn), which are separate decisions that candidates routinely fuse.</p>
+
+    <p>Four signals decide it in practice: <strong>coordination tolerance on the write path</strong>, <strong>who mints</strong> (server or client), <strong>whether the ID is exposed</strong>, and — the one most often skipped — <strong>the shape of the store</strong>. That last one is worth stating carefully, because the "sequential keys are better" rule is a <em>B-tree</em> rule and it <strong>inverts</strong> elsewhere. In an LSM-tree store (Cassandra, RocksDB), writes land in a memtable and are sorted on flush, so a random key does not cause the buffer-pool thrash that dominates the MySQL argument. And in a hash-partitioned store (DynamoDB, Cassandra), a <em>monotonic</em> partition key is actively harmful — consecutive writes all hash near each other in time and concentrate on one partition, which is 7.6's hot-partition problem created deliberately by your ID scheme. Being able to say "sequential is better in InnoDB and worse as a DynamoDB partition key, for opposite reasons" is a strong depth signal.</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Decision tree — which scheme, and why</div>
+      <svg viewBox="0 0 1040 620" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <g stroke="#b8b4ac" stroke-width="2" fill="none">
+          <path d="M520,58 L520,76 L200,76 L200,100"/>
+          <path d="M520,58 L520,76 L780,76 L780,100"/>
+          <path d="M780,158 L780,178 L570,178 L570,204"/>
+          <path d="M780,158 L780,178 L900,178 L900,204"/>
+          <path d="M570,262 L570,282 L400,282 L400,308"/>
+          <path d="M570,262 L570,282 L700,282 L700,308"/>
+          <path d="M900,262 L900,282 L900,308"/>
+          <path d="M400,366 L400,386 L250,386 L250,412"/>
+          <path d="M400,366 L400,386 L470,386 L470,412"/>
+          <path d="M700,366 L700,386 L700,412"/>
+          <path d="M900,366 L900,386 L900,412"/>
+        </g>
+
+        <!-- root -->
+        <rect x="330" y="20" width="380" height="38" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2.5"/>
+        <text x="520" y="44" text-anchor="middle" font-size="13" font-weight="800" fill="#1e3a8a">Sharded / multi-writer / multi-master?</text>
+
+        <!-- left: no -->
+        <text x="330" y="92" text-anchor="middle" font-size="11" font-weight="800" fill="#2f9e44">no</text>
+        <rect x="40" y="100" width="320" height="86" rx="9" fill="#b2f2bb" stroke="#2f9e44" stroke-width="2.5"/>
+        <text x="200" y="124" text-anchor="middle" font-size="13" font-weight="800" fill="#14532d">BIGINT AUTO_INCREMENT</text>
+        <text x="200" y="145" text-anchor="middle" font-size="11.5" fill="#14532d">Free, 8 bytes, dense, index-optimal.</text>
+        <text x="200" y="162" text-anchor="middle" font-size="11.5" fill="#14532d">Every insert is a right-edge append.</text>
+        <text x="200" y="179" text-anchor="middle" font-size="11" font-style="italic" fill="#2f9e44">Do NOT over-engineer this.</text>
+
+        <!-- right: yes -->
+        <text x="810" y="92" text-anchor="middle" font-size="11" font-weight="800" fill="#c92a2a">yes</text>
+        <rect x="600" y="100" width="360" height="58" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+        <text x="780" y="124" text-anchor="middle" font-size="12.5" font-weight="800" fill="#1e3a8a">Must the CLIENT mint the ID before</text>
+        <text x="780" y="144" text-anchor="middle" font-size="12.5" font-weight="800" fill="#1e3a8a">the write reaches a server?</text>
+
+        <text x="588" y="198" text-anchor="middle" font-size="11" font-weight="800" fill="#c92a2a">yes</text>
+        <rect x="420" y="204" width="300" height="58" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+        <text x="570" y="228" text-anchor="middle" font-size="12.5" font-weight="800" fill="#92400e">Is the store hash-partitioned</text>
+        <text x="570" y="248" text-anchor="middle" font-size="12.5" font-weight="800" fill="#92400e">by this key?</text>
+
+        <text x="918" y="198" text-anchor="middle" font-size="11" font-weight="800" fill="#2f9e44">no</text>
+        <rect x="760" y="204" width="270" height="58" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+        <text x="895" y="228" text-anchor="middle" font-size="12.5" font-weight="800" fill="#92400e">Is the ID user-visible</text>
+        <text x="895" y="248" text-anchor="middle" font-size="12.5" font-weight="800" fill="#92400e">/ must it be short?</text>
+
+        <!-- leaves under hash-partitioned -->
+        <text x="388" y="302" text-anchor="middle" font-size="11" font-weight="800" fill="#2f9e44">no</text>
+        <rect x="270" y="308" width="260" height="58" rx="9" fill="#c3fae8" stroke="#0ca678" stroke-width="2.5"/>
+        <text x="400" y="332" text-anchor="middle" font-size="13" font-weight="800" fill="#134e4a">UUIDv7</text>
+        <text x="400" y="352" text-anchor="middle" font-size="11.5" fill="#134e4a">sortable + client-mintable</text>
+
+        <text x="712" y="302" text-anchor="middle" font-size="11" font-weight="800" fill="#c92a2a">yes</text>
+        <rect x="575" y="308" width="250" height="58" rx="9" fill="#c3fae8" stroke="#0ca678" stroke-width="2.5"/>
+        <text x="700" y="332" text-anchor="middle" font-size="13" font-weight="800" fill="#134e4a">UUIDv4</text>
+        <text x="700" y="352" text-anchor="middle" font-size="11.5" fill="#134e4a">random spreads the load</text>
+
+        <!-- leaves under user-visible -->
+        <text x="916" y="302" text-anchor="middle" font-size="11" font-weight="800" fill="#c92a2a">yes</text>
+        <rect x="840" y="308" width="190" height="58" rx="9" fill="#ffd8a8" stroke="#e67700" stroke-width="2.5"/>
+        <text x="935" y="330" text-anchor="middle" font-size="12" font-weight="800" fill="#7c2d12">base62 over an</text>
+        <text x="935" y="348" text-anchor="middle" font-size="12" font-weight="800" fill="#7c2d12">ASSIGNED number</text>
+
+        <rect x="840" y="412" width="190" height="70" rx="9" fill="#ffedd5" stroke="#e67700" stroke-width="2"/>
+        <text x="935" y="434" text-anchor="middle" font-size="11.5" fill="#7c2d12">size base62 first,</text>
+        <text x="935" y="452" text-anchor="middle" font-size="11.5" fill="#7c2d12">then decide</text>
+        <text x="935" y="470" text-anchor="middle" font-size="11.5" font-weight="700" fill="#7c2d12">assigned vs. drawn</text>
+
+        <!-- the no branch under user-visible -->
+        <text x="712" y="404" text-anchor="middle" font-size="11" font-weight="800" fill="#2f9e44">no</text>
+        <rect x="560" y="412" width="250" height="58" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+        <text x="685" y="434" text-anchor="middle" font-size="12" font-weight="800" fill="#92400e">Need per-machine attribution</text>
+        <text x="685" y="453" text-anchor="middle" font-size="12" font-weight="800" fill="#92400e">or a controlled bit budget?</text>
+
+        <g stroke="#b8b4ac" stroke-width="2" fill="none">
+          <path d="M685,470 L685,492 L330,492 L330,518"/>
+          <path d="M685,470 L685,492 L800,492 L800,518"/>
+          <path d="M895,262 L895,282 L935,282 L935,308"/>
+          <path d="M935,366 L935,412"/>
+        </g>
+
+        <text x="348" y="512" text-anchor="middle" font-size="11" font-weight="800" fill="#c92a2a">yes</text>
+        <rect x="140" y="518" width="380" height="86" rx="9" fill="#a5d8ff" stroke="#1971c2" stroke-width="2.5"/>
+        <text x="330" y="542" text-anchor="middle" font-size="13" font-weight="800" fill="#0b3d66">SNOWFLAKE</text>
+        <text x="330" y="562" text-anchor="middle" font-size="11.5" fill="#0b3d66">Worker ID from ZooKeeper / etcd /</text>
+        <text x="330" y="579" text-anchor="middle" font-size="11.5" fill="#0b3d66">StatefulSet ordinal —</text>
+        <text x="330" y="596" text-anchor="middle" font-size="11.5" font-weight="800" fill="#c92a2a">never hash(hostname) % 1024</text>
+
+        <text x="818" y="512" text-anchor="middle" font-size="11" font-weight="800" fill="#2f9e44">no</text>
+        <rect x="560" y="518" width="380" height="86" rx="9" fill="#c3fae8" stroke="#0ca678" stroke-width="2.5"/>
+        <text x="750" y="542" text-anchor="middle" font-size="13" font-weight="800" fill="#134e4a">UUIDv7, or a TICKET SERVER</text>
+        <text x="750" y="562" text-anchor="middle" font-size="11.5" fill="#134e4a">Ticket server if you want a compact</text>
+        <text x="750" y="579" text-anchor="middle" font-size="11.5" fill="#134e4a">64-bit integer and can accept one</text>
+        <text x="750" y="596" text-anchor="middle" font-size="11.5" fill="#134e4a">coordinator, amortized 1000:1</text>
+      </svg>
+      <p class="caption">The default is the leftmost box. Every other path is a justified departure from it.</p>
+    </div>
+
+    <h3>Trade-offs</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>✅ Benefit</th><th>❌ Cost / Limitation</th></tr></thead>
+        <tbody>
+          <tr><td><span class="benefit">AUTO_INCREMENT: 8 bytes, dense, perfectly monotonic</span> — the ideal B-tree key; every insert is a right-edge append and the hot set is one page</td><td>Requires a single coordinator, so it does not survive sharding or multi-master; the patch (<code>auto_increment_offset</code>/<code>increment</code>) bakes the shard count into every node's config and breaks when you add one</td></tr>
+          <tr><td><span class="benefit">Ticket server: amortizes coordination 1000:1</span> — one round trip per block, a coordinator you already know how to operate, still a compact 64-bit integer</td><td>IDs are no longer globally monotonic across writers, and every crash abandons the unused remainder of a block, so the sequence permanently has gaps; you still run and page for a coordinator</td></tr>
+          <tr><td><span class="benefit">Snowflake: zero runtime coordination and k-sorted 8-byte keys</span> — collision is impossible by construction, not by probability, and 8.4's index locality is preserved</td><td>You have moved coordination to deploy time, not removed it: worker IDs must be assigned authoritatively or the scheme fails <em>silently</em>. The generator also depends on wall-clock monotonicity and will refuse to issue during a backwards clock step</td></tr>
+          <tr><td><span class="benefit">UUIDv4: no coordination of any kind, client-mintable</span> — the only scheme that works on a device with no network and no assigned identity</td><td>16 bytes and zero ordering, so as a clustered InnoDB primary key it scatters inserts across the whole index and is copied into every secondary index; and it leaks nothing, which also means it tells you nothing</td></tr>
+          <tr><td><span class="benefit">UUIDv7: v4's independence plus Snowflake's locality</span> — 48-bit ms timestamp in the high bits, 74 random bits, standardised in RFC 9562</td><td>Still 16 bytes, and the timestamp in the high bits means every ID publicly discloses its creation time to the millisecond — the price of sortability is always disclosure</td></tr>
+          <tr><td><span class="benefit">base62 over an assigned number: short, typeable, collision-free</span> — 6–8 characters covers any realistic link volume with no retry loop</td><td>The codes are sequential and therefore enumerable, leaking both your content and your volume; making them unguessable means drawing instead of assigning, which puts you back in the birthday regime with a retry loop</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>In production</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>System</th><th>How it applies</th><th>The nuance</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Twitter / X — Snowflake</strong></td><td>The origin of the 41/10/12 layout, 64-bit, from a custom epoch of 2010-11-04</td><td>The original Scala service was open-sourced and later archived; the lasting contribution is the <em>format</em>, not the service. Because the timestamp sits in the high bits, anyone can extract a tweet's creation time directly from its ID — sortability and disclosure are the same property</td></tr>
+          <tr><td><strong>Instagram — per-shard IDs in Postgres</strong></td><td>A stored procedure on each shard composes 41 bits ms + 13 bits logical shard + 10 bits sequence</td><td>No external ID service at all: the ID is minted <em>inside the same transaction</em> as the insert, so there is no window in which a generated ID can be lost. 13 bits = 8192 <strong>logical</strong> shards, deliberately over-provisioned so logical shards can be relocated between physical machines without re-minting any IDs</td></tr>
+          <tr><td><strong>Flickr — ticket servers</strong></td><td>Two MySQL boxes, a single-row table, <code>REPLACE INTO</code> + <code>LAST_INSERT_ID()</code></td><td>The HA story is the interesting part: <code>auto_increment_increment=2</code> with offsets 1 and 2 makes one server serve odd IDs and the other even. That is "partition the space" applied to the coordinator itself. They explicitly accepted gaps and non-monotonicity as the price</td></tr>
+          <tr><td><strong>MongoDB — ObjectId</strong></td><td>12 bytes: 4-byte seconds timestamp + 5-byte per-process random value + 3-byte counter, generated client-side by the driver</td><td>Second-granularity timestamp, so it is only k-sorted to the second, not the millisecond. 12 bytes rather than 16 is a deliberate compactness choice while staying client-generatable — a middle position between Snowflake and UUID</td></tr>
+          <tr><td><strong>UUIDv7 — RFC 9562 (2024)</strong></td><td>48-bit big-endian Unix millisecond timestamp, then 74 random bits, within the standard 128-bit UUID envelope</td><td>Standardisation is what makes it usable: Postgres, MySQL, and the major language runtimes ship generators, so it needs no bespoke library and no worker-ID infrastructure. It is now the default recommendation for new sharded systems that don't need per-machine attribution</td></tr>
+          <tr><td><strong>bit.ly / TinyURL-class shorteners</strong></td><td>base62 codes of 6–8 characters over a generated key</td><td>The real design question is assigned vs. drawn. Assigned (encode a counter or Snowflake) is collision-free but walkable; drawn (random, or truncated hash) is unguessable but needs a conditional insert with retry. Most production shorteners assign, then obscure the ordering, rather than drawing and hoping</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">A team is designing the write path for a chat system storing messages in Cassandra with a primary key of <code>(conversation_id, message_id)</code> — <code>conversation_id</code> is the partition key and <code>message_id</code> the clustering key. An engineer proposes Snowflake IDs for <code>message_id</code> "because sequential keys are better for the index." Evaluate the proposal: is the stated reasoning correct, is the conclusion correct, and what would you actually do?</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the fourth signal in §6 — the shape of the store — and be careful about which part of the primary key the monotonic value is landing in.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> You can defend the choice. How does an interviewer actually put pressure on it?</div>
+  </section>
+
+  <!-- ══════════════════ §7 ══════════════════ -->
+  <section id="s7">
+    <h2 class="section-title"><span class="num">§7</span> 🎯 In the Interview</h2>
+
+    <h3>When an interviewer asks / says</h3>
+    <ul class="trigger-list">
+      <li>"What's the primary key for this table, and where does it come from?"</li>
+      <li>"How do you generate the short code — and how long does it need to be?"</li>
+      <li>"You're sharded across fifty databases. How do you make sure two shards never issue the same ID?"</li>
+      <li>"Can the client generate the ID, or does it have to come from the server?"</li>
+      <li>"Someone could just guess other people's URLs, right?"</li>
+    </ul>
+
+    <h3>What you say / do</h3>
+    <p>This lands in the <strong>data model / API design</strong> phase, at the exact moment you write an <code>id</code> column onto a schema on the whiteboard — that column is a magnet, and the interviewer will point at it. It comes back in the <strong>deep dive</strong> twice: once when you shard the write path, and once when the ID is exposed in a URL. In URL shortener, paste bin, and any design where an identifier appears in a path, it is not a possible question but a guaranteed one.</p>
+    <p>Deliver it in a fixed order every time: <strong>name the scheme → give the mechanism reason → price it unprompted → name the switch condition.</strong> The mechanism reason must be about the index or the coordination path, never "it's unique" — uniqueness is table stakes and saying it signals you have not thought past the requirement.</p>
+
+    <h3>The trade-off statement (memorize this — sharded write path)</h3>
+    <div class="tradeoff-box">"I'd mint IDs with Snowflake — 41 bits of millisecond timestamp from a 2026 epoch, 10 bits of worker ID, 12 bits of sequence, in a 64-bit <code>BIGINT</code>. I'm choosing it over UUIDv4 because these rows land in an InnoDB clustered index, and a random 16-byte primary key means every insert hits a random leaf page: the working set becomes the entire index instead of the right edge, and InnoDB copies that 16-byte key into every secondary index on the table. Snowflake gives me 8 bytes and roughly-ordered inserts, plus <code>ORDER BY id</code> for free. What I'm giving up is real. I now depend on wall-clock monotonicity, so an NTP step backwards makes the generator refuse to issue rather than risk duplicates — that's an availability hit I'm accepting to protect the primary key. And I need worker IDs from something authoritative: a ZooKeeper ephemeral node or the StatefulSet ordinal, never <code>hash(hostname) % 1024</code>, which with only forty pods collides about 53% of the time and fails silently. I'd change my answer if the client had to mint the ID before the write reached the server — then it has to be UUIDv7, because a phone has no worker ID to assign."</div>
+
+    <h3>The second variant (memorize this too — the short-code redirection)</h3>
+    <div class="tradeoff-box">"I'd size base62 first and generate second, because they're separate decisions. At 100 million new links a year for ten years that's a billion keys; 62<sup>6</sup> is 56.8 billion, so six characters is comfortable and seven gives real headroom. Then generation: I would specifically <em>not</em> hash the URL and truncate to seven characters. The birthday bound bites at the square root of the key space, not the key space — 62<sup>7</sup> is 3.52 trillion, but the 50% collision point is around 2.2 million links, so that scheme breaks well inside a normal product's first year. I'd base62-encode a Snowflake ID instead, which makes collisions structurally impossible rather than merely unlikely. The cost is that the codes become roughly sequential and therefore walkable — someone can enumerate my link space and infer my volume — so if non-enumerability is an actual requirement I'd generate random codes with a conditional insert and retry on conflict, and pay the retry rate the birthday math predicts. I'd switch to that the moment enumerability is a stated requirement rather than a nice-to-have."</div>
+
+    <h3>⚠️ Traps</h3>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "I'd use UUIDs for the primary key — they're globally unique."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Uniqueness was never the hard part; the hard part is uniqueness <em>without coordination</em> <strong>and</strong> <em>without destroying index locality</em>, and UUIDv4 solves only the first half. A random 16-byte clustered key scatters every insert across the B-tree, thrashes the buffer pool, fragments the index with mid-tree page splits, and — in InnoDB specifically — is copied into every secondary index on the table. The fix is not to abandon client-side generation, it's UUIDv7: same independence, timestamp in the high bits, locality restored.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "62<sup>7</sup> is three and a half trillion, so seven characters handles trillions of links."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Only if you <em>assign</em> them. If you <em>draw</em> them — hash and truncate, or generate randomly — the birthday bound applies and the 50% collision point is at 1.177·√N ≈ <strong>2.2 million</strong>, not 3.5 trillion. That is a difference of six orders of magnitude and it is the single most reliable place to be caught out on this subtopic. Assigned versus drawn is the distinction; say which one you're doing before you quote a capacity number.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "Snowflake needs a central ID service."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Snowflake is a <em>library</em>, not a service — the whole point is that the mint is local, in-process, and involves no I/O. Twitter did originally run it as a Thrift service, but for organizational reasons rather than algorithmic ones; the algorithm requires no runtime coordination whatsoever. The only coordination is assigning a worker ID once at process startup. Calling it a service inverts the entire argument for choosing it.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "Clock skew is the main risk with Snowflake."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Worker-ID assignment is. Clock skew fails <strong>loudly</strong> — the generator detects <code>now &lt; last_ts</code> and refuses to issue, so you get an outage and a page, which is bad but visible. Duplicate worker IDs fail <strong>silently</strong>: two processes emit perfectly well-formed IDs that collide only when their millisecond and sequence happen to align, surfacing as an intermittent primary-key conflict that looks like a random bug for months. Naming the silent failure over the loud one is the depth signal here.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "Sequential IDs are better for the index, so use them everywhere."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> That is a <strong>B-tree</strong> rule and it inverts under hash partitioning. In an LSM store, writes buffer in a memtable and sort on flush, so the random-key penalty largely disappears. And as a <em>partition key</em> in DynamoDB or Cassandra, a monotonic ID is actively harmful: consecutive writes concentrate on one partition and you have manufactured 7.6's hot-partition problem in your ID scheme. Sequential is better in InnoDB and worse as a DynamoDB partition key, for opposite reasons.</div></div>
+    </div>
+
+    <div class="checkpoint gate">
+      <div class="cp-title">🚨 Checkpoint — adversarial stress test (the gate)</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">You shipped Snowflake IDs six months ago. On-call reports a handful of duplicate primary keys per day, all in one table, all perfectly well-formed 64-bit values. The interviewer says: <em>"Using only the duplicate IDs themselves, tell me how you'd distinguish a clock-rewind cause from a duplicate-worker-ID cause. Then tell me what you do about the rows already written, and what you'd have built at deploy time so this class of bug couldn't happen silently."</em></span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 A complete answer decomposes the offending IDs back into their three fields and reasons from the distribution — a worker-ID collision clusters duplicates on one worker value across many timestamps, while a rewind clusters them on one worker at timestamps the generator has already passed. It then covers remediation for existing rows (you cannot re-mint a key other rows reference), and the deploy-time fix: an authoritative worker-ID lease with a heartbeat, persisted <code>last_ts</code> across restarts, and a startup assertion. If you can't answer this cleanly, you are not done.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> Can you combine what you've learned across sections, not just recall each one?</div>
+  </section>
+
+  <!-- ══════════════════ §8 ══════════════════ -->
+  <section id="s8">
+    <h2 class="section-title"><span class="num">§8</span> 🧪 Mastery Gate</h2>
+    <div class="callout callout-quote">Synthesis only. Each question requires combining two or more sections.</div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">1</span>
+        <span class="qtext">A team migrates a two-billion-row MySQL table from <code>AUTO_INCREMENT</code> to UUIDv4 primary keys in preparation for sharding. Write throughput drops roughly 60% on identical hardware, before a single shard has been added. Explain the mechanism using 8.4's B-tree material, explain what specifically about InnoDB's <em>clustered</em> index makes this worse than it would be in a heap-organized table, and name the single change that recovers most of the loss without reintroducing a coordinator.</span>
+        <span class="quiz-toggle">▼ Hint</span>
+      </div>
+      <div class="quiz-hint">💡 Sections combined: §3 + §5 + subtopic 8.4.</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">2</span>
+        <span class="qtext">Design the ID scheme for a multi-tenant document editor where clients create documents <strong>offline</strong> and sync later, documents are stored in DynamoDB partitioned by <code>tenant_id</code>, and document URLs are shared publicly. Decide the internal primary key and the public URL slug <strong>separately</strong>, justify each against the four decision signals, and make sure at least one of your two choices is a scheme you explicitly rejected for the other — and say why the same scheme was right in one place and wrong in the other.</span>
+        <span class="quiz-toggle">▼ Hint</span>
+      </div>
+      <div class="quiz-hint">💡 Sections combined: §4 + §6, applied to a system not mentioned anywhere in this doc.</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">3</span>
+        <span class="qtext">A URL shortener generates codes as <code>base62(md5(url)[:42 bits])</code> and deduplicates by checking whether the code already exists before inserting it. Compute the volume at which this design becomes unsafe, identify the race condition in the check-then-insert, and give the two-line fix. Then say what the design gains that a counter-based scheme does not — because it does gain something, and the complete answer names it.</span>
+        <span class="quiz-toggle">▼ Hint</span>
+      </div>
+      <div class="quiz-hint">💡 Sections combined: §5 + §6 + §7.</div>
+    </div>
+
+    <h3>Mastery criteria — tick only what you can demonstrate on demand</h3>
+    <ul class="checklist">
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can compare auto-increment, UUIDv4, UUIDv7, ticket server, and Snowflake and justify a choice against a stated write rate and key-locality requirement</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can size a base62 short code for a given total-key count, showing the arithmetic</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can compute the collision probability of a truncated-hash scheme from the birthday bound, and state the 50% point as 1.177·√N</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can explain why a random primary key degrades B-tree insert performance, and name two schemes that avoid it</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can lay out the Snowflake bit budget from memory and re-cut it for a stated fleet size and lifetime</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can name the four positions on the coordination dial and what each one costs</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can explain why the "sequential keys are better" rule inverts for a hash-partitioned store</span></li>
+    </ul>
+
+    <div class="callout callout-tip">💡 <strong>Rule of thumb:</strong> If you can teach it to someone else and field their follow-up questions, you've mastered it.</div>
+  </section>
+
+  <!-- ══════════════════ §9 ══════════════════ -->
+  <section id="s9">
+    <h2 class="section-title"><span class="num">§9</span> 🔗 Connections &amp; Sources</h2>
+
+    <div class="connections">
+      <div class="conn-card">
+        <span class="conn-icon">⬅️</span>
+        <div><div class="conn-label">Builds on</div><strong>8.4 Indexing — B-tree, LSM-tree, composite indexes</strong> — this is the direct parent. 8.4 established that insert cost depends on where in the key space an insert lands; 8.9 is the consequence, since the ID scheme is what <em>decides</em> where it lands. Also <strong>8.1 SQL vs. NoSQL</strong>, because the store's physical organisation (clustered B-tree vs. LSM vs. hash-partitioned) is the signal that determines whether ID ordering helps or hurts. And <strong>7.2 Hash partitioning</strong>, since the ID is very often the partition key, and a monotonic partition key is a hot partition by construction.</div>
+      </div>
+      <div class="conn-card">
+        <span class="conn-icon">➡️</span>
+        <div><div class="conn-label">Enables</div><strong>8.6 ACID transactions</strong> — Instagram's per-shard generator is a stored procedure that runs <em>inside</em> the insert's transaction, so the ID and the row commit atomically and no generated ID can be orphaned. <strong>7.6 Hot partitions</strong>, which is what a monotonic ID does to a hash-partitioned store. <strong>3.5 Idempotency</strong>, where a client-minted UUID exists precisely so a retried request can be recognised as the same request. And <strong>28.6 coordination avoidance</strong>, which revisits the framing — Snowflake partitions the space so you never coordinate, a ticket server coordinates once per batch, UUID eliminates coordination via probability — as a callback rather than new material.</div>
+      </div>
+      <div class="conn-card">
+        <span class="conn-icon">⚡</span>
+        <div><div class="conn-label">Tension with</div><strong>8.4 itself</strong>, in the store-shape inversion: the sequential-is-better rule that 8.4 establishes for B-trees reverses when the same key becomes a hash partition key. And with <strong>security and privacy generally</strong>: the properties that make an ID a good key — compact, dense, ordered — are exactly the properties that make it a bad public identifier, because dense and ordered means enumerable and time-in-the-high-bits means every ID discloses its creation moment.</div>
+      </div>
+    </div>
+
+    <h3>📚 Further reading</h3>
+    <ul class="reading-list">
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Instagram Engineering — "Sharding &amp; IDs at Instagram"</strong> — <a href="https://instagram-engineering.com/sharding-ids-at-instagram-1cf5a71e5a5c">article</a> — the best single source; the per-shard Postgres stored procedure and the reasoning for 41/13/10</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Flickr Code — "Ticket Servers: Distributed Unique Primary Keys on the Cheap"</strong> — <a href="https://code.flickr.net/2010/02/08/ticket-servers-distributed-unique-primary-keys-on-the-cheap/">article</a> — the <code>REPLACE INTO</code> trick and the odd/even HA split, in about 800 words</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Twitter Snowflake (archived)</strong> — <a href="https://github.com/twitter-archive/snowflake">repo</a> — read the README for the bit layout and the clock-rewind behaviour; ignore the Scala</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>RFC 9562 — Universally Unique IDentifiers (UUIDs)</strong> — <a href="https://www.rfc-editor.org/rfc/rfc9562.html">RFC</a> — §5.4 (v4) and §5.7 (v7); the v7 rationale section is the clearest published statement of the locality argument</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Percona — "Store UUID in an optimized way"</strong> — <a href="https://www.percona.com/blog/store-uuid-optimized-way/">article</a> — measured InnoDB numbers for random vs. ordered primary keys; this is where the "60% drop" style figures come from</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Designing Data-Intensive Applications, Ch. 3 (B-trees / LSM-trees) and Ch. 9 (ordering guarantees)</strong> — Kleppmann — Ch. 9's treatment of Lamport timestamps and total order is the theory underneath "k-sorted, not sorted"</span></li>
+    </ul>
+  </section>
+
+  <!-- ══════════════════ §10 ══════════════════ -->
+  <section id="s10">
+    <h2 class="section-title"><span class="num">§10</span> ✍️ My Notes</h2>
+    <div class="callout callout-quote">Personal observations, model answers from drilling sessions, things that confused me. Saved locally in this browser.</div>
+    <textarea class="notes-area" placeholder="Your notes, model answers, and annotations…"></textarea>
+  </section>
+
+</article>
+</main>
+
+<script>
+// TOC active state
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('#toc nav a');
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(a => a.classList.remove('active'));
+      const a = document.querySelector(`#toc nav a[href="#${e.target.id}"]`);
+      if (a) a.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+sections.forEach(s => obs.observe(s));
+
+function toggle(cb) { cb.closest('li').classList.toggle('checked'); }
+function toggleReading(cb) { cb.closest('li').classList.toggle('checked'); }
+function toggleQuiz(q) {
+  const item = q.closest('.quiz-item');
+  item.classList.toggle('open');
+  q.querySelector('.quiz-toggle').textContent = item.classList.contains('open') ? '▲ Hide' : '▼ Hint';
+}
+
+// Notes auto-save
+const notesArea = document.querySelector('.notes-area');
+const NOTES_KEY = 'notes_8_9';
+if (localStorage.getItem(NOTES_KEY)) notesArea.value = localStorage.getItem(NOTES_KEY);
+notesArea.addEventListener('input', () => {
+  try { localStorage.setItem(NOTES_KEY, notesArea.value); } catch(e) {}
+});
+</script>
+</body>
+</html>
