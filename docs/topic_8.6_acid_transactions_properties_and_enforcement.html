@@ -1,0 +1,993 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.6 ACID Transactions — Properties and Enforcement</title>
+<style>
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface-alt: #f3f2ef;
+    --border: #e5e3de; --text: #1a1917; --text-muted: #6b6861;
+    --accent: #2563eb; --accent-light: #dbeafe;
+    --green: #16a34a; --green-light: #dcfce7;
+    --red: #dc2626; --red-light: #fee2e2;
+    --yellow: #d97706; --yellow-light: #fef3c7;
+    --purple: #7c3aed; --purple-light: #ede9fe;
+    --orange: #ea580c; --orange-light: #ffedd5;
+    --teal: #0d9488; --teal-light: #ccfbf1;
+    --code-bg: #1e1e2e; --code-text: #cdd6f4;
+    --sidebar-w: 240px; --content-max: 820px;
+    font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; }
+  #toc { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0 48px; z-index: 100; }
+  #toc-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  #toc-header .phase-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-bottom: 6px; }
+  #toc-header h2 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  #toc-header .tier-tag { font-size: 10px; font-weight: 800; letter-spacing: .06em; color: var(--yellow); background: var(--yellow-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-top: 8px; }
+  #toc nav a { display: block; padding: 5px 16px 5px 20px; font-size: 12.5px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+  main { margin-left: var(--sidebar-w); padding: 48px 48px 96px; max-width: calc(var(--sidebar-w) + var(--content-max) + 96px); width: 100%; }
+  article { max-width: var(--content-max); }
+  .doc-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 2px solid var(--border); }
+  .doc-header .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+  .tag-phase { background: var(--accent-light); color: var(--accent); }
+  .tag-topic { background: var(--purple-light); color: var(--purple); }
+  .tag-tier  { background: var(--yellow-light); color: var(--yellow); }
+  .tag-prereq{ background: var(--teal-light); color: var(--teal); }
+  .tag-date  { background: var(--surface-alt);  color: var(--text-muted); }
+  .doc-header h1 { font-size: 30px; font-weight: 800; line-height: 1.25; letter-spacing: -.02em; color: var(--text); }
+  section { margin-bottom: 52px; scroll-margin-top: 32px; }
+  h2.section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -.01em; }
+  h2.section-title .num { font-size: 11px; font-weight: 800; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; letter-spacing: .04em; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 24px 0 10px; }
+  h4 { font-size: 13.5px; font-weight: 700; color: var(--text); margin: 18px 0 8px; }
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+  code { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-family: "SF Mono","Fira Code",Menlo,monospace; font-size: 12.5px; }
+  ul.plain { margin: 0 0 14px 20px; }
+  ul.plain li { margin-bottom: 7px; font-size: 14.5px; line-height: 1.6; }
+  ol.steps { margin: 0 0 14px 22px; }
+  ol.steps li { margin-bottom: 8px; font-size: 14.5px; line-height: 1.6; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 14px; border-left: 3px solid; }
+  .callout-goal  { background: var(--accent-light); border-color: var(--accent); color: #1e40af; }
+  .callout-tip   { background: var(--yellow-light); border-color: var(--yellow); color: #92400e; }
+  .callout-warn  { background: var(--red-light); border-color: var(--red); color: #7f1d1d; }
+  .callout-quote { background: var(--surface-alt); border-color: var(--border); color: var(--text-muted); font-style: italic; }
+  .callout-teal  { background: var(--teal-light); border-color: var(--teal); color: #134e4a; }
+  .the-question { background: var(--surface); border: 2px solid var(--accent); border-radius: 12px; padding: 16px 20px; margin-top: 18px; font-size: 15.5px; }
+  .the-question .lbl { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); display: block; margin-bottom: 5px; }
+  .the-question em { color: var(--text); font-weight: 600; }
+  .definition { background: var(--purple-light); border-left: 4px solid var(--purple); border-radius: 8px; padding: 16px 20px; margin: 18px 0 24px; font-size: 15px; font-weight: 600; color: #4c1d95; line-height: 1.6; }
+  .mental-model { background: var(--teal-light); border-left: 3px solid var(--teal); border-radius: 8px; padding: 14px 18px; margin: 18px 0; font-size: 14px; color: #134e4a; }
+  .mental-model .mm-name { font-weight: 800; }
+  .mental-model .mm-break { display: block; margin-top: 7px; font-style: italic; opacity: .85; }
+  .bridge { background: linear-gradient(90deg, var(--accent-light), transparent); border-left: 4px solid var(--accent); border-radius: 8px; padding: 13px 18px; margin-top: 28px; font-size: 14.5px; color: #1e40af; font-weight: 600; }
+  .bridge .arrow { font-weight: 800; margin-right: 6px; }
+  .checkpoint { background: var(--surface); border: 2px solid var(--green); border-radius: 12px; padding: 16px 20px; margin-top: 26px; }
+  .checkpoint > .cp-title { font-size: 12px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--green); margin-bottom: 12px; display: flex; align-items: center; gap: 7px; }
+  .checkpoint.gate { border-color: var(--red); }
+  .checkpoint.gate > .cp-title { color: var(--red); }
+  .cheatsheet { background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 24px 28px; font-family: "SF Mono","Fira Code","Cascadia Code",Menlo,monospace; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-x: auto; margin-top: 16px; }
+  .cheatsheet .label { color: #cba6f7; font-weight: 700; letter-spacing: .08em; display: block; margin-top: 18px; margin-bottom: 4px; border-bottom: 1px solid #313244; padding-bottom: 3px; }
+  .cheatsheet .label:first-child { margin-top: 0; }
+  .diagram-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 16px 14px; margin: 20px 0 28px; overflow-x: auto; }
+  .diagram-wrap .diagram-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); margin-bottom: 12px; }
+  .diagram-wrap svg { display: block; width: 100%; height: auto; }
+  .diagram-wrap p.caption { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 10px; margin-bottom: 0; font-style: italic; }
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; font-size: 14.5px; line-height: 1.55; }
+  .checklist li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 2px; background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .checklist li.checked .cb { background: var(--green); border-color: var(--green); }
+  .checklist li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .checklist li.checked .text { color: var(--text-muted); text-decoration: line-through; }
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: var(--surface-alt); padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.5; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+  .misconception { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .misconception .wrong { background: var(--red-light); padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; }
+  .misconception .right { padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; color: #065f46; background: var(--green-light); }
+  .misconception .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .quiz-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .quiz-q { padding: 14px 18px; font-size: 14.5px; font-weight: 600; cursor: pointer; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .quiz-q:hover { background: var(--surface-alt); }
+  .quiz-num { flex-shrink: 0; width: 24px; height: 24px; background: var(--accent); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; margin-top: 1px; }
+  .checkpoint.gate .quiz-num { background: var(--red); }
+  .quiz-q .qtext { flex: 1; font-weight: 500; }
+  .quiz-toggle { font-size: 11px; color: var(--text-muted); flex-shrink: 0; margin-top: 3px; }
+  .quiz-hint { display: none; padding: 10px 18px 14px; font-size: 13px; color: #92400e; background: var(--yellow-light); border-top: 1px solid var(--border); line-height: 1.6; }
+  .quiz-item.open .quiz-hint { display: block; }
+  .reading-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .reading-list li { display: flex; align-items: flex-start; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; font-size: 14px; }
+  .reading-list li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 1px; cursor: pointer; background: var(--surface); display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .reading-list li.checked .cb { background: var(--green); border-color: var(--green); }
+  .reading-list li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .reading-list li.checked .rtext { color: var(--text-muted); text-decoration: line-through; }
+  .notes-area { width: 100%; min-height: 200px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: inherit; font-size: 14px; color: var(--text); resize: vertical; line-height: 1.6; }
+  .notes-area:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .connections { display: flex; flex-direction: column; gap: 12px; }
+  .conn-card { display: flex; align-items: flex-start; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14px; }
+  .conn-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .conn-label { font-weight: 700; margin-bottom: 3px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .tradeoff-box { background: var(--surface-alt); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 16px 20px; font-size: 14.5px; font-style: italic; color: var(--text); margin-top: 14px; line-height: 1.65; }
+  .trigger-list { list-style: none; display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+  .trigger-list li { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--orange); border-radius: 8px; padding: 10px 16px; font-size: 14px; font-style: italic; color: var(--text); }
+  @media (max-width: 900px) { #toc { display: none; } main { margin-left: 0; padding: 24px 20px 60px; } }
+</style>
+</head>
+<body>
+
+<aside id="toc">
+  <div id="toc-header">
+    <span class="phase-tag">Phase C · Topic 8</span>
+    <h2>8.6 ACID Transactions</h2>
+    <span class="tier-tag">🥇 T1 · ~1.75h</span>
+  </div>
+  <nav>
+    <a href="#s0">🧭 The Question</a>
+    <a href="#s1">📋 Cheatsheet</a>
+    <a href="#s2">🧠 The Mindmap</a>
+    <a href="#s3">🔥 The Problem</a>
+    <a href="#s4">💡 The Core Idea</a>
+    <a href="#s5">⚙️ How It Works</a>
+    <a href="#s6">⚖️ The Decision</a>
+    <a href="#s7">🎯 In the Interview</a>
+    <a href="#s8">🧪 Mastery Gate</a>
+    <a href="#s9">🔗 Connections</a>
+    <a href="#s10">✍️ My Notes</a>
+  </nav>
+</aside>
+
+<main>
+<article>
+
+  <header class="doc-header">
+    <div class="meta">
+      <span class="tag tag-phase">Phase C — Data Storage</span>
+      <span class="tag tag-topic">Topic 8 — Database Fundamentals</span>
+      <span class="tag tag-tier">🥇 T1 Core · ~1.75h</span>
+      <span class="tag tag-prereq">Prereqs: 8.1, 8.3</span>
+      <span class="tag tag-date">2026-08-06</span>
+    </div>
+    <h1>8.6 ACID Transactions — Properties and Enforcement</h1>
+  </header>
+
+  <!-- ══════════════════ §0 ══════════════════ -->
+  <section id="s0">
+    <h2 class="section-title"><span class="num">§0</span> 🧭 The Question This Answers</h2>
+
+    <p>8.1 chose the engine and 8.3 decided where each fact physically lives — and along the way named "transactional fan-out" as the strongest mechanism for keeping duplicated copies in sync. This subtopic asks what that word "transactional" is actually promising. ACID is not one property. It is four independent guarantees — atomicity, consistency, isolation, durability — bundled under one acronym and sold as a single feature, but each one fails in a completely different way, and each one is enforced by a different piece of machinery inside the engine.</p>
+
+    <p>The central tension is that every one of the four guarantees costs something specific — a lock held, a log fsynced, a coordinator blocked — and a system that claims "it's transactional" without naming an isolation level, and without saying what happens the moment the transaction crosses a shard boundary, hasn't actually told you what it guarantees.</p>
+
+    <div class="the-question">
+      <span class="lbl">The question</span>
+      <em>What exactly breaks — concretely, one failure at a time — when each of the four ACID properties is missing, and what mechanism inside the database is responsible for making sure it isn't?</em>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> Before we can name what protects you, we need to see what an unprotected concurrent write path actually does wrong. What breaks?</div>
+  </section>
+
+  <!-- ══════════════════ §1 ══════════════════ -->
+  <section id="s1">
+    <h2 class="section-title"><span class="num">§1</span> 📋 Cheatsheet</h2>
+
+    <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+    <div class="callout callout-tip">⏭️ <strong>First time through this topic?</strong> Skip to §2 and come back here for revision.</div>
+
+<div class="cheatsheet"><span class="label">§ 1  WHY IT EXISTS</span>Two writes that are supposed to happen together are, to the database, two
+unrelated events unless you tell it otherwise. Run "debit A" then "credit B"
+as separate statements and any of three things can happen: the process
+crashes between them and money vanishes; a concurrent reader sees the
+half-done state and reports a balance that was never true; two concurrent
+writers each read a stale balance and one silently overwrites the other's
+update. None of this is a bug in the storage engine — it's the absence of a
+primitive that says "these N writes are one indivisible, isolated, durable
+event." That primitive is the transaction, and ACID is the specification of
+what it actually guarantees.
+<span class="label">§ 2  WHAT IT IS — the four letters, independently</span>ATOMICITY    All the writes in the transaction commit, or none do. No
+             partial application, ever — even across a crash mid-write.
+CONSISTENCY  The transaction moves the database from one state that
+             satisfies its declared invariants (constraints, foreign keys)
+             to another. This is the weakest, most misunderstood letter —
+             it's the DB enforcing YOUR rules, not inventing correctness.
+ISOLATION    Concurrent transactions cannot observe each other's
+             in-flight, uncommitted state. The ideal is SERIALIZABLE: it
+             behaves as if every transaction ran alone, one after another,
+             even though the engine actually interleaves them.
+DURABILITY   Once the client is told "committed," that result survives any
+             subsequent crash — power loss one millisecond later must not
+             lose it.
+<span class="label">§ 3  THE MECHANISM — two subsystems deliver four guarantees</span>WRITE-AHEAD LOG (WAL)   Every change is appended to a sequential, durable
+                        log BEFORE the data page is touched. Atomicity and
+                        durability both come from this: on crash, replay
+                        the log — redo anything with a commit record, undo
+                        anything without one.
+CONCURRENCY CONTROL     Delivers isolation. Two families:
+  LOCKING (2PL)  acquire a lock per row touched, block or abort on
+                 conflict, release at commit. Correct, but writers can
+                 block writers and deadlock.
+  MVCC           each transaction reads a private snapshot; writers never
+                 block readers. Cheap, but the isolation you actually get
+                 depends on how conflicts are checked at commit time.
+CONSTRAINTS             Delivers consistency — CHECK, FOREIGN KEY, UNIQUE.
+                        The engine rejects (aborts) a transaction that
+                        would violate one; it does not know your invariant
+                        unless you declared it.
+<span class="label">§ 4  USE / AVOID</span>USE a full ACID transaction when: multiple rows or tables must change
+  together and a half-done state would corrupt an invariant (money,
+  inventory, identity).
+USE the weakest isolation level that still prevents the specific anomaly
+  you care about — Serializable is correct everywhere but is not free.
+AVOID assuming "wrapped in a transaction" says anything without naming the
+  isolation level — default isolation differs by engine and each level
+  permits different, specific anomalies.
+AVOID assuming a transaction spans shards for free — single-node atomicity
+  does not cross a partition boundary without an explicit protocol
+  (two-phase commit) or an explicit compensating design (saga).
+<span class="label">§ 5  ISOLATION LEVELS — named trade-offs, not just names</span>READ COMMITTED     Never reads uncommitted data. Still allows
+                    non-repeatable reads (re-run the same query, get a
+                    different answer) and phantom reads.
+REPEATABLE READ /
+SNAPSHOT            Your transaction sees one consistent snapshot for its
+                    whole duration. Prevents non-repeatable reads. Still
+                    allows WRITE SKEW — two transactions each read
+                    overlapping data, each individually looks valid, the
+                    combined effect violates an invariant neither checked.
+SERIALIZABLE        Behaves as if transactions ran one at a time. Prevents
+                    write skew too. Costs the most — either heavy locking
+                    or serialization failures that the client must retry.
+<span class="label">§ 6  NUMBERS TO ANCHOR THE DISCUSSION</span>Durability is only as strong as the fsync. An engine that reports
+  "committed" before the log is actually flushed to durable media can lose
+  the last stretch of "committed" work on power loss — this is a real,
+  documented class of misconfiguration, not a hypothetical.
+Two-phase commit costs at least 2 network round trips (prepare, commit) and
+  blocks every participant if the coordinator dies after prepare — the
+  classic 2PC blocking problem.
+Postgres and SQL Server default to READ COMMITTED; MySQL InnoDB defaults to
+  REPEATABLE READ. Three major engines, three different default anomaly
+  profiles, out of the box.
+DynamoDB transactions cap at 25 items / 4MB and cost roughly 2x the
+  read/write capacity of the equivalent non-transactional operation.
+<span class="label">§ 7  INTERVIEW TRIGGERS + GOTCHA</span>→ "What happens if the DB crashes mid-write?"        → atomicity + WAL redo/undo
+→ "How do you stop two requests from double-        → isolation, name the level
+   booking / overselling?"                             and the specific anomaly
+→ "What isolation level would you use here?"         → never just "a transaction"
+→ "This transaction spans two shards"                → single-node ACID doesn't
+                                                         cross a partition for free
+GOTCHA: Saying "I'd wrap it in a transaction" without naming an isolation
+  level is the single most common depth failure here. It says nothing,
+  because the default isolation level differs by engine and each level
+  permits a distinct, nameable anomaly. The interviewer wants to hear which
+  anomaly you're preventing and what it costs to prevent it.</div>
+  </section>
+
+  <!-- ══════════════════ §2 ══════════════════ -->
+  <section id="s2">
+    <h2 class="section-title"><span class="num">§2</span> 🧠 The Mindmap</h2>
+    <div class="callout callout-quote">The picture to hold in your head while you study. Everything below hangs off this.</div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Concept map — four promises, two subsystems</div>
+      <svg viewBox="0 0 1060 660" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="mmArrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" fill="#b8b4ac"/>
+          </marker>
+        </defs>
+
+        <g stroke="#b8b4ac" stroke-width="1.8" fill="none" marker-end="url(#mmArrow)">
+          <path d="M470,300 L215,205"/>
+          <path d="M530,292 L530,210"/>
+          <path d="M590,300 L845,205"/>
+          <path d="M470,372 L215,462"/>
+          <path d="M530,380 L530,455"/>
+          <path d="M590,372 L845,462"/>
+        </g>
+
+        <ellipse cx="530" cy="336" rx="168" ry="52" fill="#a5d8ff" stroke="#1971c2" stroke-width="2.5"/>
+        <text x="530" y="328" text-anchor="middle" font-size="15.5" font-weight="800" fill="#0b3d66">ACID = FOUR PROMISES,</text>
+        <text x="530" y="348" text-anchor="middle" font-size="13" fill="#1971c2">enforced by two subsystems</text>
+
+        <!-- TOP LEFT : four properties -->
+        <rect x="30" y="30" width="270" height="172" rx="10" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+        <text x="46" y="55" font-size="13.5" font-weight="800" fill="#1e3a8a">🔑 THE FOUR PROPERTIES</text>
+        <text x="46" y="82"  font-size="12.5" fill="#1e3a8a">Atomicity — all-or-nothing</text>
+        <text x="46" y="105" font-size="12.5" fill="#1e3a8a">Consistency — invariants hold</text>
+        <text x="46" y="128" font-size="12.5" fill="#1e3a8a">Isolation — no cross-txn visibility</text>
+        <text x="46" y="151" font-size="12.5" fill="#1e3a8a">Durability — survives a crash</text>
+        <text x="46" y="180" font-size="11.5" font-style="italic" fill="#3b5bdb">four independent promises</text>
+
+        <!-- TOP CENTRE : what breaks -->
+        <rect x="395" y="30" width="270" height="172" rx="10" fill="#ffc9c9" stroke="#c92a2a" stroke-width="2"/>
+        <text x="411" y="55" font-size="13.5" font-weight="800" fill="#7f1d1d">⚠️ WHAT BREAKS (one per letter)</text>
+        <text x="411" y="82"  font-size="12.5" fill="#7f1d1d">crash mid-write loses half a txn</text>
+        <text x="411" y="104" font-size="12.5" fill="#7f1d1d">concurrent reader sees half-done</text>
+        <text x="411" y="126" font-size="12.5" fill="#7f1d1d">concurrent writers overwrite</text>
+        <text x="411" y="148" font-size="12.5" fill="#7f1d1d">"committed" lost after a crash</text>
+        <text x="411" y="180" font-size="11.5" font-style="italic" fill="#c92a2a">each letter fails differently</text>
+
+        <!-- TOP RIGHT : enforcement mechanisms -->
+        <rect x="760" y="30" width="270" height="172" rx="10" fill="#ffd8a8" stroke="#e67700" stroke-width="2"/>
+        <text x="776" y="55" font-size="13.5" font-weight="800" fill="#7c2d12">⚙️ ENFORCEMENT MECHANISMS</text>
+        <text x="776" y="82"  font-size="12.5" fill="#7c2d12">WAL — log before data, redo/undo</text>
+        <text x="776" y="104" font-size="12.5" fill="#7c2d12">Locking (2PL) — block on conflict</text>
+        <text x="776" y="126" font-size="12.5" fill="#7c2d12">MVCC — snapshot per transaction</text>
+        <text x="776" y="148" font-size="12.5" fill="#7c2d12">Constraints — reject bad state</text>
+        <text x="776" y="180" font-size="11.5" font-style="italic" fill="#e67700">no single mechanism gives all four</text>
+
+        <!-- BOTTOM LEFT : isolation levels -->
+        <rect x="30" y="470" width="270" height="160" rx="10" fill="#c3fae8" stroke="#0ca678" stroke-width="2"/>
+        <text x="46" y="495" font-size="13.5" font-weight="800" fill="#134e4a">🎚️ ISOLATION LEVELS</text>
+        <text x="46" y="521" font-size="12.5" fill="#134e4a">Read Committed — cheapest</text>
+        <text x="46" y="543" font-size="12.5" fill="#134e4a">Repeatable Read / Snapshot</text>
+        <text x="46" y="565" font-size="12.5" fill="#134e4a">Serializable — prevents write skew</text>
+        <text x="46" y="595" font-size="11.5" font-style="italic" fill="#0ca678">a named menu, not one setting</text>
+
+        <!-- BOTTOM CENTRE : the decision -->
+        <rect x="395" y="470" width="270" height="160" rx="10" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+        <text x="411" y="495" font-size="13.5" font-weight="800" fill="#4c1d95">🎯 THE DECISION</text>
+        <text x="411" y="521" font-size="12.5" fill="#4c1d95">scope of the invariant</text>
+        <text x="411" y="543" font-size="12.5" fill="#4c1d95">write-skew tolerance</text>
+        <text x="411" y="565" font-size="12.5" fill="#4c1d95">can it stay on one shard?</text>
+        <text x="411" y="595" font-size="11.5" font-style="italic" fill="#7c3aed">weakest level that still holds</text>
+
+        <!-- BOTTOM RIGHT : real systems -->
+        <rect x="760" y="470" width="270" height="160" rx="10" fill="#b2f2bb" stroke="#2f9e44" stroke-width="2"/>
+        <text x="776" y="495" font-size="13.5" font-weight="800" fill="#14532d">🏭 REAL SYSTEMS</text>
+        <text x="776" y="521" font-size="12.5" fill="#14532d">Postgres — RC default, SSI opt-in</text>
+        <text x="776" y="543" font-size="12.5" fill="#14532d">MySQL InnoDB — RR + next-key locks</text>
+        <text x="776" y="565" font-size="12.5" fill="#14532d">Spanner — TrueTime, global serial</text>
+        <text x="776" y="587" font-size="12.5" fill="#14532d">DynamoDB — 25 items / 4MB cap</text>
+        <text x="776" y="614" font-size="11.5" font-style="italic" fill="#2f9e44">each priced the trade differently</text>
+      </svg>
+      <p class="caption">The four properties are the promises; everything else is how they're kept and what keeping them costs.</p>
+    </div>
+
+    <p><strong>How to read it:</strong> the <strong>four properties</strong> are independent promises; §3's <strong>what breaks</strong> shows each one failing on its own; the <strong>enforcement mechanisms</strong> are the two subsystems that actually deliver those promises; <strong>isolation levels</strong> are the named menu of how much of the isolation promise you're buying; <strong>the decision</strong> is which level and which scope you need; and <strong>real systems</strong> show how each engine actually resolved the trade-off.</p>
+  </section>
+
+  <!-- ══════════════════ §3 ══════════════════ -->
+  <section id="s3">
+    <h2 class="section-title"><span class="num">§3</span> 🔥 The Problem</h2>
+
+    <p>Before transactional guarantees existed as an engine primitive, "transfer $100 from A to B" was just two independent statements run back to back: <code>UPDATE accounts SET balance = balance - 100 WHERE id = A</code>, then <code>UPDATE accounts SET balance = balance + 100 WHERE id = B</code>. It reads like one operation. To the database, it is not one operation — and that gap is exactly where money disappears.</p>
+
+    <p>Three concrete, distinct ways it breaks. <strong>Crash between the two statements</strong> (an atomicity gap): the debit commits, the process dies before the credit runs, and $100 has left A and arrived nowhere — the database now violates the most basic invariant a ledger has, that total balance is conserved, and there is no record of what should happen next. <strong>A concurrent reader mid-transfer</strong> (an isolation gap): a second connection runs a balance report between the two statements and sees A already debited but B not yet credited — it reports a number that was never true at any real, consistent point in time, and there is no way for that reader to know it caught the system mid-flight. <strong>Concurrent writers on the same account</strong> (isolation, a different flavor): two transfers out of A run at the same time, each reads the current balance before either writes, each computes its own new balance from that now-stale read, and the second write silently overwrites the first — one deduction is lost entirely, the account is overdrawn, and nothing in the schema recorded that anything went wrong.</p>
+
+    <p>The instinctive fix is procedural, and it fails for the same structural reason 8.3's naive fix failed: retry logic, an application-level mutex, "just be careful about statement order" — all of it depends on every future writer, across every service and every deploy, remembering an invariant that lives outside the data. An application mutex protects one process. It says nothing about a second server handling the retried request, and nothing about a crash that happens mid-critical-section, which is a normal event at scale, not an edge case.</p>
+
+    <p>The database's answer is to make "these N writes happen as one indivisible, isolated, durable unit" a primitive the storage engine itself enforces — a transaction, bounded by <code>BEGIN</code> and <code>COMMIT</code> — rather than a convention application code has to honor correctly, forever, under concurrency and partial failure. That's what ACID actually is: four separate, independently-enforced answers to four separate ways a concurrent, crash-prone system corrupts state.</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Before / after — two unguarded statements vs. one transaction</div>
+      <svg viewBox="0 0 1040 400" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="baArrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#2563eb"/>
+          </marker>
+        </defs>
+
+        <rect x="20" y="20" width="440" height="360" rx="12" fill="#fff5f5" stroke="#c92a2a" stroke-width="2" stroke-dasharray="6 4"/>
+        <text x="40" y="48" font-size="14" font-weight="800" fill="#7f1d1d">BEFORE — two unguarded statements</text>
+
+        <g font-size="11.5" fill="#1a1917" font-family="SF Mono, Menlo, monospace">
+          <rect x="40" y="64" width="400" height="24" fill="#fff" stroke="#e5e3de"/>
+          <text x="52" y="81">UPDATE accounts SET balance =</text>
+          <rect x="40" y="88" width="400" height="24" fill="#fff" stroke="#e5e3de"/>
+          <text x="52" y="105">  balance - 100 WHERE id='A';</text>
+          <rect x="40" y="116" width="400" height="24" fill="#ffe3e3" stroke="#c92a2a" stroke-width="1.5"/>
+          <text x="52" y="133">⚠ crash here — credit never runs</text>
+          <rect x="40" y="144" width="400" height="24" fill="#f1f1ef" stroke="#e5e3de"/>
+          <text x="52" y="161">UPDATE accounts SET balance =</text>
+          <rect x="40" y="168" width="400" height="24" fill="#f1f1ef" stroke="#e5e3de"/>
+          <text x="52" y="185">  balance + 100 WHERE id='B';</text>
+        </g>
+
+        <text x="40" y="216" font-size="12.5" font-weight="700" fill="#c92a2a">RESULT: $100 left A. Arrived nowhere.</text>
+        <text x="40" y="236" font-size="12" fill="#7f1d1d">Ledger no longer sums to its prior total.</text>
+        <text x="40" y="266" font-size="12.5" fill="#c92a2a">✗ atomicity violated</text>
+        <text x="40" y="288" font-size="12.5" fill="#c92a2a">✗ a reader between the two statements</text>
+        <text x="40" y="306" font-size="12.5" fill="#c92a2a">  sees a balance that was never real</text>
+        <text x="40" y="336" font-size="12.5" fill="#c92a2a">✗ two concurrent transfers can silently</text>
+        <text x="40" y="354" font-size="12.5" fill="#c92a2a">  overwrite each other's deduction</text>
+
+        <line x1="470" y1="200" x2="565" y2="200" stroke="#2563eb" stroke-width="3" marker-end="url(#baArrow)"/>
+        <text x="517" y="188" text-anchor="middle" font-size="11.5" font-weight="800" fill="#2563eb">wrap it</text>
+
+        <rect x="580" y="20" width="440" height="360" rx="12" fill="#f0fdf4" stroke="#2f9e44" stroke-width="2"/>
+        <text x="600" y="48" font-size="14" font-weight="800" fill="#14532d">AFTER — one transaction</text>
+
+        <g font-size="11.5" fill="#1a1917" font-family="SF Mono, Menlo, monospace">
+          <rect x="600" y="64" width="400" height="22" fill="#fff" stroke="#e5e3de"/>
+          <text x="612" y="80">BEGIN;</text>
+          <rect x="600" y="86" width="400" height="22" fill="#fff" stroke="#e5e3de"/>
+          <text x="612" y="102">  UPDATE ... balance - 100 WHERE id='A';</text>
+          <rect x="600" y="108" width="400" height="22" fill="#fff" stroke="#e5e3de"/>
+          <text x="612" y="124">  UPDATE ... balance + 100 WHERE id='B';</text>
+          <rect x="600" y="130" width="400" height="22" fill="#dcfce7" stroke="#2f9e44" stroke-width="1.5"/>
+          <text x="612" y="146">COMMIT;</text>
+        </g>
+
+        <text x="600" y="176" font-size="11.5" fill="#14532d">✓ crash before COMMIT → WAL has no commit</text>
+        <text x="600" y="194" font-size="11.5" fill="#14532d">  record → whole thing undone. $100 never left A.</text>
+        <text x="600" y="220" font-size="11.5" fill="#14532d">✓ crash after COMMIT → WAL has the commit</text>
+        <text x="600" y="238" font-size="11.5" fill="#14532d">  record → both writes redone on recovery.</text>
+        <text x="600" y="264" font-size="11.5" fill="#14532d">✓ no reader ever sees the half-done state —</text>
+        <text x="600" y="282" font-size="11.5" fill="#14532d">  isolation hides the in-flight write entirely.</text>
+      </svg>
+      <p class="caption">Both statements happened, or neither did — and nobody ever observed the gap in between.</p>
+    </div>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">In the unguarded two-statement version, name the crash point that produces the <em>worst</em> outcome — not "the process dies," but a specific line in the sequence — and explain precisely why wrapping each individual <code>UPDATE</code> in its own transaction would not fix it, even though each individual statement would then be atomic.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the third paragraph of §3 and count how many separate atomic operations the "fix" actually creates.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> If a transaction is the primitive that prevents this, what exactly is each of the four letters promising — and how do the promises build on each other?</div>
+  </section>
+
+  <!-- ══════════════════ §4 ══════════════════ -->
+  <section id="s4">
+    <h2 class="section-title"><span class="num">§4</span> 💡 The Core Idea</h2>
+
+    <div class="definition">A transaction is a unit of work the database guarantees is Atomic — all its writes commit or none do; Consistency-preserving — it moves the database from one state satisfying its declared invariants to another; Isolated — concurrent transactions cannot observe each other's uncommitted, in-flight state; and Durable — once it reports success, that result survives any subsequent crash. Four independent guarantees, enforced by two largely independent subsystems inside the engine.</div>
+
+    <p>The five ideas below build on each other. Each one only makes sense because of the one before it.</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">The build chain</div>
+      <svg viewBox="0 0 1040 180" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="bcArrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#7c3aed"/>
+          </marker>
+        </defs>
+        <g>
+          <rect x="4" y="30" width="176" height="58" rx="9" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+          <text x="92" y="55" text-anchor="middle" font-size="12.5" font-weight="800" fill="#4c1d95">ATOMICITY</text>
+          <text x="92" y="108" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">the base</text>
+          <text x="92" y="124" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">primitive: group</text>
+          <text x="92" y="140" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">writes into one</text>
+        </g>
+        <line x1="186" y1="59" x2="216" y2="59" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow)"/>
+        <g>
+          <rect x="222" y="30" width="176" height="58" rx="9" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+          <text x="310" y="55" text-anchor="middle" font-size="12.5" font-weight="800" fill="#1e3a8a">CONSISTENCY</text>
+          <text x="310" y="108" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">therefore we can</text>
+          <text x="310" y="124" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">ask if the group</text>
+          <text x="310" y="140" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">leaves a valid state</text>
+        </g>
+        <line x1="404" y1="59" x2="434" y2="59" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow)"/>
+        <g>
+          <rect x="440" y="30" width="176" height="58" rx="9" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+          <text x="528" y="55" text-anchor="middle" font-size="12.5" font-weight="800" fill="#92400e">ISOLATION</text>
+          <text x="528" y="108" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">but many atomic,</text>
+          <text x="528" y="124" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">consistent txns</text>
+          <text x="528" y="140" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">run concurrently</text>
+        </g>
+        <line x1="622" y1="59" x2="652" y2="59" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow)"/>
+        <g>
+          <rect x="658" y="30" width="176" height="58" rx="9" fill="#ffd8a8" stroke="#e67700" stroke-width="2"/>
+          <text x="746" y="55" text-anchor="middle" font-size="12.5" font-weight="800" fill="#7c2d12">DURABILITY</text>
+          <text x="746" y="108" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">and once one of</text>
+          <text x="746" y="124" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">those commits, it</text>
+          <text x="746" y="140" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">must survive a crash</text>
+        </g>
+        <line x1="840" y1="59" x2="870" y2="59" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow)"/>
+        <g>
+          <rect x="876" y="20" width="160" height="78" rx="9" fill="#c3fae8" stroke="#0ca678" stroke-width="2"/>
+          <text x="956" y="42" text-anchor="middle" font-size="12" font-weight="800" fill="#134e4a">ENFORCEMENT</text>
+          <text x="956" y="58" text-anchor="middle" font-size="12" font-weight="800" fill="#134e4a">MECHANISM</text>
+          <text x="956" y="118" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">so name the two</text>
+          <text x="956" y="134" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">subsystems: WAL + locking/MVCC</text>
+        </g>
+      </svg>
+      <p class="caption">Read the italics as one sentence — that's the whole argument of this subtopic.</p>
+    </div>
+
+    <h3>Atomicity — the base primitive</h3>
+    <p>Everything else in this subtopic assumes you can already treat a group of writes as one event, and atomicity is what makes that assumption true. <strong>All the writes in a transaction commit, or none do — there is no state where some landed and some didn't</strong>, even if the process crashes halfway through. The debit-then-credit transfer from §3 is the canonical example: atomicity is the specific guarantee that closes the "$100 left A and arrived nowhere" failure. Without it, every multi-statement operation is one partial-write bug waiting for the right crash timing.</p>
+
+    <h3>Consistency — invariants hold before and after</h3>
+    <p>Once you can group writes atomically, you can ask a second, different question: does this group leave the database in a state that satisfies its rules? That's consistency, and it is the weakest and most misunderstood of the four letters, because the database does not invent your invariants — it only enforces the ones you declare, as <code>CHECK</code> constraints, <code>FOREIGN KEY</code> constraints, and <code>UNIQUE</code> constraints. If a transaction's writes would violate a declared constraint, the engine aborts the whole transaction rather than applying it partially — that abort is consistency in action. What consistency does <em>not</em> mean is "my data is correct": an application bug that computes the wrong new balance, but does so within all declared constraints, commits successfully and is fully "consistent" by the database's definition. Consistency is enforcement of stated rules, not a correctness oracle.</p>
+
+    <h3>Isolation — concurrent transactions behave as if serial</h3>
+    <p>Atomicity and consistency, as described so far, are properties of a single transaction running alone. Isolation is what happens the instant you allow many such transactions to run concurrently, which every real system does for throughput. The ideal is <strong>serializability</strong>: the observable result is as if every transaction ran one after another, with no overlap, even though the engine actually interleaves their execution for performance. This is where nearly all of the real engineering — and nearly all of the interview depth — actually lives, because "as if serial" is expensive to deliver exactly, and every isolation level weaker than full serializability is a named, specific relaxation that permits a named, specific anomaly. §3's concurrent-reader and concurrent-writer failures are both isolation failures.</p>
+
+    <h3>Durability — once committed, survives a crash</h3>
+    <p>Isolation guarantees there's a well-defined instant at which a transaction's effects become visible — the commit. Durability is the promise about what happens to that committed result afterward: once the client has been told "committed," the change survives any subsequent crash, including a power loss one millisecond later. This is a promise about the boundary between volatile memory and durable storage, and it is the one guarantee that can be silently, invisibly broken by a misconfiguration — an engine or a disk that acknowledges a write before it is actually flushed to durable media reports durability it has not actually delivered.</p>
+
+    <h3>Enforcement Mechanism — how two subsystems deliver four promises</h3>
+    <p>Naming four independent guarantees only matters if you can also name what actually enforces them, because interviewers probe exactly there. The <strong>write-ahead log (WAL)</strong> delivers atomicity and durability together: every change is appended to a sequential, durable log <em>before</em> the corresponding data page is modified, so on crash the engine can replay the log — redoing any transaction that has a commit record, undoing any that doesn't. <strong>Concurrency control</strong> delivers isolation, through one of two families: <strong>locking</strong> (acquire a lock per row touched, block or abort on conflict, release at commit — correct but writers can block writers and deadlock), or <strong>MVCC</strong> (each transaction reads its own private snapshot, so readers never block writers, at the cost of needing an explicit conflict check at commit time). <strong>Constraints</strong>, checked against the transaction's writes before commit, deliver consistency. No single mechanism gives you all four properties — ACID is the sum of at least three separate subsystems working together, which is exactly why it's possible for a system to deliver some of the four and not others.</p>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">A junior engineer says "consistency means the database is correct." Using the CHECK-constraint mechanism from this section, construct a concrete example of a transaction that is fully ACID-consistent by the database's definition, yet produces a <em>wrong</em> business result. What does this tell you about what consistency actually guarantees?</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the Consistency block and its distinction between "satisfies declared constraints" and "is correct."</div>
+      </div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">2</span>
+          <span class="qtext">Explain why atomicity and durability share one mechanism (the WAL) while isolation needs a completely separate one (locking or MVCC). What is different about the <em>kind</em> of problem isolation is solving that atomicity/durability are not?</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the build chain and the Enforcement Mechanism block — atomicity/durability are about a single transaction surviving a crash; isolation is about multiple transactions coexisting.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> You know what each letter promises and which subsystem delivers it. What actually happens, step by step, inside the engine when a transaction runs — and what happens when it crashes mid-flight?</div>
+  </section>
+
+  <!-- ══════════════════ §5 ══════════════════ -->
+  <section id="s5">
+    <h2 class="section-title"><span class="num">§5</span> ⚙️ How It Actually Works</h2>
+
+    <h3>The happy path</h3>
+    <ol class="steps">
+      <li><code>BEGIN</code> opens a transaction. The engine assigns it a transaction ID, and — in an MVCC engine — a snapshot of the database as of that instant.</li>
+      <li>Each write inside the transaction is first appended to the <strong>write-ahead log (WAL)</strong>, a sequential, append-only record of the change, <em>before</em> the actual data page is modified. Log-before-data is the entire idea; it's why it's called write-<em>ahead</em>.</li>
+      <li>Concurrency control decides what the transaction may see and whether it may proceed. Under <strong>locking</strong>, it acquires a lock on each row it touches — shared for reads, exclusive for writes — and blocks or aborts if another transaction holds a conflicting lock. Under <strong>MVCC</strong>, it simply reads from its private snapshot and writes a new row version; it never blocks a reader, and never gets blocked by one.</li>
+      <li>On <code>COMMIT</code>, the engine writes a commit record to the WAL and <strong>fsyncs</strong> it to durable storage. This fsync completing is the actual moment "committed" becomes true — not the moment the client's driver call returns, which is a subtlety that matters the instant something goes wrong between those two points.</li>
+      <li>Locks are released (locking engines), or the new row versions become visible to transactions that start afterward (MVCC engines).</li>
+    </ol>
+
+    <div class="mental-model">
+      🗺️ <span class="mm-name">Mental model — The WAL is a diary you write before you act.</span> You write down exactly what you're about to do, then you do it. If the house burns down midway, the diary shows precisely how far you got, so on recovery you know exactly what to redo and what to undo — nothing is ambiguous.
+      <span class="mm-break">Where it breaks down: a diary is written just before acting and the two are loosely coupled in time. The WAL's ordering is stricter than that — the log record must be durably fsynced before the corresponding data page write is considered safe to have happened at all, and a system that skips or delays that fsync for speed (a real, common misconfiguration) has a diary that lies about what it actually recorded.</span>
+    </div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Crash recovery — the log is the source of truth</div>
+      <svg viewBox="0 0 1040 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="crArrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" fill="#6b6861"/>
+          </marker>
+        </defs>
+
+        <text x="20" y="24" font-size="12.5" font-weight="800" fill="#1a1917">WAL (append-only, in commit order) ──────────────────────────▶ time</text>
+
+        <g font-family="SF Mono, Menlo, monospace" font-size="11">
+          <rect x="20" y="36" width="140" height="52" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+          <text x="30" y="56" fill="#1e3a8a">T1 write row A</text>
+          <rect x="160" y="36" width="140" height="52" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.5"/>
+          <text x="170" y="56" fill="#1e3a8a">T1 write row B</text>
+          <rect x="300" y="36" width="140" height="52" fill="#b2f2bb" stroke="#2f9e44" stroke-width="2"/>
+          <text x="310" y="56" fill="#14532d" font-weight="700">T1 COMMIT</text>
+
+          <rect x="440" y="36" width="140" height="52" fill="#ffe8cc" stroke="#e67700" stroke-width="1.5"/>
+          <text x="450" y="56" fill="#7c2d12">T2 write row C</text>
+          <rect x="580" y="36" width="140" height="52" fill="#ffe8cc" stroke="#e67700" stroke-width="1.5"/>
+          <text x="590" y="56" fill="#7c2d12">T2 write row D</text>
+          <rect x="720" y="36" width="140" height="52" fill="#ffe8cc" stroke="#e67700" stroke-width="1.5"/>
+          <text x="730" y="56" fill="#7c2d12">T3 write row E</text>
+          <rect x="860" y="36" width="160" height="52" fill="#ffc9c9" stroke="#c92a2a" stroke-width="2"/>
+          <text x="895" y="68" fill="#7f1d1d" font-weight="800">⚡ CRASH</text>
+        </g>
+
+        <path d="M90,90 L90,110 L370,110 L370,90" stroke="#2f9e44" stroke-width="2" fill="none" marker-end="url(#crArrow)"/>
+        <text x="230" y="128" text-anchor="middle" font-size="11.5" fill="#14532d">T1 has a commit record</text>
+
+        <path d="M510,90 L510,110 L790,110 L790,90" stroke="#c92a2a" stroke-width="2" fill="none" marker-end="url(#crArrow)"/>
+        <text x="650" y="128" text-anchor="middle" font-size="11.5" fill="#7f1d1d">T2 and T3 have NO commit record</text>
+
+        <rect x="30" y="150" width="440" height="70" rx="8" fill="#dcfce7" stroke="#2f9e44" stroke-width="1.5"/>
+        <text x="46" y="172" font-size="12" font-weight="700" fill="#14532d">→ REDO on restart</text>
+        <text x="46" y="192" font-size="11.5" fill="#14532d">Reapply A, B — T1's effects are</text>
+        <text x="46" y="208" font-size="11.5" fill="#14532d">guaranteed durable, exactly once.</text>
+
+        <rect x="510" y="150" width="480" height="70" rx="8" fill="#fee2e2" stroke="#c92a2a" stroke-width="1.5"/>
+        <text x="526" y="172" font-size="12" font-weight="700" fill="#7f1d1d">→ UNDO on restart</text>
+        <text x="526" y="192" font-size="11.5" fill="#7f1d1d">As if T2, T3 never happened. No commit record</text>
+        <text x="526" y="208" font-size="11.5" fill="#7f1d1d">in the log means the client was never told "committed."</text>
+
+        <rect x="20" y="238" width="1000" height="50" rx="8" fill="#f8fafc" stroke="#e5e3de"/>
+        <text x="36" y="258" font-size="11.5" font-weight="700" fill="#1a1917">THE INVARIANT: the log — not the data pages — is the source of truth after a crash.</text>
+        <text x="36" y="276" font-size="11" fill="#3f3f46">A data page can be half-written; a committed transaction's log record cannot be, because it was fsynced before success was ever reported.</text>
+      </svg>
+      <p class="caption">Redo what has a commit record. Undo everything else. That's the whole recovery algorithm.</p>
+    </div>
+
+    <h3>Isolation, concretely — locking vs. MVCC</h3>
+    <p>Two-phase locking (2PL) has a growing phase, where a transaction only acquires locks, and a shrinking phase, where it only releases them, never both — this ordering is what guarantees serializability under locking. It is correct, but it has a direct cost: concurrent writers to the same row block each other, and two transactions that each hold a lock the other needs <strong>deadlock</strong>, detected via a wait-for graph and resolved by aborting one transaction as the "victim." MVCC sidesteps reader/writer blocking entirely — a reader always sees a consistent snapshot and never waits on a writer — but it moves the cost to commit time: the engine must check whether a concurrent transaction wrote something that conflicts with what this transaction read, and if so, abort one of them. That check is exactly where isolation-level differences come from, and it's why MVCC engines can still permit anomalies that pure locking-based serializability would prevent.</p>
+
+    <div class="mental-model">
+      🗺️ <span class="mm-name">Mental model — MVCC is a library where every reader gets their own photocopy.</span> Instead of one shared shelf that a reader and a writer both fight over, each transaction that starts gets a private, consistent photocopy of the book as it existed at that instant. Writers make a new edition without touching anyone's photocopy, so no reader is ever blocked.
+      <span class="mm-break">Where it breaks down: photocopies never interact with each other, but real MVCC transactions do — at commit time, the engine must reconcile the new edition against what other transactions have since written, and that reconciliation step is exactly where write skew slips through if the engine only checks for direct row conflicts and not logical ones.</span>
+    </div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">The row-version chain, structurally</div>
+      <svg viewBox="0 0 1040 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="vcArrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#6b6861"/>
+          </marker>
+          <marker id="vcArrowDash" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" fill="#7c3aed"/>
+          </marker>
+        </defs>
+
+        <text x="20" y="24" font-size="12.5" font-weight="800" fill="#1a1917">Row "inventory:sku-42" — version chain over time</text>
+
+        <g font-family="SF Mono, Menlo, monospace" font-size="11">
+          <rect x="20" y="40" width="200" height="72" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.8"/>
+          <text x="34" y="60" font-weight="700" fill="#1e3a8a">v1  qty=100</text>
+          <text x="34" y="78" fill="#1e3a8a">committed by T1</text>
+
+          <line x1="220" y1="76" x2="256" y2="76" stroke="#6b6861" stroke-width="2" marker-end="url(#vcArrow)"/>
+
+          <rect x="262" y="40" width="200" height="72" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.8"/>
+          <text x="276" y="60" font-weight="700" fill="#1e3a8a">v2  qty=97</text>
+          <text x="276" y="78" fill="#1e3a8a">committed by T5</text>
+
+          <line x1="462" y1="76" x2="498" y2="76" stroke="#6b6861" stroke-width="2" marker-end="url(#vcArrow)"/>
+
+          <rect x="504" y="40" width="200" height="72" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.8"/>
+          <text x="518" y="60" font-weight="700" fill="#1e3a8a">v3  qty=95</text>
+          <text x="518" y="78" fill="#1e3a8a">committed by T9</text>
+
+          <line x1="704" y1="76" x2="740" y2="76" stroke="#6b6861" stroke-width="2" marker-end="url(#vcArrow)"/>
+
+          <rect x="746" y="40" width="220" height="72" rx="8" fill="#b2f2bb" stroke="#2f9e44" stroke-width="2"/>
+          <text x="760" y="60" font-weight="700" fill="#14532d">v4 (latest)  qty=94</text>
+          <text x="760" y="78" fill="#14532d">committed by T14</text>
+        </g>
+
+        <path d="M120,150 L120,116" stroke="#7c3aed" stroke-width="2" fill="none" marker-end="url(#vcArrowDash)" stroke-dasharray="4 3"/>
+        <text x="120" y="168" text-anchor="middle" font-size="11" fill="#4c1d95">T3's snapshot</text>
+        <text x="120" y="184" text-anchor="middle" font-size="10.5" fill="#6b6861">(began before T5 — sees v1)</text>
+
+        <path d="M362,150 L362,116" stroke="#7c3aed" stroke-width="2" fill="none" marker-end="url(#vcArrowDash)" stroke-dasharray="4 3"/>
+        <text x="362" y="168" text-anchor="middle" font-size="11" fill="#4c1d95">T7's snapshot</text>
+        <text x="362" y="184" text-anchor="middle" font-size="10.5" fill="#6b6861">(began after T5, before T9 — sees v2)</text>
+
+        <path d="M856,150 L856,116" stroke="#2f9e44" stroke-width="2" fill="none" marker-end="url(#vcArrowDash)" stroke-dasharray="4 3"/>
+        <text x="856" y="168" text-anchor="middle" font-size="11" fill="#14532d">T15 reads latest</text>
+        <text x="856" y="184" text-anchor="middle" font-size="10.5" fill="#6b6861">committed version — v4</text>
+
+        <rect x="20" y="204" width="1000" height="46" rx="8" fill="#f8fafc" stroke="#e5e3de"/>
+        <text x="36" y="224" font-size="11.5" fill="#1a1917">Each transaction reads the newest version committed before its OWN snapshot began. Older versions are retained only while an active snapshot might still need them.</text>
+        <text x="36" y="242" font-size="11.5" fill="#c92a2a">⚠ This is exactly why write skew is possible: T3 and T7 each read a DIFFERENT, individually-valid version and neither ever sees the other's write — no row-level conflict exists to detect.</text>
+      </svg>
+      <p class="caption">MVCC gives every transaction a consistent view — but "consistent for me" is not the same as "consistent with everyone else."</p>
+    </div>
+
+    <h3>Failure and edge cases</h3>
+    <ul class="plain">
+      <li><strong>Deadlock.</strong> Two transactions each hold a lock the other is waiting for. The engine detects the cycle in its wait-for graph and aborts one transaction (the "victim") to break it — the aborted transaction must be retried by the application, which is why retry logic around transactions is normal, not a code smell.</li>
+      <li><strong>Phantom reads.</strong> A range query re-run inside the same transaction returns a different set of rows because a concurrent transaction inserted a new row matching the predicate. Row-level locking doesn't prevent this — you locked the rows that existed, not the ones that didn't yet — which is why preventing it requires range or next-key locking.</li>
+      <li><strong>Write skew under snapshot isolation.</strong> Two transactions each read overlapping data, each makes a decision that is valid against what <em>they</em> read, and the combined effect violates an invariant that neither one individually violated. (Classic example: two doctors on call, each independently checks "am I the last one on call" and, seeing a colleague still listed, takes themselves off — both do this concurrently, and the shift ends with nobody on call.) Snapshot isolation, including MVCC as commonly implemented, does <strong>not</strong> prevent this by default; true serializable snapshot isolation (SSI) does, at a real cost in aborted-and-retried transactions.</li>
+      <li><strong>fsync lies.</strong> Some storage layers, drivers, or misconfigured settings acknowledge a write as durable before it is actually flushed to non-volatile media. This silently breaks durability in a way that is invisible until the exact moment a crash exposes it — there is no error, no log line, just data that was reported "committed" and then wasn't there after recovery.</li>
+      <li><strong>Cross-shard atomicity.</strong> A transaction touching rows on two different shards cannot rely on one WAL or one lock table — there isn't one. This is precisely why 8.3 named transactional fan-out as capped "at a single database or shard": single-node atomicity does not extend across a partition boundary without an explicit protocol.</li>
+    </ul>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">Trace exactly what the recovery process does with a transaction that wrote three rows, had its commit record written to the WAL, and then the machine crashed one second later before any of the three data pages were flushed to disk. Is any data lost? Why or why not?</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the crash-recovery diagram and its invariant statement.</div>
+      </div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">2</span>
+          <span class="qtext">A team implements "check current stock, then decrement it" using MVCC snapshot isolation, assuming that's strong enough to prevent overselling under concurrent checkouts. Explain precisely why it isn't, using the write-skew definition above, and name the isolation level that would actually prevent it.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the write-skew bullet in Failure and edge cases and map "check stock / decrement" onto the two-doctors example.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> You know both mechanisms and exactly how each fails. So in a live design, which isolation level and which scope do you actually pick — and what are you giving up?</div>
+  </section>
+
+  <!-- ══════════════════ §6 ══════════════════ -->
+  <section id="s6">
+    <h2 class="section-title"><span class="num">§6</span> ⚖️ The Decision — When, and What It Costs</h2>
+
+    <p>The default is not "the strongest isolation level everywhere" — it's the weakest level that still prevents the specific anomaly your workload can't tolerate, on the smallest scope you can keep it on. Full Serializable is correct everywhere, but it is not free: it costs either heavy locking or a real rate of serialization failures that the client must catch and retry, and paying that cost on a read-heavy report that doesn't need it is a needless throughput tax.</p>
+
+    <p>Three signals decide it. <strong>Scope of the invariant</strong> is the first and strongest: if the invariant lives on one row (don't oversell this SKU), a targeted lock (<code>SELECT ... FOR UPDATE</code>) or a conditional write is usually enough; if it spans multiple rows or tables with a relationship between them (an inventory count and an order total that must stay consistent with each other), you need an isolation level that actually prevents cross-row anomalies, not just per-row ones. <strong>Write-skew tolerance</strong> is the second: if two concurrent transactions could each individually look valid while jointly violating a rule — the two-doctors pattern — Repeatable Read/Snapshot Isolation is not enough, and you need Serializable (or explicit locking that closes the specific gap). <strong>Whether the transaction can stay on one node</strong> is the third and can be decisive on its own: single-node ACID does not cross a shard boundary for free, and the choice there isn't about isolation level at all — it's whether to redesign so the invariant's writes are colocated on one partition (cheap, and the strongly preferred fix), or to pay for two-phase commit (correct, but blocks every participant if the coordinator fails after prepare) or fall back to a saga — an explicit sequence of local transactions with compensating actions — which gives up atomicity for availability and requires the in-between state to be visible and recoverable, not hidden.</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Decision tree</div>
+      <svg viewBox="0 0 1040 560" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="dtArrow2" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" fill="#6b6861"/>
+          </marker>
+        </defs>
+
+        <rect x="330" y="14" width="380" height="56" rx="28" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+        <text x="520" y="38" text-anchor="middle" font-size="12.5" font-weight="700" fill="#4c1d95">Does the invariant span more than one</text>
+        <text x="520" y="56" text-anchor="middle" font-size="12.5" font-weight="700" fill="#4c1d95">row/table that must never be half-done?</text>
+
+        <path d="M380,72 L200,110" stroke="#6b6861" stroke-width="2" fill="none" marker-end="url(#dtArrow2)"/>
+        <text x="270" y="86" font-size="11.5" font-weight="800" fill="#c92a2a">no</text>
+        <path d="M660,72 L840,110" stroke="#6b6861" stroke-width="2" fill="none" marker-end="url(#dtArrow2)"/>
+        <text x="800" y="86" font-size="11.5" font-weight="800" fill="#2f9e44">yes</text>
+
+        <rect x="30" y="114" width="300" height="76" rx="10" fill="#dcfce7" stroke="#2f9e44" stroke-width="2"/>
+        <text x="180" y="138" text-anchor="middle" font-size="13" font-weight="800" fill="#14532d">READ COMMITTED</text>
+        <text x="180" y="157" text-anchor="middle" font-size="11.5" fill="#14532d">Usually enough. Add a targeted row</text>
+        <text x="180" y="175" text-anchor="middle" font-size="11.5" fill="#14532d">lock only if a specific race is found.</text>
+
+        <rect x="700" y="114" width="320" height="46" rx="23" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+        <text x="860" y="143" text-anchor="middle" font-size="12.5" font-weight="700" fill="#4c1d95">Can it stay on ONE shard/partition?</text>
+
+        <path d="M760,162 L620,200" stroke="#6b6861" stroke-width="2" fill="none" marker-end="url(#dtArrow2)"/>
+        <text x="675" y="176" font-size="11.5" font-weight="800" fill="#c92a2a">no</text>
+        <path d="M960,162 L960,200" stroke="#6b6861" stroke-width="2" fill="none" marker-end="url(#dtArrow2)"/>
+        <text x="972" y="184" font-size="11.5" font-weight="800" fill="#2f9e44">yes</text>
+
+        <rect x="380" y="204" width="330" height="94" rx="10" fill="#ffd8a8" stroke="#e67700" stroke-width="2"/>
+        <text x="545" y="228" text-anchor="middle" font-size="13" font-weight="800" fill="#7c2d12">REDESIGN / 2PC / SAGA</text>
+        <text x="545" y="247" text-anchor="middle" font-size="11.5" fill="#7c2d12">Colocate the data if you can (cheap fix).</text>
+        <text x="545" y="265" text-anchor="middle" font-size="11.5" fill="#7c2d12">Else 2PC (blocks on coordinator failure)</text>
+        <text x="545" y="283" text-anchor="middle" font-size="11.5" fill="#7c2d12">or a saga (give up atomicity, be visible).</text>
+
+        <rect x="760" y="204" width="280" height="60" rx="20" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+        <text x="900" y="228" text-anchor="middle" font-size="12" font-weight="700" fill="#4c1d95">Could two concurrent txns each look</text>
+        <text x="900" y="246" text-anchor="middle" font-size="12" font-weight="700" fill="#4c1d95">valid yet jointly break it (write skew)?</text>
+
+        <path d="M800,266 L680,304" stroke="#6b6861" stroke-width="2" fill="none" marker-end="url(#dtArrow2)"/>
+        <text x="726" y="282" font-size="11.5" font-weight="800" fill="#c92a2a">no</text>
+        <path d="M990,266 L990,304" stroke="#6b6861" stroke-width="2" fill="none" marker-end="url(#dtArrow2)"/>
+        <text x="1002" y="290" font-size="11.5" font-weight="800" fill="#2f9e44">yes</text>
+
+        <rect x="480" y="308" width="290" height="70" rx="10" fill="#dcfce7" stroke="#2f9e44" stroke-width="2"/>
+        <text x="625" y="332" text-anchor="middle" font-size="13" font-weight="800" fill="#14532d">REPEATABLE READ / SNAPSHOT</text>
+        <text x="625" y="352" text-anchor="middle" font-size="11.5" fill="#14532d">Consistent view for the whole txn</text>
+        <text x="625" y="368" text-anchor="middle" font-size="11.5" fill="#14532d">is enough — no write skew risk here.</text>
+
+        <rect x="800" y="308" width="230" height="86" rx="10" fill="#ffd8a8" stroke="#e67700" stroke-width="2.5"/>
+        <text x="915" y="332" text-anchor="middle" font-size="13" font-weight="800" fill="#7c2d12">SERIALIZABLE</text>
+        <text x="915" y="351" text-anchor="middle" font-size="11.5" fill="#7c2d12">Prevents write skew too.</text>
+        <text x="915" y="369" text-anchor="middle" font-size="11.5" fill="#7c2d12">Pay with locking or client</text>
+        <text x="915" y="385" text-anchor="middle" font-size="11" font-style="italic" fill="#e67700">retries on serialization failure</text>
+      </svg>
+      <p class="caption">Weakest level that still holds. Every "denormalize/scale" branch ends by naming what atomicity you gave up.</p>
+    </div>
+
+    <h3>Trade-offs</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>✅ Benefit</th><th>❌ Cost / Limitation</th></tr></thead>
+        <tbody>
+          <tr><td><span class="benefit">Read Committed: cheapest, highest concurrency</span> — never blocks on another transaction's uncommitted data</td><td>Permits non-repeatable reads and phantoms; a "check then act" pattern can race under concurrent writers</td></tr>
+          <tr><td><span class="benefit">Repeatable Read / Snapshot Isolation: consistent view for the whole transaction</span> — no non-repeatable reads, readers never block writers under MVCC</td><td>Still permits write skew — two transactions can each look individually correct and jointly break an invariant neither checked</td></tr>
+          <tr><td><span class="benefit">Serializable: strongest correctness guarantee</span> — behaves as if every transaction ran alone, one after another</td><td>Highest cost: heavy locking, or serialization failures the client must detect and retry; throughput drops under contention</td></tr>
+          <tr><td><span class="benefit">Two-phase commit: real atomicity across shards</span> — all participants commit or all abort</td><td>Blocks every participant if the coordinator dies after the prepare phase; adds at least 2 network round trips per transaction</td></tr>
+          <tr><td><span class="benefit">Saga: no cross-shard blocking, high availability</span> — each step is a local transaction</td><td>Gives up atomicity entirely; requires explicit compensating actions and leaves a real, visible in-between state</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>In production</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>System</th><th>How it applies</th><th>The nuance</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Postgres</strong></td><td>Defaults to Read Committed; Repeatable Read and Serializable are opt-in per transaction (<code>SET TRANSACTION ISOLATION LEVEL SERIALIZABLE</code>)</td><td>Its Serializable implementation is Serializable Snapshot Isolation (SSI) — it detects the <em>possibility</em> of a serialization anomaly and aborts one transaction rather than locking pessimistically, so the client must be ready to retry</td></tr>
+          <tr><td><strong>MySQL InnoDB</strong></td><td>Defaults to Repeatable Read — stricter than the SQL standard's own definition of that level</td><td>InnoDB's Repeatable Read uses next-key locking specifically to also prevent phantom reads, a documented deviation most engineers don't realize is non-standard</td></tr>
+          <tr><td><strong>Google Spanner</strong></td><td>Offers external consistency — effectively global Serializable — across a globally distributed, sharded database</td><td>Achieved via TrueTime, a bounded-uncertainty global clock; the database waits out the clock uncertainty window on commit, trading a few milliseconds of latency for a correctness guarantee most systems can't offer at all</td></tr>
+          <tr><td><strong>DynamoDB transactions</strong></td><td><code>TransactWriteItems</code> gives all-or-nothing atomicity across up to 25 items / 4MB, within one region</td><td>Costs roughly 2x the read/write capacity units of the equivalent non-transactional calls; it is a bounded, priced feature, not an ambient property of the store</td></tr>
+          <tr><td><strong>Sagas (order-fulfillment pipelines)</strong></td><td>Used when a business process spans multiple services/databases that can't share one transaction — reserve inventory, charge payment, ship — each a local commit, with a compensating "release inventory" if a later step fails</td><td>Not atomic in the ACID sense at all; correctness depends on every step having a working compensating action and the in-between state being observable, not on the database enforcing anything</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">A ticket-booking system needs "never sell the same seat twice" under a burst of concurrent purchase attempts at on-sale time, where every seat lives in one regional database. Which isolation level (or explicit locking strategy) would you use, which specific anomaly does it close, and what do you do differently if the venue's seats are later sharded across two regional databases?</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the three signals at the top of §6 and the decision tree.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> You can defend the choice. How does an interviewer actually put pressure on it?</div>
+  </section>
+
+  <!-- ══════════════════ §7 ══════════════════ -->
+  <section id="s7">
+    <h2 class="section-title"><span class="num">§7</span> 🎯 In the Interview</h2>
+
+    <h3>When an interviewer asks / says</h3>
+    <ul class="trigger-list">
+      <li>"Walk me through what happens if the database crashes right after this write."</li>
+      <li>"How do you make sure two concurrent requests don't both book the last seat / oversell the last item?"</li>
+      <li>"What isolation level would you use here, and why?"</li>
+      <li>"This transaction touches data on two different shards — how do you keep it atomic?"</li>
+    </ul>
+
+    <h3>What you say / do</h3>
+    <p>This lands in the <strong>data model</strong> phase the moment a write touches more than one row or table with an invariant between them — right after you've decided where each fact lives (8.3) — and it resurfaces hard in the <strong>deep dive</strong> the instant the interviewer adds concurrency or a crash to the scenario. Name the isolation level explicitly; "I'd wrap it in a transaction" with no level named answers nothing, because the anomalies each level permits are specific and different. State the mechanism, price the cost unprompted, and name the condition that would change your answer.</p>
+
+    <h3>The trade-off statement (memorize this pattern)</h3>
+    <div class="tradeoff-box">"For decrementing inventory on checkout, I'd wrap the stock read and the decrement in a single Postgres transaction using <code>SELECT ... FOR UPDATE</code> rather than relying on the default Read Committed isolation, because under Read Committed two concurrent checkouts can each read the same stock count before either commits, and both proceed to decrement it — a lost update that oversells the item. <code>FOR UPDATE</code> takes a row lock at read time, so the second transaction blocks until the first commits and is forced to read the updated count. I'm trading some serialization on that one inventory row — a very popular item can become a throughput bottleneck at checkout — for the guarantee that we never oversell. If this were a low-stakes counter, like a 'people viewing this' badge where occasional inaccuracy is fine, I wouldn't pay for the lock at all."</div>
+
+    <h3>A second trade-off variant — when the interviewer pushes it across shards</h3>
+    <div class="tradeoff-box">"If that inventory row and the order record end up on different shards — say inventory is sharded by warehouse and orders are sharded by customer — I can't get this from a single-node transaction at all; there's no shared WAL or lock table across them. My first move is to try to avoid the problem: keep the invariant's writes colocated on one shard if the data model allows it, since that's the cheap fix. If that's genuinely not possible, I'd use a saga — reserve inventory, then charge payment, then confirm the reservation — with an explicit compensating 'release inventory' step if payment fails. I'm giving up atomicity for availability: there's a real window where inventory is reserved but payment hasn't succeeded, and I'd make that window observable in the order status rather than pretend the operation is instantaneous."</div>
+
+    <h3>⚠️ Traps</h3>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "I'll just wrap it in a transaction." — and stopping there, with no isolation level named.</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> This says nothing on its own. Default isolation differs by engine — Postgres and SQL Server default to Read Committed, MySQL InnoDB defaults to Repeatable Read — and each level permits a specific, nameable anomaly. A complete answer names the level and the exact anomaly it's closing.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "ACID means my data will always be correct."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Consistency (the C) only enforces the invariants you declared — <code>CHECK</code>, <code>FOREIGN KEY</code>, <code>UNIQUE</code> constraints. An application bug that computes the wrong value but never trips a declared constraint commits successfully and is fully "consistent" by the database's own definition. The database enforces your rules; it does not invent correctness.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "Isolation means concurrent transactions can't affect each other at all."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Only Serializable gets close to that. Even snapshot isolation — commonly sold as "the strong one" and the default mental model most candidates reach for — permits write skew: two transactions can each look individually valid against what they read and still jointly violate an invariant neither one checked.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "NoSQL means no transactions."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Increasingly false — DynamoDB, MongoDB, and Cassandra (lightweight transactions) all offer some transactional scope. The real distinction from a relational engine isn't presence or absence, it's that the scope is usually bounded — a single partition, or a capped item count — rather than open-ended.</div></div>
+    </div>
+
+    <div class="checkpoint gate">
+      <div class="cp-title">🚨 Checkpoint — adversarial stress test (the gate)</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">You built the checkout decrement using <code>SELECT ... FOR UPDATE</code> on a single Postgres instance and it works. The interviewer says: <em>"We're sharding this database by product category because write throughput on one instance can't keep up. 'Decrement inventory' and 'record the order' now live on different shards. Walk me through exactly what you lose, how you'd detect a partial failure, and what you'd change in the design so the system can never show an order as confirmed with no inventory actually reserved."</em></span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 A complete answer covers: you lose single-node atomicity across the two writes, since there's no shared WAL or lock table between shards; the real fix is a saga with an explicit intermediate "reserved" state rather than assuming a bare two-phase commit is available or cheap; detection is a reconciliation job that finds reservations past a timeout with no matching confirmed order; and the honest acknowledgment that the design is now eventually consistent, not atomic — the in-between state must be made visible and recoverable, not hidden as if the operation were instantaneous. If you can't answer this cleanly, you are not done.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> Can you combine what you've learned across sections, not just recall each one?</div>
+  </section>
+
+  <!-- ══════════════════ §8 ══════════════════ -->
+  <section id="s8">
+    <h2 class="section-title"><span class="num">§8</span> 🧪 Mastery Gate</h2>
+    <div class="callout callout-quote">Synthesis only. Each question requires combining two or more sections.</div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">1</span>
+        <span class="qtext">Using the concurrent checkout / inventory-decrement scenario, explain which of the four ACID properties is actually protecting you from overselling, trace the specific mechanism (locking or MVCC) that enforces it, and state the decision signal that would tell you the cost of that protection isn't worth paying (name a concrete example where it wouldn't be).</span>
+        <span class="quiz-toggle">▼ Hint</span>
+      </div>
+      <div class="quiz-hint">💡 Sections combined: §3 + §5 + §6.</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">2</span>
+        <span class="qtext">8.3 named "transactional fan-out" as the strongest mechanism for keeping a denormalized copy in sync, but noted it caps you at a single database or shard. Explain exactly which ACID property is what makes that fan-out mechanism safe in the first place, and precisely what happens to that safety guarantee the moment the source row and the copy move onto different shards.</span>
+        <span class="quiz-toggle">▼ Hint</span>
+      </div>
+      <div class="quiz-hint">💡 Sections combined: §4 + §6 + subtopic 8.3.</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">3</span>
+        <span class="qtext">Design the write path for a ride-sharing app's driver-matching system, which must never assign the same driver to two concurrent ride requests. Name the isolation mechanism, the isolation level or explicit locking strategy you'd use, the trade-off you're accepting under a surge of simultaneous requests, and what changes if drivers in different cities live on different regional shards.</span>
+        <span class="quiz-toggle">▼ Hint</span>
+      </div>
+      <div class="quiz-hint">💡 Sections combined: §5 + §6, applied to a system not mentioned anywhere in this doc.</div>
+    </div>
+
+    <h3>Mastery criteria — tick only what you can demonstrate on demand</h3>
+    <ul class="checklist">
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can state all four ACID properties and give a concrete, distinct example of what breaks when each one alone is violated</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can name the engine mechanisms (write-ahead log, locking/MVCC, constraints) that enforce the four properties and say which mechanism enforces which property</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can compare Read Committed, Repeatable Read/Snapshot, and Serializable by the specific anomaly each one does and does not prevent</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can explain why crossing a shard boundary breaks single-node atomicity and name at least one alternative (two-phase commit or a saga) along with its cost</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can choose an isolation level or explicit locking strategy for a novel concurrent-write scenario and justify it against the specific anomaly it prevents</span></li>
+    </ul>
+
+    <div class="callout callout-tip">💡 <strong>Rule of thumb:</strong> If you can teach it to someone else and field their follow-up questions, you've mastered it.</div>
+  </section>
+
+  <!-- ══════════════════ §9 ══════════════════ -->
+  <section id="s9">
+    <h2 class="section-title"><span class="num">§9</span> 🔗 Connections &amp; Sources</h2>
+
+    <div class="connections">
+      <div class="conn-card">
+        <span class="conn-icon">⬅️</span>
+        <div><div class="conn-label">Builds on</div><strong>8.1 SQL vs. NoSQL</strong> — transaction scope is itself a property of the store, and many NoSQL engines restrict transactional guarantees to a single partition rather than offering them unboundedly. Also <strong>8.3 Data modeling</strong>, which named transactional fan-out as the strongest sync mechanism for a denormalized copy without explaining why it's strongest (atomicity) or why it's limited (single-shard scope) — this subtopic is that explanation.</div>
+      </div>
+      <div class="conn-card">
+        <span class="conn-icon">➡️</span>
+        <div><div class="conn-label">Enables</div><strong>18.x Consensus / Raft</strong>, which generalizes the single-node write-ahead log into a durability guarantee replicated across multiple nodes, using the same redo-from-log idea at a distributed scale. Also <strong>28.6 Alternatives to locking — idempotency and optimistic concurrency</strong>, which builds directly on the locking-vs-MVCC distinction made here.</div>
+      </div>
+      <div class="conn-card">
+        <span class="conn-icon">⚡</span>
+        <div><div class="conn-label">Tension with</div><strong>2.1 CAP theorem</strong> — strong isolation and cross-node atomicity both require coordination, and CAP says you cannot have unconditional coordination available during a network partition. Distributed engines resolve this by either sacrificing some availability to keep strong guarantees (Spanner) or by relaxing isolation/atomicity to keep availability (most eventually-consistent stores, sagas).</div>
+      </div>
+    </div>
+
+    <h3>📚 Further reading</h3>
+    <ul class="reading-list">
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Designing Data-Intensive Applications, Chapter 7 — Transactions</strong> — Kleppmann — the definitive treatment of isolation levels, the anomalies each one permits, and why "ACID" undersells how much variance exists between engines</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>PostgreSQL Documentation — "Write-Ahead Logging (WAL)"</strong> — <a href="https://www.postgresql.org/docs/current/wal-intro.html">docs</a> — how a real engine implements atomicity and durability</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>PostgreSQL Documentation — "Transaction Isolation"</strong> — <a href="https://www.postgresql.org/docs/current/transaction-iso.html">docs</a> — the actual anomaly table per isolation level, with worked examples</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>"A Critique of ANSI SQL Isolation Levels"</strong> — Berenson, Bernstein, et al. — the paper that formally named write skew and showed the ANSI SQL isolation definitions were incomplete</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Google — "Spanner: Google's Globally-Distributed Database"</strong> — the TrueTime paper — external consistency and global serializability at planet scale, and what it costs to get it</span></li>
+    </ul>
+  </section>
+
+  <!-- ══════════════════ §10 ══════════════════ -->
+  <section id="s10">
+    <h2 class="section-title"><span class="num">§10</span> ✍️ My Notes</h2>
+    <div class="callout callout-quote">Personal observations, model answers from drilling sessions, things that confused me. Saved locally in this browser.</div>
+    <textarea class="notes-area" placeholder="Your notes, model answers, and annotations…"></textarea>
+  </section>
+
+</article>
+</main>
+
+<script>
+// TOC active state
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('#toc nav a');
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(a => a.classList.remove('active'));
+      const a = document.querySelector(`#toc nav a[href="#${e.target.id}"]`);
+      if (a) a.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+sections.forEach(s => obs.observe(s));
+
+function toggle(cb) { cb.closest('li').classList.toggle('checked'); }
+function toggleReading(cb) { cb.closest('li').classList.toggle('checked'); }
+function toggleQuiz(q) {
+  const item = q.closest('.quiz-item');
+  item.classList.toggle('open');
+  q.querySelector('.quiz-toggle').textContent = item.classList.contains('open') ? '▲ Hide' : '▼ Hint';
+}
+
+// Notes auto-save
+const notesArea = document.querySelector('.notes-area');
+const NOTES_KEY = 'notes_8_6';
+if (localStorage.getItem(NOTES_KEY)) notesArea.value = localStorage.getItem(NOTES_KEY);
+notesArea.addEventListener('input', () => {
+  try { localStorage.setItem(NOTES_KEY, notesArea.value); } catch(e) {}
+});
+</script>
+</body>
+</html>
