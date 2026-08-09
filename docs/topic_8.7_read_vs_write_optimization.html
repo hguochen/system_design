@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.7 Read vs. Write Optimization</title>
+<style>
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface-alt: #f3f2ef;
+    --border: #e5e3de; --text: #1a1917; --text-muted: #6b6861;
+    --accent: #2563eb; --accent-light: #dbeafe;
+    --green: #16a34a; --green-light: #dcfce7;
+    --red: #dc2626; --red-light: #fee2e2;
+    --yellow: #d97706; --yellow-light: #fef3c7;
+    --purple: #7c3aed; --purple-light: #ede9fe;
+    --orange: #ea580c; --orange-light: #ffedd5;
+    --teal: #0d9488; --teal-light: #ccfbf1;
+    --code-bg: #1e1e2e; --code-text: #cdd6f4;
+    --sidebar-w: 240px; --content-max: 820px;
+    font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; }
+  #toc { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0 48px; z-index: 100; }
+  #toc-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  #toc-header .phase-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-bottom: 6px; }
+  #toc-header h2 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  #toc-header .tier-tag { font-size: 10px; font-weight: 800; letter-spacing: .06em; color: var(--yellow); background: var(--yellow-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-top: 8px; }
+  #toc nav a { display: block; padding: 5px 16px 5px 20px; font-size: 12.5px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+  main { margin-left: var(--sidebar-w); padding: 48px 48px 96px; max-width: calc(var(--sidebar-w) + var(--content-max) + 96px); width: 100%; }
+  article { max-width: var(--content-max); }
+  .doc-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 2px solid var(--border); }
+  .doc-header .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+  .tag-phase { background: var(--accent-light); color: var(--accent); }
+  .tag-topic { background: var(--purple-light); color: var(--purple); }
+  .tag-tier  { background: var(--yellow-light); color: var(--yellow); }
+  .tag-prereq{ background: var(--teal-light); color: var(--teal); }
+  .tag-date  { background: var(--surface-alt);  color: var(--text-muted); }
+  .doc-header h1 { font-size: 30px; font-weight: 800; line-height: 1.25; letter-spacing: -.02em; color: var(--text); }
+  section { margin-bottom: 52px; scroll-margin-top: 32px; }
+  h2.section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -.01em; }
+  h2.section-title .num { font-size: 11px; font-weight: 800; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; letter-spacing: .04em; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 24px 0 10px; }
+  h4 { font-size: 13.5px; font-weight: 700; color: var(--text); margin: 18px 0 8px; }
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+  code { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-family: "SF Mono","Fira Code",Menlo,monospace; font-size: 12.5px; }
+  ul.plain { margin: 0 0 14px 20px; }
+  ul.plain li { margin-bottom: 7px; font-size: 14.5px; line-height: 1.6; }
+  ol.steps { margin: 0 0 14px 22px; }
+  ol.steps li { margin-bottom: 8px; font-size: 14.5px; line-height: 1.6; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 14px; border-left: 3px solid; }
+  .callout-goal  { background: var(--accent-light); border-color: var(--accent); color: #1e40af; }
+  .callout-tip   { background: var(--yellow-light); border-color: var(--yellow); color: #92400e; }
+  .callout-warn  { background: var(--red-light); border-color: var(--red); color: #7f1d1d; }
+  .callout-quote { background: var(--surface-alt); border-color: var(--border); color: var(--text-muted); font-style: italic; }
+  .callout-teal  { background: var(--teal-light); border-color: var(--teal); color: #134e4a; }
+  .the-question { background: var(--surface); border: 2px solid var(--accent); border-radius: 12px; padding: 16px 20px; margin-top: 18px; font-size: 15.5px; }
+  .the-question .lbl { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); display: block; margin-bottom: 5px; }
+  .the-question em { color: var(--text); font-weight: 600; }
+  .definition { background: var(--purple-light); border-left: 4px solid var(--purple); border-radius: 8px; padding: 16px 20px; margin: 18px 0 24px; font-size: 15px; font-weight: 600; color: #4c1d95; line-height: 1.6; }
+  .mental-model { background: var(--teal-light); border-left: 3px solid var(--teal); border-radius: 8px; padding: 14px 18px; margin: 18px 0; font-size: 14px; color: #134e4a; }
+  .mental-model .mm-name { font-weight: 800; }
+  .mental-model .mm-break { display: block; margin-top: 7px; font-style: italic; opacity: .85; }
+  .bridge { background: linear-gradient(90deg, var(--accent-light), transparent); border-left: 4px solid var(--accent); border-radius: 8px; padding: 13px 18px; margin-top: 28px; font-size: 14.5px; color: #1e40af; font-weight: 600; }
+  .bridge .arrow { font-weight: 800; margin-right: 6px; }
+  .checkpoint { background: var(--surface); border: 2px solid var(--green); border-radius: 12px; padding: 16px 20px; margin-top: 26px; }
+  .checkpoint > .cp-title { font-size: 12px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--green); margin-bottom: 12px; display: flex; align-items: center; gap: 7px; }
+  .checkpoint.gate { border-color: var(--red); }
+  .checkpoint.gate > .cp-title { color: var(--red); }
+  .cheatsheet { background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 24px 28px; font-family: "SF Mono","Fira Code","Cascadia Code",Menlo,monospace; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-x: auto; margin-top: 16px; }
+  .cheatsheet .label { color: #cba6f7; font-weight: 700; letter-spacing: .08em; display: block; margin-top: 18px; margin-bottom: 4px; border-bottom: 1px solid #313244; padding-bottom: 3px; }
+  .cheatsheet .label:first-child { margin-top: 0; }
+  .diagram-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 16px 14px; margin: 20px 0 28px; overflow-x: auto; }
+  .diagram-wrap .diagram-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); margin-bottom: 12px; }
+  .diagram-wrap svg { display: block; width: 100%; height: auto; }
+  .diagram-wrap p.caption { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 10px; margin-bottom: 0; font-style: italic; }
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; font-size: 14.5px; line-height: 1.55; }
+  .checklist li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 2px; background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .checklist li.checked .cb { background: var(--green); border-color: var(--green); }
+  .checklist li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .checklist li.checked .text { color: var(--text-muted); text-decoration: line-through; }
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: var(--surface-alt); padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.5; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+  .misconception { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .misconception .wrong { background: var(--red-light); padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; }
+  .misconception .right { padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; color: #065f46; background: var(--green-light); }
+  .misconception .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .quiz-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .quiz-q { padding: 14px 18px; font-size: 14.5px; font-weight: 600; cursor: pointer; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .quiz-q:hover { background: var(--surface-alt); }
+  .quiz-num { flex-shrink: 0; width: 24px; height: 24px; background: var(--accent); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; margin-top: 1px; }
+  .checkpoint.gate .quiz-num { background: var(--red); }
+  .quiz-q .qtext { flex: 1; font-weight: 500; }
+  .quiz-toggle { font-size: 11px; color: var(--text-muted); flex-shrink: 0; margin-top: 3px; }
+  .quiz-hint { display: none; padding: 10px 18px 14px; font-size: 13px; color: #92400e; background: var(--yellow-light); border-top: 1px solid var(--border); line-height: 1.6; }
+  .quiz-item.open .quiz-hint { display: block; }
+  .reading-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .reading-list li { display: flex; align-items: flex-start; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; font-size: 14px; }
+  .reading-list li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 1px; cursor: pointer; background: var(--surface); display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .reading-list li.checked .cb { background: var(--green); border-color: var(--green); }
+  .reading-list li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .reading-list li.checked .rtext { color: var(--text-muted); text-decoration: line-through; }
+  .notes-area { width: 100%; min-height: 200px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: inherit; font-size: 14px; color: var(--text); resize: vertical; line-height: 1.6; }
+  .notes-area:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .connections { display: flex; flex-direction: column; gap: 12px; }
+  .conn-card { display: flex; align-items: flex-start; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14px; }
+  .conn-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .conn-label { font-weight: 700; margin-bottom: 3px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .tradeoff-box { background: var(--surface-alt); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 16px 20px; font-size: 14.5px; font-style: italic; color: var(--text); margin-top: 14px; line-height: 1.65; }
+  .trigger-list { list-style: none; display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+  .trigger-list li { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--orange); border-radius: 8px; padding: 10px 16px; font-size: 14px; font-style: italic; color: var(--text); }
+  @media (max-width: 900px) { #toc { display: none; } main { margin-left: 0; padding: 24px 20px 60px; } }
+</style>
+</head>
+<body>
+
+<aside id="toc">
+  <div id="toc-header">
+    <span class="phase-tag">Phase C · Topic 8</span>
+    <h2>8.7 Read vs. Write Optimization</h2>
+    <span class="tier-tag">🥈 T2 · ~1h</span>
+  </div>
+  <nav>
+    <a href="#s0">🧭 The Question</a>
+    <a href="#s1">📋 Cheatsheet</a>
+    <a href="#s2">🧠 The Mindmap</a>
+    <a href="#s3">🔥 The Problem</a>
+    <a href="#s4">💡 The Core Idea</a>
+    <a href="#s5">⚙️ How It Works</a>
+    <a href="#s6">⚖️ The Decision</a>
+    <a href="#s7">🎯 In the Interview</a>
+    <a href="#s8">🔗 Connections</a>
+    <a href="#s9">✍️ My Notes</a>
+  </nav>
+</aside>
+
+<main>
+<article>
+
+  <header class="doc-header">
+    <div class="meta">
+      <span class="tag tag-phase">Phase C — Data Storage</span>
+      <span class="tag tag-topic">Topic 8 — Database Fundamentals</span>
+      <span class="tag tag-tier">🥈 T2 Depth · ~1h</span>
+      <span class="tag tag-prereq">Prereqs: 8.3, 8.4, 8.2</span>
+      <span class="tag tag-date">_____</span>
+    </div>
+    <h1>8.7 Read vs. Write Optimization</h1>
+  </header>
+
+  <!-- ══════════════════ §0 ══════════════════ -->
+  <section id="s0">
+    <h2 class="section-title"><span class="num">§0</span> 🧭 The Question This Answers</h2>
+
+    <p>8.3 showed one specific trade — denormalize and you buy faster reads by paying at write time. 8.4 showed another — an LSM-tree buys fast writes by paying at read time. Both are instances of the same underlying axis, and this subtopic makes that axis explicit: every storage and schema decision sits on a dial between optimizing the read path and optimizing the write path, and no technique moves that dial for free.</p>
+
+    <p>The tension is that "make the database fast" is not a well-formed goal — fast for which side? A schema, an index, or a storage engine tuned for one side almost always taxes the other, and the craft is knowing your workload's read:write ratio well enough to spend deliberately instead of reflexively reaching for whichever fix fixed the last complaint.</p>
+
+    <div class="the-question">
+      <span class="lbl">The question</span>
+      <em>Given a workload's read:write ratio, which specific lever do you pull to speed up the dominant side, and exactly what does it cost the other side?</em>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> Before naming the levers, what actually goes wrong when someone optimizes without asking which side is hot?</div>
+  </section>
+
+  <!-- ══════════════════ §1 ══════════════════ -->
+  <section id="s1">
+    <h2 class="section-title"><span class="num">§1</span> 📋 Cheatsheet</h2>
+
+    <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds.</div>
+    <div class="callout callout-tip">⏭️ <strong>First time through?</strong> Skip to §2 and come back here for revision.</div>
+
+<div class="cheatsheet"><span class="label">§ 1  WHY IT EXISTS</span>Every read-side speedup — a denormalized column, a covering index, a cache,
+a read replica — adds work or risk to the write path: more copies to keep in
+sync, more index entries to maintain per insert, more cache invalidation to
+trigger, more replicas to propagate to. Every write-side speedup — an
+LSM-tree's sequential append, a write buffer, async replication — defers or
+relocates cost onto the read path: more files to merge on a lookup, staler
+data, more background compaction competing for I/O. Nothing here is free;
+tuning "the database" without naming which side is hot just moves the
+bottleneck somewhere less visible.
+<span class="label">§ 2  WHAT IT IS</span>READ:WRITE RATIO   The primary signal. How many reads happen per write for
+                   this specific access pattern — not the whole system.
+READ-OPTIMIZED     A schema/engine/cache choice that reduces read-time work
+LEVER              by doing more work, or accepting more risk, at write time.
+WRITE-OPTIMIZED    A schema/engine choice that reduces write-time work by
+LEVER              deferring or relocating cost to read time (or to a later,
+                   background process).
+READ AMPLIFICATION How many underlying reads (pages, SSTables, replicas) one
+                   logical read triggers. Rises when writes are optimized.
+WRITE AMPLIFICATION How many physical writes one logical write triggers.
+                    Rises when reads are optimized (8.3).
+<span class="label">§ 3  THE MECHANISM</span>MEASURE THE RATIO   Per access pattern, not per table. A users table can be
+                    read-heavy for profile lookups and write-heavy for a
+                    presence/last-seen column in the same schema.
+PICK THE LEVER      Read-heavy → denormalize (8.3), covering index (8.4),
+                    cache, read replica. Write-heavy → LSM-tree (8.4),
+                    write buffering/batching, async replication.
+PRICE IT            Every lever above has a named cost on the other side —
+                    see §4/§6. If you can't name the cost, you haven't
+                    finished the analysis, you've just picked a fashionable
+                    tool.
+SPLIT IF NEEDED     When one schema can't absorb both costs at extreme
+                    skew, or the two sides need different consistency
+                    guarantees, stop compromising one model — run two
+                    (CQRS) and accept a sync lag between them.
+<span class="label">§ 4  USE / AVOID</span>OPTIMIZE FOR READS when: read:write ratio is high (rule of thumb ≥ ~10:1,
+  strong case past ~100:1 — same threshold as 8.3's denormalization signal)
+  and some staleness or write-side cost is tolerable.
+OPTIMIZE FOR WRITES when: the workload is ingestion-shaped — logs, events,
+  telemetry, metrics — with high sustained write volume and read patterns
+  that are sequential or rare (8.2's OLAP-adjacent shape).
+SPLIT WITH CQRS when: both sides are hot AND need different consistency or
+  query shapes that no single schema serves well.
+AVOID applying a read lever (cache, extra index, denormalized column) to a
+  write-dominant path — you've added fixed per-write overhead to fix a
+  bottleneck that was never on the read side.
+AVOID assuming SQL = read-optimized and NoSQL = write-optimized — the real
+  axis is the storage engine's data structure (B-tree vs. LSM-tree, 8.4)
+  and the schema (8.3), which correlate with but are not defined by the
+  query language.
+<span class="label">§ 5  NUMBERS TO ANCHOR THE DISCUSSION</span>~10:1 read:write is the rough point where a read lever starts paying for
+  itself; ~100:1+ is where 8.3's denormalization case gets strong.
+LSM-tree writes are O(1) sequential appends to a memtable + commit log;
+  B-tree writes are O(log n) random-access page writes that can trigger
+  page splits. This is why Cassandra/RocksDB choose LSM for high ingest.
+Read amplification on an LSM-tree without mitigation: one point read may
+  check the memtable plus every un-compacted SSTable — bounded in practice
+  by Bloom filters (8.10) and compaction, not eliminated by them.
+Async replication lag is typically milliseconds to low seconds; that lag
+  is the exact price of scaling reads horizontally via read replicas
+  without touching write throughput at all.
+<span class="label">§ 6  INTERVIEW TRIGGERS + GOTCHA</span>→ "This does 50k writes/sec, few reads"         → LSM-tree engine, write
+                                                   buffering, defer indexing
+→ "This page is read a million times a day,     → denormalize, cache,
+   written a few times a day"                     covering index, replica
+→ "How do you scale reads without touching       → read replicas, or a
+   the write path?"                               separate read model (CQRS)
+→ "Why Cassandra over Postgres here?"            → LSM vs. B-tree write
+                                                   path, named explicitly
+GOTCHA: Naming a lever without naming which side pays for it. "We'd add a
+  cache" is not an answer until you've said what the cache does to the
+  write path (invalidation) and what happens to reads when it's a write-
+  heavy workload the cache barely helps.</div>
+  </section>
+
+  <!-- ══════════════════ §2 ══════════════════ -->
+  <section id="s2">
+    <h2 class="section-title"><span class="num">§2</span> 🧠 The Mindmap</h2>
+    <div class="callout callout-quote">The picture to hold in your head while you study.</div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Concept map — read vs. write optimization</div>
+      <svg viewBox="0 0 1060 660" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="mmArrow7" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" fill="#b8b4ac"/>
+          </marker>
+        </defs>
+
+        <g stroke="#b8b4ac" stroke-width="1.8" fill="none" marker-end="url(#mmArrow7)">
+          <path d="M530,276 L155,192"/>
+          <path d="M530,276 L530,192"/>
+          <path d="M530,276 L905,192"/>
+          <path d="M530,384 L315,468"/>
+          <path d="M530,384 L745,468"/>
+        </g>
+
+        <!-- centre -->
+        <ellipse cx="530" cy="330" rx="188" ry="54" fill="#a5d8ff" stroke="#1971c2" stroke-width="2.5"/>
+        <text x="530" y="322" text-anchor="middle" font-size="15.5" font-weight="800" fill="#0b3d66">READ vs. WRITE OPTIMIZATION</text>
+        <text x="530" y="346" text-anchor="middle" font-size="13" font-style="italic" fill="#1971c2">"which side pays for the speedup?"</text>
+
+        <!-- TOP LEFT : the signal -->
+        <rect x="20" y="20" width="270" height="172" rx="10" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+        <text x="36" y="45" font-size="13.5" font-weight="800" fill="#1e3a8a">📏 THE SIGNAL</text>
+        <text x="36" y="72"  font-size="12.5" fill="#1e3a8a">read:write ratio</text>
+        <text x="36" y="95"  font-size="12.5" fill="#1e3a8a">per access pattern,</text>
+        <text x="36" y="118" font-size="12.5" fill="#1e3a8a">not per table</text>
+        <text x="36" y="141" font-size="12.5" fill="#1e3a8a">staleness tolerance</text>
+        <text x="36" y="170" font-size="11.5" font-style="italic" fill="#3b5bdb">measure first</text>
+
+        <!-- TOP CENTRE : read-optimized levers -->
+        <rect x="395" y="20" width="270" height="172" rx="10" fill="#c3fae8" stroke="#0ca678" stroke-width="2"/>
+        <text x="411" y="45" font-size="13.5" font-weight="800" fill="#134e4a">📖 READ-OPTIMIZED LEVERS</text>
+        <text x="411" y="72"  font-size="12.5" fill="#134e4a">denormalize (8.3)</text>
+        <text x="411" y="95"  font-size="12.5" fill="#134e4a">covering index (8.4)</text>
+        <text x="411" y="118" font-size="12.5" fill="#134e4a">cache (Topic 5)</text>
+        <text x="411" y="141" font-size="12.5" fill="#134e4a">read replica</text>
+        <text x="411" y="170" font-size="11.5" font-style="italic" fill="#0ca678">pay at write time</text>
+
+        <!-- TOP RIGHT : write-optimized levers -->
+        <rect x="770" y="20" width="270" height="172" rx="10" fill="#ffd8a8" stroke="#e67700" stroke-width="2"/>
+        <text x="786" y="45" font-size="13.5" font-weight="800" fill="#7c2d12">✍️ WRITE-OPTIMIZED LEVERS</text>
+        <text x="786" y="72"  font-size="12.5" fill="#7c2d12">LSM-tree (8.4)</text>
+        <text x="786" y="95"  font-size="12.5" fill="#7c2d12">write buffer / batching</text>
+        <text x="786" y="118" font-size="12.5" fill="#7c2d12">async replication</text>
+        <text x="786" y="141" font-size="12.5" fill="#7c2d12">defer index maintenance</text>
+        <text x="786" y="170" font-size="11.5" font-style="italic" fill="#e67700">pay at read time</text>
+
+        <!-- BOTTOM LEFT : the cost that moves -->
+        <rect x="180" y="468" width="270" height="172" rx="10" fill="#ffc9c9" stroke="#c92a2a" stroke-width="2"/>
+        <text x="196" y="493" font-size="13.5" font-weight="800" fill="#7f1d1d">⚖️ THE COST THAT MOVES</text>
+        <text x="196" y="520" font-size="12.5" fill="#7f1d1d">write amplification</text>
+        <text x="196" y="543" font-size="12.5" fill="#7f1d1d">read amplification</text>
+        <text x="196" y="566" font-size="12.5" fill="#7f1d1d">nothing eliminated,</text>
+        <text x="196" y="589" font-size="12.5" fill="#7f1d1d">only relocated</text>
+        <text x="196" y="618" font-size="11.5" font-style="italic" fill="#c92a2a">the bill always arrives</text>
+
+        <!-- BOTTOM RIGHT : CQRS split -->
+        <rect x="610" y="468" width="270" height="172" rx="10" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+        <text x="626" y="493" font-size="13.5" font-weight="800" fill="#4c1d95">🔀 CQRS — THE SPLIT</text>
+        <text x="626" y="520" font-size="12.5" fill="#4c1d95">separate read + write models</text>
+        <text x="626" y="543" font-size="12.5" fill="#4c1d95">sync lag is the price</text>
+        <text x="626" y="566" font-size="12.5" fill="#4c1d95">used at extreme skew,</text>
+        <text x="626" y="589" font-size="12.5" fill="#4c1d95">not by default</text>
+        <text x="626" y="618" font-size="11.5" font-style="italic" fill="#7c3aed">the dial's most extreme setting</text>
+      </svg>
+      <p class="caption">Measure the signal first — everything else is choosing, and pricing, a lever.</p>
+    </div>
+
+    <p><strong>How to read it:</strong> left to right is the argument. You start at <strong>the signal</strong> — measure before you pick anything — then choose from either <strong>read-optimized</strong> or <strong>write-optimized levers</strong> depending on which side is hot; either choice creates <strong>the cost that moves</strong> to the other side; and when that cost gets too large for one schema to absorb on both sides at once, <strong>CQRS</strong> removes the compromise by splitting the model entirely.</p>
+  </section>
+
+  <!-- ══════════════════ §3 ══════════════════ -->
+  <section id="s3">
+    <h2 class="section-title"><span class="num">§3</span> 🔥 The Problem</h2>
+
+    <p>Left unexamined, "optimize the database" collapses into optimizing for whichever side is currently making noise — usually reads, because a slow page load is what a user notices and files a ticket about. So the instinctive move is to add an index for every slow query, denormalize every join that shows up in a profiler, and wrap a cache around anything read twice. Each of these fixes is individually correct in isolation and collectively dangerous, because every one of them adds fixed cost to every write: one more index to update, one more copy to keep in sync, one more cache entry to invalidate. On a read-heavy table this is a good trade. On a write-heavy table — an events table, an activity log, a metrics ingestion path — the same fixes make writes slower without meaningfully helping reads, because reads were never the bottleneck.</p>
+
+    <p>The reverse mistake is just as common and less visible: a team picks a write-optimized engine (an LSM-tree store, an append-only log) because "we have a lot of writes," without checking whether reads against that same data are also frequent and latency-sensitive. They then discover that point reads against an LSM-tree must check the in-memory memtable and potentially several on-disk SSTables before compaction has caught up — read amplification they didn't budget for, because the team asked "how do we handle the writes" and never asked "what does this cost our reads."</p>
+
+    <p>The insight that resolves both mistakes is the same one 8.3 and 8.4 already demonstrated separately: no technique removes work, it relocates it across the read/write boundary. The only question worth asking before reaching for any lever is which side of <em>this specific access pattern's</em> ratio is dominant, because the same table can be read-heavy for one query and write-heavy for another.</p>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">A team adds a cache in front of a table that receives roughly equal reads and writes, and cache hit rate improves latency in staging. In production the write path gets measurably slower and overall throughput drops. Explain what happened using the read/write relocation framing, not just "caching has overhead."</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the second paragraph — the reverse mistake — and the closing insight about relocation, not elimination.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> If cost always relocates rather than disappears, what's the actual menu of levers on each side, and how do they connect to what you already know from 8.3 and 8.4?</div>
+  </section>
+
+  <!-- ══════════════════ §4 ══════════════════ -->
+  <section id="s4">
+    <h2 class="section-title"><span class="num">§4</span> 💡 The Core Idea</h2>
+
+    <div class="definition">Read/write optimization is the practice of identifying which side of a workload's read:write ratio is dominant for a given access pattern, and deliberately choosing a schema, index, cache, or storage-engine technique that relocates cost onto the non-dominant side — because every such technique moves work across the read/write boundary rather than eliminating it.</div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">The build chain</div>
+      <svg viewBox="0 0 1000 180" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="bcArrow7" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#7c3aed"/>
+          </marker>
+        </defs>
+        <g>
+          <rect x="10" y="30" width="220" height="58" rx="9" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+          <text x="120" y="55" text-anchor="middle" font-size="12.5" font-weight="800" fill="#1e3a8a">RATIO IS</text>
+          <text x="120" y="73" text-anchor="middle" font-size="12.5" font-weight="800" fill="#1e3a8a">THE SIGNAL</text>
+          <text x="120" y="108" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">because you can't</text>
+          <text x="120" y="124" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">choose a lever</text>
+          <text x="120" y="140" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">blind</text>
+        </g>
+        <line x1="236" y1="59" x2="256" y2="59" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow7)"/>
+        <g>
+          <rect x="262" y="30" width="220" height="58" rx="9" fill="#c3fae8" stroke="#0ca678" stroke-width="2"/>
+          <text x="372" y="59" text-anchor="middle" font-size="12.5" font-weight="800" fill="#134e4a">LEVERS PER SIDE</text>
+          <text x="372" y="108" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">therefore each</text>
+          <text x="372" y="124" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">lever pushes cost</text>
+          <text x="372" y="140" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">to the OTHER side</text>
+        </g>
+        <line x1="488" y1="59" x2="508" y2="59" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow7)"/>
+        <g>
+          <rect x="514" y="30" width="220" height="58" rx="9" fill="#ffc9c9" stroke="#c92a2a" stroke-width="2"/>
+          <text x="624" y="55" text-anchor="middle" font-size="12" font-weight="800" fill="#7f1d1d">COST NEVER</text>
+          <text x="624" y="73" text-anchor="middle" font-size="12" font-weight="800" fill="#7f1d1d">DISAPPEARS</text>
+          <text x="624" y="108" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">so at extreme or</text>
+          <text x="624" y="124" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">divergent skew, the</text>
+          <text x="624" y="140" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">bill has to land</text>
+        </g>
+        <line x1="740" y1="59" x2="760" y2="59" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow7)"/>
+        <g>
+          <rect x="766" y="30" width="224" height="58" rx="9" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+          <text x="878" y="55" text-anchor="middle" font-size="12" font-weight="800" fill="#4c1d95">CQRS SPLITS</text>
+          <text x="878" y="73" text-anchor="middle" font-size="12" font-weight="800" fill="#4c1d95">THE MODEL</text>
+          <text x="878" y="108" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">when one schema</text>
+          <text x="878" y="124" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">can't absorb both —</text>
+          <text x="878" y="140" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">run two instead</text>
+        </g>
+      </svg>
+      <p class="caption">Read the italics as one sentence — that's the whole argument of this subtopic.</p>
+    </div>
+
+    <h3>The Ratio Is the Signal</h3>
+    <p>Everything downstream depends on first measuring, not guessing, the read:write ratio for the <em>specific access pattern</em> in question — not the table, not the service, the pattern. A <code>users</code> table can be read-heavy for "fetch profile by id" and write-heavy for "update last-seen timestamp" in the same schema, and those two columns deserve different treatment. This is the same discipline 8.2 introduced for classifying a workload as OLTP or OLAP, narrowed down to a single access pattern instead of a whole system.</p>
+
+    <h3>Levers Per Side</h3>
+    <p>Once the dominant side is known, the lever choice follows directly. <strong>Read-optimized levers</strong> move cost to write time: denormalization (8.3) copies a fact so a read needs no join; a covering index (8.4) lets a read be satisfied from the index alone; a cache serves repeat reads without touching storage; a read replica adds read capacity that never touches the write path at all. <strong>Write-optimized levers</strong> move cost to read time, or defer it to a background process: an LSM-tree (8.4) turns writes into cheap sequential appends and pays for it later during compaction and at read time; write buffering and batching coalesce many small writes into fewer larger ones; async replication lets a write acknowledge before every replica has it, deferring consistency to a background propagation.</p>
+
+    <h3>Cost Never Disappears</h3>
+    <p>Every lever above has a named bill. A cache's bill is invalidation complexity and a miss path that still hits storage. A read replica's bill is replication lag — reads may be stale, and write throughput doesn't improve at all, because every write still funnels through the primary. An LSM-tree's bill is read amplification: a point read may need to check several files before compaction has merged them down. This is the exact same "relocation, not elimination" argument 8.3 built for denormalization, now generalized to every technique on both sides of the dial.</p>
+
+    <h3>CQRS Splits the Model Entirely</h3>
+    <p>When a single schema can't serve both a hot read pattern and a hot write pattern well — or when the two need genuinely different consistency guarantees — the escalation is to stop compromising one model and instead maintain two: a write model optimized purely for correct, fast writes, and a separate read model optimized purely for the query shape reads need, kept in sync by the same kind of mechanism (transaction, CDC, async job) 8.3 required you to name for any denormalization. CQRS is not a new idea at this point — it's the read/write dial pushed to its most extreme, aggressive setting.</p>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">A logging pipeline ingests 80,000 events/sec and is queried only a handful of times a day, for ad hoc debugging. Using the build chain above, explain why choosing an LSM-tree engine is the correct lever, and name the specific cost it creates on the read side.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read "Levers Per Side" and "Cost Never Disappears."</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> You know the two lever families and that cost always lands somewhere. What actually happens mechanically when you diagnose a workload and apply the right one?</div>
+  </section>
+
+  <!-- ══════════════════ §5 ══════════════════ -->
+  <section id="s5">
+    <h2 class="section-title"><span class="num">§5</span> ⚙️ How It Actually Works</h2>
+
+    <h3>Happy path — diagnosing and applying the right lever</h3>
+    <ol class="steps">
+      <li>Measure the read:write ratio and the latency/staleness budget for the <em>specific access pattern</em> under discussion, not the table or service as a whole.</li>
+      <li>Identify where the dominant operation currently pays its cost — e.g., a read paying join cost, or a write paying random-page-write and index-maintenance cost.</li>
+      <li>Select the lever that matches the dominant side: read-heavy → denormalize / covering index / cache / read replica; write-heavy → LSM-tree engine / write buffering / batching / async replication.</li>
+      <li>Verify the cost actually relocated rather than vanished — confirm write latency or fan-out increased correspondingly, or that replica lag now bounds read freshness. If nothing on the other side got more expensive, you didn't apply a real lever, you found a genuine inefficiency instead (a missing index, a redundant round trip) — a different problem from the one this subtopic addresses.</li>
+      <li>If the ratio is extreme on both sides simultaneously, or the two sides need different consistency guarantees, stop iterating on one schema and consider splitting into a CQRS read model and write model instead.</li>
+    </ol>
+
+    <div class="mental-model">
+      🗺️ <span class="mm-name">Mental model — a fixed renovation budget.</span> Optimizing for reads and writes is like renovating a house with a fixed budget: knocking down a wall to enlarge the living room always shrinks another room by the same amount square-footage-wise. There is no renovation that creates space, only one that relocates it to where you need it more.
+      <span class="mm-break">Where it breaks down: a few real techniques do reduce total work rather than just relocate it — a Bloom filter (8.10) avoids a wasted disk read on both the read and write side of an LSM-tree — so the "always zero-sum" framing is a strong default, not an absolute law.</span>
+    </div>
+
+    <h3>Failure &amp; edge cases</h3>
+    <ul class="plain">
+      <li><strong>Whack-a-mole tuning.</strong> Levers get chosen based on whichever complaint arrived most recently rather than the measured ratio, so a table's optimization ends up serving last month's access pattern instead of today's — and as the ratio drifts (a table that was write-heavy during a migration becomes read-heavy after), nobody revisits the choice.</li>
+      <li><strong>Read replicas mistaken for a write fix.</strong> A team scales out read replicas expecting write throughput to improve; it doesn't, because every write still funnels through the primary. Replicas address read capacity and read latency only.</li>
+      <li><strong>Compaction stalls on LSM-trees.</strong> "Write-optimized" holds only as long as background compaction keeps pace; if foreground write volume outruns compaction, un-merged SSTables pile up, read amplification climbs, and compaction itself starts competing with live traffic for I/O and CPU — the deferred cost from §4 arriving all at once.</li>
+      <li><strong>Caching a workload with no locality.</strong> A cache only helps reads that repeat or cluster; a write-heavy or uniformly-random read pattern gets little hit-rate benefit while still paying full invalidation cost on every write — a read lever applied to a pattern that isn't actually read-dominant.</li>
+    </ul>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">The diagnostic pipeline, end to end</div>
+      <svg viewBox="0 0 1040 340" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="pfArrow7" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#2563eb"/>
+          </marker>
+        </defs>
+        <rect x="10" y="20" width="190" height="60" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+        <text x="105" y="46" text-anchor="middle" font-size="12" font-weight="700" fill="#1e3a8a">① measure ratio</text>
+        <text x="105" y="64" text-anchor="middle" font-size="10.5" fill="#1e3a8a">per access pattern</text>
+
+        <line x1="206" y1="50" x2="230" y2="50" stroke="#2563eb" stroke-width="2.5" marker-end="url(#pfArrow7)"/>
+        <rect x="236" y="20" width="210" height="60" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+        <text x="341" y="40" text-anchor="middle" font-size="12" font-weight="700" fill="#1e3a8a">② find where cost sits</text>
+        <text x="341" y="58" text-anchor="middle" font-size="10.5" fill="#1e3a8a">read pays join? write</text>
+        <text x="341" y="72" text-anchor="middle" font-size="10.5" fill="#1e3a8a">pays index upkeep?</text>
+
+        <line x1="452" y1="50" x2="476" y2="50" stroke="#2563eb" stroke-width="2.5" marker-end="url(#pfArrow7)"/>
+        <rect x="482" y="20" width="200" height="60" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+        <text x="582" y="46" text-anchor="middle" font-size="12" font-weight="700" fill="#1e3a8a">③ pick matching lever</text>
+        <text x="582" y="64" text-anchor="middle" font-size="10.5" fill="#1e3a8a">read side or write side</text>
+
+        <line x1="688" y1="50" x2="712" y2="50" stroke="#2563eb" stroke-width="2.5" marker-end="url(#pfArrow7)"/>
+        <rect x="718" y="20" width="210" height="60" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+        <text x="823" y="40" text-anchor="middle" font-size="12" font-weight="700" fill="#1e3a8a">④ verify cost relocated</text>
+        <text x="823" y="58" text-anchor="middle" font-size="10.5" fill="#1e3a8a">(not eliminated) — check</text>
+        <text x="823" y="72" text-anchor="middle" font-size="10.5" fill="#1e3a8a">the other side got pricier</text>
+
+        <line x1="823" y1="80" x2="823" y2="112" stroke="#2563eb" stroke-width="2.5" marker-end="url(#pfArrow7)"/>
+        <rect x="653" y="118" width="340" height="50" rx="24" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+        <text x="823" y="140" text-anchor="middle" font-size="12" font-weight="700" fill="#4c1d95">⑤ both sides hot / diverging consistency?</text>
+        <text x="823" y="158" text-anchor="middle" font-size="10.5" fill="#7c3aed">check before calling it done</text>
+
+        <path d="M760,168 L620,220" stroke="#6b6861" stroke-width="2" fill="none" marker-end="url(#pfArrow7)"/>
+        <text x="640" y="196" font-size="11" font-weight="800" fill="#c92a2a">yes</text>
+        <path d="M886,168 L960,220" stroke="#6b6861" stroke-width="2" fill="none" marker-end="url(#pfArrow7)"/>
+        <text x="900" y="196" font-size="11" font-weight="800" fill="#2f9e44">no</text>
+
+        <rect x="500" y="226" width="240" height="60" rx="10" fill="#fee2e2" stroke="#dc2626" stroke-width="2"/>
+        <text x="620" y="252" text-anchor="middle" font-size="12" font-weight="800" fill="#7f1d1d">SPLIT (CQRS)</text>
+        <text x="620" y="270" text-anchor="middle" font-size="10.5" fill="#7f1d1d">separate read + write models</text>
+
+        <rect x="850" y="226" width="180" height="60" rx="10" fill="#dcfce7" stroke="#2f9e44" stroke-width="2"/>
+        <text x="940" y="252" text-anchor="middle" font-size="12" font-weight="800" fill="#14532d">DONE</text>
+        <text x="940" y="270" text-anchor="middle" font-size="10.5" fill="#14532d">single schema holds</text>
+      </svg>
+    </div>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">A team ships an LSM-tree-backed store for a high-ingest workload, confirms writes are fast, and calls the optimization complete. Three months later, point-read latency has climbed steadily even though write volume hasn't changed. What did they fail to account for, and what operational factor explains the drift?</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the "Compaction stalls on LSM-trees" failure case.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> You can diagnose and apply a lever. In a live design, which one do you actually pick, and what does each choice cost in production?</div>
+  </section>
+
+  <!-- ══════════════════ §6 ══════════════════ -->
+  <section id="s6">
+    <h2 class="section-title"><span class="num">§6</span> ⚖️ The Decision — When, and What It Costs</h2>
+
+    <p>The default is <strong>measure before choosing</strong> — never assume a workload's shape from its category ("it's an events table, so it must be write-heavy") without checking the actual access patterns against it. Once measured, four situations decide the move. Near a 1:1 ratio with no strong latency pressure on either side, the right answer is usually to do nothing special: a normalized schema on a B-tree engine keeps both sides adequately served, and any lever you'd add costs more than the ratio justifies. A read-heavy pattern (roughly ≥10:1, a strong case past ~100:1) with tolerable staleness calls for denormalization, a covering index, a cache, or a read replica — pick based on whether the bottleneck is join cost, computation cost, or read throughput specifically. A write-heavy, ingestion-shaped pattern calls for an LSM-tree engine, write buffering, or async replication, accepting read amplification and staleness as the price. And when a single access pattern needs to be both hot on reads and hot on writes with genuinely different consistency requirements, no single schema serves both well — that's the signal to split into a CQRS read model and write model rather than keep compromising one.</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Decision tree</div>
+      <svg viewBox="0 0 1060 480" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="dtArrow7" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" fill="#6b6861"/>
+          </marker>
+        </defs>
+
+        <rect x="330" y="10" width="400" height="52" rx="26" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+        <text x="530" y="32" text-anchor="middle" font-size="12.5" font-weight="700" fill="#4c1d95">What's the read:write ratio for THIS access pattern?</text>
+        <text x="530" y="50" text-anchor="middle" font-size="11" fill="#7c3aed">measured, not assumed from category</text>
+
+        <path d="M420,64 L140,104" stroke="#6b6861" stroke-width="2" fill="none" marker-end="url(#dtArrow7)"/>
+        <text x="200" y="86" font-size="11" font-weight="800" fill="#6b6861">near 1:1</text>
+        <path d="M500,64 L470,104" stroke="#6b6861" stroke-width="2" fill="none" marker-end="url(#dtArrow7)"/>
+        <text x="430" y="90" font-size="11" font-weight="800" fill="#0ca678">read-heavy ≥10:1</text>
+        <path d="M640,64 L900,104" stroke="#6b6861" stroke-width="2" fill="none" marker-end="url(#dtArrow7)"/>
+        <text x="820" y="86" font-size="11" font-weight="800" fill="#e67700">write-heavy (ingest)</text>
+
+        <!-- near 1:1 leaf -->
+        <rect x="10" y="110" width="220" height="70" rx="10" fill="#f3f2ef" stroke="#b8b4ac" stroke-width="2"/>
+        <text x="120" y="134" text-anchor="middle" font-size="11.5" font-weight="800" fill="#1a1917">NO SPECIAL LEVER</text>
+        <text x="120" y="152" text-anchor="middle" font-size="10.5" fill="#1a1917">normalized schema,</text>
+        <text x="120" y="166" text-anchor="middle" font-size="10.5" fill="#1a1917">B-tree, done</text>
+
+        <!-- read-heavy sub-question -->
+        <rect x="330" y="110" width="260" height="52" rx="26" fill="#c3fae8" stroke="#0ca678" stroke-width="2"/>
+        <text x="460" y="132" text-anchor="middle" font-size="12" font-weight="700" fill="#134e4a">Is staleness tolerable</text>
+        <text x="460" y="150" text-anchor="middle" font-size="12" font-weight="700" fill="#134e4a">for this read path?</text>
+
+        <path d="M400,164 L340,204" stroke="#6b6861" stroke-width="2" fill="none" marker-end="url(#dtArrow7)"/>
+        <text x="330" y="190" font-size="11" font-weight="800" fill="#c92a2a">no</text>
+        <path d="M520,164 L580,204" stroke="#6b6861" stroke-width="2" fill="none" marker-end="url(#dtArrow7)"/>
+        <text x="565" y="190" font-size="11" font-weight="800" fill="#2f9e44">yes</text>
+
+        <rect x="230" y="210" width="220" height="80" rx="10" fill="#fee2e2" stroke="#dc2626" stroke-width="2"/>
+        <text x="340" y="234" text-anchor="middle" font-size="11.5" font-weight="800" fill="#7f1d1d">SYNC CAREFULLY</text>
+        <text x="340" y="252" text-anchor="middle" font-size="10.5" fill="#7f1d1d">transactional denorm, or</text>
+        <text x="340" y="266" text-anchor="middle" font-size="10.5" fill="#7f1d1d">keep the join — don't fake</text>
+        <text x="340" y="280" text-anchor="middle" font-size="10.5" fill="#7f1d1d">it with a stale cache</text>
+
+        <rect x="470" y="210" width="240" height="80" rx="10" fill="#dcfce7" stroke="#2f9e44" stroke-width="2"/>
+        <text x="590" y="234" text-anchor="middle" font-size="11.5" font-weight="800" fill="#14532d">DENORMALIZE / CACHE /</text>
+        <text x="590" y="250" text-anchor="middle" font-size="11.5" font-weight="800" fill="#14532d">COVERING INDEX / REPLICA</text>
+        <text x="590" y="268" text-anchor="middle" font-size="10.5" fill="#14532d">name the sync mechanism (8.3)</text>
+
+        <!-- write-heavy leaf -->
+        <rect x="830" y="110" width="220" height="80" rx="10" fill="#ffd8a8" stroke="#e67700" stroke-width="2"/>
+        <text x="940" y="134" text-anchor="middle" font-size="11.5" font-weight="800" fill="#7c2d12">LSM-TREE / WRITE BUFFER /</text>
+        <text x="940" y="150" text-anchor="middle" font-size="11.5" font-weight="800" fill="#7c2d12">ASYNC REPLICATION</text>
+        <text x="940" y="168" text-anchor="middle" font-size="10.5" fill="#7c2d12">accept read amplification</text>
+
+        <!-- common further check -->
+        <rect x="310" y="330" width="440" height="60" rx="30" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+        <text x="530" y="354" text-anchor="middle" font-size="12" font-weight="700" fill="#4c1d95">Both sides ALSO hot, with diverging</text>
+        <text x="530" y="372" text-anchor="middle" font-size="12" font-weight="700" fill="#4c1d95">consistency needs on the same data?</text>
+
+        <path d="M530,392 L530,428" stroke="#6b6861" stroke-width="2" fill="none" marker-end="url(#dtArrow7)"/>
+        <text x="550" y="414" font-size="11" font-weight="800" fill="#c92a2a">yes</text>
+
+        <rect x="360" y="434" width="340" height="40" rx="10" fill="#fee2e2" stroke="#dc2626" stroke-width="2"/>
+        <text x="530" y="459" text-anchor="middle" font-size="12" font-weight="800" fill="#7f1d1d">SPLIT — CQRS read model + write model, synced</text>
+      </svg>
+    </div>
+
+    <h3>Trade-offs</h3>
+    <div class="table-wrap">
+      <table>
+        <tr><th>✅ Benefit</th><th>❌ Cost / Limitation</th></tr>
+        <tr><td><strong>Denormalization / cache / covering index (read levers)</strong> — reads become single-fetch or in-memory, latency drops and becomes predictable</td><td>Write fan-out, cache invalidation complexity, and staleness risk — the exact source-of-truth/sync-mechanism obligation from 8.3</td></tr>
+        <tr><td><strong>LSM-tree engine (write lever)</strong> — writes are O(1) sequential appends, sustaining very high ingest throughput</td><td>Read amplification — a point read may check the memtable plus multiple SSTables — and background compaction competes with live traffic for I/O</td></tr>
+        <tr><td><strong>Read replicas</strong> — horizontally scale read throughput without touching the write path at all</td><td>Replication lag makes replica reads stale by design, and write throughput is completely unaffected — the wrong lever if writes are the bottleneck</td></tr>
+        <tr><td><strong>CQRS split models</strong> — each side can be optimized without compromising the other</td><td>Two models to build, operate, and keep in sync; the sync lag is now a first-class part of the system's consistency story, not an incidental detail</td></tr>
+      </table>
+    </div>
+
+    <h3>In production</h3>
+    <div class="table-wrap">
+      <table>
+        <tr><th>System</th><th>How it applies</th><th>The nuance</th></tr>
+        <tr><td><strong>Cassandra / ScyllaDB</strong></td><td>LSM-tree storage engine purpose-built for high sustained write throughput — sequential commit log + memtable, flushed and compacted in the background</td><td>Compaction strategy (size-tiered vs. leveled) is itself a read/write dial: size-tiered favors write throughput with higher read amplification, leveled favors read latency at higher write amplification</td></tr>
+        <tr><td><strong>PostgreSQL / MySQL (OLTP default)</strong></td><td>B-tree storage engine, read-optimized by default; read replicas added explicitly for horizontal read scaling</td><td>Replication lag under heavy write load can push replica reads seconds behind the primary — an explicit trade the application must tolerate or route around</td></tr>
+        <tr><td><strong>Instagram / Twitter home timelines</strong></td><td>Fan-out-on-write pushes read optimization to its extreme — a timeline read is one fetch, at the cost of writing a single post into millions of follower timelines</td><td>This is the same lever family as 8.3's denormalization, applied at social-network scale; celebrity accounts break the pattern and need a hybrid pull-on-read fallback</td></tr>
+        <tr><td><strong>Kafka</strong></td><td>Append-only log is a pure write-optimized structure; consumers read sequentially rather than doing arbitrary point lookups</td><td>Converts the read pattern itself into something cheap (sequential scan from an offset) rather than trying to make arbitrary reads fast against a write-optimized structure</td></tr>
+        <tr><td><strong>E-commerce search/catalog (CQRS in practice)</strong></td><td>Write model is a normalized order/inventory database; read model is a precomputed, denormalized search index (e.g., Elasticsearch) rebuilt from the write model via a pipeline</td><td>The read model can lag the write model by seconds to minutes; a schema change on the write side requires a full reindex/backfill of the read model, not a simple migration</td></tr>
+      </table>
+    </div>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">A social app's notification feed is read constantly (every app open) and written to constantly (every like, comment, and follow generates a notification). Both sides are hot, and reads need to reflect writes within a few seconds at most. Would you reach for a single well-tuned schema or split into CQRS? Justify using the decision tree above.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the last branch of the decision tree — both sides hot with diverging needs.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> Can you defend this under interview pressure — and hold up when the interviewer pushes on the cost you claimed you'd pay?</div>
+  </section>
+
+  <!-- ══════════════════ §7 ══════════════════ -->
+  <section id="s7">
+    <h2 class="section-title"><span class="num">§7</span> 🎯 In the Interview</h2>
+
+    <h3>When an interviewer asks / says</h3>
+    <ul class="trigger-list">
+      <li>"This service does 50,000 writes a second and only occasional reads — how would you design the storage layer?"</li>
+      <li>"This endpoint is read a million times a day and written to a handful of times — what would you change?"</li>
+      <li>"How would you scale reads without touching your write path at all?"</li>
+      <li>"Walk me through why you'd pick Cassandra over Postgres for this."</li>
+    </ul>
+
+    <h3>What you say / do</h3>
+    <p>This surfaces in the schema/data-model phase immediately after choosing SQL vs. NoSQL (8.1) and classifying the workload (8.2), and resurfaces hard in the deep dive the moment the interviewer gives you a concrete read or write number. Lead by stating the ratio (measured or explicitly assumed), name which side is dominant, name the specific lever, price it unprompted, and give the condition that would flip your answer.</p>
+
+    <h3>The trade-off statement (write-heavy variant)</h3>
+    <div class="tradeoff-box">"This write path is doing roughly 50,000 events a second with only occasional ad hoc reads for debugging, so I'd optimize for writes — an LSM-tree-backed store like Cassandra instead of a B-tree engine, because LSM writes are sequential appends to a memtable and commit log rather than in-place random-access page writes, which is what lets it sustain that ingest rate. The cost is read amplification: a point read may have to check the memtable plus several SSTables, mitigated but not eliminated by Bloom filters and compaction, and ad hoc analytical queries against this store will be slow by design. I'd change my answer if the read pattern shifted to needing frequent, low-latency point lookups on recent events — at that point I'd add a read-optimized layer in front rather than fight the storage engine."</div>
+
+    <h3>The trade-off statement (read-heavy variant)</h3>
+    <div class="tradeoff-box">"If instead this were a product page read 200,000 times a minute per popular item and edited a few times a day, I'd push the other direction: denormalize the category and price fields directly onto the product row, add a covering index for the page's exact filter and sort, and put a cache in front with a TTL matched to how stale the display can tolerably be. The cost lands entirely on the write side — every edit fans out to the copies and invalidates the cache — which is acceptable because writes are rare. I'd change my answer for any field that has to be transactionally exact, like live inventory count; that one I'd read straight from the source instead of the cache, because a stale count there isn't a UX nuisance, it's a correctness bug."</div>
+
+    <h3>⚠️ Traps</h3>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "We'll just add a cache/index to make it fast" — without first asking whether the workload is read- or write-dominant.</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Caches and indexes both add fixed cost to every write — invalidation, index maintenance. Applying either to a write-heavy path adds overhead without touching the actual bottleneck, which was never on the read side.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "NoSQL is for write-heavy workloads, SQL is for read-heavy ones."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> The deciding factor is the storage engine's data structure — B-tree vs. LSM-tree (8.4) — and the schema design (8.3), not the query language. Postgres can be tuned write-heavy and Cassandra can serve read-heavy patterns poorly if the wrong engine or model is chosen; SQL-vs-NoSQL correlates with this axis but doesn't define it.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "Read replicas will fix our write bottleneck."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Replicas scale read throughput horizontally; every write still funnels through the primary. If writes are the actual bottleneck, adding replicas doesn't touch it — a mismatch between the symptom and the lever.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "We picked an LSM-tree store, so reads are just as fast as writes now."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> "Write-optimized" is not "equally fast at everything" — it's an explicit trade. LSM-trees pay for fast writes with read amplification across the memtable and un-compacted SSTables, mitigated by Bloom filters and compaction, never eliminated.</div></div>
+    </div>
+
+    <div class="checkpoint gate">
+      <div class="cp-title">🚨 Checkpoint — adversarial stress test (the gate)</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">You've told the interviewer you'd denormalize a hot read field and cache it with a 30-second TTL. They push: "Your write volume on the source field just increased 50x due to a new feature. Walk me through what breaks first, how you'd detect it, and whether your original lever choice still holds."</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 A complete answer covers: write amplification scaling directly with the new write volume (8.3), the cache's invalidation traffic scaling with it too, the specific signal you'd monitor (write latency on the source table, fan-out queue depth, cache invalidation rate) rather than waiting for a user-visible symptom, and the honest re-evaluation — at 50x the write volume the read:write ratio may have moved enough that the lever you originally chose no longer pays for itself, and you'd need to re-measure rather than assume the original decision still stands. If you can't answer this cleanly, you are not done.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════ §8 ══════════════════ -->
+  <section id="s8">
+    <h2 class="section-title"><span class="num">§8</span> 🔗 Connections &amp; Sources</h2>
+
+    <div class="connections">
+      <div class="conn-card">
+        <span class="conn-icon">⬅️</span>
+        <div><div class="conn-label">Builds on</div><strong>8.3 Data Modeling — Normalization and Denormalization</strong>, which supplies the read-side lever (denormalization) and the source-of-truth/sync-mechanism vocabulary this subtopic reuses for every lever, not just that one. Also <strong>8.4 Indexing</strong>, which supplies the write-side lever (LSM-tree vs. B-tree) as a storage-engine-level instance of the same axis, and <strong>8.2 OLTP vs. OLAP</strong>, which established workload classification as the precursor to measuring a ratio at all.</div>
+      </div>
+      <div class="conn-card">
+        <span class="conn-icon">➡️</span>
+        <div><div class="conn-label">Enables</div><strong>8.10 Bloom filters</strong>, the concrete mechanism that bounds (without eliminating) the read amplification an LSM-tree creates — the cost named here, mitigated there. Also <strong>Topic 5 Caching</strong>, which is this subtopic's read lever explored in full depth, and <strong>24.1–24.3 Fan-out</strong>, which is the read-optimization lever pushed to social-network extremes.</div>
+      </div>
+      <div class="conn-card">
+        <span class="conn-icon">⚡</span>
+        <div><div class="conn-label">Tension with</div><strong>8.6 ACID Transactions</strong> — async replication and CQRS both loosen consistency guarantees in exchange for splitting or relocating read/write cost, directly trading against the atomicity and isolation guarantees 8.6 established as defaults for a system of record.</div>
+      </div>
+    </div>
+
+    <h3>📚 Further reading</h3>
+    <ul class="reading-list">
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Designing Data-Intensive Applications, Chapter 3 — Storage and Retrieval</strong> — Kleppmann — the canonical B-tree vs. LSM-tree comparison and read/write amplification trade-offs this subtopic generalizes</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Martin Fowler — "CQRS"</strong> — <a href="https://martinfowler.com/bliki/CQRS.html">site</a> — the read/write dial pushed to its most extreme, architectural form</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>DataStax — "How is data written?"</strong> — <a href="https://docs.datastax.com/en/cassandra-oss/3.0/cassandra/dml/dmlHowDataWritten.html">docs</a> — the Cassandra write path (memtable, commit log, compaction) as a concrete write-optimized mechanism</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>AWS — "Working with read replicas" (RDS/Aurora)</strong> — <a href="https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_ReadRepl.html">docs</a> — the operational reality of replication lag as the price of read scaling</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Discord Engineering — "How Discord Stores Trillions of Messages"</strong> — search Discord's engineering blog — a real migration driven explicitly by a read/write ratio shift (Cassandra to ScyllaDB)</span></li>
+    </ul>
+  </section>
+
+  <!-- ══════════════════ §9 ══════════════════ -->
+  <section id="s9">
+    <h2 class="section-title"><span class="num">§9</span> ✍️ My Notes</h2>
+    <div class="callout callout-quote">Personal observations, model answers from drilling sessions, things that confused me. Saved locally in this browser.</div>
+    <textarea class="notes-area" placeholder="Your notes, model answers, and annotations…"></textarea>
+  </section>
+
+</article>
+</main>
+
+<script>
+// TOC active state
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('#toc nav a');
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(a => a.classList.remove('active'));
+      const a = document.querySelector(`#toc nav a[href="#${e.target.id}"]`);
+      if (a) a.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+sections.forEach(s => obs.observe(s));
+
+function toggle(cb) { cb.closest('li').classList.toggle('checked'); }
+function toggleReading(cb) { cb.closest('li').classList.toggle('checked'); }
+function toggleQuiz(q) {
+  const item = q.closest('.quiz-item');
+  item.classList.toggle('open');
+  q.querySelector('.quiz-toggle').textContent = item.classList.contains('open') ? '▲ Hide' : '▼ Hint';
+}
+
+// Notes auto-save
+const notesArea = document.querySelector('.notes-area');
+const NOTES_KEY = 'notes_8_7';
+if (localStorage.getItem(NOTES_KEY)) notesArea.value = localStorage.getItem(NOTES_KEY);
+notesArea.addEventListener('input', () => {
+  try { localStorage.setItem(NOTES_KEY, notesArea.value); } catch(e) {}
+});
+</script>
+</body>
+</html>

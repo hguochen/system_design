@@ -206,6 +206,36 @@ The database's answer is to make "these N writes happen as one indivisible, isol
 
    > 💡 *If you hesitate, re-read the third paragraph of §3 and count how many separate atomic operations the "fix" actually creates.*
 
+MODEL ANSWER — §3 Checkpoint
+
+CRASH POINT
+  Between the debit committing and the credit running — after
+  "UPDATE ... balance - 100 WHERE id='A'" takes effect, before
+  "UPDATE ... balance + 100 WHERE id='B'" executes.
+
+OUTCOME
+  $100 left A. Nothing records it should reach B. The ledger's
+  invariant (total balance conserved) is violated with no
+  correction path.
+
+WHY PER-STATEMENT TRANSACTIONS DON'T FIX IT
+  Atomicity only covers the boundary you draw — BEGIN...COMMIT
+  around exactly what's inside it. Two separate single-statement
+  transactions have two separate boundaries, with a gap between them.
+
+  The crash window doesn't close. It MOVES — from "mid-statement" to
+  "mid-transfer, between the two now-atomic pieces." Each UPDATE is
+  guaranteed all-or-nothing on its own, but nothing guarantees debit
+  and credit happen TOGETHER. A crash in that gap reproduces the
+  identical failure: A debited, B never credited.
+
+THE TAKEAWAY
+  Atomicity is a property of whatever you put inside BEGIN/COMMIT —
+  not a property of "using transactions" in general. Draw the
+  boundary around the wrong unit (one statement instead of the whole
+  multi-step operation) and you get well-defined atomicity around
+  something that was never what needed protecting.
+
 > **→ Next:** If a transaction is the primitive that prevents this, what exactly is each of the four letters promising — and how do the promises build on each other?
 
 ---
@@ -254,9 +284,69 @@ Naming four independent guarantees only matters if you can also name what actual
 
    > 💡 *If you hesitate, re-read the Consistency block and its distinction between "satisfies declared constraints" and "is correct."*
 
+MODEL ANSWER — §4 Checkpoint 1
+
+EXAMPLE
+  BEGIN;
+    UPDATE accounts SET balance = balance - 100 WHERE id = 'A';
+    UPDATE accounts SET balance = balance + 80  WHERE id = 'B';
+  COMMIT;
+
+WHY IT'S "CONSISTENT" BY THE DATABASE'S DEFINITION
+  Both declared constraints still hold after commit — say,
+  balance >= 0 on both rows, foreign keys intact, no UNIQUE
+  violated. The engine has nothing to check against for
+  "debit amount must equal credit amount," because that
+  invariant was never declared. It's not a rule the schema knows.
+
+WHY IT'S WRONG
+  $20 vanished. The ledger's real invariant — total balance
+  conserved across the transfer — is violated, but silently,
+  because nobody told the database that invariant exists.
+
+WHAT THIS SAYS ABOUT CONSISTENCY
+  Consistency enforces DECLARED rules, not business intent.
+  The database is not a correctness oracle — it will happily
+  commit a transaction that is internally well-formed and
+  externally wrong, because "well-formed" is the only thing
+  it was ever told to check. Closing this gap requires an
+  explicit constraint or trigger encoding the real invariant
+  (e.g., a CHECK or application-level validation comparing
+  debit and credit amounts) — the database won't infer it.
+
 2. Explain why atomicity and durability share one mechanism (the WAL) while isolation needs a completely separate one (locking or MVCC). What is different about the *kind* of problem isolation is solving that atomicity/durability are not?
 
    > 💡 *If you hesitate, re-read the build chain and the Enforcement Mechanism block — atomicity/durability are about a single transaction surviving a crash; isolation is about multiple transactions coexisting.*
+
+MODEL ANSWER — §4 Checkpoint 2
+
+WAL → ATOMICITY + DURABILITY
+  Both are about ONE transaction surviving TIME — specifically,
+  surviving a crash. Redo what has a commit record, undo what
+  doesn't. This is a single-timeline problem: given one transaction's
+  history of writes, did it fully happen or fully not happen, and
+  does that answer hold after a failure. No other transaction needs
+  to be in the picture at all for this problem to exist.
+
+LOCKING/MVCC → ISOLATION
+  A completely different axis: multiple transactions coexisting at
+  the SAME INSTANT. This problem exists even with zero crashes,
+  ever — it's about concurrency, not failure. Two transactions
+  running simultaneously need a rule for what each is allowed to see
+  and touch of the other's in-flight state.
+
+THE TEST
+  One transaction at a time, crashes still happen → still need the
+  WAL (crash-recovery is still a real problem), no longer need
+  locking/MVCC (there's nothing concurrent to isolate FROM).
+  This is what proves they're solving genuinely different problems,
+  not two flavors of the same one.
+
+THE TAKEAWAY
+  Atomicity/durability = a transaction vs. time (failure).
+  Isolation = a transaction vs. other transactions (concurrency).
+  That's why one mechanism (WAL) can't deliver both — they're not
+  variations on a theme, they're answers to different questions.
 
 > **→ Next:** You know what each letter promises and which subsystem delivers it. What actually happens, step by step, inside the engine when a transaction runs — and what happens when it crashes mid-flight?
 
@@ -343,9 +433,57 @@ Two-phase locking (2PL) has a growing phase, where a transaction only acquires l
 
    > 💡 *If you hesitate, re-read the crash-recovery diagram and its invariant statement.*
 
+MODEL ANSWER — §5 Checkpoint 1
+
+RESULT: No data is lost.
+
+WHY
+  The engine's rule is: fsync the commit record to durable storage
+  BEFORE reporting "committed" to the client — never the reverse.
+  So if a commit record for this transaction exists in the WAL after
+  the crash, that fsync must have already completed; there's no path
+  where the client sees "committed" and the record isn't durably
+  logged yet.
+
+WHAT RECOVERY DOES
+  Scans the WAL, finds the commit record for this transaction, and
+  REDOES it — reapplies the three row writes to the data pages,
+  reconstructing exactly the state that would exist if the pages had
+  been flushed normally before the crash.
+
+WHY THE UNFLUSHED DATA PAGES DON'T MATTER
+  The data pages were never the source of truth — the log was. Their
+  being stale or missing entirely after a crash is expected and fine,
+  because redo rebuilds them deterministically from what's already
+  durable in the log.
+
 2. A team implements "check current stock, then decrement it" using MVCC snapshot isolation, assuming that's strong enough to prevent overselling under concurrent checkouts. Explain precisely why it isn't, using the write-skew definition above, and name the isolation level that would actually prevent it.
 
    > 💡 *If you hesitate, re-read the write-skew bullet in Failure and edge cases and map "check stock / decrement" onto the two-doctors example.*
+
+MODEL ANSWER — §5 Checkpoint 2
+
+WHY SNAPSHOT ISOLATION ISN'T ENOUGH
+  Two checkout transactions each read the stock count from their own
+  private snapshot, taken before either commits. Both see stock
+  available. Both decrement based on that stale read. Neither ever
+  observes the other's write, because MVCC's whole point is that
+  readers don't block on writers and don't see concurrent in-flight
+  changes. The result: the true count goes negative, or the last
+  unit sells twice — an oversell that neither transaction, in
+  isolation, did anything "wrong" to cause.
+
+THE FIX
+  SERIALIZABLE isolation — the transaction behaves as if it ran
+  alone, with no concurrent writes overlapping it. Under true
+  Serializable (e.g. Postgres's SSI), the engine detects the
+  dependency between the two transactions' read and write sets and
+  aborts one of them rather than letting both commit.
+
+  For this specific single-row case, a narrower fix also works:
+  SELECT ... FOR UPDATE, an explicit row lock that forces the second
+  transaction to block until the first commits, so it reads the
+  post-decrement value instead of a stale snapshot.
 
 > **→ Next:** You know both mechanisms and exactly how each fails. So in a live design, which isolation level and which scope do you actually pick — and what are you giving up?
 
@@ -413,6 +551,50 @@ Three signals decide it. **Scope of the invariant** is the first and strongest: 
 
    > 💡 *If you hesitate, re-read the three signals at the top of §6 and the decision tree.*
 
+MODEL ANSWER — §6 Checkpoint
+
+PART 1 — single regional database
+  Lock: SELECT ... FOR UPDATE on the seat's row, inside a
+  transaction, at read time. The scenario already tells you the
+  race exists (a burst of concurrent purchases at on-sale time), so
+  this isn't a "wait and see" case — take the lock upfront.
+
+  Anomaly closed: LOST UPDATE, not write skew. Both buyers target
+  the SAME row (one seat), so a row-level lock is sufficient on its
+  own — the second transaction blocks until the first commits, then
+  sees the seat as sold and fails/retries. (Write skew would need
+  Serializable instead, but only applies when the two transactions
+  write to DIFFERENT rows — e.g. two different seats jointly
+  violating a separate venue-capacity counter neither one's row lock
+  would ever touch.)
+
+PART 2 — sharded across two regional databases
+  First move: check whether this problem needed to exist at all.
+  If seats are sharded sensibly — by venue or region, the natural
+  scheme — a given individual seat still lives entirely on one
+  shard. "Never sell seat 14B twice" stays a single-shard problem;
+  nothing about that specific invariant crossed a boundary. Correct
+  sharding design usually means you never needed cross-shard
+  atomicity for the per-seat lock at all.
+
+  Where cross-shard coordination IS genuinely needed — e.g. one
+  order books two seats that land on different shards — two options,
+  with a real cost difference:
+    TWO-PHASE COMMIT   correct, atomic across shards, but blocks
+                       every participant if the coordinator dies
+                       after prepare. A bad fit for a bursty on-sale
+                       spike specifically: a stuck coordinator at
+                       peak load stalls every reservation waiting
+                       on it.
+    SAGA               reserve each seat locally, confirm the order,
+                       compensate (release) on failure. No blocking,
+                       better availability under load — at the cost
+                       of a real, visible "reserved but not yet
+                       confirmed" window that must be observable and
+                       recoverable, not hidden.
+  For a high-throughput on-sale burst, the saga is usually the
+  better-fitting answer once colocation genuinely isn't possible.
+
 > **→ Next:** You can defend the choice. How does an interviewer actually put pressure on it?
 
 ---
@@ -459,6 +641,41 @@ This lands in the **data model** phase the moment a write touches more than one 
    > 💡 *A complete answer covers: you lose single-node atomicity across the two writes, since there's no shared WAL or lock table between shards; the real fix is a saga with an explicit intermediate "reserved" state rather than assuming a bare two-phase commit is available or cheap; detection is a reconciliation job that finds reservations past a timeout with no matching confirmed order; and the honest acknowledgment that the design is now eventually consistent, not atomic — the in-between state must be made visible and recoverable, not hidden as if the operation were instantaneous. If you can't answer this cleanly, you are not done.*
 
 > **→ Next:** Can you combine what you've learned across sections, not just recall each one?
+
+MODEL ANSWER — §7 Adversarial Stress Test
+
+WHAT YOU LOSE
+  Single-node atomicity across the two writes. There is no shared
+  WAL or lock table spanning both shards — "decrement inventory" and
+  "record the order" are now two independent local transactions with
+  nothing structurally tying their fates together.
+
+THE REAL FIX
+  A saga, not a bare two-phase commit. 2PC would technically restore
+  atomicity, but at a cost that's worse than the problem it solves:
+  if the coordinator dies after both shards have prepared but before
+  it sends commit, both shards are stuck holding locks indefinitely,
+  waiting on a coordinator that may never return. A saga sidesteps
+  this entirely: reserve inventory (local commit on shard 1), then
+  confirm the order (local commit on shard 2), with an explicit
+  compensating "release inventory" step if the order step fails.
+  No cross-shard blocking, ever — at the cost of a real, visible
+  in-between state.
+
+DETECTION
+  A reconciliation job that finds inventory reservations past a
+  timeout with no matching confirmed order (or the reverse — a
+  confirmed order with no matching reservation) — not a generic
+  "check if the counts agree," but a specific comparison keyed to
+  that intermediate "reserved" state.
+
+WHAT CHANGES IN THE DESIGN
+  The system is now eventually consistent, not atomic, and the
+  design has to say so out loud rather than hide it: an order sits
+  in a "reserved, pending confirmation" state until the payment/
+  inventory steps both complete, and that state is a real, queryable
+  status — not an implementation detail papered over to look
+  instantaneous.
 
 ---
 

@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.8 N+1 Query Problem</title>
+<style>
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface-alt: #f3f2ef;
+    --border: #e5e3de; --text: #1a1917; --text-muted: #6b6861;
+    --accent: #2563eb; --accent-light: #dbeafe;
+    --green: #16a34a; --green-light: #dcfce7;
+    --red: #dc2626; --red-light: #fee2e2;
+    --yellow: #d97706; --yellow-light: #fef3c7;
+    --purple: #7c3aed; --purple-light: #ede9fe;
+    --orange: #ea580c; --orange-light: #ffedd5;
+    --teal: #0d9488; --teal-light: #ccfbf1;
+    --code-bg: #1e1e2e; --code-text: #cdd6f4;
+    --sidebar-w: 240px; --content-max: 820px;
+    font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; }
+  #toc { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0 48px; z-index: 100; }
+  #toc-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  #toc-header .phase-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-bottom: 6px; }
+  #toc-header h2 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  #toc-header .tier-tag { font-size: 10px; font-weight: 800; letter-spacing: .06em; color: var(--yellow); background: var(--yellow-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-top: 8px; }
+  #toc nav a { display: block; padding: 5px 16px 5px 20px; font-size: 12.5px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+  main { margin-left: var(--sidebar-w); padding: 48px 48px 96px; max-width: calc(var(--sidebar-w) + var(--content-max) + 96px); width: 100%; }
+  article { max-width: var(--content-max); }
+  .doc-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 2px solid var(--border); }
+  .doc-header .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+  .tag-phase { background: var(--accent-light); color: var(--accent); }
+  .tag-topic { background: var(--purple-light); color: var(--purple); }
+  .tag-tier  { background: var(--yellow-light); color: var(--yellow); }
+  .tag-prereq{ background: var(--teal-light); color: var(--teal); }
+  .tag-date  { background: var(--surface-alt);  color: var(--text-muted); }
+  .doc-header h1 { font-size: 30px; font-weight: 800; line-height: 1.25; letter-spacing: -.02em; color: var(--text); }
+  section { margin-bottom: 52px; scroll-margin-top: 32px; }
+  h2.section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -.01em; }
+  h2.section-title .num { font-size: 11px; font-weight: 800; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; letter-spacing: .04em; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 24px 0 10px; }
+  h4 { font-size: 13.5px; font-weight: 700; color: var(--text); margin: 18px 0 8px; }
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+  code { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-family: "SF Mono","Fira Code",Menlo,monospace; font-size: 12.5px; }
+  ul.plain { margin: 0 0 14px 20px; }
+  ul.plain li { margin-bottom: 7px; font-size: 14.5px; line-height: 1.6; }
+  ol.steps { margin: 0 0 14px 22px; }
+  ol.steps li { margin-bottom: 8px; font-size: 14.5px; line-height: 1.6; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 14px; border-left: 3px solid; }
+  .callout-goal  { background: var(--accent-light); border-color: var(--accent); color: #1e40af; }
+  .callout-tip   { background: var(--yellow-light); border-color: var(--yellow); color: #92400e; }
+  .callout-warn  { background: var(--red-light); border-color: var(--red); color: #7f1d1d; }
+  .callout-quote { background: var(--surface-alt); border-color: var(--border); color: var(--text-muted); font-style: italic; }
+  .callout-teal  { background: var(--teal-light); border-color: var(--teal); color: #134e4a; }
+  .the-question { background: var(--surface); border: 2px solid var(--accent); border-radius: 12px; padding: 16px 20px; margin-top: 18px; font-size: 15.5px; }
+  .the-question .lbl { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); display: block; margin-bottom: 5px; }
+  .the-question em { color: var(--text); font-weight: 600; }
+  .definition { background: var(--purple-light); border-left: 4px solid var(--purple); border-radius: 8px; padding: 16px 20px; margin: 18px 0 24px; font-size: 15px; font-weight: 600; color: #4c1d95; line-height: 1.6; }
+  .mental-model { background: var(--teal-light); border-left: 3px solid var(--teal); border-radius: 8px; padding: 14px 18px; margin: 18px 0; font-size: 14px; color: #134e4a; }
+  .mental-model .mm-name { font-weight: 800; }
+  .mental-model .mm-break { display: block; margin-top: 7px; font-style: italic; opacity: .85; }
+  .bridge { background: linear-gradient(90deg, var(--accent-light), transparent); border-left: 4px solid var(--accent); border-radius: 8px; padding: 13px 18px; margin-top: 28px; font-size: 14.5px; color: #1e40af; font-weight: 600; }
+  .bridge .arrow { font-weight: 800; margin-right: 6px; }
+  .checkpoint { background: var(--surface); border: 2px solid var(--green); border-radius: 12px; padding: 16px 20px; margin-top: 26px; }
+  .checkpoint > .cp-title { font-size: 12px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--green); margin-bottom: 12px; display: flex; align-items: center; gap: 7px; }
+  .checkpoint.gate { border-color: var(--red); }
+  .checkpoint.gate > .cp-title { color: var(--red); }
+  .cheatsheet { background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 24px 28px; font-family: "SF Mono","Fira Code","Cascadia Code",Menlo,monospace; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-x: auto; margin-top: 16px; }
+  .cheatsheet .label { color: #cba6f7; font-weight: 700; letter-spacing: .08em; display: block; margin-top: 18px; margin-bottom: 4px; border-bottom: 1px solid #313244; padding-bottom: 3px; }
+  .cheatsheet .label:first-child { margin-top: 0; }
+  .diagram-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 16px 14px; margin: 20px 0 28px; overflow-x: auto; }
+  .diagram-wrap .diagram-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); margin-bottom: 12px; }
+  .diagram-wrap svg { display: block; width: 100%; height: auto; }
+  .diagram-wrap p.caption { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 10px; margin-bottom: 0; font-style: italic; }
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; font-size: 14.5px; line-height: 1.55; }
+  .checklist li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 2px; background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .checklist li.checked .cb { background: var(--green); border-color: var(--green); }
+  .checklist li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .checklist li.checked .text { color: var(--text-muted); text-decoration: line-through; }
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: var(--surface-alt); padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.5; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+  .misconception { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .misconception .wrong { background: var(--red-light); padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; }
+  .misconception .right { padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; color: #065f46; background: var(--green-light); }
+  .misconception .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .quiz-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .quiz-q { padding: 14px 18px; font-size: 14.5px; font-weight: 600; cursor: pointer; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .quiz-q:hover { background: var(--surface-alt); }
+  .quiz-num { flex-shrink: 0; width: 24px; height: 24px; background: var(--accent); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; margin-top: 1px; }
+  .checkpoint.gate .quiz-num { background: var(--red); }
+  .quiz-q .qtext { flex: 1; font-weight: 500; }
+  .quiz-toggle { font-size: 11px; color: var(--text-muted); flex-shrink: 0; margin-top: 3px; }
+  .quiz-hint { display: none; padding: 10px 18px 14px; font-size: 13px; color: #92400e; background: var(--yellow-light); border-top: 1px solid var(--border); line-height: 1.6; }
+  .quiz-item.open .quiz-hint { display: block; }
+  .reading-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .reading-list li { display: flex; align-items: flex-start; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; font-size: 14px; }
+  .reading-list li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 1px; cursor: pointer; background: var(--surface); display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .reading-list li.checked .cb { background: var(--green); border-color: var(--green); }
+  .reading-list li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .reading-list li.checked .rtext { color: var(--text-muted); text-decoration: line-through; }
+  .notes-area { width: 100%; min-height: 200px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: inherit; font-size: 14px; color: var(--text); resize: vertical; line-height: 1.6; }
+  .notes-area:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .connections { display: flex; flex-direction: column; gap: 12px; }
+  .conn-card { display: flex; align-items: flex-start; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14px; }
+  .conn-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .conn-label { font-weight: 700; margin-bottom: 3px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .tradeoff-box { background: var(--surface-alt); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 16px 20px; font-size: 14.5px; font-style: italic; color: var(--text); margin-top: 14px; line-height: 1.65; }
+  .trigger-list { list-style: none; display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+  .trigger-list li { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--orange); border-radius: 8px; padding: 10px 16px; font-size: 14px; font-style: italic; color: var(--text); }
+  @media (max-width: 900px) { #toc { display: none; } main { margin-left: 0; padding: 24px 20px 60px; } }
+</style>
+</head>
+<body>
+
+<aside id="toc">
+  <div id="toc-header">
+    <span class="phase-tag">Phase C · Topic 8</span>
+    <h2>8.8 N+1 Query Problem</h2>
+    <span class="tier-tag">🥉 T3 · ~30min</span>
+  </div>
+  <nav>
+    <a href="#s0">🧭 The Question</a>
+    <a href="#s1">📋 Cheatsheet</a>
+    <a href="#s2">🧠 The Mindmap</a>
+    <a href="#s3">🎯 In the Interview</a>
+    <a href="#s4">🔗 Connections</a>
+    <a href="#s5">✍️ My Notes</a>
+  </nav>
+</aside>
+
+<main>
+<article>
+
+  <header class="doc-header">
+    <div class="meta">
+      <span class="tag tag-phase">Phase C — Data Storage</span>
+      <span class="tag tag-topic">Topic 8 — Database Fundamentals</span>
+      <span class="tag tag-tier">🥉 T3 Awareness · ~30min</span>
+      <span class="tag tag-prereq">Prereqs: 8.5, 8.3</span>
+      <span class="tag tag-date">_____</span>
+    </div>
+    <h1>8.8 N+1 Query Problem</h1>
+  </header>
+
+  <div class="callout callout-tip">🥉 <strong>T3 means:</strong> you need to <em>name this correctly and know its one trade-off</em>. You are not expected to design it, derive it, or defend it under deep probing. If an interviewer goes deep here, it is almost always a tangent — acknowledge the concept, state the trade-off, and steer back to the main design.</div>
+
+  <!-- ══════════════════ §0 ══════════════════ -->
+  <section id="s0">
+    <h2 class="section-title"><span class="num">§0</span> 🧭 The Question This Answers</h2>
+
+    <p>8.5 established that a query's cost is not the same as a request's cost — a request can be slow because of <em>how many</em> queries it fires, not because any one of them is expensive. The N+1 problem is the canonical instance: an endpoint issues one query to fetch a list, then one more query per row to fetch each row's related data, and every one of those queries is individually fast and collectively fatal.</p>
+
+    <div class="the-question">
+      <span class="lbl">The question</span>
+      <em>Why does an endpoint whose every query runs in under a millisecond still take half a second, and what do you change?</em>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> What does that pattern actually look like, and what's the one fix worth naming in a room?</div>
+  </section>
+
+  <!-- ══════════════════ §1 ══════════════════ -->
+  <section id="s1">
+    <h2 class="section-title"><span class="num">§1</span> 📋 Cheatsheet</h2>
+
+    <div class="callout callout-quote">The whole subtopic, at recall depth.</div>
+
+<div class="cheatsheet"><span class="label">§ 1  WHY IT EXISTS</span>Nobody writes N+1 on purpose. It emerges from abstractions that make a
+database call invisible: an ORM's lazy-loading association looks like a
+plain object-property access (post.author.name), so a loop over 100
+posts silently fires 100 separate queries. GraphQL reproduces it
+structurally — each nested field has its own resolver, and each resolver
+runs once per parent object. The obvious fix people reach for first is to
+add an index, which does nothing, because each of the N queries was
+already fast. The cost was never in the query, it was in the round trips.
+
+<span class="label">§ 2  WHAT IT IS</span>An access pattern where fetching a collection of N parent rows costs 1
+query for the parents plus N additional queries — one per parent — to
+fetch their related rows. Total latency scales linearly with the size of
+the result set. Its signature is a query log full of the SAME query
+repeated with only the bound parameter changing.
+
+<span class="label">§ 3  THE MECHANISM</span>THE COST MODEL   Total = 1 RTT + (N x RTT). With a same-AZ database at
+                 ~0.5-1ms round trip and N = 100, that is ~50-100ms of
+                 pure network wait for queries that sum to a few ms of
+                 actual database work. Cross-AZ or cross-region, it is
+                 far worse. The queries are also SERIAL — each one waits
+                 for the previous object to be materialized.
+THE FIX (BATCH)  Collapse N+1 round trips into 1 or 2:
+                 - EAGER LOAD / JOIN — one query returns parents and
+                   children together (JOIN, or the ORM's include /
+                   select_related / JOIN FETCH).
+                 - BATCH LOAD — 2 queries: fetch the parents, collect
+                   their ids, then one WHERE parent_id IN (...) for
+                   all children, and stitch in memory.
+                 - DATALOADER — the batch-load pattern automated: it
+                   collects the per-object requests fired during one
+                   event-loop tick, dedupes them, and issues a single
+                   batched query. This is the standard answer for
+                   GraphQL nested resolvers.
+
+<span class="label">§ 4  USE / AVOID</span>BATCH LOAD (IN (...)) when the child set is large or you are joining
+  more than one one-to-many collection — it keeps the row count flat.
+EAGER LOAD (JOIN) when the association is to-one or the child set per
+  parent is small — one round trip, no stitching code.
+AVOID a JOIN across two independent one-to-many collections in the same
+  query — you get the cartesian product of both (a post with 50 comments
+  and 20 tags returns 1,000 rows for one post), which trades a round-trip
+  problem for a data-transfer problem.
+AVOID "fix it with an index" — the N queries are already fast; indexes
+  do not reduce round trips.
+
+<span class="label">§ 5  INTERVIEW TRIGGERS + GOTCHA</span>→ "How would you load the feed and each      → batch/eager load, name
+   post's author?"                             N+1 explicitly
+→ "This endpoint gets slower as page size    → suspect N+1; check query
+   grows"                                      COUNT per request first
+→ "Any concerns with using an ORM here?"     → lazy loading -&gt; N+1
+→ "How does GraphQL avoid hammering the      → DataLoader: batch +
+   database on nested fields?"                 dedupe per tick
+GOTCHA: Calling it a slow-query problem. It is a ROUND-TRIP problem —
+  N fast queries executed serially. The fix is reducing the number of
+  round trips, not the cost of each one, which is why indexing and
+  query tuning do nothing for it.</div>
+  </section>
+
+  <!-- ══════════════════ §2 ══════════════════ -->
+  <section id="s2">
+    <h2 class="section-title"><span class="num">§2</span> 🧠 The Mindmap</h2>
+    <div class="callout callout-quote">The picture to hold in your head.</div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Concept map — the N+1 query problem</div>
+      <svg viewBox="0 0 1060 660" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="mmArrow88" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" fill="#b8b4ac"/>
+          </marker>
+        </defs>
+
+        <g stroke="#b8b4ac" stroke-width="1.8" fill="none" marker-end="url(#mmArrow88)">
+          <path d="M400,292 L182,208"/>
+          <path d="M660,292 L878,208"/>
+          <path d="M400,368 L182,452"/>
+          <path d="M660,368 L878,452"/>
+        </g>
+
+        <!-- centre -->
+        <ellipse cx="530" cy="330" rx="195" ry="54" fill="#a5d8ff" stroke="#1971c2" stroke-width="2.5"/>
+        <text x="530" y="322" text-anchor="middle" font-size="15.5" font-weight="800" fill="#0b3d66">N+1 QUERY PROBLEM</text>
+        <text x="530" y="346" text-anchor="middle" font-size="13" font-style="italic" fill="#1971c2">"round trips, not query cost"</text>
+
+        <!-- TOP LEFT : the shape -->
+        <rect x="40" y="30" width="270" height="172" rx="10" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+        <text x="56" y="55" font-size="13.5" font-weight="800" fill="#1e3a8a">🔎 THE SHAPE</text>
+        <text x="56" y="82"  font-size="12.5" fill="#1e3a8a">1 query for the list</text>
+        <text x="56" y="105" font-size="12.5" fill="#1e3a8a">+N queries, one per row</text>
+        <text x="56" y="128" font-size="12.5" fill="#1e3a8a">latency = N × RTT</text>
+        <text x="56" y="151" font-size="12.5" fill="#1e3a8a">same query, new param</text>
+        <text x="56" y="180" font-size="11.5" font-style="italic" fill="#3b5bdb">grows with page size</text>
+
+        <!-- TOP RIGHT : where it comes from -->
+        <rect x="750" y="30" width="270" height="172" rx="10" fill="#ffd8a8" stroke="#e67700" stroke-width="2"/>
+        <text x="766" y="55" font-size="13.5" font-weight="800" fill="#7c2d12">🪤 WHERE IT COMES FROM</text>
+        <text x="766" y="82"  font-size="12.5" fill="#7c2d12">ORM lazy loading</text>
+        <text x="766" y="105" font-size="12.5" fill="#7c2d12">GraphQL nested resolvers</text>
+        <text x="766" y="128" font-size="12.5" fill="#7c2d12">query inside a for-loop</text>
+        <text x="766" y="151" font-size="12.5" fill="#7c2d12">naive repository composition</text>
+        <text x="766" y="180" font-size="11.5" font-style="italic" fill="#e67700">nobody writes it on purpose</text>
+
+        <!-- BOTTOM LEFT : the fixes -->
+        <rect x="40" y="458" width="270" height="172" rx="10" fill="#c3fae8" stroke="#0ca678" stroke-width="2"/>
+        <text x="56" y="483" font-size="13.5" font-weight="800" fill="#134e4a">🛠️ THE FIXES</text>
+        <text x="56" y="510" font-size="12.5" fill="#134e4a">eager load / JOIN</text>
+        <text x="56" y="533" font-size="12.5" fill="#134e4a">batch WHERE id IN (...)</text>
+        <text x="56" y="556" font-size="12.5" fill="#134e4a">DataLoader (batch + dedupe)</text>
+        <text x="56" y="579" font-size="12.5" fill="#134e4a">denormalize (8.3)</text>
+        <text x="56" y="608" font-size="11.5" font-style="italic" fill="#0ca678">collapse N hops into 1–2</text>
+
+        <!-- BOTTOM RIGHT : the trade -->
+        <rect x="750" y="458" width="270" height="172" rx="10" fill="#ffc9c9" stroke="#c92a2a" stroke-width="2"/>
+        <text x="766" y="483" font-size="13.5" font-weight="800" fill="#7f1d1d">⚖️ THE TRADE</text>
+        <text x="766" y="510" font-size="12.5" fill="#7f1d1d">JOIN → cartesian blow-up</text>
+        <text x="766" y="533" font-size="12.5" fill="#7f1d1d">IN-list → +1 hop, plan churn</text>
+        <text x="766" y="556" font-size="12.5" fill="#7f1d1d">eager load over-fetches</text>
+        <text x="766" y="585" font-size="11.5" font-style="italic" fill="#c92a2a">no fix is free</text>
+      </svg>
+      <p class="caption">Top row is the diagnosis; bottom row is the response and its price.</p>
+    </div>
+
+    <p><strong>How to read it:</strong> left to right is the diagnosis. <strong>The shape</strong> is what you observe (latency growing with page size, one query repeated with a changing parameter); <strong>where it comes from</strong> is why it appears without anyone writing it; <strong>the fixes</strong> all do the same thing — collapse N round trips into one or two; and <strong>the trade</strong> is that none of them is free, so you pick based on whether the risk is row explosion (favour batching) or an extra hop (favour a JOIN).</p>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> How do you say this in a room without turning a one-line observation into a five-minute tangent?</div>
+  </section>
+
+  <!-- ══════════════════ §3 ══════════════════ -->
+  <section id="s3">
+    <h2 class="section-title"><span class="num">§3</span> 🎯 In the Interview</h2>
+
+    <h3>When an interviewer asks / says</h3>
+    <ul class="trigger-list">
+      <li>"Walk me through how you'd load the feed — the posts and each post's author and comment count."</li>
+      <li>"This endpoint's latency scales with the page size. Where would you look first?"</li>
+      <li>"You've picked an ORM here. Any concerns?"</li>
+      <li>"In GraphQL, how do you stop deeply nested queries from hammering the database?"</li>
+    </ul>
+
+    <h3>What you say / do</h3>
+    <p>This surfaces in the API/data-access part of the deep dive, usually the moment you describe an endpoint that returns a list of objects with nested data. Name it as a <strong>round-trip</strong> problem, name the batch fix, name which batch fix and why, and move on in under 30 seconds — it is a competence signal, not a design decision, and lingering on it costs you time you need for the actual architecture. If the interviewer wants more, the one place worth going deeper is why a JOIN is not automatically the right fix.</p>
+
+    <h3>The one-line answer</h3>
+    <div class="tradeoff-box">"Fetching 100 posts and then each post's author is an N+1 — one query for the list plus one per row, so latency is roughly 100 round trips at ~1ms each, about 100ms of pure network wait for queries that only do a few milliseconds of real work. I'd batch it: collect the author ids and issue a single <code>WHERE id IN (...)</code>, or use a DataLoader if this is GraphQL. The cost is that I'm now stitching results in application code and the <code>IN</code> list length varies, which churns the query plan cache — I'd take the JOIN instead if it were only the author, and I'd avoid the JOIN the moment I also need comments and tags, because joining two one-to-many collections gives me their cartesian product."</div>
+
+    <h3>⚠️ Traps</h3>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "We'd add an index on the foreign key to fix the N+1."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Each of the N queries is already a fast indexed lookup. The cost is N serial network round trips, and an index does not reduce their number. Indexing addresses per-query cost (8.4); N+1 is a per-request round-trip count problem — different axis entirely.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "Just use a JOIN — that always fixes it."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> A JOIN fixes the to-one case cleanly, but joining a parent to two independent one-to-many collections returns the cartesian product of both child sets — 50 comments × 20 tags = 1,000 rows to transfer and de-duplicate for a single post. You traded N round trips for a data-transfer and memory problem. Batched <code>IN (...)</code> queries keep the row count flat.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "ORMs cause N+1, so we'd write raw SQL."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Lazy loading is the common trigger, but the pattern is the <em>shape of the access</em>, not the tool. A hand-written repository method called inside a <code>for</code> loop produces exactly the same N+1, and every mature ORM ships an eager-load or batch-load escape hatch. The fix is batching the access, not abandoning the abstraction.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "We didn't see it in testing, so it isn't there."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> N+1 is invisible at small N — with 5 test rows it costs 5ms and looks fine. It only becomes a production incident when N grows with real data. This is why the detection signal is <em>queries per request</em> (visible at any N) rather than endpoint latency (only visible at large N).</div></div>
+    </div>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">Define the N+1 problem and state, in one answer under 30 seconds, why adding an index does not fix it.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read §1 — specifically <strong>§ 3 THE MECHANISM</strong>, the cost model line.</div>
+      </div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">2</span>
+          <span class="qtext">An interviewer says: "This GraphQL endpoint returns 50 authors, each with their 20 most recent posts, and it's timing out." What do you reach for, and what is the one thing you'd warn against?</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read §3 — the one-line answer, and the second trap about JOINs.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════ §4 ══════════════════ -->
+  <section id="s4">
+    <h2 class="section-title"><span class="num">§4</span> 🔗 Connections &amp; Sources</h2>
+
+    <div class="connections">
+      <div class="conn-card">
+        <span class="conn-icon">⬅️</span>
+        <div><div class="conn-label">Builds on</div><strong>8.5 Query Patterns and Optimization</strong> — 8.5 taught you to look at the query plan for a slow query; N+1 is the case where every plan is optimal and the request is still slow, which is what forces the shift from per-query cost to per-request round-trip count. Also <strong>8.3 Data Modeling</strong>, whose denormalization lever is the schema-level way to remove the join entirely rather than batch it.</div>
+      </div>
+      <div class="conn-card">
+        <span class="conn-icon">➡️</span>
+        <div><div class="conn-label">Enables</div><strong>8.7 Read vs. Write Optimization</strong> — batching, eager loading, and denormalizing away a join are all read-side levers, and N+1 is the sharpest everyday example of a read path paying a cost that a write-time decision could have absorbed. Also <strong>Topic 5 Caching</strong>, where a per-object cache is the third way to collapse the N lookups, at the price of invalidation.</div>
+      </div>
+      <div class="conn-card">
+        <span class="conn-icon">⚡</span>
+        <div><div class="conn-label">Tension with</div><strong>8.3 Normalization</strong> — a normalized schema is exactly what makes related data require a second fetch in the first place. N+1 is the everyday tax of normalization, and the reason denormalization keeps getting proposed as the cure; the counter-argument is that batching solves the latency without the write-side fan-out cost denormalization introduces.</div>
+      </div>
+    </div>
+
+    <h3>📚 Further reading</h3>
+    <ul class="reading-list">
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Martin Fowler — "Lazy Load" pattern</strong> — <a href="https://martinfowler.com/eaaCatalog/lazyLoad.html">site</a> — the abstraction that produces N+1, described by the person who named it, including why it is still usually the right default</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>GraphQL DataLoader — README</strong> — <a href="https://github.com/graphql/dataloader">repo</a> — the batch-and-dedupe-per-tick mechanism, and the clearest explanation of why nested resolvers make N+1 structural rather than accidental</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Designing Data-Intensive Applications, Chapter 2 — Data Models and Query Languages</strong> — Kleppmann — the "many round trips" framing that makes N+1 a general distributed-systems cost, not just an ORM quirk</span></li>
+    </ul>
+  </section>
+
+  <!-- ══════════════════ §5 ══════════════════ -->
+  <section id="s5">
+    <h2 class="section-title"><span class="num">§5</span> ✍️ My Notes</h2>
+    <div class="callout callout-quote">Personal observations, model answers from drilling sessions, things that confused me. Saved locally in this browser.</div>
+    <textarea class="notes-area" placeholder="Your notes, model answers, and annotations…"></textarea>
+  </section>
+
+</article>
+</main>
+
+<script>
+// TOC active state
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('#toc nav a');
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(a => a.classList.remove('active'));
+      const a = document.querySelector(`#toc nav a[href="#${e.target.id}"]`);
+      if (a) a.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+sections.forEach(s => obs.observe(s));
+
+function toggle(cb) { cb.closest('li').classList.toggle('checked'); }
+function toggleReading(cb) { cb.closest('li').classList.toggle('checked'); }
+function toggleQuiz(q) {
+  const item = q.closest('.quiz-item');
+  item.classList.toggle('open');
+  q.querySelector('.quiz-toggle').textContent = item.classList.contains('open') ? '▲ Hide' : '▼ Hint';
+}
+
+// Notes auto-save
+const notesArea = document.querySelector('.notes-area');
+const NOTES_KEY = 'notes_8_8';
+if (localStorage.getItem(NOTES_KEY)) notesArea.value = localStorage.getItem(NOTES_KEY);
+notesArea.addEventListener('input', () => {
+  try { localStorage.setItem(NOTES_KEY, notesArea.value); } catch(e) {}
+});
+</script>
+</body>
+</html>

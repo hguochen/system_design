@@ -233,4 +233,72 @@ With a manually sharded relational database (via something like Vitess or Citus,
 So the real reason isn't "relational can't do point-lookup partitioning" — it's that DynamoDB gives you managed, elastic partitioning as a built-in service property, while a sharded relational setup makes that entire operational layer your team's responsibility. Given your storage trajectory (95TB, growing) and global read fan-out, that's a meaningful amount of undifferentiated engineering work you'd rather not own.
 
 # 6. Deep dive
+
+Given what's come up so far, the most natural candidate is the Unique ID Generation Service, which you've named repeatedly but never designed. Walk me through how you'd generate globally unique, short (7-8 character) codes at your write scale (600 QPS peak) without collisions, without a centralized bottleneck, and without values being sequentially guessable.
+
+in terms of unique ID generation. if all our IDs sits inside 1 node, then unique ID generation is trivial and just a matter of big integer auto increments, we get global uniqueness and no cross network lookups.  this is the hands down best approach for single node service unique ID generations. 
+
+but for our system, we are expected to hold 95TB worth of (and growing) unique key counts and quite unlikely that we can put all of them inside 1 node. so we have to use a distributed key generation approach. for which, we have 4 approaches:
+
+* coordinate on write - each time we request a short_url, we make a request to uniqueID service to request a short_url
+* coordinate on batch - uniqueID service pre assigned each requesting compute server a range of say 1M unique ids
+* partition the space - each compute server generates a unique key in the format {timestamp:machineID:sequenceID}. totalling 64 bits
+* probabilistic ID generation - randomly generate a key and re-generate on collision
+
+
+because our service requires write p99 latency of 300ms, of which 200ms is budgeted for cross region latency, we only have <100ms of latency budget for unique ID generation, among other latency consuming operations. so we cannot afford a cross network hop to a central latency service such as coordinate on write or on batch. in discarding this 2 options, we are buying lower latency to trade for possible collisions. 
+
+between partition the space and probabilistic ID generation, i'd choose probabilistic ID generation over partition the space. for 3 reasons:
+
+* partition the space requires upfront commitment of defining the max number of machines to be inserted as machineIDs. an arbitrarily large max machine ID range leads to wasteage, while a small range leads to re architectures after our machines hit the ceiling count. Given our service is popular and growing, we do not want to define a fixed ceiling and rearchitect the service later.
+* partition the space is max 64 bits, which gives us 8 chars max, no more. again, we don't want to define a char limit upfront.
+* partition the space allows the short_url to expose the exact creation timestamp because the short_url is shared, this is a leak we don't want
+
+
+in choosing a probabilistic ID generation, we want to have a short, unique and readable short_url. 
+per our calculation,
+20M writes/day -> 73B keys over 10 years
+
+if we choose alphanumeric chars, we have 62 choices for 1 char, so having 7 chars, 62^7 = 3.5T keys. which is more than enough number of keys for our 10 years of usage.
+
+but we also need to factor in collisions, because each collisions requires a regeneration of key and increases latency, we need to make sure there's as little latency as possible. for 3.5T keys, the P(at least 1 collision) > 50% is at roughly at around 2.2M keys, K^2/2N where k is keys drawn and N is key space. so collision is bound to happen. therefore, to balance the readability and collision chance, we have our short_url be 8 char long, that gives us 218T keys with a at least 1 collision over 50% 17M keys. 
+
+conclusion. our short_url will be 8 chars long alphanumeric. each compute server will have the same unique ID generation library to produce short_urls, globally unique, locally generated keys with no lookups required. 
+
+on the write path, once we get the short_url generated, we'll conditionally atomic write to DynamoDB, if write fails due to collision, we generate a new short_url to be retried.
+
 # 7 Wrap
+
+so our system made the following choices:
+
+* HTTP GET /v1/short_url for reads, HTTP POST /v1/urls {long_url} for writes
+* 95TB of data storage over 10 years
+* introduce CDN to handle read caching, TLS termination, authentication, fend off DDoS attacks
+* introduce Load balancers to route traffic through least connections server
+* introduce L1 & L2 Redis caches to handle further reads traffic
+* use probabilistic ID generation library that generates 8 char short_urls
+* chose DynamoDB as our KV data store, with short_url as PK. hot read path is a point lookup, so latency stays flat as data volume grows
+* rate limiting with auth based at CDN level. IP based rate limiting at L3 level
+* read your own write guarantee via DynamoDb's consistent reads via a TTL redis check
+* negative caching to prevent spamming short_urls and crashing the server
+* conditional atomic write to protect against short_url collisions on write path
+
+monitors:
+
+* DynamoDB
+   * data storage per shard
+   * QPS per shard
+   * p99/p999 latency
+* Caches
+   * Cache hit ratio
+* Compute Servers
+   * Connection pool counts
+   * QPS
+   * Service health
+
+My Design weaknesses
+incorrect TTL chosen leading to false negatives
+
+* our negative cache TTL of 30s could break the system into giving false negatives, what was previously an invalid short_url could very well become legitimate in 30s. but negative cache denies all reads for this short_url over 30s TTL
+* read-your-own-writes TTL makes the assumption that data propagation can be bridged to replicas in 30s. if replication of data takes more than 30s and we would be telling author their short_url is missing when its actually in flight in propagation
+* Mitigation: we'll do an adaptive TTL by measuring false negatives, such as a valid short_url leading to negative cache returns, a short_url in primary but missing in replica leading to short url read failures by author
