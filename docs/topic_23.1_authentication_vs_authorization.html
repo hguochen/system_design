@@ -1,0 +1,1008 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>23.1 Authentication vs. Authorization</title>
+<style>
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface-alt: #f3f2ef;
+    --border: #e5e3de; --text: #1a1917; --text-muted: #6b6861;
+    --accent: #2563eb; --accent-light: #dbeafe;
+    --green: #16a34a; --green-light: #dcfce7;
+    --red: #dc2626; --red-light: #fee2e2;
+    --yellow: #d97706; --yellow-light: #fef3c7;
+    --purple: #7c3aed; --purple-light: #ede9fe;
+    --orange: #ea580c; --orange-light: #ffedd5;
+    --teal: #0d9488; --teal-light: #ccfbf1;
+    --code-bg: #1e1e2e; --code-text: #cdd6f4;
+    --sidebar-w: 240px; --content-max: 820px;
+    font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; }
+  #toc { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0 48px; z-index: 100; }
+  #toc-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  #toc-header .phase-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-bottom: 6px; }
+  #toc-header h2 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  #toc-header .tier-tag { font-size: 10px; font-weight: 800; letter-spacing: .06em; color: var(--yellow); background: var(--yellow-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-top: 8px; }
+  #toc nav a { display: block; padding: 5px 16px 5px 20px; font-size: 12.5px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+  main { margin-left: var(--sidebar-w); padding: 48px 48px 96px; max-width: calc(var(--sidebar-w) + var(--content-max) + 96px); width: 100%; }
+  article { max-width: var(--content-max); }
+  .doc-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 2px solid var(--border); }
+  .doc-header .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+  .tag-phase { background: var(--accent-light); color: var(--accent); }
+  .tag-topic { background: var(--purple-light); color: var(--purple); }
+  .tag-tier  { background: var(--yellow-light); color: var(--yellow); }
+  .tag-prereq{ background: var(--teal-light); color: var(--teal); }
+  .tag-date  { background: var(--surface-alt);  color: var(--text-muted); }
+  .doc-header h1 { font-size: 30px; font-weight: 800; line-height: 1.25; letter-spacing: -.02em; color: var(--text); }
+  section { margin-bottom: 52px; scroll-margin-top: 32px; }
+  h2.section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -.01em; }
+  h2.section-title .num { font-size: 11px; font-weight: 800; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; letter-spacing: .04em; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 24px 0 10px; }
+  h4 { font-size: 13.5px; font-weight: 700; color: var(--text); margin: 18px 0 8px; }
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+  code { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-family: "SF Mono","Fira Code",Menlo,monospace; font-size: 12.5px; }
+  ul.plain { margin: 0 0 14px 20px; }
+  ul.plain li { margin-bottom: 7px; font-size: 14.5px; line-height: 1.6; }
+  ol.steps { margin: 0 0 14px 22px; }
+  ol.steps li { margin-bottom: 8px; font-size: 14.5px; line-height: 1.6; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 14px; border-left: 3px solid; }
+  .callout-goal  { background: var(--accent-light); border-color: var(--accent); color: #1e40af; }
+  .callout-tip   { background: var(--yellow-light); border-color: var(--yellow); color: #92400e; }
+  .callout-warn  { background: var(--red-light); border-color: var(--red); color: #7f1d1d; }
+  .callout-quote { background: var(--surface-alt); border-color: var(--border); color: var(--text-muted); font-style: italic; }
+  .callout-teal  { background: var(--teal-light); border-color: var(--teal); color: #134e4a; }
+  .the-question { background: var(--surface); border: 2px solid var(--accent); border-radius: 12px; padding: 16px 20px; margin-top: 18px; font-size: 15.5px; }
+  .the-question .lbl { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); display: block; margin-bottom: 5px; }
+  .the-question em { color: var(--text); font-weight: 600; }
+  .definition { background: var(--purple-light); border-left: 4px solid var(--purple); border-radius: 8px; padding: 16px 20px; margin: 18px 0 24px; font-size: 15px; font-weight: 600; color: #4c1d95; line-height: 1.6; }
+  .mental-model { background: var(--teal-light); border-left: 3px solid var(--teal); border-radius: 8px; padding: 14px 18px; margin: 18px 0; font-size: 14px; color: #134e4a; }
+  .mental-model .mm-name { font-weight: 800; }
+  .mental-model .mm-break { display: block; margin-top: 7px; font-style: italic; opacity: .85; }
+  .bridge { background: linear-gradient(90deg, var(--accent-light), transparent); border-left: 4px solid var(--accent); border-radius: 8px; padding: 13px 18px; margin-top: 28px; font-size: 14.5px; color: #1e40af; font-weight: 600; }
+  .bridge .arrow { font-weight: 800; margin-right: 6px; }
+  .checkpoint { background: var(--surface); border: 2px solid var(--green); border-radius: 12px; padding: 16px 20px; margin-top: 26px; }
+  .checkpoint > .cp-title { font-size: 12px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--green); margin-bottom: 12px; display: flex; align-items: center; gap: 7px; }
+  .checkpoint.gate { border-color: var(--red); }
+  .checkpoint.gate > .cp-title { color: var(--red); }
+  .cheatsheet { background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 24px 28px; font-family: "SF Mono","Fira Code","Cascadia Code",Menlo,monospace; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-x: auto; margin-top: 16px; }
+  .cheatsheet .label { color: #cba6f7; font-weight: 700; letter-spacing: .08em; display: block; margin-top: 18px; margin-bottom: 4px; border-bottom: 1px solid #313244; padding-bottom: 3px; }
+  .cheatsheet .label:first-child { margin-top: 0; }
+  .diagram-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 16px 14px; margin: 20px 0 28px; overflow-x: auto; }
+  .diagram-wrap .diagram-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); margin-bottom: 12px; }
+  .diagram-wrap svg { display: block; width: 100%; height: auto; }
+  .diagram-wrap p.caption { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 10px; margin-bottom: 0; font-style: italic; }
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; font-size: 14.5px; line-height: 1.55; }
+  .checklist li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 2px; background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .checklist li.checked .cb { background: var(--green); border-color: var(--green); }
+  .checklist li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .checklist li.checked .text { color: var(--text-muted); text-decoration: line-through; }
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: var(--surface-alt); padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.5; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+  .misconception { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .misconception .wrong { background: var(--red-light); padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; }
+  .misconception .right { padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; color: #065f46; background: var(--green-light); }
+  .misconception .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .quiz-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .quiz-q { padding: 14px 18px; font-size: 14.5px; font-weight: 600; cursor: pointer; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .quiz-q:hover { background: var(--surface-alt); }
+  .quiz-num { flex-shrink: 0; width: 24px; height: 24px; background: var(--accent); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; margin-top: 1px; }
+  .checkpoint.gate .quiz-num { background: var(--red); }
+  .quiz-q .qtext { flex: 1; font-weight: 500; }
+  .quiz-toggle { font-size: 11px; color: var(--text-muted); flex-shrink: 0; margin-top: 3px; }
+  .quiz-hint { display: none; padding: 10px 18px 14px; font-size: 13px; color: #92400e; background: var(--yellow-light); border-top: 1px solid var(--border); line-height: 1.6; }
+  .quiz-item.open .quiz-hint { display: block; }
+  .reading-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .reading-list li { display: flex; align-items: flex-start; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; font-size: 14px; }
+  .reading-list li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 1px; cursor: pointer; background: var(--surface); display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .reading-list li.checked .cb { background: var(--green); border-color: var(--green); }
+  .reading-list li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .reading-list li.checked .rtext { color: var(--text-muted); text-decoration: line-through; }
+  .notes-area { width: 100%; min-height: 200px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: inherit; font-size: 14px; color: var(--text); resize: vertical; line-height: 1.6; }
+  .notes-area:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .connections { display: flex; flex-direction: column; gap: 12px; }
+  .conn-card { display: flex; align-items: flex-start; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14px; }
+  .conn-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .conn-label { font-weight: 700; margin-bottom: 3px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .tradeoff-box { background: var(--surface-alt); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 16px 20px; font-size: 14.5px; font-style: italic; color: var(--text); margin-top: 14px; line-height: 1.65; }
+  .trigger-list { list-style: none; display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+  .trigger-list li { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--orange); border-radius: 8px; padding: 10px 16px; font-size: 14px; font-style: italic; color: var(--text); }
+  @media (max-width: 900px) { #toc { display: none; } main { margin-left: 0; padding: 24px 20px 60px; } }
+</style>
+</head>
+<body>
+
+<aside id="toc">
+  <div id="toc-header">
+    <span class="phase-tag">Phase G · Topic 23</span>
+    <h2>23.1 Auth vs. Authz</h2>
+    <span class="tier-tag">🥇 T1 · ~3h</span>
+  </div>
+  <nav>
+    <a href="#s0">🧭 The Question</a>
+    <a href="#s1">🎯 Quick Reference</a>
+    <a href="#s2">📋 Cheatsheet</a>
+    <a href="#s3">🧠 The Mindmap</a>
+    <a href="#s4">🔥 The Problem</a>
+    <a href="#s5">💡 The Core Idea</a>
+    <a href="#s6">⚙️ How It Works</a>
+    <a href="#s7">⚖️ The Decision</a>
+    <a href="#s8">🎯 In the Interview</a>
+    <a href="#s9">🧪 Mastery Gate</a>
+    <a href="#s10">🔗 Connections</a>
+    <a href="#s11">✍️ My Notes</a>
+  </nav>
+</aside>
+
+<main>
+<article>
+
+  <header class="doc-header">
+    <div class="meta">
+      <span class="tag tag-phase">Phase G — Security</span>
+      <span class="tag tag-topic">Topic 23 — Security</span>
+      <span class="tag tag-tier">🥇 T1 Core · ~3h</span>
+      <span class="tag tag-prereq">Prereqs: 3.2, 3.4</span>
+      <span class="tag tag-date">Not yet studied</span>
+    </div>
+    <h1>23.1 Authentication vs. Authorization</h1>
+  </header>
+
+  <!-- ══════════════════ §0 ══════════════════ -->
+  <section id="s0">
+    <h2 class="section-title"><span class="num">§0</span> 🧭 The Question This Answers</h2>
+
+    <p>3.2 established how a server recognizes a returning client across requests — a session ID or token that proves "this request came from the same party as that earlier login." 3.4 established JWT as a way to carry that identity statelessly, self-contained and signed, with no server-side lookup required. Both of those subtopics answer the same underlying question: <strong>who is making this request?</strong> Nothing in either one answers a completely different question that comes immediately after: <strong>now that you know who they are, what are they actually allowed to do?</strong></p>
+
+    <p>The tension is that these two questions get conflated constantly, in real production systems, not just in interview answers. A request arrives with a valid, correctly-signed token — authentication succeeds — and it is tempting to treat "the token is valid" as equivalent to "the request should be allowed to proceed." It isn't. A valid token proves identity, not permission. The moment a system has more than one role, more than one tenant, or resources that belong to specific owners, collapsing those two checks into one is exactly how a logged-in customer ends up reading another customer's invoices, or a support agent ends up able to delete production data they were only supposed to view.</p>
+
+    <div class="the-question">
+      <span class="lbl">The question</span>
+      <em>Given a request that has already proven who is sending it, how do you separately and explicitly decide whether that specific identity is allowed to perform this specific action on this specific resource — and where in the system does that decision actually get made?</em>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> Before naming the two mechanisms, what actually breaks when systems don't separate them?</div>
+  </section>
+
+  <!-- ══════════════════ §1 ══════════════════ -->
+  <section id="s1">
+    <h2 class="section-title"><span class="num">§1</span> 🎯 Interview Quick Reference Card</h2>
+    <div class="callout callout-quote">Not a summary — a live-recall tool, built for retrieval speed under interview pressure. If you need the reasoning behind anything here, that's what §2 (cheatsheet) and the rest of the doc are for.</div>
+
+    <h3>The checklist — walk this on the whiteboard, in order</h3>
+    <ol class="steps">
+      <li>Say both words out loud and define them in one line each: authentication = who are you, authorization = what can you do</li>
+      <li>Name where authentication happens — usually terminated once, near the edge (API gateway / auth middleware), producing a verified identity attached to the request context</li>
+      <li>Name where authorization happens — as close to the resource as possible, re-checked at every layer, never assumed from the edge alone</li>
+      <li>Name the mechanism for each: authentication → session lookup or JWT signature verification; authorization → RBAC role check, ABAC attribute check, or ACL/relationship check</li>
+      <li>Name the failure code for each independently: authentication fails → <code>401</code>; authorization fails → <code>403</code></li>
+      <li>Call out the specific vulnerability class this whole topic exists to prevent: broken object-level authorization (IDOR/BOLA) — checking "is this token valid" but never checking "does this specific resource belong to this identity"</li>
+    </ol>
+
+    <h3>Trigger → action</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Interviewer says</th><th>You do</th></tr></thead>
+        <tbody>
+          <tr><td>"How would you handle access control for this API?"</td><td>Two separate checks, two separate answers — never one combined "is this user allowed" blob</td></tr>
+          <tr><td>"What if a user tries to access another user's data?"</td><td>Name IDOR/BOLA directly — check resource ownership, not just token validity</td></tr>
+          <tr><td>"How do you design permissions for a multi-tenant app?"</td><td>RBAC for role-shaped permissions, ABAC/ReBAC when permission depends on the resource's own attributes (tenant ID, ownership)</td></tr>
+          <tr><td>"What if a user's role changes mid-session?"</td><td>Depends on where authorization state lives — JWT-embedded claims are stale until expiry; server-side lookup is instantly fresh. Name the trade-off.</td></tr>
+          <tr><td>"Should the gateway or the service check permissions?"</td><td>Both, for different grains — gateway does coarse-grained (route-level), service does fine-grained (resource-level). Never skip the service-level check.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Fast disambiguation — the pairs that get confused live</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Pair</th><th>The distinction</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Authentication vs. authorization</strong></td><td>AuthN proves identity (a fact about the requester). AuthZ decides permission (a policy decision about that identity plus a specific resource and action).</td></tr>
+          <tr><td><strong>401 vs. 403</strong></td><td>401 = not authenticated at all, go log in. 403 = authenticated, but this identity is not allowed to do this — don't retry with the same credentials expecting a different result.</td></tr>
+          <tr><td><strong>RBAC vs. ABAC</strong></td><td>RBAC = permission depends on a fixed role assigned to the subject. ABAC = permission depends on dynamic attributes (resource owner, tenant, time of day) evaluated at request time.</td></tr>
+          <tr><td><strong>Coarse-grained vs. fine-grained authorization</strong></td><td>Coarse = "can this role call this endpoint at all" (gateway-level). Fine = "can this specific identity act on this specific resource instance" (service/resource-level). Both are required.</td></tr>
+          <tr><td><strong>Stale JWT claims vs. live session lookup</strong></td><td>JWT-embedded roles are frozen at issuance — a revoked permission still works until the token expires. A server-side lookup is checked fresh on every request but costs a lookup.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>High-yield anchors</h3>
+    <div class="cheatsheet" style="font-size: 12.5px;">OWASP API Security Top 10 (2023): API1 — Broken Object Level Authorization
+  is the #1 ranked risk — the exact "valid token, wrong resource" failure
+  this subtopic exists to prevent.
+401 Unauthorized = authentication failure. 403 Forbidden = authorization
+  failure. (401's name is historically misleading — it means "unauthenticated.")
+Google Zanzibar (2019 paper) — the relationship-based access control system
+  powering Google Docs/Drive sharing at global scale.
+AWS IAM — explicit Deny always overrides any Allow, evaluated per
+  (principal, action, resource) triple.</div>
+
+    <h3>The script — say this close to verbatim</h3>
+    <div class="tradeoff-box">"I'd split this into two explicit checks rather than one. Authentication happens once, near the edge — the gateway verifies the JWT signature and attaches a verified identity to the request context. Authorization is separate and happens again at the resource layer: for a multi-tenant document app, that means checking not just 'is this a valid user' but 'does this specific document belong to this user's tenant, and does their role allow this action' — I'd use RBAC for the role part (admin/editor/viewer) and an ownership check for the resource part, which is really a relationship-based check, the same shape as Google's Zanzibar. The cost is that this fine-grained check has to run on every single request that touches a resource, not just once at the gateway — skipping it there is exactly how broken object-level authorization vulnerabilities happen, which OWASP ranks as the top API security risk. I'd only centralize this into a dedicated policy engine like OPA if the same complex policy logic needed to be consistently enforced across many services."</div>
+
+    <h3>If pushed on the revocation problem specifically</h3>
+    <div class="tradeoff-box">A role change or permission revocation only takes effect immediately if authorization is checked against a live, server-side source of truth. If the permission is baked into a JWT claim at issuance, the old permission remains valid until that token expires — the fix is either short-lived tokens with frequent re-issuance, or moving the authorization check itself out of the token and into a server-side lookup evaluated fresh per request.</div>
+  </section>
+
+  <!-- ══════════════════ §2 ══════════════════ -->
+  <section id="s2">
+    <h2 class="section-title"><span class="num">§2</span> 📋 Cheatsheet</h2>
+
+    <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+    <div class="callout callout-tip">⏭️ <strong>First time through this topic?</strong> Skip to §3 and come back here for revision.</div>
+
+<div class="cheatsheet"><span class="label">§ 1  WHY IT EXISTS</span>Early systems with one role (or "logged in = full access") could get away
+with a single check: does a valid session exist? As soon as a system has
+more than one role, more than one tenant, or resources with individual
+owners, "logged in" stops meaning "allowed to do this specific thing."
+Treating authentication's yes/no answer as if it also answered the
+permission question is the single most common root cause of broken access
+control — an attacker doesn't need to break your login, just find an
+endpoint that only checked that a token was valid, never whose it was.
+<span class="label">§ 2  WHAT IT IS</span>AUTHENTICATION (AuthN)   Verifying identity — proving the requester is who
+                        they claim to be. Answers "who are you?"
+AUTHORIZATION (AuthZ)    Evaluating permission — deciding whether that
+                        identity may perform a specific action on a
+                        specific resource. Answers "what can you do?"
+SUBJECT / ACTION /       The three inputs every authorization decision
+RESOURCE                  needs: who is asking, what they want to do, and
+                        what they want to do it to.
+ENFORCEMENT POINT        Wherever a check actually blocks or allows a
+                        request — can and should exist at multiple layers
+                        (gateway, service, resource), not just one.
+<span class="label">§ 3  THE MECHANISM</span>AUTHENTICATE ONCE        Verify identity near the edge — session lookup
+                        (3.2) or JWT signature check (3.4) — attach the
+                        verified identity to the request context.
+AUTHORIZE PER REQUEST     Re-evaluate permission for THIS action on THIS
+                        resource, every time, as close to the resource
+                        as possible — never cached from a prior request.
+PICK THE POLICY MODEL     RBAC (role-based) for permissions that map
+                        cleanly to a small role set. ABAC (attribute-
+                        based) or ReBAC (relationship-based) when
+                        permission depends on resource ownership, tenant,
+                        or other request-time attributes a fixed role
+                        can't capture.
+FAIL WITH THE RIGHT CODE  401 = not authenticated. 403 = authenticated but
+                        not permitted. Never blur the two — they tell the
+                        client to do completely different things next.
+<span class="label">§ 4  USE / AVOID</span>USE RBAC when: a small, stable set of roles (admin/editor/viewer) maps
+  cleanly onto permissions across the whole system.
+USE ABAC/ReBAC when: permission depends on the relationship between the
+  subject and the specific resource instance — ownership, tenant match,
+  sharing grants — which no fixed role can express.
+USE a centralized policy engine (e.g. OPA) when: many services need to
+  enforce the same complex policy consistently and auditably.
+AVOID checking authorization only at the API gateway and trusting every
+  downstream service — an internal call that bypasses the gateway, or a
+  compromised service, has no enforcement left standing behind it.
+AVOID embedding permissions in a long-lived JWT and assuming they're
+  current — they're frozen at issuance and stay valid until expiry, even
+  after being revoked server-side.
+AVOID checking "is this token valid" as a substitute for "does this
+  resource belong to this identity" — that gap IS broken object-level
+  authorization (IDOR/BOLA), OWASP's #1 ranked API risk.
+<span class="label">§ 5  NUMBERS TO ANCHOR THE DISCUSSION</span>OWASP API Security Top 10 (2023): API1 — Broken Object Level Authorization
+  ranked #1. This is literally "authenticated but not authorized correctly."
+401 Unauthorized = authentication failure (misleading name — really means
+  "unauthenticated"). 403 Forbidden = authorization failure.
+Google Zanzibar (2019) — the relationship-based access control model
+  behind Google Docs/Drive sharing; permissions expressed as tuples:
+  object#relation@user (e.g. doc:123#editor@alice).
+AWS IAM evaluates every request as (principal, action, resource) and an
+  explicit Deny always overrides any Allow, regardless of order.
+<span class="label">§ 6  INTERVIEW TRIGGERS + GOTCHA</span>→ "How would you handle access control here?"     → two separate checks,
+                                                     name both explicitly
+→ "What if a user accesses another          → name IDOR/BOLA, check
+   user's data?"                              resource ownership
+→ "Permissions for a multi-tenant app?"      → RBAC for roles, ABAC/
+                                                ReBAC for ownership
+→ "What if the gateway already checked      → gateway = coarse-grained
+   auth?"                                      only; fine-grained still
+                                                runs at the resource
+GOTCHA: Treating "the token is valid" as "the request is allowed." A
+  valid signature proves identity, not permission — the two checks are
+  answering different questions and must both run, separately, every time.</div>
+  </section>
+
+  <!-- ══════════════════ §3 ══════════════════ -->
+  <section id="s3">
+    <h2 class="section-title"><span class="num">§3</span> 🧠 The Mindmap</h2>
+    <div class="callout callout-quote">The picture to hold in your head while you study. Everything below hangs off this.</div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Concept map — two independent questions, checked at every layer</div>
+      <svg viewBox="0 0 1060 700" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="mmArrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" fill="#b8b4ac"/>
+          </marker>
+        </defs>
+
+        <g stroke="#b8b4ac" stroke-width="1.8" fill="none" marker-end="url(#mmArrow)">
+          <path d="M468,318 L215,222"/>
+          <path d="M530,308 L530,225"/>
+          <path d="M592,318 L845,222"/>
+          <path d="M468,392 L215,482"/>
+          <path d="M592,392 L845,482"/>
+        </g>
+
+        <ellipse cx="530" cy="355" rx="170" ry="55" fill="#a5d8ff" stroke="#1971c2" stroke-width="2.5"/>
+        <text x="530" y="345" text-anchor="middle" font-size="15" font-weight="800" fill="#0b3d66">AUTHENTICATION vs.</text>
+        <text x="530" y="364" text-anchor="middle" font-size="15" font-weight="800" fill="#0b3d66">AUTHORIZATION</text>
+        <text x="530" y="384" text-anchor="middle" font-size="11.5" font-style="italic" fill="#1971c2">"who are you" vs. "what can you do"</text>
+
+        <!-- TOP LEFT : authentication -->
+        <rect x="30" y="30" width="270" height="190" rx="10" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+        <text x="46" y="55" font-size="13.5" font-weight="800" fill="#1e3a8a">🔑 AUTHENTICATION</text>
+        <text x="46" y="81"  font-size="12.5" fill="#1e3a8a">proves who you are</text>
+        <text x="46" y="102" font-size="12.5" fill="#1e3a8a">session lookup (3.2)</text>
+        <text x="46" y="123" font-size="12.5" fill="#1e3a8a">JWT signature check (3.4)</text>
+        <text x="46" y="144" font-size="12.5" fill="#1e3a8a">OAuth token (23.2)</text>
+        <text x="46" y="165" font-size="12.5" fill="#1e3a8a">produces a verified identity</text>
+        <text x="46" y="196" font-size="11.5" font-style="italic" fill="#3b5bdb">⚠ once per request —</text>
+        <text x="46" y="211" font-size="11.5" font-style="italic" fill="#3b5bdb">near the edge</text>
+
+        <!-- TOP CENTRE : authorization -->
+        <rect x="395" y="30" width="270" height="190" rx="10" fill="#ffc9c9" stroke="#c92a2a" stroke-width="2"/>
+        <text x="411" y="55" font-size="13.5" font-weight="800" fill="#7f1d1d">🔒 AUTHORIZATION</text>
+        <text x="411" y="81"  font-size="12.5" fill="#7f1d1d">decides what you can do</text>
+        <text x="411" y="102" font-size="12.5" fill="#7f1d1d">subject + action + resource</text>
+        <text x="411" y="123" font-size="12.5" fill="#7f1d1d">RBAC — role-based</text>
+        <text x="411" y="144" font-size="12.5" fill="#7f1d1d">ABAC / ReBAC — attribute/relation</text>
+        <text x="411" y="165" font-size="12.5" fill="#7f1d1d">policy: allow / deny</text>
+        <text x="411" y="196" font-size="11.5" font-style="italic" fill="#c92a2a">⚠ re-evaluated every</text>
+        <text x="411" y="211" font-size="11.5" font-style="italic" fill="#c92a2a">request, never cached</text>
+
+        <!-- TOP RIGHT : enforcement points -->
+        <rect x="760" y="30" width="270" height="190" rx="10" fill="#ffd8a8" stroke="#e67700" stroke-width="2"/>
+        <text x="776" y="55" font-size="13.5" font-weight="800" fill="#7c2d12">🏛️ ENFORCEMENT POINTS</text>
+        <text x="776" y="81"  font-size="12.5" fill="#7c2d12">edge/gateway — coarse-grained</text>
+        <text x="776" y="102" font-size="12.5" fill="#7c2d12">service/resource — fine-grained</text>
+        <text x="776" y="123" font-size="12.5" fill="#7c2d12">defense in depth — check at</text>
+        <text x="776" y="144" font-size="12.5" fill="#7c2d12">MULTIPLE layers, not one</text>
+        <text x="776" y="196" font-size="11.5" font-style="italic" fill="#e67700">⚠ never trust the gateway</text>
+        <text x="776" y="211" font-size="11.5" font-style="italic" fill="#e67700">    as the only check</text>
+
+        <!-- BOTTOM LEFT : failure modes -->
+        <rect x="30" y="490" width="270" height="180" rx="10" fill="#c3fae8" stroke="#0ca678" stroke-width="2"/>
+        <text x="46" y="515" font-size="13.5" font-weight="800" fill="#134e4a">💥 FAILURE MODES</text>
+        <text x="46" y="541" font-size="12.5" fill="#134e4a">IDOR/BOLA — valid token,</text>
+        <text x="46" y="562" font-size="12.5" fill="#134e4a">wrong resource (OWASP #1)</text>
+        <text x="46" y="583" font-size="12.5" fill="#134e4a">stale JWT claims — revoked</text>
+        <text x="46" y="604" font-size="12.5" fill="#134e4a">but still valid till expiry</text>
+        <text x="46" y="635" font-size="11.5" font-style="italic" fill="#0ca678">⚠ 401 vs 403 confusion —</text>
+        <text x="46" y="650" font-size="11.5" font-style="italic" fill="#0ca678">different remediation paths</text>
+
+        <!-- BOTTOM RIGHT : real systems -->
+        <rect x="760" y="490" width="270" height="180" rx="10" fill="#b2f2bb" stroke="#2f9e44" stroke-width="2"/>
+        <text x="776" y="515" font-size="13.5" font-weight="800" fill="#14532d">🏭 REAL SYSTEMS</text>
+        <text x="776" y="541" font-size="12.5" fill="#14532d">Google Zanzibar — ReBAC</text>
+        <text x="776" y="562" font-size="12.5" fill="#14532d">AWS IAM — explicit deny wins</text>
+        <text x="776" y="583" font-size="12.5" fill="#14532d">GitHub — RBAC + scoped PATs</text>
+        <text x="776" y="604" font-size="12.5" fill="#14532d">OPA — centralized policy engine</text>
+        <text x="776" y="635" font-size="11.5" font-style="italic" fill="#2f9e44">most combine RBAC + ReBAC</text>
+      </svg>
+      <p class="caption">Authentication and authorization are independent facts about a request; enforcement points name where each is checked; failure modes catalog what breaks when a layer is skipped; real systems check the model against production.</p>
+    </div>
+
+    <p><strong>How to read it:</strong> <strong>authentication</strong> and <strong>authorization</strong> are the two top branches because they are genuinely independent facts about a request — one can succeed while the other fails, and the rest of the map exists to keep that independence intact. <strong>Enforcement points</strong> is where the map gets architectural: it names <em>where</em> each check actually runs, and insists authorization is re-checked at every layer, not inherited from the edge. <strong>Failure modes</strong> is the catalog of what goes wrong specifically when that discipline slips — most of them trace back to skipping a layer or trusting stale state. <strong>Real systems</strong> is where production access-control models (RBAC, ABAC, ReBAC, centralized policy engines) get checked against how big companies actually built this.</p>
+  </section>
+
+  <!-- ══════════════════ §4 ══════════════════ -->
+  <section id="s4">
+    <h2 class="section-title"><span class="num">§4</span> 🔥 The Problem</h2>
+
+    <p>Early systems, or systems with a single class of user, can get away with collapsing authentication and authorization into one check: does a valid session exist? If every logged-in user is allowed to do everything the application supports, "are you logged in?" and "are you allowed to do this?" happen to have the same answer, and nobody notices they're actually two different questions. This works fine — right up until the system grows a second role, a second tenant, or a resource that belongs to a specific owner rather than to "logged-in users" as an undifferentiated group.</p>
+
+    <p>The moment that happens, the naive approach breaks in a specific and predictable way. An endpoint checks "does this request carry a valid token?" — that's authentication, and it passes. It does not separately check "does the resource this token's owner is requesting actually belong to them, or does their role permit this specific action?" — that's authorization, and nobody wrote the check. The result is a fully authenticated, perfectly legitimate user reading or modifying data that was never meant to be theirs, simply by changing an ID in a URL or a request body. This is not a hypothetical: OWASP's API Security Top 10 ranks exactly this failure — Broken Object Level Authorization — as the single most common and highest-impact API vulnerability class in production systems.</p>
+
+    <p>The instinctive first fix is to sprinkle permission checks wherever someone notices they're missing: an <code>if user.role == 'admin'</code> here, a manual ownership comparison there, added ad hoc as bugs get reported. This doesn't survive scale for a structural reason — the checks live scattered across dozens of endpoints, written by different engineers at different times, with no single place to audit "what can this role actually do" or "is every resource-touching endpoint actually checking ownership." Some endpoints get the check; others, added in a hurry, don't. The insight that resolves this is to stop treating "allowed" as a side-effect of "logged in" and instead build authorization as its own explicit, separately-evaluated decision — one that takes an identity, an action, and a resource as inputs, runs <em>after</em> authentication has already succeeded, and runs again at every layer that touches the resource, not just once at the front door.</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Before / after — one conflated check vs. two separate, explicit checks</div>
+      <svg viewBox="0 0 1040 420" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <rect x="20" y="20" width="440" height="380" rx="12" fill="#fff5f5" stroke="#c92a2a" stroke-width="2" stroke-dasharray="6 4"/>
+        <text x="40" y="48" font-size="14" font-weight="800" fill="#7f1d1d">BEFORE — one conflated check</text>
+
+        <g font-family="SF Mono, Menlo, monospace" font-size="12.5" fill="#7f1d1d">
+          <text x="40" y="80">if valid_token(request):</text>
+          <text x="40" y="104">    allow()</text>
+        </g>
+
+        <text x="40" y="150" font-size="12.5" fill="#2f9e44">✓ works when every logged-in user</text>
+        <text x="54" y="168" font-size="12.5" fill="#2f9e44">is allowed to do everything</text>
+        <text x="40" y="194" font-size="12.5" fill="#c92a2a">✗ "valid token" silently becomes</text>
+        <text x="54" y="212" font-size="12.5" fill="#c92a2a">"allowed to do anything"</text>
+        <text x="40" y="238" font-size="12.5" fill="#c92a2a">✗ IDOR/BOLA: change an ID in the</text>
+        <text x="54" y="256" font-size="12.5" fill="#c92a2a">URL, access someone else's data</text>
+        <text x="40" y="282" font-size="12.5" fill="#c92a2a">✗ permission checks scattered ad hoc</text>
+        <text x="54" y="300" font-size="12.5" fill="#c92a2a">wherever a bug got reported</text>
+        <text x="40" y="326" font-size="12.5" fill="#c92a2a">✗ no single place to audit "what</text>
+        <text x="54" y="344" font-size="12.5" fill="#c92a2a">can this role actually do"</text>
+        <text x="40" y="378" font-size="11.5" font-style="italic" fill="#7f1d1d">"logged in" quietly stands in for "allowed"</text>
+
+        <line x1="470" y1="210" x2="565" y2="210" stroke="#2563eb" stroke-width="3" marker-end="url(#baArrow2)"/>
+        <defs>
+          <marker id="baArrow2" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#2563eb"/>
+          </marker>
+        </defs>
+        <text x="517" y="198" text-anchor="middle" font-size="11" font-weight="800" fill="#2563eb">separate the</text>
+        <text x="517" y="224" text-anchor="middle" font-size="11" font-weight="800" fill="#2563eb">two checks</text>
+
+        <rect x="580" y="20" width="440" height="380" rx="12" fill="#f0fdf4" stroke="#2f9e44" stroke-width="2"/>
+        <text x="600" y="48" font-size="14" font-weight="800" fill="#14532d">AFTER — two explicit checks</text>
+
+        <g font-family="SF Mono, Menlo, monospace" font-size="12" fill="#14532d">
+          <text x="600" y="76">identity = authenticate(request)</text>
+          <text x="600" y="96">if not identity: return 401</text>
+          <text x="600" y="116">if not authorize(identity, action,</text>
+          <text x="612" y="134">                  resource):</text>
+          <text x="612" y="152">    return 403</text>
+          <text x="600" y="172">allow()</text>
+        </g>
+
+        <text x="600" y="206" font-size="12.5" fill="#2f9e44">✓ authentication answers "who" —</text>
+        <text x="614" y="224" font-size="12.5" fill="#2f9e44">once, at the edge</text>
+        <text x="600" y="250" font-size="12.5" fill="#2f9e44">✓ authorization answers "what" —</text>
+        <text x="614" y="268" font-size="12.5" fill="#2f9e44">re-evaluated per resource, every</text>
+        <text x="614" y="286" font-size="12.5" fill="#2f9e44">request</text>
+        <text x="600" y="312" font-size="12.5" fill="#2f9e44">✓ a missing check is a missing call,</text>
+        <text x="614" y="330" font-size="12.5" fill="#2f9e44">not a silently-passing token check</text>
+        <text x="600" y="356" font-size="12.5" fill="#2f9e44">✓ policy logic centralizable and</text>
+        <text x="614" y="374" font-size="12.5" fill="#2f9e44">auditable in one place</text>
+      </svg>
+      <p class="caption">A missing authorization check is now visible as a missing function call, not hidden inside a token check that silently keeps passing.</p>
+    </div>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">A teammate says: "Our gateway already validates the JWT on every request — isn't that enough access control?" Explain precisely what question the gateway's check answers and what question it leaves completely unanswered, using a concrete example of a request that would pass the gateway's check but should still be rejected.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the second paragraph — the part distinguishing "does this request carry a valid token" from "does this resource belong to this identity."</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> If the fix is two separate checks, what exactly does each one consist of, and how do they build on each other?</div>
+  </section>
+
+  <!-- ══════════════════ §5 ══════════════════ -->
+  <section id="s5">
+    <h2 class="section-title"><span class="num">§5</span> 💡 The Core Idea</h2>
+
+    <div class="definition">Authentication and authorization are two independent decisions — verifying who is making a request, and separately deciding what that verified identity is permitted to do — and treating them as one collapsed check is the root cause of most broken access control.</div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">The build chain</div>
+      <svg viewBox="0 0 1040 190" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="bcArrow2" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#7c3aed"/>
+          </marker>
+        </defs>
+        <g>
+          <rect x="8" y="30" width="232" height="58" rx="9" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+          <text x="124" y="55" text-anchor="middle" font-size="12.5" font-weight="800" fill="#4c1d95">TWO DIFFERENT</text>
+          <text x="124" y="73" text-anchor="middle" font-size="12.5" font-weight="800" fill="#4c1d95">QUESTIONS</text>
+          <text x="124" y="110" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">because "who are you"</text>
+          <text x="124" y="126" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">and "what can you do"</text>
+          <text x="124" y="142" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">need separate answers</text>
+        </g>
+        <line x1="246" y1="59" x2="274" y2="59" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow2)"/>
+        <g>
+          <rect x="280" y="30" width="232" height="58" rx="9" fill="#ffc9c9" stroke="#c92a2a" stroke-width="2"/>
+          <text x="396" y="55" text-anchor="middle" font-size="12.5" font-weight="800" fill="#7f1d1d">AUTHENTICATION</text>
+          <text x="396" y="73" text-anchor="middle" font-size="12.5" font-weight="800" fill="#7f1d1d">ESTABLISHES IDENTITY</text>
+          <text x="396" y="110" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">therefore every request</text>
+          <text x="396" y="126" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">needs a verified subject</text>
+          <text x="396" y="142" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">before anything else happens</text>
+        </g>
+        <line x1="518" y1="59" x2="546" y2="59" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow2)"/>
+        <g>
+          <rect x="552" y="30" width="232" height="58" rx="9" fill="#c3fae8" stroke="#0ca678" stroke-width="2"/>
+          <text x="668" y="55" text-anchor="middle" font-size="12.5" font-weight="800" fill="#134e4a">AUTHORIZATION</text>
+          <text x="668" y="73" text-anchor="middle" font-size="12.5" font-weight="800" fill="#134e4a">EVALUATES POLICY</text>
+          <text x="668" y="110" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">so identity alone is never</text>
+          <text x="668" y="126" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">enough — action + resource</text>
+          <text x="668" y="142" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">must be checked too</text>
+        </g>
+        <line x1="790" y1="59" x2="818" y2="59" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow2)"/>
+        <g>
+          <rect x="824" y="30" width="208" height="58" rx="9" fill="#ffd8a8" stroke="#e67700" stroke-width="2"/>
+          <text x="928" y="55" text-anchor="middle" font-size="12.5" font-weight="800" fill="#7c2d12">ENFORCEMENT AT</text>
+          <text x="928" y="73" text-anchor="middle" font-size="12.5" font-weight="800" fill="#7c2d12">EVERY LAYER</text>
+          <text x="928" y="110" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">which means a bypassed</text>
+          <text x="928" y="126" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">layer can't fall back on</text>
+          <text x="928" y="142" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">a check that only ran once</text>
+        </g>
+        <text x="520" y="178" text-anchor="middle" font-size="11.5" font-style="italic" fill="#7c3aed">read the connective words under the arrows — each block exists because of the one before it</text>
+      </svg>
+      <p class="caption">Four ideas, one chain. Skip a link and the next block stops making sense.</p>
+    </div>
+
+    <h3>Two Different Questions</h3>
+    <p>Everything starts with recognizing that "who is this?" and "what are they allowed to do?" are not the same question wearing different names — they have different inputs, different failure modes, and different correct responses. Authentication takes a set of credentials (a password, a token, a certificate) and produces a single yes-or-no answer plus, on success, an identity. Authorization takes that identity, plus the specific action being attempted, plus the specific resource it targets, and produces a separate yes-or-no answer. A system can authenticate a request perfectly and still be completely wrong to allow it — those are independent facts, and a design that only checks one of them is only half-built, no matter how solid that half is.</p>
+
+    <h3>Authentication Establishes Identity</h3>
+    <p>Once the two questions are separated, authentication's job is narrow and well-defined: verify that the requester is who they claim to be, and produce a verified identity the rest of the system can trust. The mechanisms are the ones 3.2 and 3.4 already covered — a server-side session looked up by a session ID (3.2), or a JWT whose signature is checked locally without a database round trip (3.4) — plus delegated mechanisms like OAuth2 tokens (23.2) issued by a third-party identity provider, or mutual TLS certificates for service-to-service calls. Whichever mechanism is used, authentication typically happens once per request, as early as possible — often at an API gateway or auth middleware layer — and its output is a verified identity attached to the request context that every downstream layer can read without re-verifying credentials itself.</p>
+
+    <h3>Authorization Evaluates Policy Against That Identity</h3>
+    <p>Authentication's output — a trusted identity — is authorization's input, but authorization needs two more things authentication never had: the specific action being attempted (read, write, delete, refund) and the specific resource it targets (this order, this document, this account). The policy model that maps <code>(identity, action, resource)</code> to <code>allow</code>/<code>deny</code> is a real design choice, not a formality: RBAC (Role-Based Access Control) assigns permissions to roles and roles to identities, which works well when permissions map cleanly onto a small, stable set of roles like admin/editor/viewer. ABAC (Attribute-Based Access Control) and ReBAC (Relationship-Based Access Control, the model behind Google's Zanzibar) evaluate permission against dynamic attributes or relationships at request time — does this identity's <code>tenant_id</code> match this resource's <code>tenant_id</code>, does this identity own this specific document — which RBAC's fixed roles can't express because the permission depends on the resource instance, not just the subject's role.</p>
+
+    <h3>Enforcement Must Happen at Every Layer</h3>
+    <p>None of the above matters if it only runs once, at the edge, and every downstream service assumes it's already been done. This is the direct consequence of separating the two checks: authentication genuinely can be centralized at one layer, because identity doesn't change as a request travels deeper into the system — but authorization must be re-evaluated at every layer that touches a resource, because a gateway checking "does this role allow calling this endpoint at all" (coarse-grained) has no way to know "does this specific document belong to this specific identity" (fine-grained) without knowing about that document. A service that trusts the gateway's coarse check as a substitute for its own fine-grained check is exactly how a valid, authenticated request reaches a resource it should never have touched — the confused deputy problem, and the direct mechanism behind IDOR/BOLA.</p>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">Explain, using the build chain above, why it's structurally correct to authenticate a request once at the edge but structurally wrong to authorize it only once at the edge. What's different about what each check needs to know?</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read "Authentication Establishes Identity" and "Enforcement Must Happen at Every Layer" — the answer is about what information each check depends on and whether that information is available at the edge.</div>
+      </div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">2</span>
+          <span class="qtext">A teammate proposes hardcoding <code>if user.role == 'admin'</code> checks directly inside each service's business logic instead of using RBAC role definitions or a policy engine. Using the build chain, explain what's being traded, and say whether this is ever a legitimate choice.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, trace from AUTHORIZATION EVALUATES POLICY through ENFORCEMENT AT EVERY LAYER — the answer is about consistency and auditability versus simplicity for a small, stable permission set.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> You know the two mechanisms. What actually happens, request by request, once you sit down to enforce them?</div>
+  </section>
+
+  <!-- ══════════════════ §6 ══════════════════ -->
+  <section id="s6">
+    <h2 class="section-title"><span class="num">§6</span> ⚙️ How It Actually Works</h2>
+
+    <h3>A request that touches a specific resource (happy path)</h3>
+    <ol class="steps">
+      <li>Client sends a request carrying credentials — a session cookie, a bearer JWT, or an OAuth access token.</li>
+      <li>The authentication layer (typically at the gateway or auth middleware) verifies those credentials: a session lookup against a store (3.2), or a local signature check against a JWT (3.4). On success, it attaches a verified identity to the request context. On failure, the request stops here with <code>401</code>.</li>
+      <li>The request proceeds toward the resource it's targeting. Before the business logic runs, the authorization layer evaluates a policy decision: does <em>this</em> identity have permission to perform <em>this</em> action on <em>this specific resource instance</em> — not just "is this endpoint allowed for this role" but "does this document/order/account belong to this identity, or does their role grant access to it."</li>
+      <li>If the policy check fails, the request stops with <code>403</code> — the identity is known and valid, it simply isn't permitted to do this. If it passes, the business logic runs.</li>
+      <li>Every subsequent internal call that touches the same or a different resource re-evaluates its own authorization check — the earlier pass does not carry forward as a blanket permission.</li>
+    </ol>
+
+    <div class="mental-model">
+      🗺️ <span class="mm-name">Mental model — the office building badge system.</span> A badge reader at the building's front entrance authenticates you: it verifies you're a real employee, once, when you walk in. But every individual door past the lobby — the server room, the finance floor, the executive suite — has its <em>own</em> reader that checks whether <em>your specific badge</em> is authorized for <em>that specific door</em>, every single time you walk through it. Getting past the front desk never implies you can open every door behind it.
+      <span class="mm-break">Where it breaks down: a building's interior doors are physical and finite, so a determined attacker who slips past the lobby still has to defeat each door individually and in person. A software system has none of that friction — a single missing authorization check on one internal endpoint is instantly and remotely exploitable, with no equivalent of a hallway to walk down or a guard to notice you.</span>
+    </div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Structural — enforcement points along the request path</div>
+      <svg viewBox="0 0 1040 460" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="spArrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#2563eb"/>
+          </marker>
+          <marker id="spArrowRed" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#c92a2a"/>
+          </marker>
+        </defs>
+
+        <!-- lane headers -->
+        <g font-size="12.5" font-weight="800">
+          <rect x="20" y="16" width="180" height="34" rx="6" fill="#dbe4ff" stroke="#3b5bdb"/>
+          <text x="110" y="38" text-anchor="middle" fill="#1e3a8a">CLIENT</text>
+          <rect x="290" y="16" width="200" height="34" rx="6" fill="#ffc9c9" stroke="#c92a2a"/>
+          <text x="390" y="38" text-anchor="middle" fill="#7f1d1d">EDGE / GATEWAY</text>
+          <rect x="580" y="16" width="200" height="34" rx="6" fill="#ffd8a8" stroke="#e67700"/>
+          <text x="680" y="38" text-anchor="middle" fill="#7c2d12">SERVICE</text>
+          <rect x="860" y="16" width="180" height="34" rx="6" fill="#c3fae8" stroke="#0ca678"/>
+          <text x="950" y="38" text-anchor="middle" fill="#134e4a">RESOURCE LAYER</text>
+        </g>
+
+        <!-- lifelines -->
+        <g stroke="#d8d5cf" stroke-width="1.5" stroke-dasharray="4 4">
+          <line x1="110" y1="50" x2="110" y2="430"/>
+          <line x1="390" y1="50" x2="390" y2="430"/>
+          <line x1="680" y1="50" x2="680" y2="430"/>
+          <line x1="950" y1="50" x2="950" y2="430"/>
+        </g>
+
+        <!-- step 1: client -> edge -->
+        <line x1="110" y1="76" x2="382" y2="76" stroke="#2563eb" stroke-width="2.5" marker-end="url(#spArrow)"/>
+        <text x="250" y="68" text-anchor="middle" font-size="11.5" fill="#2563eb">request + credentials</text>
+
+        <!-- authenticate box at edge -->
+        <rect x="300" y="92" width="180" height="46" rx="7" fill="#fff5f5" stroke="#c92a2a" stroke-width="2"/>
+        <text x="390" y="112" text-anchor="middle" font-size="11.5" font-weight="800" fill="#7f1d1d">AUTHENTICATE</text>
+        <text x="390" y="128" text-anchor="middle" font-size="10.5" fill="#7f1d1d">session / JWT check</text>
+
+        <!-- step 2: edge -> service (coarse authz) -->
+        <line x1="390" y1="150" x2="672" y2="150" stroke="#2563eb" stroke-width="2.5" marker-end="url(#spArrow)"/>
+        <text x="530" y="142" text-anchor="middle" font-size="11" fill="#2563eb">verified identity + AUTHORIZE (coarse)</text>
+        <text x="530" y="167" text-anchor="middle" font-size="10.5" font-style="italic" fill="#6b6861">"can this role call this endpoint at all?"</text>
+
+        <!-- step 3: service -> resource (fine authz) -->
+        <line x1="680" y1="190" x2="942" y2="190" stroke="#2563eb" stroke-width="2.5" marker-end="url(#spArrow)"/>
+        <text x="810" y="182" text-anchor="middle" font-size="11" fill="#2563eb">AUTHORIZE (fine)</text>
+        <text x="810" y="207" text-anchor="middle" font-size="10.5" font-style="italic" fill="#6b6861">"does THIS resource belong to THIS identity?"</text>
+
+        <!-- return path -->
+        <line x1="950" y1="240" x2="118" y2="240" stroke="#c92a2a" stroke-width="2.5" stroke-dasharray="7 4" marker-end="url(#spArrowRed)"/>
+        <text x="530" y="232" text-anchor="middle" font-size="11" font-weight="700" fill="#c92a2a">response travels back through every lane</text>
+
+        <rect x="20" y="270" width="1000" height="130" rx="9" fill="#f3f2ef" stroke="#b8b4ac" stroke-width="2"/>
+        <text x="520" y="298" text-anchor="middle" font-size="12.5" font-weight="800" fill="#1a1917">THE RULE:</text>
+        <text x="520" y="322" text-anchor="middle" font-size="12" fill="#1a1917">Authentication happens ONCE, near the edge. Authorization is re-evaluated at EVERY layer that touches</text>
+        <text x="520" y="342" text-anchor="middle" font-size="12" fill="#1a1917">a resource — the fine-grained check at the resource layer is never optional, no matter what the coarse</text>
+        <text x="520" y="362" text-anchor="middle" font-size="12" fill="#1a1917">check upstream already confirmed.</text>
+        <text x="520" y="388" text-anchor="middle" font-size="11.5" font-style="italic" fill="#6b6861">401 if authentication fails anywhere before the resource layer · 403 if either authorization check fails · 2xx only if all pass</text>
+      </svg>
+      <p class="caption">Authentication is centralized; authorization is layered — a coarse check at the edge never substitutes for a fine-grained check at the resource.</p>
+    </div>
+
+    <h3>Failure and edge cases</h3>
+    <ul class="plain">
+      <li><strong>Broken object-level authorization (IDOR/BOLA).</strong> An authenticated user changes an ID in a URL or request body (<code>GET /invoices/1042</code> → <code>GET /invoices/1043</code>) and the endpoint only checks that the token is valid, never that invoice 1043 belongs to this identity. This is OWASP's #1 ranked API security risk precisely because it's easy to introduce (one missing <code>WHERE owner_id = :identity</code> clause) and trivial to exploit (increment an integer).</li>
+      <li><strong>Stale permissions in a long-lived JWT.</strong> A JWT that bakes role or permission claims into its payload at issuance is only as current as the moment it was issued. Revoke a user's admin role server-side, and their existing JWT — still cryptographically valid — keeps granting admin access until it expires, because nothing about revoking the role changed the token's signature. This is 3.4's statelessness trade-off resurfacing as a security problem: the token doesn't know the server changed its mind.</li>
+      <li><strong>Trusting the gateway as the only enforcement point.</strong> A service assumes "the gateway already checked auth, so I don't need to" and skips its own resource-level check entirely. This collapses the moment any request reaches that service without going through the gateway — a compromised adjacent service, a debug endpoint, a service-to-service call inside the same network — because there is no enforcement left standing behind the assumption.</li>
+      <li><strong>Confusing 401 and 403 in the response.</strong> Returning <code>403</code> for a missing or expired token (instead of <code>401</code>) tells the client "you are who you say you are, but you're not allowed" — which sends a legitimate client down the wrong remediation path and, in security-sensitive contexts, can leak information about what does or doesn't exist.</li>
+    </ul>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Mechanism flow — request handling, step by step</div>
+      <svg viewBox="0 0 1040 260" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="mfArrow3" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#2563eb"/>
+          </marker>
+        </defs>
+
+        <rect x="10" y="30" width="180" height="70" rx="9" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+        <text x="100" y="56" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1e3a8a">① credentials</text>
+        <text x="100" y="74" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1e3a8a">arrive</text>
+        <text x="100" y="92" text-anchor="middle" font-size="10.5" font-style="italic" fill="#1e3a8a">session cookie or JWT</text>
+
+        <line x1="196" y1="65" x2="224" y2="65" stroke="#2563eb" stroke-width="2.5" marker-end="url(#mfArrow3)"/>
+
+        <rect x="230" y="30" width="190" height="70" rx="9" fill="#fff5f5" stroke="#c92a2a" stroke-width="2"/>
+        <text x="325" y="56" text-anchor="middle" font-size="12.5" font-weight="700" fill="#7f1d1d">② authenticate</text>
+        <text x="325" y="74" text-anchor="middle" font-size="12.5" font-weight="700" fill="#7f1d1d">(once, at the edge)</text>
+        <text x="325" y="92" text-anchor="middle" font-size="10.5" font-style="italic" fill="#7f1d1d">401 if this fails</text>
+
+        <line x1="426" y1="65" x2="454" y2="65" stroke="#2563eb" stroke-width="2.5" marker-end="url(#mfArrow3)"/>
+
+        <rect x="460" y="30" width="190" height="70" rx="9" fill="#ffd8a8" stroke="#e67700" stroke-width="2"/>
+        <text x="555" y="56" text-anchor="middle" font-size="12.5" font-weight="700" fill="#7c2d12">③ authorize (coarse)</text>
+        <text x="555" y="74" text-anchor="middle" font-size="12.5" font-weight="700" fill="#7c2d12">role vs. endpoint</text>
+        <text x="555" y="92" text-anchor="middle" font-size="10.5" font-style="italic" fill="#7c2d12">gateway-level</text>
+
+        <line x1="656" y1="65" x2="684" y2="65" stroke="#2563eb" stroke-width="2.5" marker-end="url(#mfArrow3)"/>
+
+        <rect x="690" y="30" width="200" height="70" rx="9" fill="#c3fae8" stroke="#0ca678" stroke-width="2"/>
+        <text x="790" y="56" text-anchor="middle" font-size="12.5" font-weight="700" fill="#134e4a">④ authorize (fine)</text>
+        <text x="790" y="74" text-anchor="middle" font-size="12.5" font-weight="700" fill="#134e4a">resource ownership</text>
+        <text x="790" y="92" text-anchor="middle" font-size="10.5" font-style="italic" fill="#134e4a">service/resource-level</text>
+
+        <path d="M790,100 L790,130 L555,130 L555,158" stroke="#2563eb" stroke-width="2.5" fill="none" marker-end="url(#mfArrow3)"/>
+
+        <rect x="300" y="164" width="510" height="76" rx="9" fill="#b2f2bb" stroke="#2f9e44" stroke-width="2.5"/>
+        <text x="555" y="190" text-anchor="middle" font-size="13" font-weight="800" fill="#14532d">⑤ 401 if step ② failed, 403 if step ③ or ④ failed,</text>
+        <text x="555" y="210" text-anchor="middle" font-size="13" font-weight="800" fill="#14532d">2xx only if every check passed</text>
+        <text x="555" y="230" text-anchor="middle" font-size="11.5" font-style="italic" fill="#2f9e44">→ business logic runs ONLY after every prior check succeeds</text>
+      </svg>
+      <p class="caption">Four checks, always in this order: arrive, authenticate, authorize coarse, authorize fine — business logic runs last, not first.</p>
+    </div>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">Walk through exactly what happens when a valid, unexpired JWT for a user whose <code>admin</code> role was revoked five minutes ago is used to call a privileged endpoint. Does the request succeed or fail, and why — tying your answer to what specifically is (and isn't) checked at each step.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read "Stale permissions in a long-lived JWT" and trace which of the two checks (authentication vs. authorization) actually depends on current server-side state.</div>
+      </div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">2</span>
+          <span class="qtext">A service behind the gateway receives a request directly from another internal service, bypassing the gateway entirely (a legitimate internal call, not an attack). Explain precisely what breaks if that service has no authorization check of its own and was relying entirely on the gateway having already checked it.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read "Trusting the gateway as the only enforcement point" and the enforcement-points diagram — think about what happens to a request that never passes through the box performing the check.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> You can design and enforce both checks correctly. In a live design, which policy model do you actually pick, and what does each one cost?</div>
+  </section>
+
+  <!-- ══════════════════ §7 ══════════════════ -->
+  <section id="s7">
+    <h2 class="section-title"><span class="num">§7</span> ⚖️ The Decision — When, and What It Costs</h2>
+
+    <p>The default for any system with more than one role or more than one resource owner is: authenticate once near the edge, authorize again at the resource layer, and never let one substitute for the other — that part isn't a judgment call, it's a baseline. The actual decision is <em>which policy model</em> implements authorization, and that choice depends on how permission actually varies across your domain.</p>
+
+    <p><strong>Permissions map cleanly onto a small, stable set of roles.</strong> If "admin can do everything, editor can read and write, viewer can only read" fully describes your permission structure, RBAC is the right default: it's simple to reason about, simple to audit ("what can an editor do?" has one answer), and cheap to implement as a role-to-permission lookup table. Most internal admin tools and a large share of B2B SaaS products never need more than this.</p>
+
+    <p><strong>Permission depends on the relationship between the identity and the specific resource instance.</strong> The moment "can this user edit this document" depends on <em>which</em> document — do they own it, is it shared with them, does it belong to their tenant — a fixed role can't express the answer, because the answer varies per resource, not per subject. This is ABAC or, more specifically for ownership/sharing graphs, ReBAC — the model Google's Zanzibar paper describes, expressing permissions as tuples like <code>doc:123#editor@alice</code> and answering "can alice edit doc:123?" by checking the relationship graph, not a role table.</p>
+
+    <p><strong>The same complex policy needs to be enforced consistently across many services.</strong> When RBAC or ABAC logic starts getting duplicated — and inevitably drifting — across a dozen services, a centralized policy engine (Open Policy Agent is the common production choice) becomes worth its cost: services send <code>(identity, action, resource)</code> to a dedicated policy decision point and get back allow/deny, so the policy logic lives and gets audited in exactly one place instead of a dozen slightly different reimplementations.</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Decision tree — which policy model, and whether to centralize it</div>
+      <svg viewBox="0 0 1040 420" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <g stroke="#b8b4ac" stroke-width="2" fill="none">
+          <path d="M520,58 L520,76 L200,76 L200,100"/>
+          <path d="M520,58 L520,76 L840,76 L840,100"/>
+          <path d="M200,186 L200,206 L620,206 L620,232"/>
+          <path d="M840,186 L840,206 L840,232"/>
+        </g>
+
+        <rect x="240" y="20" width="560" height="38" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2.5"/>
+        <text x="520" y="44" text-anchor="middle" font-size="12.5" font-weight="800" fill="#1e3a8a">Does permission depend on WHICH resource instance (ownership, tenant, sharing)?</text>
+
+        <text x="140" y="92" text-anchor="middle" font-size="10.5" font-weight="800" fill="#2f9e44">no — role alone decides</text>
+        <rect x="20" y="100" width="360" height="86" rx="9" fill="#b2f2bb" stroke="#2f9e44" stroke-width="2.5"/>
+        <text x="200" y="126" text-anchor="middle" font-size="13" font-weight="800" fill="#14532d">RBAC — role → permission mapping</text>
+        <text x="200" y="148" text-anchor="middle" font-size="11.5" fill="#14532d">Simple, auditable, cheap to reason</text>
+        <text x="200" y="168" text-anchor="middle" font-size="10.5" font-style="italic" fill="#14532d">about. Continue below to decide placement.</text>
+
+        <text x="900" y="92" text-anchor="middle" font-size="10.5" font-weight="800" fill="#c92a2a">yes — depends on the resource</text>
+        <rect x="700" y="100" width="320" height="86" rx="9" fill="#c3fae8" stroke="#0ca678" stroke-width="2.5"/>
+        <text x="840" y="128" text-anchor="middle" font-size="13" font-weight="800" fill="#134e4a">ABAC / ReBAC (Zanzibar-style)</text>
+        <text x="840" y="150" text-anchor="middle" font-size="11.5" fill="#134e4a">Ownership/tenant/relationship</text>
+        <text x="840" y="170" text-anchor="middle" font-size="11.5" fill="#134e4a">checked per resource instance</text>
+
+        <text x="410" y="226" text-anchor="middle" font-size="10.5" font-weight="800" fill="#2f9e44">no — few services</text>
+        <rect x="140" y="232" width="360" height="86" rx="9" fill="#a5d8ff" stroke="#1971c2" stroke-width="2.5"/>
+        <text x="320" y="258" text-anchor="middle" font-size="13" font-weight="800" fill="#0b3d66">KEEP THE CHECK IN-SERVICE</text>
+        <text x="320" y="280" text-anchor="middle" font-size="11.5" fill="#0b3d66">Lower latency, no new dependency —</text>
+        <text x="320" y="298" text-anchor="middle" font-size="11.5" fill="#0b3d66">fine for a handful of services</text>
+
+        <text x="840" y="226" text-anchor="middle" font-size="10.5" font-weight="800" fill="#c92a2a">yes — many services</text>
+        <rect x="660" y="232" width="360" height="86" rx="9" fill="#ffd8a8" stroke="#e67700" stroke-width="2.5"/>
+        <text x="840" y="258" text-anchor="middle" font-size="13" font-weight="800" fill="#7c2d12">CENTRALIZE IN A POLICY ENGINE (OPA)</text>
+        <text x="840" y="280" text-anchor="middle" font-size="11.5" fill="#7c2d12">One auditable source of truth — pay a</text>
+        <text x="840" y="298" text-anchor="middle" font-size="11.5" fill="#7c2d12">network hop and a new dependency</text>
+
+        <rect x="20" y="340" width="1000" height="60" rx="9" fill="#f3f2ef" stroke="#b8b4ac" stroke-width="2"/>
+        <text x="520" y="364" text-anchor="middle" font-size="12" font-weight="700" fill="#1a1917">Below RBAC: "does the SAME complex policy need enforcing consistently across many independent services?"</text>
+        <text x="520" y="384" text-anchor="middle" font-size="12" fill="#1a1917">ABAC/ReBAC is a terminal choice here — it answers the resource-instance question directly, on its own.</text>
+      </svg>
+      <p class="caption">RBAC vs. ABAC/ReBAC is the first fork; centralizing policy enforcement is a second, independent decision underneath RBAC.</p>
+    </div>
+
+    <h3>Trade-offs</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>✅ Benefit</th><th>❌ Cost / Limitation</th></tr></thead>
+        <tbody>
+          <tr><td><span class="benefit">RBAC is simple and auditable</span> — "what can an editor do?" has exactly one answer, defined in exactly one place</td><td>RBAC cannot express permission that depends on the specific resource instance (ownership, tenant match) — it answers "what role" not "which document," so it silently under- or over-permits the moment resource-level nuance matters</td></tr>
+          <tr><td><span class="benefit">JWT-embedded permission claims need zero server-side lookup</span> — the signature check alone is enough, which is fast and requires no shared state (3.4's core payoff)</td><td>Revoked or changed permissions stay valid until the token expires — there is no way to instantly force a stale claim to stop working without shortening token lifetimes or adding the server-side lookup you were trying to avoid</td></tr>
+          <tr><td><span class="benefit">Fine-grained, per-resource authorization checks close the IDOR/BOLA gap</span> — the #1 OWASP API risk, directly addressed</td><td>Must be applied consistently on every single resource-touching endpoint; one missed endpoint reintroduces the exact vulnerability, and there is no way to verify completeness except deliberate audit or a centralized enforcement layer</td></tr>
+          <tr><td><span class="benefit">A centralized policy engine (OPA) gives one auditable source of truth</span> across every service, instead of N slightly-drifted reimplementations</td><td>Adds a network hop and a latency cost to every authorization decision, and becomes a new critical-path dependency — if the policy engine is unreachable, every downstream authorization check is blocked too</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>In production</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>System</th><th>How it applies</th><th>The nuance</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Google Zanzibar</strong></td><td>Relationship-based access control (ReBAC) expressing permissions as tuples — <code>object#relation@user</code> — powering sharing across Docs, Drive, and Cloud at global scale</td><td>Chosen specifically because RBAC's fixed roles can't express "this document is shared with this specific person" — permission is a graph relationship, not a role assignment</td></tr>
+          <tr><td><strong>AWS IAM</strong></td><td>Every request evaluated as <code>(principal, action, resource)</code> against attached policy documents; an explicit <code>Deny</code> always overrides any <code>Allow</code>, regardless of evaluation order</td><td>The explicit-deny-wins rule exists specifically so a broad, accidentally-permissive policy can always be overridden by a narrower, deliberate restriction — safety by default</td></tr>
+          <tr><td><strong>GitHub</strong></td><td>Hybrid model: coarse RBAC roles per repository (read/write/admin/maintain) layered with fine-grained, individually-scoped Personal Access Tokens that further restrict what even an admin-role token can do</td><td>Demonstrates RBAC and fine-grained scoping working together rather than as alternatives — the role sets the ceiling, the token scope can only narrow it further</td></tr>
+          <tr><td><strong>Open Policy Agent (OPA)</strong></td><td>Deployed as a sidecar or centralized service at companies like Netflix and Pinterest; services send <code>(identity, action, resource)</code> and receive an allow/deny decision from policy written in Rego</td><td>The canonical production answer to "the same complex policy needs enforcing consistently across dozens of services" — the trade-off table's centralization row, in practice</td></tr>
+          <tr><td><strong>Auth0 / Okta</strong></td><td>Identity providers that deliberately separate authentication (login, MFA, session issuance) from authorization entirely — they hand back a verified identity and let each application define and enforce its own permission model</td><td>A clean illustration that authentication is a solved, outsourceable problem while authorization is inherently domain-specific and can't be fully delegated to a third party</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">You're designing permissions for a multi-tenant project-management SaaS: each company (tenant) has its own workspace, users have roles (admin/member/viewer) within their own workspace, and a document can additionally be shared with specific individuals outside the normal role hierarchy. Using the decision tree above, name which policy model(s) you'd combine, and justify against the specific cost each one adds.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the second and third boundary conditions — tenant/ownership scoping needs one model, individual sharing on top of a role hierarchy needs another; they aren't mutually exclusive.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> Can you defend this under interview pressure — and hold up when the interviewer pushes on the cost you claimed you'd pay?</div>
+  </section>
+
+  <!-- ══════════════════ §8 ══════════════════ -->
+  <section id="s8">
+    <h2 class="section-title"><span class="num">§8</span> 🎯 In the Interview</h2>
+
+    <h3>When an interviewer asks / says</h3>
+    <ul class="trigger-list">
+      <li>"How would you handle access control for this API?"</li>
+      <li>"What happens if a user tries to access another user's data by changing an ID?"</li>
+      <li>"How would you design permissions for a multi-tenant SaaS application?"</li>
+      <li>"The gateway already validates the token — isn't that enough?"</li>
+    </ul>
+
+    <h3>What you say / do</h3>
+    <p>This lands right after you've decided how identity is established (session vs. JWT vs. OAuth — 3.2/3.4/23.2) in the high-level design phase, and it resurfaces hard in the deep dive the instant the interviewer proposes a scenario involving more than one user or more than one role. Say both words and define them in one breath before doing anything else: authentication is identity, authorization is permission. Then name where each check runs — authentication once, near the edge; authorization again, at the resource — before naming the specific policy model (RBAC/ABAC/ReBAC) you'd use for this domain.</p>
+
+    <h3>The trade-off statement (memorize this pattern)</h3>
+    <div class="tradeoff-box">"I'd separate this into two explicit checks. Authentication happens once, at the gateway — it verifies the JWT signature and attaches a verified identity to the request. Authorization happens again, separately, at the resource layer: for this multi-tenant document system, I'd use RBAC for the role part — admin, editor, viewer, within a workspace — combined with an ownership check for the resource part, confirming the document's <code>tenant_id</code> matches the identity's tenant before allowing access, which is really a relationship check, the same shape as what Google's Zanzibar system does for Docs sharing. The cost is that this fine-grained check has to run on every single resource-touching endpoint, not just once at the gateway — skipping it there is exactly how broken object-level authorization vulnerabilities happen, which OWASP ranks as the top API security risk. I'd only reach for a centralized policy engine like OPA if this same complex policy needed to be enforced consistently across many more services than the two or three in this design."</div>
+
+    <h3>A second trade-off variant — the revocation pushback</h3>
+    <div class="tradeoff-box">"If the interviewer pushes on 'what happens when you revoke someone's access' — the honest answer is that it depends entirely on where the permission lives. If it's baked into a JWT claim at issuance, revocation doesn't take effect until that token expires, because nothing about revoking server-side changed the token's signature. I'd either keep access tokens short-lived — 15 minutes is a common default — so the staleness window is small, or move the authorization check itself out of the token and into a server-side lookup checked fresh on every request, which trades a small latency cost for instant revocation. Which one I pick depends on how sensitive instant revocation actually needs to be for this system — a banking app needs the live lookup; a low-stakes internal tool can tolerate a 15-minute staleness window."</div>
+
+    <h3>⚠️ Traps</h3>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "If the request has a valid token, it's authenticated, so it's fine to proceed."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> A valid token proves identity, nothing more. Whether that identity is allowed to do <em>this specific thing</em> to <em>this specific resource</em> is a completely separate question that a valid token has not answered. Treating "authenticated" as "authorized" is the single most common root cause of broken access control.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "The gateway already checks the token on every request, so individual services don't need their own permission checks."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> The gateway can only do coarse-grained authorization — "can this role call this endpoint at all" — because it doesn't know about the specific resource instance being requested. Only the service that owns the resource can check "does this document belong to this identity." Skipping that check anywhere is exactly how IDOR/BOLA vulnerabilities happen.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "401 and 403 are basically interchangeable — just return whichever is easier to implement."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> They tell the client to do completely different things. 401 means "I don't know who you are — authenticate and try again." 403 means "I know exactly who you are, and the answer is still no — don't bother re-authenticating." Conflating them breaks a client's retry logic and, in privacy-sensitive contexts, can leak whether a resource exists at all.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "We use JWTs, so revoking a user's access is instant — we just stop issuing new tokens with that permission."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Every already-issued token with the old permission remains cryptographically valid and keeps working until it expires, regardless of what changed server-side. Instant revocation requires either a live server-side check or deliberately short token lifetimes — it is never a property JWTs give you for free.</div></div>
+    </div>
+
+    <div class="checkpoint gate">
+      <div class="cp-title">🚨 Checkpoint — adversarial stress test (the gate)</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">You've designed a document-sharing system using RBAC (owner/editor/viewer roles within a workspace) plus a per-document ownership check. The interviewer pushes: <em>"A user is removed from a workspace — their role is deleted server-side. They still hold a JWT issued ten minutes ago with `role: editor` baked into its claims, and it doesn't expire for another twenty minutes. Walk me through exactly what happens if they call `PATCH /documents/{id}` on a document in that workspace during those twenty minutes, and tell me precisely what you'd change about the design so removal takes effect immediately instead of waiting for token expiry."</em></span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 A complete answer covers: with role claims baked into the JWT, the request WILL succeed during the remaining token lifetime — the signature is still valid, and the server has no mechanism in this design to know the role was revoked. It names the fix precisely: either (a) don't embed role/permission claims in the JWT at all — check the current role via a server-side lookup on every request, trading a lookup cost for instant revocation, or (b) keep short-lived access tokens with a refresh flow, bounding the staleness window instead of eliminating it — legitimate ONLY if a bounded-but-nonzero window is acceptable for this system's risk profile. A complete answer commits to one, rather than describing both and refusing to choose.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> Can you combine what you've learned across sections, not just recall each one?</div>
+  </section>
+
+  <!-- ══════════════════ §9 ══════════════════ -->
+  <section id="s9">
+    <h2 class="section-title"><span class="num">§9</span> 🧪 Mastery Gate</h2>
+    <div class="callout callout-quote">Synthesis only. Each question requires combining two or more sections.</div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">1</span>
+        <span class="qtext">A junior engineer argues that embedding a user's full permission set directly into the JWT (instead of just their identity) is strictly better, because it means the resource layer never needs a database lookup to authorize a request. Using the build chain from §5 and the stale-claims failure mode from §6, explain exactly what this trades away, and name the specific production scenario where that trade becomes a real security incident, not a theoretical concern.</span>
+        <span class="quiz-toggle">▼ Hint</span>
+      </div>
+      <div class="quiz-hint">💡 Sections combined: §5 + §6 + subtopic 3.4.</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">2</span>
+        <span class="qtext">You're designing access control for a hospital's electronic health records system, where a doctor should be able to read and write records for patients currently under their care, a nurse should be able to read (but not write) the same records, and a billing clerk should be able to read only the billing-relevant fields of any patient's record, never clinical notes. Decide which policy model(s) this requires, and justify why plain RBAC (doctor/nurse/billing-clerk roles alone, with no resource-level or field-level nuance) is or isn't sufficient here.</span>
+        <span class="quiz-toggle">▼ Hint</span>
+      </div>
+      <div class="quiz-hint">💡 Sections combined: §7 + §8, applied to a system not mentioned elsewhere in this doc.</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">3</span>
+        <span class="qtext">An interviewer asks you to explain, end to end, how a request to <code>DELETE /workspaces/{id}/members/{user_id}</code> should be authorized in a multi-tenant SaaS product, where only a workspace's owner (not just any admin) can remove another member, and a member can always remove themselves. Walk through what gets checked, in what order, and what specifically would go wrong if the check only verified "is the caller an admin of some workspace" rather than "is the caller the owner of THIS workspace, or removing THEMSELVES."</span>
+        <span class="quiz-toggle">▼ Hint</span>
+      </div>
+      <div class="quiz-hint">💡 Sections combined: §4 + §6 + §8.</div>
+    </div>
+
+    <h3>Mastery criteria — tick only what you can demonstrate on demand</h3>
+    <ul class="checklist">
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can explain the difference between authentication (who are you?) and authorization (what can you do?) and give a concrete example of each failing independently</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can name and explain broken object-level authorization (IDOR/BOLA) as the concrete failure mode of skipping resource-level authorization</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can choose between RBAC, ABAC, and ReBAC for a novel domain and justify the choice against how permission actually varies</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can explain why authorization must be re-checked at every enforcement layer while authentication can be centralized at the edge</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can explain the revocation trade-off between JWT-embedded permission claims and a live server-side authorization lookup, including at least one concrete mitigation</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can correctly distinguish 401 from 403 and justify which one applies to a given failure scenario</span></li>
+    </ul>
+
+    <div class="callout callout-tip">💡 <strong>Rule of thumb:</strong> If you can teach it to someone else and field their follow-up questions, you've mastered it.</div>
+  </section>
+
+  <!-- ══════════════════ §10 ══════════════════ -->
+  <section id="s10">
+    <h2 class="section-title"><span class="num">§10</span> 🔗 Connections &amp; Sources</h2>
+
+    <div class="connections">
+      <div class="conn-card">
+        <span class="conn-icon">⬅️</span>
+        <div><div class="conn-label">Builds on</div><strong>3.2 Session Management Approaches</strong>, which supplies one of the two concrete mechanisms (server-side session lookup) that authentication in this subtopic actually relies on to establish identity. <strong>3.4 JWT as Stateless Session Token</strong>, which supplies the other mechanism (signature verification with no server round trip) and, critically, the exact statelessness trade-off that resurfaces here as the stale-permissions security problem in §6 and §8.</div>
+      </div>
+      <div class="conn-card">
+        <span class="conn-icon">➡️</span>
+        <div><div class="conn-label">Enables</div><strong>23.2 OAuth2</strong>, the delegated-authentication mechanism for letting a third party authenticate a user on your behalf, which still requires this subtopic's separate authorization step once the OAuth token is validated. <strong>23.3 JWT — Structure, Signing, Validation, and Security Pitfalls</strong>, the deep dive on the exact token mechanics used at a conceptual level here. <strong>23.4 RBAC — Roles, Permissions, Policy Enforcement Points</strong>, the full depth treatment of the policy model introduced here in §5 and §7. <strong>11.7 API Gateway Patterns</strong>, where the edge-level authentication and coarse-grained authorization described in §6's enforcement-points diagram get implemented concretely.</div>
+      </div>
+      <div class="conn-card">
+        <span class="conn-icon">⚡</span>
+        <div><div class="conn-label">Tension with</div><strong>3.4 JWT as Stateless Session Token</strong> directly, on the statelessness-vs-revocability axis — the exact property that makes JWTs attractive (no server-side lookup) is the exact property that makes authorization decisions embedded in them impossible to revoke instantly, and neither is strictly better, only better for a given staleness tolerance. Also <strong>4.6 Sticky Sessions</strong> — a live, server-side authorization lookup pulls a system back toward needing consistent, current state per request, in tension with the horizontally-scalable statelessness that sessions and load balancing were built to achieve.</div>
+      </div>
+    </div>
+
+    <h3>📚 Further reading</h3>
+    <ul class="reading-list">
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>OWASP API Security Top 10 (2023)</strong> — <a href="https://owasp.org/API-Security/editions/2023/en/0x11-t10/">docs</a> — API1: Broken Object Level Authorization, ranked #1; read this one entry closely, it is the concrete failure mode this whole subtopic exists to prevent</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Google — "Zanzibar: Google's Consistent, Global Authorization System" (2019)</strong> — <a href="https://research.google/pubs/pub48190/">paper</a> — the relationship-based access control model referenced throughout §5–§7; read the tuple model, skip the consistency-protocol internals</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>AWS IAM — Policy Evaluation Logic</strong> — <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html">docs</a> — the authoritative source for the explicit-deny-overrides-allow rule referenced in §7</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>NIST — Role Based Access Control standard, INCITS 359-2004</strong> — <a href="https://csrc.nist.gov/projects/role-based-access-control">docs</a> — the formal definition of RBAC referenced in §5 and §7</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Auth0 — "Authorization Policies: RBAC vs. ABAC"</strong> — <a href="https://auth0.com/docs/manage-users/access-control">docs</a> — a practitioner-level comparison of the two policy models covered in §7's decision tree</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Open Policy Agent (OPA) documentation</strong> — <a href="https://www.openpolicyagent.org/docs/latest/">docs</a> — the centralized-policy-engine pattern referenced in §7's "In production" table</span></li>
+    </ul>
+  </section>
+
+  <!-- ══════════════════ §11 ══════════════════ -->
+  <section id="s11">
+    <h2 class="section-title"><span class="num">§11</span> ✍️ My Notes</h2>
+    <div class="callout callout-quote">Personal observations, model answers from drilling sessions, things that confused me. Saved locally in this browser.</div>
+    <textarea class="notes-area" placeholder="Your notes, model answers, and annotations…"></textarea>
+  </section>
+
+</article>
+</main>
+
+<script>
+// TOC active state
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('#toc nav a');
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(a => a.classList.remove('active'));
+      const a = document.querySelector(`#toc nav a[href="#${e.target.id}"]`);
+      if (a) a.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+sections.forEach(s => obs.observe(s));
+
+function toggle(cb) { cb.closest('li').classList.toggle('checked'); }
+function toggleReading(cb) { cb.closest('li').classList.toggle('checked'); }
+function toggleQuiz(q) {
+  const item = q.closest('.quiz-item');
+  item.classList.toggle('open');
+  q.querySelector('.quiz-toggle').textContent = item.classList.contains('open') ? '▲ Hide' : '▼ Hint';
+}
+
+// Notes auto-save
+const notesArea = document.querySelector('.notes-area');
+const NOTES_KEY = 'notes_23_1';
+if (localStorage.getItem(NOTES_KEY)) notesArea.value = localStorage.getItem(NOTES_KEY);
+notesArea.addEventListener('input', () => {
+  try { localStorage.setItem(NOTES_KEY, notesArea.value); } catch(e) {}
+});
+</script>
+</body>
+</html>

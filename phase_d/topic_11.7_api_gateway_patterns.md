@@ -4,7 +4,8 @@
 > **Phase:** D — Networking Branch
 > **Depth Tier:** 🥇 T1 (Core) — budget ~3h
 > **Prereqs:** 4.5 (Reverse Proxies), 11.1 (REST — Principles, Resource Design, HTTP Methods, Status Codes)
-> **Date studied:** Not yet studied
+> **Date studied:** 2026-08-10
+> ⚠️ **Provenance note:** Marked done at Gary's request before the protocol completed. §4–§7 checkpoints drilled live, with retries on §5 Checkpoint 2 (in-memory auth cache / statelessness — three attempts before landing the instance-routing mechanism) and §7 (routing inter-service calls through the gateway — two attempts; first reached for orchestration-creep/statelessness instead of the north-south/east-west boundary, second still inverted the SPOF and latency framing before correction). §8 rehearsal, Step 3 (closed-book §1 reconstruction), Step 4 (refinement), and the §9 Mastery Gate synthesis questions were never attempted. Treat mastery as unverified on those pieces, not as complete.
 
 ---
 
@@ -256,6 +257,28 @@ The insight that resolves this is to stop repeating the cross-cutting logic per 
 
    > 💡 *If you hesitate, re-read the second paragraph — the part about what a per-service reverse proxy does and doesn't solve for the client calling in.*
 
+MODEL ANSWER — §4 Checkpoint (per-service reverse proxy vs. shared gateway)
+
+WHAT IT FIXES
+  Removes the gateway's SPOF: no single shared component that every
+  request depends on. TLS termination and rate limiting still happen,
+  just locally per service instead of centrally.
+
+WHAT IT STILL LEAVES BROKEN (the client-side half)
+  The client still integrates against N services directly — N hostnames,
+  and because each service's proxy is independently implemented, the
+  SAME duplication problem that caused inconsistency internally now
+  surfaces externally: auth header formats, rate-limit response shapes,
+  and error bodies can differ proxy to proxy. Duplication doesn't stay
+  an internal ops problem — it's the client's problem too, just one
+  layer removed.
+
+WHY MIGRATION STILL BREAKS CALLERS
+  Because the client calls services directly rather than through one
+  stable address, moving, splitting, or renaming a service is still a
+  breaking change for every direct caller — exactly the cost a shared
+  gateway's routing table was built to absorb.
+
 > **→ Next:** If the fix is one edge component owning cross-cutting concerns, what exactly does it consist of, and how do the pieces build on each other?
 
 ---
@@ -300,9 +323,60 @@ None of the above holds up if the gateway itself becomes a bottleneck, and it wi
 
    > 💡 *If you hesitate, re-read "App-Aware Routing" and think about what information a load balancer has versus what a gateway needs to route `/orders/*` correctly.*
 
+MODEL ANSWER — §5 Checkpoint 1 (IP:port routing vs. app-aware routing)
+
+WHY IP:PORT CARRIES NO ROUTING SIGNAL
+  ONE EDGE means every backend service sits behind the SAME externally-
+  reachable address. A device reading only IP:port sees identical
+  information whether the request is headed for /orders or /users —
+  there's nothing at that layer to distinguish N different backends.
+
+WHY APP-AWARE ROUTING NEEDS TLS TERMINATION FIRST (your addition)
+  The path/host/header that DOES carry routing information lives inside
+  the HTTP request, which is encrypted until TLS is terminated. You
+  can't route on path until you've decrypted and parsed the request —
+  which is exactly why TLS termination and app-aware routing live in
+  the same component instead of being split across two.
+
+WHY A PLAIN LOAD BALANCER NEVER NEEDED THIS
+  An L4 load balancer isn't failing at a job it was trying to do — it's
+  solving a narrower problem: picking a healthy INSTANCE of one already-
+  known destination. It was never asked "which service," so it never
+  needed L7 visibility to answer it.
+
 2. A teammate proposes adding a small in-memory cache *inside* a single gateway instance, keyed by client IP, to speed up repeated auth checks. Using the build chain, explain what this breaks and why it's the same mistake REST's statelessness constraint (11.1) was built to prevent.
 
    > 💡 *If you hesitate, trace the build chain from ONE EDGE through STATELESSNESS LETS THE EDGE SCALE — the answer is about what happens when a client's second request lands on a different gateway instance.*
+MODEL ANSWER — §5 Checkpoint 2 (in-memory auth cache breaks statelessness)
+
+THE MECHANISM, NOT JUST THE LABEL
+  "Breaks statelessness" isn't itself an explanation — the question is
+  what specifically stops working. STATELESSNESS LETS THE EDGE SCALE
+  means ANY gateway instance can serve ANY request, because none of
+  them privately remembers anything about a client. A per-instance
+  cache violates exactly that: the cache only exists on the ONE
+  instance that happened to handle the first request.
+
+WHAT HAPPENS ON THE VERY NEXT REQUEST — NO CRASH NEEDED
+  The client's second request gets load-balanced across instances like
+  any other request, with no guarantee it lands on the same one again.
+  If it lands on instance B, B has never seen that cache entry — the
+  speedup silently doesn't apply. Worse: if the client's permissions
+  were revoked in between, instance A might keep serving a STALE
+  cached decision while B correctly re-checks. Correctness now depends
+  on WHICH instance you happen to hit — that's the actual break.
+
+THE REQUIREMENT THIS CREATES, AND WHY IT'S THE SAME REST MISTAKE
+  For the cache to reliably help at all, the SAME client would need to
+  be routed to the SAME instance every time — sticky sessions / server
+  affinity. That's precisely the dependency 11.1's statelessness
+  constraint exists to eliminate: stateless requests are what let a
+  load balancer distribute freely across any healthy instance with
+  zero coordination. Reintroducing affinity at the gateway reintroduces
+  the exact fragility REST's statelessness removed — a client tied to
+  one instance can't be transparently rerouted if that instance is
+  slow, restarting, or scaled down.
+
 
 > **→ Next:** You know the pieces. What actually happens, request by request, when a call comes through the gateway?
 
@@ -357,9 +431,45 @@ None of the above holds up if the gateway itself becomes a bottleneck, and it wi
 
    > 💡 *If you hesitate, re-read the "Cascading failure without circuit breaking" failure case — the answer is about a shared resource at the gateway, not about the slow backend itself.*
 
+MODEL ANSWER — §6 Checkpoint 1 (cascading failure without circuit breaking)
+
+THE CASCADE
+  Slow backend → gateway blocks waiting on its response → the shared
+  connection/thread pool at the gateway fills with requests stuck on
+  that ONE backend → pool exhausted → NEW requests, including ones
+  for completely healthy backends, can't get a slot → they queue or
+  fail too. The healthy backend was never the problem; gateway-level
+  resource exhaustion was.
+
+THE FIX
+  A circuit breaker, not just a timeout. Timeout bounds one request's
+  cost; circuit breaker tracks failure rate per backend and, once a
+  threshold is crossed, stops forwarding to that backend entirely
+  (fails fast, zero resource cost) for a cooldown, then half-opens to
+  test recovery — this is what stops the REPEATED resource cost a
+  timeout alone doesn't prevent.
+
 2. A team adds a feature to their gateway: on every incoming order request, the gateway calls the inventory-service to check stock levels and rejects the order at the edge if stock is zero, before ever forwarding to the order-service. Explain why this is the "orchestration creep" failure case specifically, and where that logic should live instead.
 
    > 💡 *If you hesitate, re-read "Orchestration creep" and the Core Idea's warning about what the gateway is not supposed to understand.*
+
+MODEL ANSWER — §6 Checkpoint 2 (orchestration creep)
+
+WHY IT'S ORCHESTRATION CREEP
+  The gateway is making a business decision (reject on zero stock)
+  instead of routing and enforcing cross-cutting policy. Each addition
+  looks harmless in isolation ("just one more check"), but the gateway
+  accumulates business logic over time until it's a second monolith —
+  one every team now depends on for deploys, sitting in the one place
+  you can least afford an outage.
+
+WHERE IT SHOULD LIVE
+  In order-service, which already owns the order domain. The gateway
+  keeps doing exactly what it already does — route to order-service
+  (north-south). Order-service calls inventory-service itself
+  (east-west, service-to-service) as part of processing the order. No
+  new component needed — just the decision staying with the service
+  that actually owns it.
 
 > **→ Next:** You can trace a request through the gateway. In a live design, when do you actually reach for one, and what does it cost you?
 
@@ -411,6 +521,31 @@ The default the moment a system has more than a couple of independently-deployed
 1. A team's gateway currently authenticates, rate-limits, and routes for six backend services. An engineer proposes also moving all *inter-service* calls (order-service calling inventory-service to check stock) through the same gateway, "since the auth logic is already there." Using the decision tree above, would you agree, and what would you actually recommend instead? Justify against the specific cost you'd be accepting either way.
 
    > 💡 *If you hesitate, re-read the first boundary condition — north-south vs. east-west traffic — and the trade-off row about the gateway being a single point of failure.*
+
+MODEL ANSWER — §7 Checkpoint (routing inter-service calls through the shared gateway)
+
+VERDICT
+  Disagree. Recommend a service mesh sidecar for the inter-service
+  calls instead, keeping the gateway limited to routing external
+  traffic.
+
+WHY — TRAFFIC DIRECTION, NOT LOGIC OWNERSHIP
+  Gateway → services is north-south (external, client-facing). Order-
+  service → inventory-service is east-west (internal, service-to-
+  service). Routing east-west traffic through the gateway "since the
+  auth logic is already there" conflates the two.
+
+THE SPECIFIC COST — CONTAINED, NOT REMOVED
+  The gateway is already a SPOF for north-south traffic; that doesn't
+  change. What changes is the BLAST RADIUS: routing internal calls
+  through it means internal traffic now ALSO depends on the shared
+  gateway being up — traffic that never needed a client-facing
+  contract now shares a failure domain it didn't have to.
+
+THE SPECIFIC COST — ADDED LATENCY
+  Every inter-service call now pays the gateway's hop unconditionally,
+  for traffic that could otherwise stay local to the two services
+  involved. A per-service mesh sidecar avoids that added round trip.
 
 > **→ Next:** Can you defend this under interview pressure — and hold up when the interviewer pushes on the cost you claimed you'd pay?
 
