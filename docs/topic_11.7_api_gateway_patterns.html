@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>11.7 API Gateway Patterns</title>
+<style>
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface-alt: #f3f2ef;
+    --border: #e5e3de; --text: #1a1917; --text-muted: #6b6861;
+    --accent: #2563eb; --accent-light: #dbeafe;
+    --green: #16a34a; --green-light: #dcfce7;
+    --red: #dc2626; --red-light: #fee2e2;
+    --yellow: #d97706; --yellow-light: #fef3c7;
+    --purple: #7c3aed; --purple-light: #ede9fe;
+    --orange: #ea580c; --orange-light: #ffedd5;
+    --teal: #0d9488; --teal-light: #ccfbf1;
+    --code-bg: #1e1e2e; --code-text: #cdd6f4;
+    --sidebar-w: 240px; --content-max: 820px;
+    font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; }
+  #toc { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0 48px; z-index: 100; }
+  #toc-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  #toc-header .phase-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-bottom: 6px; }
+  #toc-header h2 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  #toc-header .tier-tag { font-size: 10px; font-weight: 800; letter-spacing: .06em; color: var(--yellow); background: var(--yellow-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-top: 8px; }
+  #toc nav a { display: block; padding: 5px 16px 5px 20px; font-size: 12.5px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+  main { margin-left: var(--sidebar-w); padding: 48px 48px 96px; max-width: calc(var(--sidebar-w) + var(--content-max) + 96px); width: 100%; }
+  article { max-width: var(--content-max); }
+  .doc-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 2px solid var(--border); }
+  .doc-header .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+  .tag-phase { background: var(--accent-light); color: var(--accent); }
+  .tag-topic { background: var(--purple-light); color: var(--purple); }
+  .tag-tier  { background: var(--yellow-light); color: var(--yellow); }
+  .tag-prereq{ background: var(--teal-light); color: var(--teal); }
+  .tag-date  { background: var(--surface-alt);  color: var(--text-muted); }
+  .doc-header h1 { font-size: 30px; font-weight: 800; line-height: 1.25; letter-spacing: -.02em; color: var(--text); }
+  section { margin-bottom: 52px; scroll-margin-top: 32px; }
+  h2.section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -.01em; }
+  h2.section-title .num { font-size: 11px; font-weight: 800; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; letter-spacing: .04em; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 24px 0 10px; }
+  h4 { font-size: 13.5px; font-weight: 700; color: var(--text); margin: 18px 0 8px; }
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+  code { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-family: "SF Mono","Fira Code",Menlo,monospace; font-size: 12.5px; }
+  ul.plain { margin: 0 0 14px 20px; }
+  ul.plain li { margin-bottom: 7px; font-size: 14.5px; line-height: 1.6; }
+  ol.steps { margin: 0 0 14px 22px; }
+  ol.steps li { margin-bottom: 8px; font-size: 14.5px; line-height: 1.6; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 14px; border-left: 3px solid; }
+  .callout-goal  { background: var(--accent-light); border-color: var(--accent); color: #1e40af; }
+  .callout-tip   { background: var(--yellow-light); border-color: var(--yellow); color: #92400e; }
+  .callout-warn  { background: var(--red-light); border-color: var(--red); color: #7f1d1d; }
+  .callout-quote { background: var(--surface-alt); border-color: var(--border); color: var(--text-muted); font-style: italic; }
+  .callout-teal  { background: var(--teal-light); border-color: var(--teal); color: #134e4a; }
+  .the-question { background: var(--surface); border: 2px solid var(--accent); border-radius: 12px; padding: 16px 20px; margin-top: 18px; font-size: 15.5px; }
+  .the-question .lbl { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); display: block; margin-bottom: 5px; }
+  .the-question em { color: var(--text); font-weight: 600; }
+  .definition { background: var(--purple-light); border-left: 4px solid var(--purple); border-radius: 8px; padding: 16px 20px; margin: 18px 0 24px; font-size: 15px; font-weight: 600; color: #4c1d95; line-height: 1.6; }
+  .mental-model { background: var(--teal-light); border-left: 3px solid var(--teal); border-radius: 8px; padding: 14px 18px; margin: 18px 0; font-size: 14px; color: #134e4a; }
+  .mental-model .mm-name { font-weight: 800; }
+  .mental-model .mm-break { display: block; margin-top: 7px; font-style: italic; opacity: .85; }
+  .bridge { background: linear-gradient(90deg, var(--accent-light), transparent); border-left: 4px solid var(--accent); border-radius: 8px; padding: 13px 18px; margin-top: 28px; font-size: 14.5px; color: #1e40af; font-weight: 600; }
+  .bridge .arrow { font-weight: 800; margin-right: 6px; }
+  .checkpoint { background: var(--surface); border: 2px solid var(--green); border-radius: 12px; padding: 16px 20px; margin-top: 26px; }
+  .checkpoint > .cp-title { font-size: 12px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--green); margin-bottom: 12px; display: flex; align-items: center; gap: 7px; }
+  .checkpoint.gate { border-color: var(--red); }
+  .checkpoint.gate > .cp-title { color: var(--red); }
+  .cheatsheet { background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 24px 28px; font-family: "SF Mono","Fira Code","Cascadia Code",Menlo,monospace; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-x: auto; margin-top: 16px; }
+  .cheatsheet .label { color: #cba6f7; font-weight: 700; letter-spacing: .08em; display: block; margin-top: 18px; margin-bottom: 4px; border-bottom: 1px solid #313244; padding-bottom: 3px; }
+  .cheatsheet .label:first-child { margin-top: 0; }
+  .diagram-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 16px 14px; margin: 20px 0 28px; overflow-x: auto; }
+  .diagram-wrap .diagram-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); margin-bottom: 12px; }
+  .diagram-wrap svg { display: block; width: 100%; height: auto; }
+  .diagram-wrap p.caption { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 10px; margin-bottom: 0; font-style: italic; }
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; font-size: 14.5px; line-height: 1.55; }
+  .checklist li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 2px; background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .checklist li.checked .cb { background: var(--green); border-color: var(--green); }
+  .checklist li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .checklist li.checked .text { color: var(--text-muted); text-decoration: line-through; }
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: var(--surface-alt); padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.5; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+  .misconception { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .misconception .wrong { background: var(--red-light); padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; }
+  .misconception .right { padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; color: #065f46; background: var(--green-light); }
+  .misconception .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .quiz-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .quiz-q { padding: 14px 18px; font-size: 14.5px; font-weight: 600; cursor: pointer; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .quiz-q:hover { background: var(--surface-alt); }
+  .quiz-num { flex-shrink: 0; width: 24px; height: 24px; background: var(--accent); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; margin-top: 1px; }
+  .checkpoint.gate .quiz-num { background: var(--red); }
+  .quiz-q .qtext { flex: 1; font-weight: 500; }
+  .quiz-toggle { font-size: 11px; color: var(--text-muted); flex-shrink: 0; margin-top: 3px; }
+  .quiz-hint { display: none; padding: 10px 18px 14px; font-size: 13px; color: #92400e; background: var(--yellow-light); border-top: 1px solid var(--border); line-height: 1.6; }
+  .quiz-item.open .quiz-hint { display: block; }
+  .reading-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .reading-list li { display: flex; align-items: flex-start; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; font-size: 14px; }
+  .reading-list li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 1px; cursor: pointer; background: var(--surface); display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .reading-list li.checked .cb { background: var(--green); border-color: var(--green); }
+  .reading-list li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .reading-list li.checked .rtext { color: var(--text-muted); text-decoration: line-through; }
+  .notes-area { width: 100%; min-height: 200px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: inherit; font-size: 14px; color: var(--text); resize: vertical; line-height: 1.6; }
+  .notes-area:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .connections { display: flex; flex-direction: column; gap: 12px; }
+  .conn-card { display: flex; align-items: flex-start; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14px; }
+  .conn-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .conn-label { font-weight: 700; margin-bottom: 3px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .tradeoff-box { background: var(--surface-alt); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 16px 20px; font-size: 14.5px; font-style: italic; color: var(--text); margin-top: 14px; line-height: 1.65; }
+  .trigger-list { list-style: none; display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+  .trigger-list li { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--orange); border-radius: 8px; padding: 10px 16px; font-size: 14px; font-style: italic; color: var(--text); }
+  @media (max-width: 900px) { #toc { display: none; } main { margin-left: 0; padding: 24px 20px 60px; } }
+</style>
+</head>
+<body>
+
+<aside id="toc">
+  <div id="toc-header">
+    <span class="phase-tag">Phase D · Topic 11</span>
+    <h2>11.7 API Gateway Patterns</h2>
+    <span class="tier-tag">🥇 T1 · ~3h</span>
+  </div>
+  <nav>
+    <a href="#s0">🧭 The Question</a>
+    <a href="#s1">🎯 Quick Reference</a>
+    <a href="#s2">📋 Cheatsheet</a>
+    <a href="#s3">🧠 The Mindmap</a>
+    <a href="#s4">🔥 The Problem</a>
+    <a href="#s5">💡 The Core Idea</a>
+    <a href="#s6">⚙️ How It Works</a>
+    <a href="#s7">⚖️ The Decision</a>
+    <a href="#s8">🎯 In the Interview</a>
+    <a href="#s9">🧪 Mastery Gate</a>
+    <a href="#s10">🔗 Connections</a>
+    <a href="#s11">✍️ My Notes</a>
+  </nav>
+</aside>
+
+<main>
+<article>
+
+  <header class="doc-header">
+    <div class="meta">
+      <span class="tag tag-phase">Phase D — Networking</span>
+      <span class="tag tag-topic">Topic 11 — API Design &amp; Service Boundaries</span>
+      <span class="tag tag-tier">🥇 T1 Core · ~3h</span>
+      <span class="tag tag-prereq">Prereqs: 4.5, 11.1</span>
+      <span class="tag tag-date">Not yet studied</span>
+    </div>
+    <h1>11.7 API Gateway Patterns</h1>
+  </header>
+
+  <!-- ══════════════════ §0 ══════════════════ -->
+  <section id="s0">
+    <h2 class="section-title"><span class="num">§0</span> 🧭 The Question This Answers</h2>
+
+    <p>11.1 established that a well-designed API is a resource-oriented contract between a client and a service. 4.5 established that a reverse proxy can sit in front of a backend and terminate connections on its behalf. Once a system stops being one service and becomes many — an order service, a user service, an inventory service, each with its own REST API — a new problem appears that neither of those subtopics solves on its own: every one of those services now needs authentication, TLS termination, rate limiting, and a consistent way for clients to find it, and none of that is core business logic. <strong>An API gateway is the architectural answer: one edge component that owns every cross-cutting concern once, so that N backend services don't each reinvent it, and so that a client sees one coherent API surface instead of N independently-addressed ones.</strong></p>
+
+    <p>The tension is that centralizing this logic in one place trades duplication for concentration — you stop writing the same auth check five times, but you also create one component that every request must pass through, whose failure now means every service is unreachable. The obvious move — let each service handle its own auth, its own rate limiting, its own TLS — avoids that concentration risk, but it means five teams independently reimplement (and independently get wrong) the same cross-cutting logic, and a client integrating with your system has to learn five different hostnames and five different auth mechanisms instead of one.</p>
+
+    <div class="the-question">
+      <span class="lbl">The question</span>
+      <em>When you have many backend services instead of one, where do cross-cutting concerns — authentication, rate limiting, routing, TLS termination — belong, and what do you give up by concentrating them in a single edge component instead of leaving them distributed?</em>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> Before naming the pattern, what actually breaks when every service handles its own edge concerns?</div>
+  </section>
+
+  <!-- ══════════════════ §1 ══════════════════ -->
+  <section id="s1">
+    <h2 class="section-title"><span class="num">§1</span> 🎯 Interview Quick Reference Card</h2>
+    <div class="callout callout-quote">Not a summary — a live-recall tool, built for retrieval speed under interview pressure. If you need the reasoning behind anything here, that's what §2 (cheatsheet) and the rest of the doc are for.</div>
+
+    <h3>The checklist — walk this on the whiteboard, in order</h3>
+    <ol class="steps">
+      <li>Name the edge: one entry point in front of N backend services, not N independently-addressed hostnames</li>
+      <li>List what moves to the gateway: TLS termination, authentication, rate limiting, request routing — cross-cutting, not business logic</li>
+      <li>Pick a routing strategy: path-based (<code>/orders/*</code> → order-service) is the default; name host-based and header-based as alternatives</li>
+      <li>Say what does NOT belong in the gateway: business logic, service-specific validation, anything that would make the gateway a second monolith</li>
+      <li>Name the failure mode up front: the gateway is now a single point of failure and adds a hop of latency — mitigate with stateless horizontal scaling (3.1, 4.5) and circuit breaking per backend</li>
+    </ol>
+
+    <h3>Trigger → action</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Interviewer says</th><th>You do</th></tr></thead>
+        <tbody>
+          <tr><td>"How do you handle auth across all these microservices?"</td><td>Terminate auth once at the gateway (validate the token), not once per service</td></tr>
+          <tr><td>"Where does rate limiting live?"</td><td>Gateway, keyed per API key/user, token bucket, reject with <code>429</code> before load reaches a backend</td></tr>
+          <tr><td>"The client needs data from 3 services for one screen"</td><td>Name it explicitly: aggregate at the gateway for a fixed shape, or split into a Backend-for-Frontend if it diverges per client type</td></tr>
+          <tr><td>"What if the gateway goes down?"</td><td>It's a SPOF by construction — mitigate with stateless instances behind a load balancer, never a single box</td></tr>
+          <tr><td>"Gateway vs. load balancer vs. reverse proxy — what's the difference?"</td><td>LB picks a healthy backend; reverse proxy forwards on behalf of a backend; gateway does both <strong>plus</strong> app-aware routing, auth, and per-route policy</td></tr>
+          <tr><td>"Gateway vs. service mesh?"</td><td>Gateway = north-south (client → services, edge). Mesh sidecar (Envoy/Istio) = east-west (service → service, internal)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Fast disambiguation — the pairs that get confused live</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Pair</th><th>The distinction</th></tr></thead>
+        <tbody>
+          <tr><td><strong>API gateway vs. reverse proxy</strong></td><td>A reverse proxy forwards traffic; a gateway is a reverse proxy that's <em>application-aware</em> — it understands routes, API keys, and per-endpoint policy, not just "forward to backend X."</td></tr>
+          <tr><td><strong>API gateway vs. load balancer</strong></td><td>A load balancer picks <em>which healthy instance</em> of one service to hit. A gateway decides <em>which service</em> a request even belongs to, then usually hands off to a load balancer for the instance-level pick.</td></tr>
+          <tr><td><strong>API gateway vs. service mesh (sidecar)</strong></td><td>Gateway sits at the edge and handles external (north-south) traffic. A mesh sidecar (Envoy) sits next to every service and handles internal (east-west) traffic. Same proxy tech, different topological role.</td></tr>
+          <tr><td><strong>Gateway aggregation vs. BFF</strong></td><td>A single generic gateway aggregating for every client type becomes a routing monolith as client needs diverge. A Backend-for-Frontend is a separate thin aggregation layer per client type, each shaped to that client only.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>High-yield anchors</h3>
+    <div class="cheatsheet" style="font-size: 12.5px;">North-south traffic → API gateway (edge, client-facing)
+East-west traffic   → service mesh sidecar (internal, service-to-service)
+Same proxy tech often runs both roles (e.g. Envoy) — the role is topological, not technological
+AWS API Gateway's published account-level default throttle is on the order of
+  10,000 req/s steady-state / 5,000 req/s burst — treat as an order-of-magnitude
+  anchor, not a memorized constant; AWS revises these over time
+Kong is built on nginx/OpenResty; auth, rate limiting, and logging ship as plugins</div>
+
+    <h3>The script — say this close to verbatim</h3>
+    <div class="tradeoff-box">"I'd put an API gateway — something like Kong or AWS API Gateway — in front of the order-service, user-service, and inventory-service, so clients see one host instead of three. It terminates TLS once, validates the auth token before any backend sees the request, and enforces a per-API-key rate limit with a token bucket, rejecting with <code>429</code> before load ever reaches a backend. Path-based routing — <code>/orders/*</code> to order-service, <code>/users/*</code> to user-service — means I can move, split, or scale a backend without any client-facing change. The cost is that the gateway becomes a single point of failure and adds a hop of latency to every request, so I run it as stateless instances behind a load balancer rather than a single box, and I keep it limited to routing and cross-cutting policy — the moment it starts doing real aggregation or business logic, it's turned into a second monolith I now have to operate."</div>
+
+    <h3>If pushed on gateway vs. service mesh specifically</h3>
+    <div class="tradeoff-box">Gateway handles north-south (external client → your services) traffic. A service mesh sidecar handles east-west (service → service) traffic. I'd introduce a mesh only once service-to-service call volume and observability needs grow past what a shared library or convention can handle — not as a default alongside the gateway from day one.</div>
+  </section>
+
+  <!-- ══════════════════ §2 ══════════════════ -->
+  <section id="s2">
+    <h2 class="section-title"><span class="num">§2</span> 📋 Cheatsheet</h2>
+
+    <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+    <div class="callout callout-tip">⏭️ <strong>First time through this topic?</strong> Skip to §3 and come back here for revision.</div>
+
+<div class="cheatsheet"><span class="label">§ 1  WHY IT EXISTS</span>Once a system has more than a couple of backend services, each one independently
+needs TLS termination, authentication, rate limiting, and a stable address a
+client can find it at. Building that into every service means five teams
+duplicate — and independently get wrong — the same cross-cutting logic, and a
+client has to learn N hostnames and N auth mechanisms instead of one. The
+API gateway's fix is to centralize all of that at a single edge component that
+every external request passes through once, so it's implemented correctly one
+time instead of N times, and the client sees one coherent surface.
+<span class="label">§ 2  WHAT IT IS</span>API GATEWAY           A reverse proxy (4.5) specialized for API traffic: it does
+                     app-aware routing (path/host/header → backend service),
+                     not just "forward to backend X."
+NORTH-SOUTH TRAFFIC   Traffic entering from outside the system (client → edge).
+                     This is the gateway's job.
+EAST-WEST TRAFFIC     Traffic between your own services (service → service).
+                     This is a service mesh's job, not the gateway's.
+CROSS-CUTTING CONCERN A behavior every service needs (auth, rate limiting, TLS,
+                     logging) that has nothing to do with any one service's
+                     actual business logic.
+BFF (BACKEND FOR      A thin, client-specific aggregation layer (one per client
+FRONTEND)             type: mobile, web, partner) instead of one generic gateway
+                     trying to serve every client's shape.
+<span class="label">§ 3  THE MECHANISM</span>TERMINATE TLS ONCE    Gateway holds the certificate, decrypts once at the edge;
+                     internal hops run over a trusted network (4.5's argument,
+                     applied to many backends instead of one).
+AUTHENTICATE ONCE     Validate the token/session at the gateway; backends trust
+                     a forwarded identity instead of each re-implementing auth.
+ROUTE BY PATH/HOST     Match the incoming request to exactly one backend service
+                     — path-based is the default (/orders/* -> order-service).
+RATE LIMIT AT THE EDGE Reject overload with 429 BEFORE it reaches a backend, not
+                     after — protects every downstream service in one place.
+KEEP IT STATELESS      Same 3.1 constraint as everywhere else: gateway instances
+                     carry no session, so they scale horizontally behind a
+                     plain load balancer and any instance can serve any request.
+<span class="label">§ 4  USE / AVOID</span>USE a gateway when you have multiple backend services and want ONE place to
+  enforce auth, rate limiting, and routing instead of N places.
+USE path-based routing as the default; reach for header-based routing only for
+  things like API versioning or canary traffic splitting.
+USE a BFF when different client types (mobile vs. web vs. partner) need
+  genuinely different response shapes from the same underlying services.
+AVOID putting business logic in the gateway — that turns your edge component
+  into a second, harder-to-deploy monolith that every team now depends on.
+AVOID a single generic gateway trying to aggregate for every client type at
+  once — that's the routing-monolith failure mode BFF exists to prevent.
+AVOID treating the gateway as free — it is a real hop, a real SPOF risk, and a
+  real thing to capacity-plan and scale.
+<span class="label">§ 5  GATEWAY vs. REVERSE PROXY vs. LOAD BALANCER vs. SERVICE MESH</span>REVERSE PROXY (4.5)   Forwards on behalf of a backend; doesn't need to
+                     understand routes or app-level policy.
+LOAD BALANCER          Picks WHICH healthy instance of one service to hit.
+API GATEWAY            Decides WHICH SERVICE a request belongs to, applies
+                     app-aware policy (auth, rate limit, routing), then USUALLY
+                     hands off to a load balancer for the instance-level pick.
+SERVICE MESH SIDECAR   Same proxy technology as a gateway (often literally
+                     Envoy), but placed next to every internal service to
+                     handle east-west traffic instead of north-south.
+<span class="label">§ 6  NUMBERS TO ANCHOR THE DISCUSSION</span>North-south (client -> edge) is the gateway's job; east-west (service -> service)
+  is the mesh's job — this single distinction resolves most gateway-vs-mesh
+  interview questions.
+AWS API Gateway's documented account-level default throttle is on the order of
+  10,000 req/s steady-state / 5,000 req/s burst — an order-of-magnitude anchor,
+  not a number to over-commit to, since providers revise these over time.
+Kong runs on nginx/OpenResty (Lua); auth, rate limiting, and transformation
+  ship as composable plugins rather than one monolithic codebase.
+Envoy is the proxy underneath both edge gateways (e.g. Ambassador, Contour) AND
+  Istio's service mesh sidecars — the SAME technology serving two different
+  topological roles.
+Netflix's move from a single generic Zuul gateway toward Backend-for-Frontend
+  layers per client (mobile, TV, web) is the canonical real-world BFF story.
+<span class="label">§ 7  INTERVIEW TRIGGERS + GOTCHA</span>→ "How do you handle auth across N microservices?"  → once, at the gateway —
+                                                        not once per service
+→ "Where does rate limiting live?"                   → the edge/gateway, keyed
+                                                        per client, BEFORE load
+                                                        reaches a backend
+→ "What happens if the gateway goes down?"           → name the SPOF risk
+                                                        directly, then the fix:
+                                                        stateless + horizontal
+                                                        scaling behind an LB
+→ "Gateway or service mesh here?"                     → north-south vs.
+                                                        east-west, not "which
+                                                        is better"
+GOTCHA: Treating the gateway as a place to put business logic or heavy
+  aggregation "since it's already there." The gateway's value is in NOT
+  knowing about your domain — the moment it does, you've built a second
+  monolith that's harder to deploy than the one you decomposed.</div>
+  </section>
+
+  <!-- ══════════════════ §3 ══════════════════ -->
+  <section id="s3">
+    <h2 class="section-title"><span class="num">§3</span> 🧠 The Mindmap</h2>
+    <div class="callout callout-quote">The picture to hold in your head while you study. Everything below hangs off this.</div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Concept map — one edge, cross-cutting concerns owned once</div>
+      <svg viewBox="0 0 1060 700" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="mmArrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" fill="#b8b4ac"/>
+          </marker>
+        </defs>
+
+        <g stroke="#b8b4ac" stroke-width="1.8" fill="none" marker-end="url(#mmArrow)">
+          <path d="M468,318 L215,222"/>
+          <path d="M530,308 L530,225"/>
+          <path d="M592,318 L845,222"/>
+          <path d="M468,392 L215,482"/>
+          <path d="M530,400 L530,475"/>
+          <path d="M592,392 L845,482"/>
+        </g>
+
+        <ellipse cx="530" cy="355" rx="170" ry="55" fill="#a5d8ff" stroke="#1971c2" stroke-width="2.5"/>
+        <text x="530" y="345" text-anchor="middle" font-size="16" font-weight="800" fill="#0b3d66">API GATEWAY PATTERNS</text>
+        <text x="530" y="368" text-anchor="middle" font-size="12.5" font-style="italic" fill="#1971c2">"one edge, cross-cutting</text>
+        <text x="530" y="385" text-anchor="middle" font-size="12.5" font-style="italic" fill="#1971c2">concerns owned once, not N times"</text>
+
+        <!-- TOP LEFT : why it exists -->
+        <rect x="30" y="30" width="270" height="190" rx="10" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+        <text x="46" y="55" font-size="13.5" font-weight="800" fill="#1e3a8a">❓ WHY IT EXISTS</text>
+        <text x="46" y="81"  font-size="12.5" fill="#1e3a8a">N services each need auth/TLS/</text>
+        <text x="46" y="99"  font-size="12.5" fill="#1e3a8a">rate limits</text>
+        <text x="46" y="120" font-size="12.5" fill="#1e3a8a">duplicated N times, N ways</text>
+        <text x="46" y="141" font-size="12.5" fill="#1e3a8a">client learns N hostnames</text>
+        <text x="46" y="162" font-size="12.5" fill="#1e3a8a">+ N auth mechanisms</text>
+        <text x="46" y="196" font-size="11.5" font-style="italic" fill="#3b5bdb">⚠ fix: ONE edge, everything</text>
+        <text x="46" y="211" font-size="11.5" font-style="italic" fill="#3b5bdb">owned once</text>
+
+        <!-- TOP CENTRE : cross-cutting concerns -->
+        <rect x="395" y="30" width="270" height="190" rx="10" fill="#ffc9c9" stroke="#c92a2a" stroke-width="2"/>
+        <text x="411" y="55" font-size="13.5" font-weight="800" fill="#7f1d1d">🔀 CROSS-CUTTING</text>
+        <text x="411" y="72" font-size="13.5" font-weight="800" fill="#7f1d1d">CONCERNS</text>
+        <text x="411" y="96"  font-size="12.5" fill="#7f1d1d">TLS termination — once, at edge</text>
+        <text x="411" y="117" font-size="12.5" fill="#7f1d1d">authentication — validate once</text>
+        <text x="411" y="138" font-size="12.5" fill="#7f1d1d">rate limiting — token bucket,</text>
+        <text x="411" y="156" font-size="12.5" fill="#7f1d1d">  reject BEFORE backend hit</text>
+        <text x="411" y="196" font-size="11.5" font-style="italic" fill="#c92a2a">⚠ never business logic —</text>
+        <text x="411" y="211" font-size="11.5" font-style="italic" fill="#c92a2a">that's a second monolith</text>
+
+        <!-- TOP RIGHT : routing strategies -->
+        <rect x="760" y="30" width="270" height="190" rx="10" fill="#ffd8a8" stroke="#e67700" stroke-width="2"/>
+        <text x="776" y="55" font-size="13.5" font-weight="800" fill="#7c2d12">🧭 ROUTING STRATEGIES</text>
+        <text x="776" y="81"  font-size="12.5" fill="#7c2d12">path-based — default</text>
+        <text x="776" y="102" font-size="12.5" fill="#7c2d12">host-based — per-domain</text>
+        <text x="776" y="123" font-size="12.5" fill="#7c2d12">header-based — versioning,</text>
+        <text x="776" y="141" font-size="12.5" fill="#7c2d12">  canary splitting</text>
+        <text x="776" y="196" font-size="11.5" font-style="italic" fill="#e67700">decouples client from</text>
+        <text x="776" y="211" font-size="11.5" font-style="italic" fill="#e67700">internal service topology</text>
+
+        <!-- BOTTOM LEFT : failure modes -->
+        <rect x="30" y="490" width="270" height="180" rx="10" fill="#c3fae8" stroke="#0ca678" stroke-width="2"/>
+        <text x="46" y="515" font-size="13.5" font-weight="800" fill="#134e4a">⚠️ FAILURE MODES</text>
+        <text x="46" y="541" font-size="12.5" fill="#134e4a">SPOF at the edge</text>
+        <text x="46" y="562" font-size="12.5" fill="#134e4a">added latency, every request</text>
+        <text x="46" y="583" font-size="12.5" fill="#134e4a">orchestration creep</text>
+        <text x="46" y="604" font-size="12.5" fill="#134e4a">cascading failure, no breaker</text>
+        <text x="46" y="635" font-size="11.5" font-style="italic" fill="#0ca678">fix: stateless + horizontal</text>
+        <text x="46" y="650" font-size="11.5" font-style="italic" fill="#0ca678">scaling + circuit breaking</text>
+
+        <!-- BOTTOM RIGHT : real systems -->
+        <rect x="760" y="490" width="270" height="180" rx="10" fill="#b2f2bb" stroke="#2f9e44" stroke-width="2"/>
+        <text x="776" y="515" font-size="13.5" font-weight="800" fill="#14532d">🏭 REAL SYSTEMS</text>
+        <text x="776" y="541" font-size="12.5" fill="#14532d">Kong — nginx/OpenResty, plugins</text>
+        <text x="776" y="562" font-size="12.5" fill="#14532d">AWS API Gateway — Lambda,</text>
+        <text x="776" y="580" font-size="12.5" fill="#14532d">  usage plans</text>
+        <text x="776" y="601" font-size="12.5" fill="#14532d">Netflix Zuul → BFF per client</text>
+        <text x="776" y="622" font-size="12.5" fill="#14532d">Envoy — powers BOTH gateway</text>
+        <text x="776" y="640" font-size="12.5" fill="#14532d">  and mesh sidecars</text>
+        <text x="776" y="661" font-size="11.5" font-style="italic" fill="#2f9e44">Istio — mesh, east-west</text>
+
+        <!-- CENTER-BOTTOM connector -->
+        <rect x="395" y="490" width="270" height="180" rx="10" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+        <text x="411" y="515" font-size="13.5" font-weight="800" fill="#4c1d95">🔗 NORTH-SOUTH vs.</text>
+        <text x="411" y="532" font-size="13.5" font-weight="800" fill="#4c1d95">EAST-WEST</text>
+        <text x="411" y="556" font-size="12.5" fill="#4c1d95">gateway = client → services</text>
+        <text x="411" y="577" font-size="12.5" fill="#4c1d95">mesh sidecar = service → service</text>
+        <text x="411" y="598" font-size="12.5" fill="#4c1d95">same proxy tech, different role</text>
+        <text x="411" y="635" font-size="11.5" font-style="italic" fill="#7c3aed">this is where routing and</text>
+        <text x="411" y="650" font-size="11.5" font-style="italic" fill="#7c3aed">topology meet</text>
+      </svg>
+      <p class="caption">Why it exists is the motivating duplication problem; cross-cutting concerns and routing are what the gateway centralizes; failure modes are the price of concentration; real systems are the check on your instincts.</p>
+    </div>
+
+    <p><strong>How to read it:</strong> <strong>why it exists</strong> is the motivating problem — duplication and client-side complexity that grows with every new service. <strong>Cross-cutting concerns</strong> are what the gateway centralizes, and the warning inside that box (never business logic) is the boundary that keeps the pattern honest. <strong>Routing strategies</strong> are the mechanism that turns one edge address into many backend destinations, meeting cross-cutting concerns in the <strong>north-south vs. east-west</strong> block — the single distinction that resolves most gateway-vs-mesh confusion. <strong>Failure modes</strong> are the price of centralizing, and <strong>real systems</strong> are where you check the pattern against production names and the concrete architectural choices they made.</p>
+  </section>
+
+  <!-- ══════════════════ §4 ══════════════════ -->
+  <section id="s4">
+    <h2 class="section-title"><span class="num">§4</span> 🔥 The Problem</h2>
+
+    <p>Once a system decomposes from one service into several — order-service, user-service, inventory-service, each independently deployed with its own REST API (11.1) — every one of those services independently faces the same set of edge concerns: it needs to terminate TLS, it needs to authenticate the caller, it needs to protect itself from being overwhelmed by traffic, and it needs a stable address a client can find it at. None of that is the service's actual job. The order-service's job is to manage orders; validating a JWT and enforcing a rate limit are the same problem repeated verbatim across every service in the system, and repeated logic is where inconsistency lives — one team gets the token validation subtly wrong, another team forgets rate limiting entirely until an incident forces it in, and a third team implements it differently enough that debugging an auth failure means knowing which service you're even looking at.</p>
+
+    <p>The instinctive first fix is "give each service a reverse proxy (4.5) in front of it and let it handle its own TLS and rate limiting locally." This helps at the level of a single service, but it doesn't solve the client-side half of the problem at all: a client integrating with the system still has to know that orders live at <code>orders.internal.example.com</code>, users live at <code>users.internal.example.com</code>, and each of those hosts might have a slightly different auth header format or rate-limit response shape. Every new service is a new integration point for every existing client, and moving, splitting, or renaming a service becomes a breaking change for everyone calling it directly.</p>
+
+    <p>The insight that resolves this is to stop repeating the cross-cutting logic per service and instead centralize it at a single edge component every external request passes through exactly once. An API gateway is a reverse proxy specialized for this job: it terminates TLS once, authenticates once, rate-limits once, and then routes the now-trusted, now-throttled request to whichever backend actually owns it — by path, host, or header. The client sees one address and one contract; the backend services see only traffic that has already passed the checks they used to each implement themselves.</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Before / after — every service owns its own edge vs. one shared gateway</div>
+      <svg viewBox="0 0 1040 420" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <rect x="20" y="20" width="440" height="380" rx="12" fill="#fff5f5" stroke="#c92a2a" stroke-width="2" stroke-dasharray="6 4"/>
+        <text x="40" y="48" font-size="14" font-weight="800" fill="#7f1d1d">BEFORE — every service owns its own edge</text>
+
+        <g font-family="SF Mono, Menlo, monospace" font-size="11.5" fill="#7f1d1d">
+          <text x="40" y="76">orders.internal.example.com</text>
+          <text x="54" y="94">├─ own TLS cert, own auth, own limiter</text>
+          <text x="40" y="118">users.internal.example.com</text>
+          <text x="54" y="136">├─ own TLS cert (different expiry)</text>
+          <text x="54" y="154">└─ own auth (subtly different)</text>
+          <text x="40" y="178">inventory.internal.example.com</text>
+          <text x="54" y="196">└─ own TLS, own auth, no rate limiter</text>
+        </g>
+
+        <text x="40" y="228" font-size="12.5" fill="#2f9e44">✓ each service is independently simple</text>
+        <text x="40" y="254" font-size="12.5" fill="#c92a2a">✗ auth/TLS/rate-limit logic reimplemented 3x</text>
+        <text x="40" y="278" font-size="12.5" fill="#c92a2a">✗ client must know 3 hostnames, 3 auth</text>
+        <text x="54" y="296" font-size="12.5" fill="#c92a2a">flavors</text>
+        <text x="40" y="320" font-size="12.5" fill="#c92a2a">✗ moving a service breaks every direct caller</text>
+        <text x="40" y="344" font-size="12.5" fill="#c92a2a">✗ inconsistency across services is where</text>
+        <text x="54" y="362" font-size="12.5" fill="#c92a2a">bugs hide</text>
+        <text x="40" y="386" font-size="11.5" font-style="italic" fill="#7f1d1d">contract lives in each team's head, N times</text>
+
+        <line x1="470" y1="210" x2="565" y2="210" stroke="#2563eb" stroke-width="3" marker-end="url(#baArrow2)"/>
+        <defs>
+          <marker id="baArrow2" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#2563eb"/>
+          </marker>
+        </defs>
+        <text x="517" y="198" text-anchor="middle" font-size="11" font-weight="800" fill="#2563eb">centralize the</text>
+        <text x="517" y="224" text-anchor="middle" font-size="11" font-weight="800" fill="#2563eb">cross-cutting logic</text>
+
+        <rect x="580" y="20" width="440" height="380" rx="12" fill="#f0fdf4" stroke="#2f9e44" stroke-width="2"/>
+        <text x="600" y="48" font-size="14" font-weight="800" fill="#14532d">AFTER — one gateway, N services behind it</text>
+
+        <g font-family="SF Mono, Menlo, monospace" font-size="11.5" fill="#14532d">
+          <text x="600" y="76">api.example.com/orders/*   ──┐</text>
+          <text x="600" y="94">api.example.com/users/*    ──┼──▶ ONE GATEWAY</text>
+          <text x="600" y="112">api.example.com/inventory/* ──┘</text>
+          <text x="600" y="140">TLS terminated once</text>
+          <text x="600" y="158">auth validated once</text>
+          <text x="600" y="176">rate limit enforced once</text>
+        </g>
+
+        <text x="600" y="228" font-size="12.5" fill="#2f9e44">✓ auth/TLS/rate-limit logic exists ONCE</text>
+        <text x="600" y="252" font-size="12.5" fill="#2f9e44">✓ client learns ONE host, ONE auth</text>
+        <text x="614" y="270" font-size="12.5" fill="#2f9e44">mechanism</text>
+        <text x="600" y="294" font-size="12.5" fill="#2f9e44">✓ moving/splitting a backend is invisible</text>
+        <text x="614" y="312" font-size="12.5" fill="#2f9e44">to the client — only routing rules change</text>
+        <text x="600" y="336" font-size="12.5" fill="#c92a2a">✗ the gateway is now a single point of failure</text>
+        <text x="600" y="382" font-size="11.5" font-style="italic" fill="#14532d">contract lives in one place, owned once</text>
+      </svg>
+      <p class="caption">Centralizing cross-cutting concerns trades N duplicated implementations for one shared dependency.</p>
+    </div>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">A teammate argues: "Let's just put a reverse proxy in front of each service instead of one shared gateway — same TLS and rate-limiting benefit, less centralized risk." Explain precisely what this fixes and what it still leaves broken, using the client-side half of the problem specifically.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the second paragraph — the part about what a per-service reverse proxy does and doesn't solve for the client calling in.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> If the fix is one edge component owning cross-cutting concerns, what exactly does it consist of, and how do the pieces build on each other?</div>
+  </section>
+
+  <!-- ══════════════════ §5 ══════════════════ -->
+  <section id="s5">
+    <h2 class="section-title"><span class="num">§5</span> 💡 The Core Idea</h2>
+
+    <div class="definition">An API gateway is a single edge component, application-aware rather than a plain forwarder, that owns every cross-cutting concern — TLS termination, authentication, rate limiting, and routing — for all of a system's backend services, so a client integrates with one coherent surface instead of learning the internal service topology.</div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">The build chain</div>
+      <svg viewBox="0 0 1040 190" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="bcArrow2" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#7c3aed"/>
+          </marker>
+        </defs>
+        <g>
+          <rect x="8" y="30" width="232" height="58" rx="9" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+          <text x="124" y="55" text-anchor="middle" font-size="12.5" font-weight="800" fill="#4c1d95">ONE EDGE, NOT</text>
+          <text x="124" y="73" text-anchor="middle" font-size="12.5" font-weight="800" fill="#4c1d95">N ENTRY POINTS</text>
+          <text x="124" y="110" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">because cross-cutting</text>
+          <text x="124" y="126" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">concerns are the same</text>
+          <text x="124" y="142" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">for every service</text>
+        </g>
+        <line x1="246" y1="59" x2="274" y2="59" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow2)"/>
+        <g>
+          <rect x="280" y="30" width="232" height="58" rx="9" fill="#ffc9c9" stroke="#c92a2a" stroke-width="2"/>
+          <text x="396" y="55" text-anchor="middle" font-size="12.5" font-weight="800" fill="#7f1d1d">APP-AWARE</text>
+          <text x="396" y="73" text-anchor="middle" font-size="12.5" font-weight="800" fill="#7f1d1d">ROUTING</text>
+          <text x="396" y="110" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">therefore the gateway</text>
+          <text x="396" y="126" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">matches requests to a</text>
+          <text x="396" y="142" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">BACKEND, not a raw forward</text>
+        </g>
+        <line x1="518" y1="59" x2="546" y2="59" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow2)"/>
+        <g>
+          <rect x="552" y="30" width="232" height="58" rx="9" fill="#c3fae8" stroke="#0ca678" stroke-width="2"/>
+          <text x="668" y="55" text-anchor="middle" font-size="12.5" font-weight="800" fill="#134e4a">ROUTING DECOUPLES</text>
+          <text x="668" y="73" text-anchor="middle" font-size="12.5" font-weight="800" fill="#134e4a">CLIENT FROM TOPOLOGY</text>
+          <text x="668" y="110" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">so a service can move,</text>
+          <text x="668" y="126" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">split, or scale with no</text>
+          <text x="668" y="142" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">client-facing change</text>
+        </g>
+        <line x1="790" y1="59" x2="818" y2="59" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow2)"/>
+        <g>
+          <rect x="824" y="30" width="208" height="58" rx="9" fill="#ffd8a8" stroke="#e67700" stroke-width="2"/>
+          <text x="928" y="55" text-anchor="middle" font-size="12.5" font-weight="800" fill="#7c2d12">STATELESSNESS LETS</text>
+          <text x="928" y="73" text-anchor="middle" font-size="12.5" font-weight="800" fill="#7c2d12">THE EDGE SCALE</text>
+          <text x="928" y="110" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">which means the gateway</text>
+          <text x="928" y="126" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">obeys 3.1 or it becomes</text>
+          <text x="928" y="142" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">the new bottleneck</text>
+        </g>
+        <text x="520" y="178" text-anchor="middle" font-size="11.5" font-style="italic" fill="#7c3aed">read the connective words under the arrows — each block exists because of the one before it</text>
+      </svg>
+      <p class="caption">Four ideas, one chain. Skip a link and the next block stops making sense.</p>
+    </div>
+
+    <h3>One Edge, Not N Entry Points</h3>
+    <p>Everything starts with concentration: instead of every backend service independently exposing itself to the outside world, exactly one component — the gateway — is externally reachable, and every backend sits behind it on an internal network. This is the direct fix for §4's duplication problem: TLS certificates, authentication logic, and rate-limit enforcement are implemented once, at the gateway, instead of once per service. A client that used to need three hostnames and three auth flavors now needs one of each. This single shift is what makes the rest of the pattern possible — you cannot centralize a cross-cutting concern without first centralizing the entry point it needs to run at.</p>
+
+    <h3>App-Aware Routing</h3>
+    <p>Once there's one edge, the gateway has to do something a plain reverse proxy (4.5) doesn't: decide <em>which backend service</em> a given request even belongs to. A reverse proxy forwards on behalf of a single backend it already knows about; a gateway inspects the request — its path, its host, sometimes a header — and matches it against a routing table that maps <code>/orders/*</code> to the order-service, <code>/users/*</code> to the user-service, and so on. This is the "application-aware" part of "application-aware reverse proxy": the gateway understands enough about your API surface to route correctly, without understanding anything about what an order or a user actually <em>is</em>.</p>
+
+    <h3>Routing Decouples the Client From Topology</h3>
+    <p>Because the client only ever sees the gateway's routing table, not the backend services directly, the mapping from path to service becomes an internal implementation detail you're free to change. The order-service can be split into an orders-read-service and an orders-write-service, or moved to a different cluster, or scaled from three instances to thirty, and none of that is visible to a client — only the gateway's routing rules change, and only if the <em>path</em> itself changes, which it usually doesn't. This is the direct payoff of the pattern: the cost of evolving your service topology drops from "every caller needs a change" to "update one routing table."</p>
+
+    <h3>Statelessness Lets the Edge Scale</h3>
+    <p>None of the above holds up if the gateway itself becomes a bottleneck, and it will unless it obeys the same constraint that made REST (11.1) and reverse proxies (4.5) scalable in the first place: no server-side session tied to a specific gateway instance. A stateless gateway can run as many identical instances behind a plain load balancer, and any instance can handle any request, because none of them privately remembers anything about a client between requests. This is what turns "one edge component" from a liability (a single box that falls over under load) into an asset (a horizontally-scalable layer that's still logically singular from the client's point of view).</p>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">Explain, using the build chain above, why a gateway that inspects only the <em>destination IP and port</em> of a request (like a plain load balancer) cannot do the job a gateway needs to do, even though both sit "in front of" the backend services.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read "App-Aware Routing" and think about what information a load balancer has versus what a gateway needs to route <code>/orders/*</code> correctly.</div>
+      </div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">2</span>
+          <span class="qtext">A teammate proposes adding a small in-memory cache <em>inside</em> a single gateway instance, keyed by client IP, to speed up repeated auth checks. Using the build chain, explain what this breaks and why it's the same mistake REST's statelessness constraint (11.1) was built to prevent.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, trace the build chain from ONE EDGE through STATELESSNESS LETS THE EDGE SCALE — the answer is about what happens when a client's second request lands on a different gateway instance.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> You know the pieces. What actually happens, request by request, when a call comes through the gateway?</div>
+  </section>
+
+  <!-- ══════════════════ §6 ══════════════════ -->
+  <section id="s6">
+    <h2 class="section-title"><span class="num">§6</span> ⚙️ How It Actually Works</h2>
+
+    <h3>A request through the gateway (happy path)</h3>
+    <ol class="steps">
+      <li>A TLS connection is established with the gateway, which holds the certificate; the gateway decrypts once, and everything behind it runs over a trusted internal network (the same argument 4.5 makes for a single reverse proxy, applied here to every backend at once).</li>
+      <li>The gateway authenticates the request — validates a JWT, checks an API key, or checks a session cookie — <em>before</em> any backend sees it. On failure, it returns <code>401</code>/<code>403</code> immediately; no backend is invoked at all.</li>
+      <li>The gateway checks the request against a rate limit, typically a token bucket keyed by API key or user ID. If the bucket is empty, it returns <code>429</code> immediately, protecting every downstream service from that specific overload without any of them having to implement the check themselves.</li>
+      <li>The gateway matches the request's path (most commonly) against a routing table and resolves exactly one backend service — <code>/orders/*</code> → order-service. This step is what makes the gateway "application-aware" rather than a generic forwarder.</li>
+      <li>The gateway forwards the request to a healthy instance of that backend (often handing off the instance-level pick to a load balancer), optionally attaching a forwarded-identity header so the backend can trust "this request is already authenticated" instead of re-checking.</li>
+      <li>The backend's response passes back through the gateway to the client, sometimes with response transformation (stripping internal fields, unifying an error shape across services) applied on the way out.</li>
+    </ol>
+
+    <div class="mental-model">
+      🗺️ <span class="mm-name">Mental model — airport customs and security.</span> Every passenger, regardless of which airline or gate they're eventually headed to, passes through exactly one security checkpoint: identity is checked once, bags are scanned once, and only after clearing both do you get routed to your specific gate. The airport doesn't make every airline run its own independent security line.
+      <span class="mm-break">Where it breaks down: a security checkpoint doesn't dynamically reroute you if your gate changes at the last minute — a gateway's routing table can update to reflect a moved or scaled backend without the passenger (client) needing to be told anything changed at all, which is a stronger guarantee than the analogy provides.</span>
+    </div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Mechanism flow — a request through the gateway</div>
+      <svg viewBox="0 0 1040 260" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="mfArrow2" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#2563eb"/>
+          </marker>
+        </defs>
+
+        <rect x="10" y="30" width="160" height="70" rx="9" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+        <text x="90" y="56" text-anchor="middle" font-size="12" font-weight="700" fill="#1e3a8a">① TLS</text>
+        <text x="90" y="74" text-anchor="middle" font-size="12" font-weight="700" fill="#1e3a8a">terminated once</text>
+        <text x="90" y="92" text-anchor="middle" font-size="10" font-style="italic" fill="#1e3a8a">at the edge</text>
+
+        <line x1="176" y1="65" x2="200" y2="65" stroke="#2563eb" stroke-width="2.5" marker-end="url(#mfArrow2)"/>
+
+        <rect x="206" y="30" width="170" height="70" rx="9" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+        <text x="291" y="56" text-anchor="middle" font-size="12" font-weight="700" fill="#92400e">② authenticate</text>
+        <text x="291" y="74" text-anchor="middle" font-size="10" font-style="italic" fill="#92400e">401/403 on failure,</text>
+        <text x="291" y="90" text-anchor="middle" font-size="10" font-style="italic" fill="#92400e">no backend called</text>
+
+        <line x1="382" y1="65" x2="406" y2="65" stroke="#2563eb" stroke-width="2.5" marker-end="url(#mfArrow2)"/>
+
+        <rect x="412" y="30" width="170" height="70" rx="9" fill="#ffd8a8" stroke="#e67700" stroke-width="2"/>
+        <text x="497" y="56" text-anchor="middle" font-size="12" font-weight="700" fill="#7c2d12">③ rate limit</text>
+        <text x="497" y="74" text-anchor="middle" font-size="10" font-style="italic" fill="#7c2d12">429 on empty bucket,</text>
+        <text x="497" y="90" text-anchor="middle" font-size="10" font-style="italic" fill="#7c2d12">no backend called</text>
+
+        <line x1="588" y1="65" x2="612" y2="65" stroke="#2563eb" stroke-width="2.5" marker-end="url(#mfArrow2)"/>
+
+        <rect x="618" y="30" width="180" height="70" rx="9" fill="#c3fae8" stroke="#0ca678" stroke-width="2"/>
+        <text x="708" y="56" text-anchor="middle" font-size="12" font-weight="700" fill="#134e4a">④ match route</text>
+        <text x="708" y="74" text-anchor="middle" font-size="10" font-style="italic" fill="#134e4a">path/host/header →</text>
+        <text x="708" y="90" text-anchor="middle" font-size="10" font-style="italic" fill="#134e4a">exactly one backend</text>
+
+        <path d="M708,100 L708,130 L497,130 L497,158" stroke="#2563eb" stroke-width="2.5" fill="none" marker-end="url(#mfArrow2)"/>
+
+        <rect x="300" y="164" width="470" height="76" rx="9" fill="#b2f2bb" stroke="#2f9e44" stroke-width="2.5"/>
+        <text x="535" y="190" text-anchor="middle" font-size="13" font-weight="800" fill="#14532d">⑤ forward to a healthy backend instance</text>
+        <text x="535" y="210" text-anchor="middle" font-size="13" font-weight="800" fill="#14532d">⑥ response passes back to the client</text>
+        <text x="535" y="230" text-anchor="middle" font-size="11.5" font-style="italic" fill="#2f9e44">→ optional: forwarded-identity header, response transformation</text>
+      </svg>
+      <p class="caption">Every check that can reject the request runs before any backend is ever invoked — TLS, auth, rate limit, in that order.</p>
+    </div>
+
+    <h3>Failure and edge cases</h3>
+    <ul class="plain">
+      <li><strong>The single point of failure.</strong> Every request now depends on the gateway being up. A gateway with a single instance turns a distributed system with N independently-failing services back into a system with one hard dependency. The fix is the same one applied everywhere else in this doc: run multiple stateless gateway instances behind a load balancer, so no single instance's failure takes down the edge.</li>
+      <li><strong>Added latency on every request.</strong> Even a well-optimized gateway hop — TLS termination, auth check, route match — adds real time to every single call, and that cost is paid by every request in the system, not just the ones that need it. This is a cost you pay unconditionally in exchange for the consistency benefit; it doesn't disappear by ignoring it.</li>
+      <li><strong>Orchestration creep.</strong> A gateway that starts as "route and enforce policy" slowly accumulates real aggregation logic — "just call these two other services and merge the results here, it's convenient" — until the gateway itself becomes a service with business logic, deployment risk, and a release cycle every other team now depends on. This is the exact monolith the system was decomposed away from, rebuilt at the edge.</li>
+      <li><strong>Cascading failure without circuit breaking.</strong> If a backend service starts timing out, a gateway that keeps forwarding every request to it and waiting for the timeout will itself back up — its own thread/connection pool fills with requests stuck waiting on a dead backend, and healthy requests to <em>other</em> backends start failing too, purely from resource exhaustion at the gateway. A circuit breaker per backend (stop forwarding to a service that's failing, fail fast instead) isolates the blast radius to the one failing service.</li>
+    </ul>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Structural — gateway topology: north-south vs. east-west traffic</div>
+      <svg viewBox="0 0 1040 340" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="topoArrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#2563eb"/>
+          </marker>
+          <marker id="topoArrowGreen" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#2f9e44"/>
+          </marker>
+        </defs>
+
+        <rect x="20" y="20" width="140" height="50" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+        <text x="90" y="50" text-anchor="middle" font-size="13" font-weight="800" fill="#1e3a8a">CLIENT</text>
+
+        <line x1="160" y1="45" x2="220" y2="45" stroke="#2563eb" stroke-width="3" marker-end="url(#topoArrow)"/>
+        <text x="190" y="34" text-anchor="middle" font-size="10.5" font-weight="800" fill="#2563eb">north-south</text>
+
+        <rect x="226" y="15" width="160" height="60" rx="8" fill="#ffd8a8" stroke="#e67700" stroke-width="2.5"/>
+        <text x="306" y="40" text-anchor="middle" font-size="13" font-weight="800" fill="#7c2d12">API GATEWAY</text>
+        <text x="306" y="58" text-anchor="middle" font-size="10.5" fill="#7c2d12">auth · TLS · rate limit</text>
+
+        <line x1="386" y1="45" x2="440" y2="45" stroke="#2563eb" stroke-width="3" marker-end="url(#topoArrow)"/>
+
+        <rect x="446" y="90" width="180" height="60" rx="8" fill="#b2f2bb" stroke="#2f9e44" stroke-width="2"/>
+        <text x="536" y="115" text-anchor="middle" font-size="12.5" font-weight="800" fill="#14532d">order-service</text>
+        <text x="536" y="133" text-anchor="middle" font-size="10" fill="#14532d">+ mesh sidecar</text>
+
+        <rect x="446" y="170" width="180" height="60" rx="8" fill="#b2f2bb" stroke="#2f9e44" stroke-width="2"/>
+        <text x="536" y="195" text-anchor="middle" font-size="12.5" font-weight="800" fill="#14532d">user-service</text>
+        <text x="536" y="213" text-anchor="middle" font-size="10" fill="#14532d">+ mesh sidecar</text>
+
+        <rect x="446" y="250" width="180" height="60" rx="8" fill="#b2f2bb" stroke="#2f9e44" stroke-width="2"/>
+        <text x="536" y="275" text-anchor="middle" font-size="12.5" font-weight="800" fill="#14532d">inventory-service</text>
+        <text x="536" y="293" text-anchor="middle" font-size="10" fill="#14532d">+ mesh sidecar</text>
+
+        <path d="M306,75 L306,120 L446,120" stroke="#2563eb" stroke-width="2.5" fill="none" marker-end="url(#topoArrow)"/>
+        <path d="M306,75 L306,200 L446,200" stroke="#2563eb" stroke-width="2.5" fill="none" marker-end="url(#topoArrow)"/>
+        <path d="M306,75 L306,280 L446,280" stroke="#2563eb" stroke-width="2.5" fill="none" marker-end="url(#topoArrow)"/>
+
+        <path d="M626,120 C 680,140 680,170 626,190" stroke="#2f9e44" stroke-width="2.5" fill="none" marker-end="url(#topoArrowGreen)"/>
+        <path d="M626,190 C 680,220 680,250 626,270" stroke="#2f9e44" stroke-width="2.5" fill="none" marker-end="url(#topoArrowGreen)"/>
+        <text x="700" y="205" font-size="10.5" font-weight="800" fill="#2f9e44">east-west</text>
+        <text x="700" y="220" font-size="10.5" font-weight="800" fill="#2f9e44">(sidecar to</text>
+        <text x="700" y="235" font-size="10.5" font-weight="800" fill="#2f9e44">sidecar)</text>
+
+        <rect x="20" y="250" width="380" height="70" rx="9" fill="#f3f2ef" stroke="#b8b4ac" stroke-width="2"/>
+        <text x="210" y="274" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1a1917">The gateway owns north-south traffic (client → services).</text>
+        <text x="210" y="294" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1a1917">Mesh sidecars own east-west traffic (service → service) —</text>
+        <text x="210" y="312" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1a1917">often the SAME proxy technology, different placement.</text>
+      </svg>
+      <p class="caption">One shared hop at the edge for external traffic; one local hop per service for internal traffic — different topologies for different traffic directions.</p>
+    </div>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">A gateway forwards every request to a backend and blocks waiting for its response, with no circuit breaker configured. Walk through exactly how one backend service becoming slow (not down — just slow) can cause requests to <em>other, healthy</em> backends to start failing too, and name the specific mechanism that fixes it.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the "Cascading failure without circuit breaking" failure case — the answer is about a shared resource at the gateway, not about the slow backend itself.</div>
+      </div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">2</span>
+          <span class="qtext">A team adds a feature to their gateway: on every incoming order request, the gateway calls the inventory-service to check stock levels and rejects the order at the edge if stock is zero, before ever forwarding to the order-service. Explain why this is the "orchestration creep" failure case specifically, and where that logic should live instead.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read "Orchestration creep" and the Core Idea's warning about what the gateway is not supposed to understand.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> You can trace a request through the gateway. In a live design, when do you actually reach for one, and what does it cost?</div>
+  </section>
+
+  <!-- ══════════════════ §7 ══════════════════ -->
+  <section id="s7">
+    <h2 class="section-title"><span class="num">§7</span> ⚖️ The Decision — When, and What It Costs</h2>
+
+    <p>The default the moment a system has more than a couple of independently-deployed backend services with any external client is an API gateway at the edge — not per-service reverse proxies, not clients calling services directly. It collapses N auth implementations into one, gives you a single place to enforce and observe rate limiting, and lets your service topology evolve without breaking every caller. You leave that default, or extend it, at specific, nameable boundaries.</p>
+
+    <p><strong>The traffic is internal, service-to-service, not external client traffic.</strong> A gateway is built for north-south traffic — external clients reaching into your system — and applying the same centralized-edge model to east-west traffic (service A calling service B internally) reintroduces the single-point-of-failure and added-latency costs for calls that don't need a client-facing contract at all. This is the boundary where a service mesh sidecar (Envoy/Istio, a decentralized per-service proxy) takes over instead — each service gets its own local proxy instance, so there's no single shared hop and no single shared failure domain for internal traffic.</p>
+
+    <p><strong>Different client types need genuinely different response shapes.</strong> A single generic gateway trying to serve a mobile app, a web app, and a partner API with one aggregation layer will either over-fetch for the client that needs less, or accumulate special-case logic per client type until it becomes the routing-and-aggregation monolith Netflix hit with Zuul. The fix is a Backend-for-Frontend: a thin, separate aggregation layer per client type, sitting behind the shared gateway (or replacing it for that client), shaped to exactly what that client needs.</p>
+
+    <p><strong>The gateway is being asked to do real business logic.</strong> Stock checks, pricing rules, workflow orchestration — none of that is a cross-cutting concern, and putting it in the gateway means every team now depends on the gateway's release cycle for changes that have nothing to do with routing, auth, or rate limiting. If you catch yourself justifying gateway logic with "it's convenient, it's already there," that's the signal to stop and put the logic in the service that owns the domain instead.</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Decision tree — gateway, mesh, or a BFF</div>
+      <svg viewBox="0 0 1040 420" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <g stroke="#b8b4ac" stroke-width="2" fill="none">
+          <path d="M520,58 L520,76 L200,76 L200,100"/>
+          <path d="M520,58 L520,76 L840,76 L840,100"/>
+          <path d="M200,186 L200,206 L620,206 L620,232"/>
+          <path d="M840,186 L840,206 L840,232"/>
+        </g>
+
+        <rect x="280" y="20" width="480" height="38" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2.5"/>
+        <text x="520" y="44" text-anchor="middle" font-size="12.5" font-weight="800" fill="#1e3a8a">Is this call external (client → system) or internal (service → service)?</text>
+
+        <text x="140" y="92" text-anchor="middle" font-size="10.5" font-weight="800" fill="#2f9e44">external, north-south</text>
+        <rect x="20" y="100" width="360" height="86" rx="9" fill="#b2f2bb" stroke="#2f9e44" stroke-width="2.5"/>
+        <text x="200" y="126" text-anchor="middle" font-size="13" font-weight="800" fill="#14532d">Do different client types need</text>
+        <text x="200" y="146" text-anchor="middle" font-size="13" font-weight="800" fill="#14532d">genuinely different response shapes?</text>
+        <text x="200" y="170" text-anchor="middle" font-size="10.5" font-style="italic" fill="#14532d">answered in the two boxes below</text>
+
+        <text x="900" y="92" text-anchor="middle" font-size="10.5" font-weight="800" fill="#c92a2a">internal, east-west</text>
+        <rect x="700" y="100" width="320" height="86" rx="9" fill="#ffd8a8" stroke="#e67700" stroke-width="2.5"/>
+        <text x="840" y="130" text-anchor="middle" font-size="13" font-weight="800" fill="#7c2d12">SERVICE MESH SIDECAR</text>
+        <text x="840" y="152" text-anchor="middle" font-size="11.5" fill="#7c2d12">Per-service proxy (Envoy/Istio).</text>
+        <text x="840" y="170" text-anchor="middle" font-size="11.5" fill="#7c2d12">No shared edge hop.</text>
+
+        <text x="410" y="226" text-anchor="middle" font-size="10.5" font-weight="800" fill="#2f9e44">no — one shape fits all</text>
+        <rect x="140" y="232" width="360" height="86" rx="9" fill="#a5d8ff" stroke="#1971c2" stroke-width="2.5"/>
+        <text x="320" y="258" text-anchor="middle" font-size="13" font-weight="800" fill="#0b3d66">SINGLE SHARED GATEWAY</text>
+        <text x="320" y="280" text-anchor="middle" font-size="11.5" fill="#0b3d66">Default. Terminate TLS, auth,</text>
+        <text x="320" y="298" text-anchor="middle" font-size="11.5" fill="#0b3d66">rate limit, route — once.</text>
+
+        <text x="840" y="226" text-anchor="middle" font-size="10.5" font-weight="800" fill="#c92a2a">yes — needs diverge</text>
+        <rect x="660" y="232" width="360" height="86" rx="9" fill="#c3fae8" stroke="#0ca678" stroke-width="2.5"/>
+        <text x="840" y="258" text-anchor="middle" font-size="13" font-weight="800" fill="#134e4a">BACKEND-FOR-FRONTEND</text>
+        <text x="840" y="280" text-anchor="middle" font-size="11.5" fill="#134e4a">Thin aggregation layer per client</text>
+        <text x="840" y="298" text-anchor="middle" font-size="11.5" fill="#134e4a">type, behind the shared gateway</text>
+
+        <rect x="20" y="340" width="1000" height="60" rx="9" fill="#f3f2ef" stroke="#b8b4ac" stroke-width="2"/>
+        <text x="520" y="364" text-anchor="middle" font-size="12" font-weight="700" fill="#1a1917">The default is the gateway (left path). Every other box is a justified departure —</text>
+        <text x="520" y="384" text-anchor="middle" font-size="12" fill="#1a1917">named against a specific boundary condition, not a stylistic preference.</text>
+      </svg>
+      <p class="caption">Leave the single-gateway default only at a nameable boundary — internal traffic direction, or genuine client-shape divergence.</p>
+    </div>
+
+    <h3>Trade-offs</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>✅ Benefit</th><th>❌ Cost / Limitation</th></tr></thead>
+        <tbody>
+          <tr><td><span class="benefit">Cross-cutting logic exists once</span> — auth, TLS, and rate limiting are implemented and audited in a single place instead of N times across N services</td><td>The gateway is a single point of failure by construction — every external request depends on it being up, which reintroduces the exact "one thing everything depends on" risk decomposition was trying to remove</td></tr>
+          <tr><td><span class="benefit">The client sees one coherent surface</span> — one hostname, one auth mechanism, regardless of how many backend services exist behind it</td><td>Every request pays an added hop of latency, unconditionally — even requests that would have been fine going straight to the backend</td></tr>
+          <tr><td><span class="benefit">Backend services can be moved, split, or scaled without breaking callers</span> — only the gateway's routing table changes</td><td>It's a real thing to capacity-plan, scale, and operate — under-provisioning the gateway throttles every service behind it at once, not just one</td></tr>
+          <tr><td><span class="benefit">Centralized observability</span> — request volume, error rates, and latency are visible for the whole system's external traffic in one place</td><td>Left unchecked, it accumulates aggregation and business logic until it becomes a second, harder-to-deploy monolith sitting in front of the first decomposition</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>In production</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>System</th><th>How it applies</th><th>The nuance</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Kong</strong></td><td>Built on nginx/OpenResty; auth, rate limiting, logging, and transformation ship as composable plugins rather than a single monolithic codebase</td><td>The plugin model is what keeps Kong from becoming its own monolith — you compose only the cross-cutting behaviors a given route actually needs</td></tr>
+          <tr><td><strong>AWS API Gateway</strong></td><td>Managed gateway with native Lambda integration, usage plans + API keys for per-client rate limiting, and request/response transformation</td><td>Fully managed removes the "run stateless instances behind a load balancer" operational burden entirely, at the cost of vendor lock-in to AWS's routing and throttling model</td></tr>
+          <tr><td><strong>Netflix (Zuul → BFF)</strong></td><td>Started with a single generic gateway (Zuul) in front of all services; moved toward Backend-for-Frontend layers per client type (mobile, TV, web)</td><td>The canonical real-world example of a single gateway becoming a routing-and-aggregation bottleneck once client needs diverged enough to justify splitting it</td></tr>
+          <tr><td><strong>Envoy (as edge gateway)</strong></td><td>The same Envoy proxy that powers Istio's service mesh sidecars (a tension covered in §10) is also used directly as an edge gateway (e.g. via Ambassador, Contour)</td><td>Demonstrates that "gateway" and "mesh sidecar" are topological roles, not different pieces of technology — the same proxy, placed differently, does either job</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">A team's gateway currently authenticates, rate-limits, and routes for six backend services. An engineer proposes also moving all <em>inter-service</em> calls (order-service calling inventory-service to check stock) through the same gateway, "since the auth logic is already there." Using the decision tree above, would you agree, and what would you actually recommend instead? Justify against the specific cost you'd be accepting either way.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the first boundary condition — north-south vs. east-west traffic — and the trade-off row about the gateway being a single point of failure.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> Can you defend this under interview pressure — and hold up when the interviewer pushes on the cost you claimed you'd pay?</div>
+  </section>
+
+  <!-- ══════════════════ §8 ══════════════════ -->
+  <section id="s8">
+    <h2 class="section-title"><span class="num">§8</span> 🎯 In the Interview</h2>
+
+    <h3>When an interviewer asks / says</h3>
+    <ul class="trigger-list">
+      <li>"How would you handle authentication across all these microservices?"</li>
+      <li>"Where would you put rate limiting in this design?"</li>
+      <li>"The client's dashboard needs data from three different services — where does that come together?"</li>
+      <li>"What happens if this component goes down — doesn't that take out your whole API?"</li>
+    </ul>
+
+    <h3>What you say / do</h3>
+    <p>This surfaces right after you've decomposed the system into multiple services in the high-level design phase — the moment you draw more than one backend box, the interviewer is listening for whether you notice the cross-cutting concerns that now need a home. Lead with the edge, not the backend: name the gateway first, name exactly what moves into it (TLS, auth, rate limiting, routing), and be explicit about what stays out (business logic). When the interviewer pushes on the SPOF risk — and they usually will — that's your cue to name statelessness and horizontal scaling unprompted, not wait to be asked.</p>
+
+    <h3>The trade-off statement (memorize this pattern)</h3>
+    <div class="tradeoff-box">"I'd put an API gateway — something like Kong or AWS API Gateway — in front of the order-service, user-service, and inventory-service, so a client sees one host and one auth mechanism instead of three. It terminates TLS once, validates the auth token before any backend sees the request, and enforces a per-API-key rate limit with a token bucket, rejecting with <code>429</code> before load ever reaches a backend. Path-based routing — <code>/orders/*</code> to order-service, <code>/users/*</code> to user-service — means I can move, split, or scale a backend without any client-facing change; only the gateway's routing table updates. The cost is that the gateway becomes a single point of failure and adds a hop of latency to every request, so I run it as stateless instances behind a load balancer rather than one box, and I keep it strictly to routing and cross-cutting policy — the moment it starts doing real aggregation or business logic, it's become a second monolith I now have to operate and deploy. I'd change this answer if the traffic in question were service-to-service instead of external — that's a service mesh's job, not the gateway's."</div>
+
+    <h3>A second trade-off variant — when the interviewer pushes on client-shape divergence</h3>
+    <div class="tradeoff-box">"If the mobile app, the web app, and a partner API all need meaningfully different data shapes from the same underlying services, I wouldn't try to make one gateway serve all three — that's how you end up with a pile of client-specific branches in a component that's supposed to stay generic. I'd introduce a Backend-for-Frontend per client type: a thin aggregation layer, one per client, sitting behind the shared gateway, each shaped to exactly what that client needs. The cost is now three things to deploy instead of one, but each one stays simple and client-specific instead of the shared gateway accumulating special cases for every client it serves — that's the trade Netflix made when they moved off a single generic Zuul gateway."</div>
+
+    <h3>⚠️ Traps</h3>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "I'd just have the gateway call the other services directly and stitch the response together — it's already sitting in the request path, so why not?"</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> That's the orchestration-creep failure case. The moment the gateway starts making decisions based on business data (stock levels, pricing, workflow state) instead of routing and policy, it's stopped being a cross-cutting edge component and become a second service with real logic — one that every other team's release now depends on, sitting in the one place you can least afford an outage.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "The gateway is basically the same thing as a load balancer, just with a different name."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> A load balancer picks <em>which healthy instance</em> of one known service to send a request to. A gateway first decides <em>which service</em> a request even belongs to, applies app-aware policy (auth, rate limiting per API key, path-based routing), and typically hands off to a load balancer afterward for the instance-level pick. They solve different problems and usually both exist in the same request path.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "We should route all our internal service-to-service calls through the API gateway too, so we only maintain one routing layer."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> This conflates north-south and east-west traffic. Routing internal calls through the same edge gateway means every internal call now also depends on that single shared component, and pays its added latency — for traffic that never needed a client-facing contract in the first place. Internal traffic is a service mesh's job precisely because it wants a <em>decentralized</em>, per-service proxy, not one more shared bottleneck.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "A single gateway instance is fine — we'll just make sure the server it runs on is really beefy."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> No amount of vertical scaling removes the single-point-of-failure risk; a single instance means a single restart, deploy, or crash takes out every backend service's external traffic at once. The fix is horizontal — multiple stateless gateway instances behind a load balancer — the same 3.1/4.5 argument applied at the gateway layer, not a bigger box.</div></div>
+    </div>
+
+    <div class="checkpoint gate">
+      <div class="cp-title">🚨 Checkpoint — adversarial stress test (the gate)</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">You've designed a gateway that authenticates once at the edge and forwards a trusted-identity header (say, <code>X-User-Id</code>) to backend services instead of making them re-validate the token. The interviewer pushes: <em>"What stops a request from reaching a backend service directly, bypassing the gateway entirely, and just setting that X-User-Id header itself to impersonate any user it wants? Walk me through exactly what needs to be true at the network level and the backend level for this trusted-header pattern to actually be safe."</em></span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 A complete answer covers: backend services must NOT be reachable from outside the trusted network at all — they sit on a private network/VPC with no public ingress, so the gateway is the only path in, and "bypass the gateway" is not a request path that exists, not merely one that's discouraged. It covers defense in depth: even on a private network, the backend should verify the request came from the gateway specifically (mutual TLS between gateway and backend, or a shared secret/signed header the gateway attaches that a spoofed direct request couldn't produce), not trust X-User-Id on its face just because it arrived on the internal network — because "internal network" and "trusted request" are not automatically the same thing once you have more than a few services and any lateral movement risk. If you can't name both the network-isolation requirement AND the additional verification layer, you are not done.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> Can you combine what you've learned across sections, not just recall each one?</div>
+  </section>
+
+  <!-- ══════════════════ §9 ══════════════════ -->
+  <section id="s9">
+    <h2 class="section-title"><span class="num">§9</span> 🧪 Mastery Gate</h2>
+    <div class="callout callout-quote">Synthesis only. Each question requires combining two or more sections.</div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">1</span>
+        <span class="qtext">A junior engineer argues that adding a small per-instance cache of validated auth tokens inside each gateway instance (to avoid re-validating the same token on every request from the same client) is a harmless performance optimization. Using the build chain from §5 and the mechanism steps from §6, explain everything that specifically breaks once that per-instance state exists — naming the concrete infrastructure behavior that stops working, not just "it's not stateless anymore."</span>
+        <span class="quiz-toggle">▼ Hint</span>
+      </div>
+      <div class="quiz-hint">💡 Sections combined: §5 + §6 + subtopics 3.1/4.5.</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">2</span>
+        <span class="qtext">You're designing the API layer for a food delivery platform with three backend services (restaurant-service, order-service, driver-location-service) and two very different clients: a consumer mobile app that needs a fast, minimal "track my order" view, and an internal ops dashboard that needs deep, denormalized data across all three services for support agents. Decide where a gateway fits, where a BFF fits (if at all), and justify the split using the specific cost each client's needs would impose on a single shared layer.</span>
+        <span class="quiz-toggle">▼ Hint</span>
+      </div>
+      <div class="quiz-hint">💡 Sections combined: §7 + §8, applied to a system not mentioned elsewhere in this doc.</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">3</span>
+        <span class="qtext">An interviewer asks what happens to your design if the inventory-service starts timing out under load, and your gateway has no circuit breaker configured. Walk through the failure cascade end to end — from the first slow inventory-service call to the effect on completely unrelated requests going through the same gateway — and name the specific fix, tying it back to why the gateway's shared nature makes this worse than if each service were called directly.</span>
+        <span class="quiz-toggle">▼ Hint</span>
+      </div>
+      <div class="quiz-hint">💡 Sections combined: §4 + §6 + §8.</div>
+    </div>
+
+    <h3>Mastery criteria — tick only what you can demonstrate on demand</h3>
+    <ul class="checklist">
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can explain why cross-cutting concerns (auth, TLS termination, rate limiting, routing) belong at a centralized edge rather than duplicated per service, and what specifically breaks when they're duplicated instead</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can design path-based (and name host-based/header-based) routing rules that decouple a client from internal service topology</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can distinguish an API gateway from a reverse proxy, a load balancer, and a service mesh sidecar, and correctly map north-south vs. east-west traffic to gateway vs. mesh</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can explain when to introduce a Backend-for-Frontend instead of one generic gateway, and name the specific cost of not doing so</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can name the failure modes a gateway introduces (SPOF, added latency, orchestration creep, cascading failure without circuit breaking) and the specific mitigation for each</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can describe the responsibilities of an API gateway (auth, rate limiting, routing, SSL termination) and explain why it belongs at the edge — the topic's own mastery criterion, stated directly</span></li>
+    </ul>
+
+    <div class="callout callout-tip">💡 <strong>Rule of thumb:</strong> If you can teach it to someone else and field their follow-up questions, you've mastered it.</div>
+  </section>
+
+  <!-- ══════════════════ §10 ══════════════════ -->
+  <section id="s10">
+    <h2 class="section-title"><span class="num">§10</span> 🔗 Connections &amp; Sources</h2>
+
+    <div class="connections">
+      <div class="conn-card">
+        <span class="conn-icon">⬅️</span>
+        <div><div class="conn-label">Builds on</div><strong>4.5 Reverse Proxies</strong>, which supplies the exact mechanism (terminate TLS, forward on behalf of a backend) the gateway centralizes across many backends instead of one — a gateway <em>is</em> an application-aware reverse proxy, not a different technology. Also <strong>11.1 REST</strong>, which supplies the resource-oriented API surface the gateway routes requests toward, and whose statelessness precondition the gateway itself must obey to scale horizontally.</div>
+      </div>
+      <div class="conn-card">
+        <span class="conn-icon">➡️</span>
+        <div><div class="conn-label">Enables</div><strong>11.4 Microservice Decomposition</strong>, where the services being routed to are actually carved out — the gateway is the edge counterpart to that decomposition, the thing that keeps the client from ever seeing the seams. <strong>23.1 Authentication vs. Authorization</strong>, since "authenticate once at the gateway" is the concrete architectural home for that distinction. <strong>25.6 Rate Limiting at CDN, Gateway, and Service Layers</strong>, the direct deep dive on where in the stack rate limiting decisions get made, of which this subtopic covers exactly one layer. <strong>14.5 Service Discovery</strong>, which the gateway's routing table needs in order to know where a scaled or moved backend instance actually lives.</div>
+      </div>
+      <div class="conn-card">
+        <span class="conn-icon">⚡</span>
+        <div><div class="conn-label">Tension with</div><strong>Service mesh / sidecar pattern (Envoy, Istio)</strong> directly, on the centralized-edge-proxy-vs-decentralized-per-service-proxy axis — a gateway concentrates cross-cutting concerns for north-south traffic in one place, while a mesh deliberately distributes the same kind of proxy logic to every service for east-west traffic, trading a single shared hop for N independent ones. Neither replaces the other; they answer different traffic directions. Also tension with <strong>11.1 REST</strong>'s "keep the resource shape fixed and simple" — a gateway doing heavy response aggregation is, in effect, quietly rebuilding the multi-resource-shape flexibility REST doesn't natively provide, which is exactly the pressure that pushes toward either GraphQL (11.3) or a BFF instead of gateway-level aggregation.</div>
+      </div>
+    </div>
+
+    <h3>📚 Further reading</h3>
+    <ul class="reading-list">
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Kong Gateway documentation — Plugin Hub</strong> — <a href="https://docs.konghq.com/hub/">docs</a> — see the plugin model in practice: auth, rate limiting, and transformation as composable, independently-deployable units rather than one monolithic gateway codebase</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>AWS API Gateway Developer Guide — Throttling</strong> — <a href="https://docs.aws.amazon.com/apigateway/latest/developerguide/api-gateway-request-throttling.html">docs</a> — the account-level and per-method throttling model referenced in §2/§6</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Sam Newman — "Backends For Frontends"</strong> — from <em>Building Microservices</em>, and his standalone writing on the pattern — the canonical treatment of when and why to split a shared gateway into per-client aggregation layers</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Netflix Technology Blog — the Zuul and API Gateway evolution posts</strong> — search "Netflix Zuul" and "Netflix API Gateway" on the Netflix Tech Blog — the real production story behind §6/§7's Netflix example</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Envoy Proxy documentation — "What is Envoy"</strong> — <a href="https://www.envoyproxy.io/docs/envoy/latest/intro/what_is_envoy">docs</a> — read specifically for how the same proxy serves both edge-gateway and service-mesh-sidecar roles, the §10 tension</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Istio documentation — "Istio / Envoy relationship"</strong> — <a href="https://istio.io/latest/docs/ops/deployment/architecture/">docs</a> — the mesh-sidecar side of the north-south/east-west distinction</span></li>
+    </ul>
+  </section>
+
+  <!-- ══════════════════ §11 ══════════════════ -->
+  <section id="s11">
+    <h2 class="section-title"><span class="num">§11</span> ✍️ My Notes</h2>
+    <div class="callout callout-quote">Personal observations, model answers from drilling sessions, things that confused me. Saved locally in this browser.</div>
+    <textarea class="notes-area" placeholder="Your notes, model answers, and annotations…"></textarea>
+  </section>
+
+</article>
+</main>
+
+<script>
+// TOC active state
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('#toc nav a');
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(a => a.classList.remove('active'));
+      const a = document.querySelector(`#toc nav a[href="#${e.target.id}"]`);
+      if (a) a.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+sections.forEach(s => obs.observe(s));
+
+function toggle(cb) { cb.closest('li').classList.toggle('checked'); }
+function toggleReading(cb) { cb.closest('li').classList.toggle('checked'); }
+function toggleQuiz(q) {
+  const item = q.closest('.quiz-item');
+  item.classList.toggle('open');
+  q.querySelector('.quiz-toggle').textContent = item.classList.contains('open') ? '▲ Hide' : '▼ Hint';
+}
+
+// Notes auto-save
+const notesArea = document.querySelector('.notes-area');
+const NOTES_KEY = 'notes_11_7';
+if (localStorage.getItem(NOTES_KEY)) notesArea.value = localStorage.getItem(NOTES_KEY);
+notesArea.addEventListener('input', () => {
+  try { localStorage.setItem(NOTES_KEY, notesArea.value); } catch(e) {}
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.10 Bloom Filters — Probabilistic Membership Testing</title>
+<style>
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface-alt: #f3f2ef;
+    --border: #e5e3de; --text: #1a1917; --text-muted: #6b6861;
+    --accent: #2563eb; --accent-light: #dbeafe;
+    --green: #16a34a; --green-light: #dcfce7;
+    --red: #dc2626; --red-light: #fee2e2;
+    --yellow: #d97706; --yellow-light: #fef3c7;
+    --purple: #7c3aed; --purple-light: #ede9fe;
+    --orange: #ea580c; --orange-light: #ffedd5;
+    --teal: #0d9488; --teal-light: #ccfbf1;
+    --code-bg: #1e1e2e; --code-text: #cdd6f4;
+    --sidebar-w: 240px; --content-max: 820px;
+    font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; }
+  #toc { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0 48px; z-index: 100; }
+  #toc-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  #toc-header .phase-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-bottom: 6px; }
+  #toc-header h2 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  #toc-header .tier-tag { font-size: 10px; font-weight: 800; letter-spacing: .06em; color: var(--yellow); background: var(--yellow-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-top: 8px; }
+  #toc nav a { display: block; padding: 5px 16px 5px 20px; font-size: 12.5px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+  main { margin-left: var(--sidebar-w); padding: 48px 48px 96px; max-width: calc(var(--sidebar-w) + var(--content-max) + 96px); width: 100%; }
+  article { max-width: var(--content-max); }
+  .doc-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 2px solid var(--border); }
+  .doc-header .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+  .tag-phase { background: var(--accent-light); color: var(--accent); }
+  .tag-topic { background: var(--purple-light); color: var(--purple); }
+  .tag-tier  { background: var(--yellow-light); color: var(--yellow); }
+  .tag-prereq{ background: var(--teal-light); color: var(--teal); }
+  .tag-date  { background: var(--surface-alt);  color: var(--text-muted); }
+  .doc-header h1 { font-size: 30px; font-weight: 800; line-height: 1.25; letter-spacing: -.02em; color: var(--text); }
+  section { margin-bottom: 52px; scroll-margin-top: 32px; }
+  h2.section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -.01em; }
+  h2.section-title .num { font-size: 11px; font-weight: 800; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; letter-spacing: .04em; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 24px 0 10px; }
+  h4 { font-size: 13.5px; font-weight: 700; color: var(--text); margin: 18px 0 8px; }
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+  code { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-family: "SF Mono","Fira Code",Menlo,monospace; font-size: 12.5px; }
+  ul.plain { margin: 0 0 14px 20px; }
+  ul.plain li { margin-bottom: 7px; font-size: 14.5px; line-height: 1.6; }
+  ol.steps { margin: 0 0 14px 22px; }
+  ol.steps li { margin-bottom: 8px; font-size: 14.5px; line-height: 1.6; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 14px; border-left: 3px solid; }
+  .callout-goal  { background: var(--accent-light); border-color: var(--accent); color: #1e40af; }
+  .callout-tip   { background: var(--yellow-light); border-color: var(--yellow); color: #92400e; }
+  .callout-warn  { background: var(--red-light); border-color: var(--red); color: #7f1d1d; }
+  .callout-quote { background: var(--surface-alt); border-color: var(--border); color: var(--text-muted); font-style: italic; }
+  .callout-teal  { background: var(--teal-light); border-color: var(--teal); color: #134e4a; }
+  .the-question { background: var(--surface); border: 2px solid var(--accent); border-radius: 12px; padding: 16px 20px; margin-top: 18px; font-size: 15.5px; }
+  .the-question .lbl { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); display: block; margin-bottom: 5px; }
+  .the-question em { color: var(--text); font-weight: 600; }
+  .definition { background: var(--purple-light); border-left: 4px solid var(--purple); border-radius: 8px; padding: 16px 20px; margin: 18px 0 24px; font-size: 15px; font-weight: 600; color: #4c1d95; line-height: 1.6; }
+  .mental-model { background: var(--teal-light); border-left: 3px solid var(--teal); border-radius: 8px; padding: 14px 18px; margin: 18px 0; font-size: 14px; color: #134e4a; }
+  .mental-model .mm-name { font-weight: 800; }
+  .mental-model .mm-break { display: block; margin-top: 7px; font-style: italic; opacity: .85; }
+  .bridge { background: linear-gradient(90deg, var(--accent-light), transparent); border-left: 4px solid var(--accent); border-radius: 8px; padding: 13px 18px; margin-top: 28px; font-size: 14.5px; color: #1e40af; font-weight: 600; }
+  .bridge .arrow { font-weight: 800; margin-right: 6px; }
+  .checkpoint { background: var(--surface); border: 2px solid var(--green); border-radius: 12px; padding: 16px 20px; margin-top: 26px; }
+  .checkpoint > .cp-title { font-size: 12px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--green); margin-bottom: 12px; display: flex; align-items: center; gap: 7px; }
+  .checkpoint.gate { border-color: var(--red); }
+  .checkpoint.gate > .cp-title { color: var(--red); }
+  .cheatsheet { background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 24px 28px; font-family: "SF Mono","Fira Code","Cascadia Code",Menlo,monospace; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-x: auto; margin-top: 16px; }
+  .cheatsheet .label { color: #cba6f7; font-weight: 700; letter-spacing: .08em; display: block; margin-top: 18px; margin-bottom: 4px; border-bottom: 1px solid #313244; padding-bottom: 3px; }
+  .cheatsheet .label:first-child { margin-top: 0; }
+  .diagram-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 16px 14px; margin: 20px 0 28px; overflow-x: auto; }
+  .diagram-wrap .diagram-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); margin-bottom: 12px; }
+  .diagram-wrap svg { display: block; width: 100%; height: auto; }
+  .diagram-wrap p.caption { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 10px; margin-bottom: 0; font-style: italic; }
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; font-size: 14.5px; line-height: 1.55; }
+  .checklist li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 2px; background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .checklist li.checked .cb { background: var(--green); border-color: var(--green); }
+  .checklist li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .checklist li.checked .text { color: var(--text-muted); text-decoration: line-through; }
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: var(--surface-alt); padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.5; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+  .misconception { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .misconception .wrong { background: var(--red-light); padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; }
+  .misconception .right { padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; color: #065f46; background: var(--green-light); }
+  .misconception .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .quiz-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .quiz-q { padding: 14px 18px; font-size: 14.5px; font-weight: 600; cursor: pointer; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .quiz-q:hover { background: var(--surface-alt); }
+  .quiz-num { flex-shrink: 0; width: 24px; height: 24px; background: var(--accent); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; margin-top: 1px; }
+  .checkpoint.gate .quiz-num { background: var(--red); }
+  .quiz-q .qtext { flex: 1; font-weight: 500; }
+  .quiz-toggle { font-size: 11px; color: var(--text-muted); flex-shrink: 0; margin-top: 3px; }
+  .quiz-hint { display: none; padding: 10px 18px 14px; font-size: 13px; color: #92400e; background: var(--yellow-light); border-top: 1px solid var(--border); line-height: 1.6; }
+  .quiz-item.open .quiz-hint { display: block; }
+  .reading-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .reading-list li { display: flex; align-items: flex-start; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; font-size: 14px; }
+  .reading-list li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 1px; cursor: pointer; background: var(--surface); display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .reading-list li.checked .cb { background: var(--green); border-color: var(--green); }
+  .reading-list li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .reading-list li.checked .rtext { color: var(--text-muted); text-decoration: line-through; }
+  .notes-area { width: 100%; min-height: 200px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: inherit; font-size: 14px; color: var(--text); resize: vertical; line-height: 1.6; }
+  .notes-area:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .connections { display: flex; flex-direction: column; gap: 12px; }
+  .conn-card { display: flex; align-items: flex-start; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14px; }
+  .conn-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .conn-label { font-weight: 700; margin-bottom: 3px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .tradeoff-box { background: var(--surface-alt); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 16px 20px; font-size: 14.5px; font-style: italic; color: var(--text); margin-top: 14px; line-height: 1.65; }
+  .trigger-list { list-style: none; display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+  .trigger-list li { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--orange); border-radius: 8px; padding: 10px 16px; font-size: 14px; font-style: italic; color: var(--text); }
+  @media (max-width: 900px) { #toc { display: none; } main { margin-left: 0; padding: 24px 20px 60px; } }
+</style>
+</head>
+<body>
+
+<aside id="toc">
+  <div id="toc-header">
+    <span class="phase-tag">Phase C · Topic 8</span>
+    <h2>8.10 Bloom Filters — Probabilistic Membership Testing</h2>
+    <span class="tier-tag">🥈 T2 · ~1h</span>
+  </div>
+  <nav>
+    <a href="#s0">🧭 The Question</a>
+    <a href="#s1">📋 Cheatsheet</a>
+    <a href="#s2">🧠 The Mindmap</a>
+    <a href="#s3">🔥 The Problem</a>
+    <a href="#s4">💡 The Core Idea</a>
+    <a href="#s5">⚙️ How It Works</a>
+    <a href="#s6">⚖️ The Decision</a>
+    <a href="#s7">🎯 In the Interview</a>
+    <a href="#s8">🔗 Connections</a>
+    <a href="#s9">✍️ My Notes</a>
+  </nav>
+</aside>
+
+<main>
+<article>
+
+  <header class="doc-header">
+    <div class="meta">
+      <span class="tag tag-phase">Phase C — Data Storage</span>
+      <span class="tag tag-topic">Topic 8 — Database Fundamentals</span>
+      <span class="tag tag-tier">🥈 T2 Depth · ~1h</span>
+      <span class="tag tag-prereq">Prereqs: 8.4, 8.7</span>
+      <span class="tag tag-date">_____</span>
+    </div>
+    <h1>8.10 Bloom Filters — Probabilistic Membership Testing</h1>
+  </header>
+
+  <!-- ══════════════════ §0 ══════════════════ -->
+  <section id="s0">
+    <h2 class="section-title"><span class="num">§0</span> 🧭 The Question This Answers</h2>
+
+    <p>8.4 introduced the LSM-tree, and 8.7 named the bill it leaves on the read side: a point read may have to check the memtable plus every un-compacted SSTable before it can answer, because a key could in principle be in any of them. That bill is only "bounded, not eliminated" by one specific mechanism — this subtopic is that mechanism.</p>
+
+    <p>The tension is that checking whether a key is absent from a file should be cheap, but the only fully correct way to know is to actually look — and looking means a disk seek per file, for files that, most of the time, don't contain the key at all. Storing every key in memory to answer exactly would be correct but defeats the entire point of using disk-backed storage in the first place.</p>
+
+    <div class="the-question">
+      <span class="lbl">The question</span>
+      <em>How do you cheaply and quickly rule out "this key isn't here" for most files, without paying for an actual lookup or storing the full key set — and what do you give up to get that speed?</em>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> Before naming the mechanism, what specifically goes wrong with the two obvious fixes — check every file, or keep every key in memory?</div>
+  </section>
+
+  <!-- ══════════════════ §1 ══════════════════ -->
+  <section id="s1">
+    <h2 class="section-title"><span class="num">§1</span> 📋 Cheatsheet</h2>
+
+    <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds.</div>
+    <div class="callout callout-tip">⏭️ <strong>First time through?</strong> Skip to §2 and come back here for revision.</div>
+
+<div class="cheatsheet"><span class="label">§ 1  WHY IT EXISTS</span>An LSM-tree point read (8.4, 8.7) may need to check several SSTables before
+answering, and each check that turns up nothing is a wasted disk seek. Storing
+every key in memory to answer exactly would avoid the waste but costs O(n)
+memory proportional to the full key set — the exact cost disk-backed storage
+was chosen to avoid. The gap is a structure that's cheap like memory but
+correct enough, most of the time, to skip real lookups entirely.
+<span class="label">§ 2  WHAT IT IS</span>BLOOM FILTER       A fixed-size bit array plus k independent hash functions
+                   that answers "possibly present" or "definitely absent" for
+                   a key, using far less space than storing the key itself.
+FALSE POSITIVE     The filter says "possibly present" for a key that was
+                   never inserted. Expected and tunable — never eliminated.
+FALSE NEGATIVE     The filter says "definitely absent" for a key that WAS
+                   inserted. Architecturally impossible by construction —
+                   this is the one guarantee that never breaks.
+k HASH FUNCTIONS   Independent functions mapping a key to k positions in the
+                   m-bit array. Same k functions used for insert and query.
+<span class="label">§ 3  THE MECHANISM</span>INSERT             Compute k hash positions for the key, set each bit to 1.
+                   Idempotent — setting an already-1 bit changes nothing.
+QUERY              Compute the same k positions. Any bit still 0 → key was
+                   definitely never inserted (that slot was never touched).
+                   All k bits 1 → "maybe" — those bits could be 1 from other
+                   keys' overlapping hashes, not necessarily this one.
+FALLBACK ON MAYBE  A "maybe" always triggers the real, expensive check
+                   (disk read, DB lookup) — the filter only ever saves work
+                   on definite-absent answers, never replaces the real check.
+<span class="label">§ 4  USE / AVOID</span>USE when: the real lookup is expensive (disk seek, network hop, DB query),
+  false positives are tolerable IF a fallback check follows, and false
+  negatives are unacceptable — you can never afford to say "not here" when
+  it is.
+AVOID when: you need EXACT membership with no fallback path, you need to
+  enumerate members (Bloom filters can't list what they hold), or you need
+  to delete entries from a filter already in use — a plain Bloom filter
+  can't safely unset a bit shared by other keys.
+AVOID assuming a Bloom filter replaces the real lookup — it only ever
+  reduces how often you pay for it.
+<span class="label">§ 5  NUMBERS TO ANCHOR THE DISCUSSION</span>~10 bits per key is the standard sizing to hit roughly a 1% false-positive
+  rate — dramatically less than 8+ bytes per key for a real key or hash set
+  entry.
+False positive rate p ≈ (1 − e^(−kn/m))^k, where m = bits, n = elements,
+  k = hash functions. The optimal k ≈ (m/n)·ln2 for a given m and n.
+FPR is NOT fixed once sized — inserting more elements than the filter was
+  built for (n grows past design capacity) drives the fill ratio up and the
+  false-positive rate climbs, silently, with no error thrown.
+Cassandra defaults bloom_filter_fp_chance to ~0.01 (1%) per SSTable — a
+  direct, tunable production instance of this trade-off.
+<span class="label">§ 6  INTERVIEW TRIGGERS + GOTCHA</span>→ "How do you avoid hitting the DB for keys      → Bloom filter in front of
+   that almost never exist?"                        the expensive check
+→ "This LSM-tree does a lot of point reads       → Bloom filter per SSTable,
+   against cold SSTables — how speed it up?"        skip files on a "no"
+→ "How would you stop your cache from being      → Bloom filter as an
+   polluted by one-hit-wonder traffic?"             admission filter
+→ "What's a space-efficient way to check          → Bloom filter, then
+   set membership?"                                 immediately name the FPR
+GOTCHA: Saying "it tells you if something is in the set." It never does —
+  it tells you "definitely not" or "maybe," and "maybe" is not "yes." Skipping
+  the fallback-check requirement is the single most common depth failure.</div>
+  </section>
+
+  <!-- ══════════════════ §2 ══════════════════ -->
+  <section id="s2">
+    <h2 class="section-title"><span class="num">§2</span> 🧠 The Mindmap</h2>
+    <div class="callout callout-quote">The picture to hold in your head while you study.</div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Concept map — Bloom filters</div>
+      <svg viewBox="0 0 1060 660" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="mmArrow10" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" fill="#b8b4ac"/>
+          </marker>
+        </defs>
+
+        <g stroke="#b8b4ac" stroke-width="1.8" fill="none" marker-end="url(#mmArrow10)">
+          <path d="M530,276 L155,192"/>
+          <path d="M530,276 L530,192"/>
+          <path d="M530,276 L905,192"/>
+          <path d="M530,384 L315,468"/>
+          <path d="M530,384 L745,468"/>
+        </g>
+
+        <!-- centre -->
+        <ellipse cx="530" cy="330" rx="188" ry="54" fill="#a5d8ff" stroke="#1971c2" stroke-width="2.5"/>
+        <text x="530" y="322" text-anchor="middle" font-size="15.5" font-weight="800" fill="#0b3d66">BLOOM FILTERS</text>
+        <text x="530" y="346" text-anchor="middle" font-size="12.5" font-style="italic" fill="#1971c2">"cheap NO, honest MAYBE, never a false NO"</text>
+
+        <!-- TOP LEFT : the guarantee -->
+        <rect x="20" y="20" width="270" height="172" rx="10" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+        <text x="36" y="45" font-size="13.5" font-weight="800" fill="#1e3a8a">🛡️ THE GUARANTEE</text>
+        <text x="36" y="72"  font-size="12.5" fill="#1e3a8a">no false negatives,</text>
+        <text x="36" y="95"  font-size="12.5" fill="#1e3a8a">ever</text>
+        <text x="36" y="118" font-size="12.5" fill="#1e3a8a">false positives expected,</text>
+        <text x="36" y="141" font-size="12.5" fill="#1e3a8a">tunable rate</text>
+        <text x="36" y="170" font-size="11.5" font-style="italic" fill="#3b5bdb">asymmetric by design</text>
+
+        <!-- TOP CENTRE : the mechanism -->
+        <rect x="395" y="20" width="270" height="172" rx="10" fill="#c3fae8" stroke="#0ca678" stroke-width="2"/>
+        <text x="411" y="45" font-size="13.5" font-weight="800" fill="#134e4a">⚙️ THE MECHANISM</text>
+        <text x="411" y="72"  font-size="12.5" fill="#134e4a">m-bit array + k hashes</text>
+        <text x="411" y="95"  font-size="12.5" fill="#134e4a">insert: set k bits</text>
+        <text x="411" y="118" font-size="12.5" fill="#134e4a">query: check k bits</text>
+        <text x="411" y="141" font-size="12.5" fill="#134e4a">same k functions both ways</text>
+        <text x="411" y="170" font-size="11.5" font-style="italic" fill="#0ca678">shared, compact space</text>
+
+        <!-- TOP RIGHT : the cost -->
+        <rect x="770" y="20" width="270" height="172" rx="10" fill="#ffd8a8" stroke="#e67700" stroke-width="2"/>
+        <text x="786" y="45" font-size="13.5" font-weight="800" fill="#7c2d12">💸 THE COST</text>
+        <text x="786" y="72"  font-size="12.5" fill="#7c2d12">space vs. FPR tuning</text>
+        <text x="786" y="95"  font-size="12.5" fill="#7c2d12">no deletion (plain form)</text>
+        <text x="786" y="118" font-size="12.5" fill="#7c2d12">no member enumeration</text>
+        <text x="786" y="141" font-size="12.5" fill="#7c2d12">silent FPR drift if overfull</text>
+        <text x="786" y="170" font-size="11.5" font-style="italic" fill="#e67700">nothing is free</text>
+
+        <!-- BOTTOM LEFT : where used -->
+        <rect x="180" y="468" width="270" height="172" rx="10" fill="#ffc9c9" stroke="#c92a2a" stroke-width="2"/>
+        <text x="196" y="493" font-size="13.5" font-weight="800" fill="#7f1d1d">📍 WHERE USED</text>
+        <text x="196" y="520" font-size="12.5" fill="#7f1d1d">LSM-tree SSTables (8.4, 8.7)</text>
+        <text x="196" y="543" font-size="12.5" fill="#7f1d1d">cache / CDN admission</text>
+        <text x="196" y="566" font-size="12.5" fill="#7f1d1d">crawler URL dedup</text>
+        <text x="196" y="589" font-size="12.5" fill="#7f1d1d">existence checks (9.x, 30.x)</text>
+        <text x="196" y="618" font-size="11.5" font-style="italic" fill="#c92a2a">always in front of a real check</text>
+
+        <!-- BOTTOM RIGHT : variants -->
+        <rect x="610" y="468" width="270" height="172" rx="10" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+        <text x="626" y="493" font-size="13.5" font-weight="800" fill="#4c1d95">🔀 VARIANTS</text>
+        <text x="626" y="520" font-size="12.5" fill="#4c1d95">counting Bloom filter</text>
+        <text x="626" y="543" font-size="12.5" fill="#4c1d95">— adds safe deletion</text>
+        <text x="626" y="566" font-size="12.5" fill="#4c1d95">cuckoo filter — native</text>
+        <text x="626" y="589" font-size="12.5" fill="#4c1d95">deletion, similar density</text>
+        <text x="626" y="618" font-size="11.5" font-style="italic" fill="#7c3aed">relax the one limitation</text>
+      </svg>
+      <p class="caption">The guarantee and the mechanism explain each other; the cost is the bill for the compression; where-used and variants are the interview-relevant edges.</p>
+    </div>
+
+    <p><strong>How to read it:</strong> the top branches describe the shape of the promise — <strong>the guarantee</strong> is the one-way asymmetry that makes the structure trustworthy at all, <strong>the mechanism</strong> is how that asymmetry is physically produced, <strong>the cost</strong> is what you pay for the compression, <strong>where used</strong> is the recurring interview-relevant deployment, and <strong>variants</strong> exist specifically to relax the one limitation (no deletion) the base structure accepts.</p>
+  </section>
+
+  <!-- ══════════════════ §3 ══════════════════ -->
+  <section id="s3">
+    <h2 class="section-title"><span class="num">§3</span> 🔥 The Problem</h2>
+
+    <p>An LSM-tree's read path (8.4, 8.7) can legitimately need to check the memtable plus several on-disk SSTables before it knows whether a key exists, because any of them could hold it. The obvious fix — check every candidate file — is correct but expensive: each check that finds nothing is still a disk seek that was paid for and returned no value, and the number of un-compacted files only grows under sustained write load.</p>
+
+    <p>The equally obvious reverse fix is to keep an exact record of every key in memory — a hash set — so membership can be answered without touching disk at all. This is correct and fast, but it costs memory proportional to the full key set, at roughly the same per-key overhead as the keys themselves. For a dataset large enough to justify disk-backed storage in the first place, holding every key in memory defeats the reason that storage engine was chosen — you'd need enough RAM to hold what you're explicitly trying to keep on disk.</p>
+
+    <p>The insight that resolves this is to stop demanding an exact answer. Most queries against most files are going to be negative — the key genuinely isn't in that particular SSTable — so what's actually needed is a structure that can say "definitely not here" cheaply and correctly nearly all the time, is allowed to occasionally be wrong in the safe direction (a wasted check on a key that turns out not to be there), and is never allowed to be wrong in the unsafe direction (claiming absence for a key that's actually present, which would silently return a wrong answer). Trading a small, controlled rate of wasted work for a large reduction in memory is the entire design.</p>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">Why can't you just keep every key in an in-memory hash set to avoid disk reads entirely, if a hash set would also give you a correct, fast answer?</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the second paragraph — the reverse mistake and why it defeats the purpose of disk-backed storage.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> If the fix is to accept a controlled kind of wrongness, what exactly is the structure that produces "definitely not / maybe," and how does it connect insert and query?</div>
+  </section>
+
+  <!-- ══════════════════ §4 ══════════════════ -->
+  <section id="s4">
+    <h2 class="section-title"><span class="num">§4</span> 💡 The Core Idea</h2>
+
+    <div class="definition">A Bloom filter is a compact, probabilistic data structure that answers "is this key possibly in the set" using a fixed-size bit array and several independent hash functions, guaranteeing zero false negatives while allowing a tunable, non-zero rate of false positives.</div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">The build chain</div>
+      <svg viewBox="0 0 1000 180" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="bcArrow10" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#7c3aed"/>
+          </marker>
+        </defs>
+        <g>
+          <rect x="4" y="30" width="228" height="58" rx="9" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+          <text x="118" y="55" text-anchor="middle" font-size="12" font-weight="800" fill="#1e3a8a">BIT ARRAY +</text>
+          <text x="118" y="73" text-anchor="middle" font-size="12" font-weight="800" fill="#1e3a8a">HASHES</text>
+          <text x="118" y="108" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">because every key</text>
+          <text x="118" y="124" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">needs a fixed, shared</text>
+          <text x="118" y="140" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">space to land in</text>
+        </g>
+        <line x1="238" y1="59" x2="258" y2="59" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow10)"/>
+        <g>
+          <rect x="264" y="30" width="224" height="58" rx="9" fill="#c3fae8" stroke="#0ca678" stroke-width="2"/>
+          <text x="376" y="59" text-anchor="middle" font-size="12" font-weight="800" fill="#134e4a">INSERT SETS BITS</text>
+          <text x="376" y="108" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">therefore each key</text>
+          <text x="376" y="124" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">stamps a small, known</text>
+          <text x="376" y="140" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">pattern into that space</text>
+        </g>
+        <line x1="494" y1="59" x2="514" y2="59" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow10)"/>
+        <g>
+          <rect x="520" y="30" width="224" height="58" rx="9" fill="#ffc9c9" stroke="#c92a2a" stroke-width="2"/>
+          <text x="632" y="59" text-anchor="middle" font-size="12" font-weight="800" fill="#7f1d1d">QUERY CHECKS BITS</text>
+          <text x="632" y="108" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">so checking those same</text>
+          <text x="632" y="124" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">positions reveals whether</text>
+          <text x="632" y="140" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">any part is missing</text>
+        </g>
+        <line x1="750" y1="59" x2="770" y2="59" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow10)"/>
+        <g>
+          <rect x="776" y="30" width="220" height="58" rx="9" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+          <text x="886" y="55" text-anchor="middle" font-size="11.5" font-weight="800" fill="#4c1d95">THE ASYMMETRIC</text>
+          <text x="886" y="73" text-anchor="middle" font-size="11.5" font-weight="800" fill="#4c1d95">GUARANTEE</text>
+          <text x="886" y="108" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">so "maybe" needs a</text>
+          <text x="886" y="124" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">fallback, but "no" is</text>
+          <text x="886" y="140" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">trustworthy alone</text>
+        </g>
+      </svg>
+      <p class="caption">Read the italics as one sentence — that's the whole argument of this subtopic.</p>
+    </div>
+
+    <h3>The Bit Array and Hash Functions</h3>
+    <p>The structure starts as an <code>m</code>-bit array, every bit initialized to 0, paired with <code>k</code> independent hash functions that each map any key to a position between 0 and <code>m − 1</code>. Neither the array nor the hash functions know anything about the actual keys yet — they're just fixed machinery, sized in advance based on how many keys you expect to insert and how much false-positive rate you're willing to tolerate.</p>
+
+    <h3>Insert Sets Bits</h3>
+    <p>Inserting a key means running it through all <code>k</code> hash functions to get <code>k</code> positions, then setting the bit at each of those positions to 1. This is idempotent — if a bit is already 1 because some other key's hash landed on the same position, setting it again changes nothing and loses no information about the fact that it's set. Nothing about which key set a given bit is recorded; the array only remembers that the position was touched by <em>something</em>.</p>
+
+    <h3>Query Checks Bits</h3>
+    <p>Checking whether a key is present, referencing the same insert machinery, means hashing the query key with the same <code>k</code> functions and checking those same <code>k</code> positions. If even one of them is still 0, the key was definitely never inserted — no insert could have left that bit at 0 if this exact key had gone through the same hash functions. If all <code>k</code> positions are 1, the honest answer is "maybe" — those bits could have been set by this key, by some other key whose hashes happened to overlap, or by some combination of several other keys.</p>
+
+    <h3>The Asymmetric Guarantee</h3>
+    <p>This is where the two prior blocks combine into the property that makes the whole thing usable: a bit can only ever be set, never unset by a query, so a bit being 0 is unimpeachable proof of absence — a false negative would require a bit to somehow be 0 despite having been set, which the mechanism makes impossible. A bit being 1 proves nothing about any single key, because multiple keys' hashes accumulate onto the same shared space — which is exactly why false positives are possible and expected, not a flaw to be engineered away.</p>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">Two keys that were never inserted happen to hash to exactly the k bit positions that other, real keys already set. What does a query for either of these non-inserted keys return, and why is that consistent with the Bloom filter's guarantee rather than a violation of it?</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read "The Asymmetric Guarantee" — what a 1 bit does and doesn't prove.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> You know how insert and query use the same k positions. What does this look like end to end, and where specifically does it fail or degrade?</div>
+  </section>
+
+  <!-- ══════════════════ §5 ══════════════════ -->
+  <section id="s5">
+    <h2 class="section-title"><span class="num">§5</span> ⚙️ How It Actually Works</h2>
+
+    <h3>Happy path — sizing, inserting, and querying</h3>
+    <ol class="steps">
+      <li>Decide the target false-positive rate and expected element count <code>n</code>, and size the bit array <code>m</code> and hash count <code>k</code> accordingly (roughly 10 bits per key for a ~1% target FPR).</li>
+      <li>Initialize the <code>m</code>-bit array to all zeros.</li>
+      <li>For each key inserted (e.g., each key written into an SSTable during a flush or compaction), compute its <code>k</code> hash positions and set those bits to 1.</li>
+      <li>On a lookup, compute the same <code>k</code> positions for the query key.</li>
+      <li>If any position is 0, return "definitely absent" and skip the expensive real check entirely (e.g., skip reading this SSTable from disk).</li>
+      <li>If all positions are 1, return "maybe present" and fall through to the real check — the filter never substitutes for it, only decides whether to skip it.</li>
+    </ol>
+
+    <div class="mental-model">
+      🗺️ <span class="mm-name">Mental model — a shared ink-stamp guest list.</span> Each real guest, on arrival, gets k random spots on a shared card stamped with ink. To check if someone got in, you stamp the same k spots on a fresh card and hold it up to the shared one: if any spot you stamped is blank on the shared card, that person never came through — no guest's arrival could have left it blank. If every spot matches, it might be them, or it might just be that enough other guests' stamps happened to cover the same spots.
+      <span class="mm-break">Where it breaks down: real ink doesn't have a precisely computable "how full is the card" number the way a Bloom filter's bit-fill ratio directly determines its false-positive rate via a closed-form formula — the analogy captures the shared-space collision but not the tunable math behind it.</span>
+    </div>
+
+    <h3>Failure &amp; edge cases</h3>
+    <ul class="plain">
+      <li><strong>No safe deletion.</strong> Unsetting a bit to "remove" a key risks unsetting it for every other key whose hash also touched that position, silently reintroducing false negatives — the one guarantee that must never break. Deletion requires a counting variant (a small counter per position instead of a single bit) or rebuilding the filter from scratch.</li>
+      <li><strong>Silent FPR drift under overfill.</strong> Inserting more elements than the filter was sized for isn't rejected or flagged — the array simply fills up faster than planned, more bits reach 1, and the false-positive rate climbs above its design target with no error or warning, only a gradually less useful filter.</li>
+      <li><strong>No enumeration.</strong> The structure can answer "is X a member" for a candidate X you already have, but it cannot produce a list of what it contains — there's no way to walk the bit array backward into a set of keys.</li>
+      <li><strong>Not resizable in place.</strong> Growing <code>m</code> after the fact means rebuilding the filter from the full key set, not adjusting the existing array — in an LSM-tree, this happens naturally as a side effect of compaction rewriting SSTables, not as a special-cased maintenance step.</li>
+    </ul>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Insert / query flow</div>
+      <svg viewBox="0 0 1040 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="ifArrow10" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#2563eb"/>
+          </marker>
+        </defs>
+
+        <rect x="10" y="20" width="190" height="50" rx="8" fill="#c3fae8" stroke="#0ca678" stroke-width="2"/>
+        <text x="105" y="40" text-anchor="middle" font-size="12" font-weight="700" fill="#134e4a">INSERT key</text>
+        <text x="105" y="58" text-anchor="middle" font-size="10.5" fill="#134e4a">hash₁(key)…hashₖ(key)</text>
+
+        <line x1="206" y1="45" x2="230" y2="45" stroke="#0ca678" stroke-width="2.5" marker-end="url(#ifArrow10)"/>
+        <rect x="236" y="20" width="230" height="50" rx="8" fill="#c3fae8" stroke="#0ca678" stroke-width="2"/>
+        <text x="351" y="40" text-anchor="middle" font-size="12" font-weight="700" fill="#134e4a">set bit at each position</text>
+        <text x="351" y="58" text-anchor="middle" font-size="10.5" fill="#134e4a">idempotent</text>
+
+        <rect x="10" y="110" width="190" height="50" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+        <text x="105" y="130" text-anchor="middle" font-size="12" font-weight="700" fill="#1e3a8a">QUERY key</text>
+        <text x="105" y="148" text-anchor="middle" font-size="10.5" fill="#1e3a8a">hash₁(key)…hashₖ(key)</text>
+
+        <line x1="206" y1="135" x2="230" y2="135" stroke="#3b5bdb" stroke-width="2.5" marker-end="url(#ifArrow10)"/>
+        <rect x="236" y="110" width="230" height="50" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+        <text x="351" y="130" text-anchor="middle" font-size="12" font-weight="700" fill="#1e3a8a">check bit at each position</text>
+        <text x="351" y="148" text-anchor="middle" font-size="10.5" fill="#1e3a8a">same k positions</text>
+
+        <line x1="466" y1="135" x2="490" y2="135" stroke="#6b6861" stroke-width="2.5" marker-end="url(#ifArrow10)"/>
+
+        <path d="M498,150 L560,220" stroke="#6b6861" stroke-width="2" fill="none" marker-end="url(#ifArrow10)"/>
+        <text x="500" y="190" font-size="11" font-weight="800" fill="#c92a2a">any bit = 0</text>
+        <path d="M498,120 L560,60" stroke="#6b6861" stroke-width="2" fill="none" marker-end="url(#ifArrow10)"/>
+        <text x="500" y="90" font-size="11" font-weight="800" fill="#2f9e44">all bits = 1</text>
+
+        <rect x="566" y="20" width="260" height="70" rx="10" fill="#fee2e2" stroke="#dc2626" stroke-width="2"/>
+        <text x="696" y="46" text-anchor="middle" font-size="12.5" font-weight="800" fill="#7f1d1d">MAYBE PRESENT</text>
+        <text x="696" y="64" text-anchor="middle" font-size="10.5" fill="#7f1d1d">fall through to the real,</text>
+        <text x="696" y="78" text-anchor="middle" font-size="10.5" fill="#7f1d1d">expensive check</text>
+
+        <rect x="566" y="210" width="260" height="70" rx="10" fill="#dcfce7" stroke="#2f9e44" stroke-width="2"/>
+        <text x="696" y="236" text-anchor="middle" font-size="12.5" font-weight="800" fill="#14532d">DEFINITELY ABSENT</text>
+        <text x="696" y="254" text-anchor="middle" font-size="10.5" fill="#14532d">skip the real lookup</text>
+        <text x="696" y="268" text-anchor="middle" font-size="10.5" fill="#14532d">(e.g. skip this SSTable)</text>
+      </svg>
+    </div>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">A Bloom filter sized for 100,000 keys is instead used to hold 2,000,000 keys, because a teammate reused it to "save engineering time." What happens to lookup behavior, mechanically — and would the filter visibly report that anything is wrong?</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read "Silent FPR drift under overfill."</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> Given what a Bloom filter buys and costs, when do you actually reach for one in a design, and what do real systems do with it?</div>
+  </section>
+
+  <!-- ══════════════════ §6 ══════════════════ -->
+  <section id="s6">
+    <h2 class="section-title"><span class="num">§6</span> ⚖️ The Decision — When, and What It Costs</h2>
+
+    <p>The default question is <strong>do you need an exact answer, or can a "maybe" be verified cheaply enough that a false positive just costs one extra real check?</strong> If exactness is mandatory and there's no fallback path to verify a "maybe" — for instance, the Bloom filter itself would be the only source of truth — it's the wrong structure entirely; use a real index or exact set. If a fallback exists and the real lookup is materially more expensive than a bit-array check (a disk seek, a network round trip, a full database query), a Bloom filter earns its place by turning most of those expensive checks into cheap in-memory ones. The remaining decision is whether entries need to be deleted from the filter over its lifetime: a plain Bloom filter can't safely unset a bit, so any workload that needs eviction — a crawler retiring stale URLs, a cache admission filter for content that ages out — needs a counting Bloom filter or a cuckoo filter instead, both of which trade a bit more space or complexity for safe deletion.</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Decision tree</div>
+      <svg viewBox="0 0 1200 460" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="dtArrow10" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" fill="#6b6861"/>
+          </marker>
+        </defs>
+
+        <rect x="280" y="10" width="500" height="52" rx="26" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+        <text x="530" y="32" text-anchor="middle" font-size="12.5" font-weight="700" fill="#4c1d95">Do you need an exact, guaranteed-correct answer?</text>
+        <text x="530" y="50" text-anchor="middle" font-size="11" fill="#7c3aed">no fallback available for a "maybe"?</text>
+
+        <path d="M400,64 L150,104" stroke="#6b6861" stroke-width="2" fill="none" marker-end="url(#dtArrow10)"/>
+        <text x="210" y="86" font-size="11" font-weight="800" fill="#c92a2a">yes</text>
+        <path d="M660,64 L820,104" stroke="#6b6861" stroke-width="2" fill="none" marker-end="url(#dtArrow10)"/>
+        <text x="770" y="86" font-size="11" font-weight="800" fill="#2f9e44">no, maybe + fallback is fine</text>
+
+        <rect x="10" y="110" width="260" height="70" rx="10" fill="#fee2e2" stroke="#dc2626" stroke-width="2"/>
+        <text x="140" y="134" text-anchor="middle" font-size="11.5" font-weight="800" fill="#7f1d1d">USE AN EXACT STRUCTURE</text>
+        <text x="140" y="152" text-anchor="middle" font-size="10.5" fill="#7f1d1d">hash set / real index — a</text>
+        <text x="140" y="166" text-anchor="middle" font-size="10.5" fill="#7f1d1d">filter can't be the source of truth</text>
+
+        <rect x="700" y="110" width="280" height="60" rx="26" fill="#c3fae8" stroke="#0ca678" stroke-width="2"/>
+        <text x="840" y="132" text-anchor="middle" font-size="12" font-weight="700" fill="#134e4a">Is the real lookup meaningfully</text>
+        <text x="840" y="150" text-anchor="middle" font-size="12" font-weight="700" fill="#134e4a">more expensive than a bit check?</text>
+
+        <path d="M780,170 L720,210" stroke="#6b6861" stroke-width="2" fill="none" marker-end="url(#dtArrow10)"/>
+        <text x="710" y="196" font-size="11" font-weight="800" fill="#c92a2a">no</text>
+        <path d="M900,170 L940,210" stroke="#6b6861" stroke-width="2" fill="none" marker-end="url(#dtArrow10)"/>
+        <text x="930" y="196" font-size="11" font-weight="800" fill="#2f9e44">yes</text>
+
+        <rect x="590" y="216" width="240" height="60" rx="10" fill="#f3f2ef" stroke="#b8b4ac" stroke-width="2"/>
+        <text x="710" y="240" text-anchor="middle" font-size="11" font-weight="800" fill="#1a1917">PROBABLY NOT WORTH IT</text>
+        <text x="710" y="258" text-anchor="middle" font-size="10.5" fill="#1a1917">added complexity for a small saving</text>
+
+        <rect x="850" y="216" width="200" height="60" rx="26" fill="#ffd8a8" stroke="#e67700" stroke-width="2"/>
+        <text x="950" y="238" text-anchor="middle" font-size="11.5" font-weight="700" fill="#7c2d12">Need deletion over</text>
+        <text x="950" y="256" text-anchor="middle" font-size="11.5" font-weight="700" fill="#7c2d12">the filter's lifetime?</text>
+
+        <path d="M890,280 L830,320" stroke="#6b6861" stroke-width="2" fill="none" marker-end="url(#dtArrow10)"/>
+        <text x="820" y="306" font-size="11" font-weight="800" fill="#c92a2a">yes</text>
+        <path d="M1010,280 L1010,320" stroke="#6b6861" stroke-width="2" fill="none" marker-end="url(#dtArrow10)"/>
+        <text x="1020" y="306" font-size="11" font-weight="800" fill="#2f9e44">no</text>
+
+        <rect x="670" y="326" width="260" height="70" rx="10" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+        <text x="800" y="350" text-anchor="middle" font-size="11.5" font-weight="800" fill="#4c1d95">COUNTING / CUCKOO FILTER</text>
+        <text x="800" y="368" text-anchor="middle" font-size="10.5" fill="#4c1d95">pay extra space for safe</text>
+        <text x="800" y="382" text-anchor="middle" font-size="10.5" fill="#4c1d95">deletion</text>
+
+        <rect x="930" y="326" width="240" height="70" rx="10" fill="#dcfce7" stroke="#2f9e44" stroke-width="2"/>
+        <text x="1050" y="350" text-anchor="middle" font-size="11.5" font-weight="800" fill="#14532d">PLAIN BLOOM FILTER</text>
+        <text x="1050" y="368" text-anchor="middle" font-size="10.5" fill="#14532d">size for expected n,</text>
+        <text x="1050" y="382" text-anchor="middle" font-size="10.5" fill="#14532d">monitor fill, rebuild on growth</text>
+      </svg>
+    </div>
+
+    <h3>Trade-offs</h3>
+    <div class="table-wrap">
+      <table>
+        <tr><th>✅ Benefit</th><th>❌ Cost / Limitation</th></tr>
+        <tr><td><strong>Extremely space-efficient</strong> — ~10 bits per key for a ~1% false-positive rate, vs. 8+ bytes per key for a real key or hash-set entry</td><td>Never exact — false positives are guaranteed at a non-zero, tunable rate; every "maybe" needs a real fallback check</td></tr>
+        <tr><td><strong>O(k) constant-time insert and query</strong>, independent of how many elements are already stored</td><td>No deletion in the plain form — unsetting a bit can silently reintroduce false negatives, the one guarantee that must never break</td></tr>
+        <tr><td><strong>Fixed size regardless of key length or content</strong> — a 64-byte URL and a 4-byte integer cost the same per-key overhead</td><td>FPR degrades under overfill, silently, with no built-in signal — must be sized upfront and monitored or rebuilt as n grows</td></tr>
+      </table>
+    </div>
+
+    <h3>In production</h3>
+    <div class="table-wrap">
+      <table>
+        <tr><th>System</th><th>How it applies</th><th>The nuance</th></tr>
+        <tr><td><strong>Cassandra / RocksDB / LevelDB</strong></td><td>One Bloom filter per SSTable; a "definitely absent" result skips reading that file from disk entirely on a point read</td><td><code>bloom_filter_fp_chance</code> (Cassandra, default ~0.01) is directly tunable; a lower FPR costs more bits per key, trading memory for fewer wasted disk reads</td></tr>
+        <tr><td><strong>CDN / cache admission filters</strong> (e.g., Akamai-style "one-hit wonder" avoidance)</td><td>A Bloom filter tracks "has this URL been requested before"; content is only cached on a repeat request, avoiding cache pollution from one-off traffic</td><td>False positives mean a small fraction of genuinely first-time requests get cached prematurely — accepted, given how much pollution it prevents</td></tr>
+        <tr><td><strong>Web crawlers (URL frontier dedup)</strong></td><td>A Bloom filter tracks "have I already queued/crawled this URL" to avoid expensive re-crawls at billions-of-URLs scale</td><td>Standard (non-counting) filters are the norm because the URL set is effectively append-only; retiring URLs at scale would require a counting variant</td></tr>
+        <tr><td><strong>Bigtable / HBase</strong></td><td>A Bloom filter per SSTable-equivalent (HFile) avoids disk seeks for reads against rows or column families that don't exist in that file</td><td>Same LSM-tree read-amplification mitigation as Cassandra/RocksDB — the general pattern, not a one-off optimization</td></tr>
+        <tr><td><strong>Chrome Safe Browsing (historical design)</strong></td><td>A locally-stored, compact filter let the browser cheaply rule out "definitely not a known-malicious URL" before a network call to verify a "maybe"</td><td>Illustrates the fallback requirement at product scale: a "maybe" never blocked a page on its own, it only triggered a real check against the authoritative list</td></tr>
+      </table>
+    </div>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">You're designing a web crawler's URL dedup system, deciding between a plain Bloom filter and a Cuckoo filter for tracking "have I already crawled this URL." What's the deciding factor, and what pushes you toward each option?</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the deletion branch of the decision tree.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> Can you deliver this cleanly under interview pressure, including when the interviewer pushes on the exact cost you're claiming?</div>
+  </section>
+
+  <!-- ══════════════════ §7 ══════════════════ -->
+  <section id="s7">
+    <h2 class="section-title"><span class="num">§7</span> 🎯 In the Interview</h2>
+
+    <h3>When an interviewer asks / says</h3>
+    <ul class="trigger-list">
+      <li>"How would you avoid hitting the database for keys that almost never exist?"</li>
+      <li>"This LSM-tree does a lot of point reads against cold SSTables — how would you speed that up?"</li>
+      <li>"How would you stop your cache from being polluted by one-off traffic?"</li>
+      <li>"What's a space-efficient way to check set membership without storing every key?"</li>
+    </ul>
+
+    <h3>What you say / do</h3>
+    <p>This surfaces right after committing to an LSM-tree engine (8.4) and naming read amplification as its cost (8.7), the moment the interviewer asks how to make point reads faster without giving up the write throughput you just justified. Name the structure, state the guarantee precisely (no false negatives, tunable false positives), price the space and the fallback-check requirement unprompted, and name the condition that would change your answer.</p>
+
+    <h3>The trade-off statement</h3>
+    <div class="tradeoff-box">"Since this store's SSTables accumulate over time and a point read may need to check several before compaction has merged them down, I'd put a Bloom filter in front of each one — a compact bit array with a handful of hash functions per key, sized for roughly 10 bits per key to hit about a 1% false-positive rate. On a lookup, if the filter says a key is definitely absent, I skip that file's disk read entirely; if it says maybe-present, I still pay for the real read, because the filter can produce false positives but is guaranteed never to produce a false negative. The cost is that roughly 1% of lookups against files that don't actually contain the key still do an unnecessary disk read, and the filter can't have entries safely removed or be resized in place — it gets rebuilt naturally whenever compaction rewrites the SSTable. I'd change my answer if I needed exact membership with no fallback check available, or the ability to enumerate what's stored — a Bloom filter can't do either of those, and I'd reach for a real index instead."</div>
+
+    <h3>⚠️ Traps</h3>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "A Bloom filter tells you if something is in the set."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> It never confirms presence — only "definitely absent" or "maybe present." Any "maybe" requires a real check before you can call it a "yes." Treating "maybe" as "yes" reintroduces exactly the wrong-answer risk the filter was supposed to prevent.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "We can use the Bloom filter to see what's stored, instead of querying the full index."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Bloom filters answer membership for a candidate key you already have — they cannot enumerate their contents. There's no operation that walks the bit array back into a list of members.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "We'll just clear the bits for stale entries to keep the filter accurate."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> A shared bit can be set by many keys' overlapping hashes. Unsetting it to "delete" one key can silently produce a false negative for a different key that also depends on that bit — the one guarantee the structure must never break. Deletion needs a counting variant or a full rebuild.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "We're seeing false positives, so there must be a bug in the filter."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> False positives are expected and guaranteed by design at a non-zero rate. The actual bug to look for, if the rate is higher than intended, is an undersized filter or one that's been overfilled past its planned element count — not the mechanism itself.</div></div>
+    </div>
+
+    <div class="checkpoint gate">
+      <div class="cp-title">🚨 Checkpoint — adversarial stress test (the gate)</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">You've told the interviewer you'd size a Bloom filter for 1,000,000 keys at a 1% false-positive rate. They push: "Six months later this SSTable has grown to 5,000,000 keys and the filter was never resized. Walk me through what happens to lookup performance, why, and how you'd detect and fix it."</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 A complete answer covers: the fill ratio climbing 5x past design capacity and the false-positive rate rising superlinearly (not just proportionally) as bits saturate toward all-1, the resulting erosion of the filter's benefit as more "maybe" answers force real disk reads, that the structure raises no error or signal on its own so this must be caught by monitoring observed FPR or bit-fill ratio, and the fix — rebuild the filter sized for the current key count, which in an LSM-tree happens naturally as SSTables are rewritten during compaction rather than as a special maintenance step. If you can't answer this cleanly, you are not done.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════ §8 ══════════════════ -->
+  <section id="s8">
+    <h2 class="section-title"><span class="num">§8</span> 🔗 Connections &amp; Sources</h2>
+
+    <div class="connections">
+      <div class="conn-card">
+        <span class="conn-icon">⬅️</span>
+        <div><div class="conn-label">Builds on</div><strong>8.4 Indexing — B-tree, LSM-tree, composite indexes</strong>, which introduced the SSTable structure a Bloom filter sits in front of, and <strong>8.7 Read vs. Write Optimization</strong>, which named read amplification as the specific, unavoidable cost of write-optimized LSM engines and identified Bloom filters as the mechanism that bounds — never eliminates — that cost.</div>
+      </div>
+      <div class="conn-card">
+        <span class="conn-icon">➡️</span>
+        <div><div class="conn-label">Enables</div><strong>9.x Object storage</strong> (existence checks before an expensive metadata or blob lookup) and <strong>30.x Search index term lookups</strong>, both referenced in the roadmap as places this exact mechanism resurfaces without being re-derived from scratch.</div>
+      </div>
+      <div class="conn-card">
+        <span class="conn-icon">⚡</span>
+        <div><div class="conn-label">Tension with</div><strong>8.6 ACID Transactions</strong>, which established exactness and correctness as defaults for a system of record — a Bloom filter deliberately trades exactness for space efficiency, which is only safe because it is never the source of truth, only an optimization layer sitting in front of one.</div>
+      </div>
+    </div>
+
+    <h3>📚 Further reading</h3>
+    <ul class="reading-list">
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Designing Data-Intensive Applications, Chapter 3 — Storage and Retrieval</strong> — Kleppmann — introduces Bloom filters directly in the LSM-tree section as the standard SSTable point-read optimization</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Burton H. Bloom — "Space/Time Trade-offs in Hash Coding with Allowable Errors" (1970)</strong> — the original paper; primary source for the guarantee and the false-positive-rate math</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>RocksDB Wiki — "RocksDB Bloom Filter"</strong> — <a href="https://github.com/facebook/rocksdb/wiki/RocksDB-Bloom-Filter">wiki</a> — production tuning knobs: bits-per-key, block-based vs. full filters</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Apache Cassandra docs — "Bloom filters"</strong> — <a href="https://cassandra.apache.org/doc/latest/cassandra/operating/bloom_filters.html">docs</a> — <code>bloom_filter_fp_chance</code> as a live, tunable production trade-off</span></li>
+    </ul>
+  </section>
+
+  <!-- ══════════════════ §9 ══════════════════ -->
+  <section id="s9">
+    <h2 class="section-title"><span class="num">§9</span> ✍️ My Notes</h2>
+    <div class="callout callout-quote">Personal observations, model answers from drilling sessions, things that confused me. Saved locally in this browser.</div>
+    <textarea class="notes-area" placeholder="Your notes, model answers, and annotations…"></textarea>
+  </section>
+
+</article>
+</main>
+
+<script>
+// TOC active state
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('#toc nav a');
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(a => a.classList.remove('active'));
+      const a = document.querySelector(`#toc nav a[href="#${e.target.id}"]`);
+      if (a) a.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+sections.forEach(s => obs.observe(s));
+
+function toggle(cb) { cb.closest('li').classList.toggle('checked'); }
+function toggleReading(cb) { cb.closest('li').classList.toggle('checked'); }
+function toggleQuiz(q) {
+  const item = q.closest('.quiz-item');
+  item.classList.toggle('open');
+  q.querySelector('.quiz-toggle').textContent = item.classList.contains('open') ? '▲ Hide' : '▼ Hint';
+}
+
+// Notes auto-save
+const notesArea = document.querySelector('.notes-area');
+const NOTES_KEY = 'notes_8_10';
+if (localStorage.getItem(NOTES_KEY)) notesArea.value = localStorage.getItem(NOTES_KEY);
+notesArea.addEventListener('input', () => {
+  try { localStorage.setItem(NOTES_KEY, notesArea.value); } catch(e) {}
+});
+</script>
+</body>
+</html>

@@ -157,9 +157,45 @@ This surfaces in the API/data-access part of the deep dive, usually the moment y
 
    > 💡 *If you hesitate, re-read §1 — specifically `§ 3 THE MECHANISM`, the cost model line.*
 
+N+1 problem is when you make 1 query to fetch a list of data then make 1 query on each data set again, totalling N queries. The cost is N serial network round trips, not per query latency solved by adding indexes. 
+
 2. An interviewer says: *"This GraphQL endpoint returns 50 authors, each with their 20 most recent posts, and it's timing out."* What do you reach for, and what is the one thing you'd warn against?
 
    > 💡 *If you hesitate, re-read §3 — the one-line answer, and the second trap about JOINs.*
+
+MODEL ANSWER — §3 Checkpoint 2
+
+WHAT YOU REACH FOR
+  DataLoader. Each author's `posts` resolver fires independently —
+  that's 1 query for the authors + 50 for their posts. DataLoader
+  batches the 50 per-author requests raised in one event-loop tick,
+  dedupes them, and issues a single query for all of them. Two
+  round trips instead of 51.
+
+THE QUERY IT ISSUES
+  Not a plain IN-list — that returns every post for all 50 authors.
+  Top-N-per-group needs a window function:
+
+    SELECT * FROM (
+      SELECT p.*, ROW_NUMBER() OVER (
+               PARTITION BY author_id ORDER BY created_at DESC
+             ) AS rn
+      FROM posts p WHERE p.author_id IN (...)
+    ) t WHERE t.rn <= 20;
+
+  Then stitch results back to authors in memory.
+
+WHAT YOU WARN AGAINST
+  The JOIN. It fixes the to-one case cleanly, but here it's already
+  1,000 rows, and joining a second one-to-many (comments, tags)
+  returns the cartesian product of both child sets. You'd have
+  traded a round-trip problem for a data-transfer and memory
+  problem. Batching keeps the row count flat.
+
+ONE-LINE VERSION
+  DataLoader to collapse 51 round trips into 2, a window function
+  so "20 most recent each" is actually enforced in the database —
+  and not a JOIN, because the fan-out multiplies.
 
 ---
 

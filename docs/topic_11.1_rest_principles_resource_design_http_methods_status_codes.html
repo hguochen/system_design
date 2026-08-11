@@ -1,0 +1,1068 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>11.1 REST — Principles, Resource Design, HTTP Methods, Status Codes</title>
+<style>
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface-alt: #f3f2ef;
+    --border: #e5e3de; --text: #1a1917; --text-muted: #6b6861;
+    --accent: #2563eb; --accent-light: #dbeafe;
+    --green: #16a34a; --green-light: #dcfce7;
+    --red: #dc2626; --red-light: #fee2e2;
+    --yellow: #d97706; --yellow-light: #fef3c7;
+    --purple: #7c3aed; --purple-light: #ede9fe;
+    --orange: #ea580c; --orange-light: #ffedd5;
+    --teal: #0d9488; --teal-light: #ccfbf1;
+    --code-bg: #1e1e2e; --code-text: #cdd6f4;
+    --sidebar-w: 240px; --content-max: 820px;
+    font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; }
+  #toc { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0 48px; z-index: 100; }
+  #toc-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  #toc-header .phase-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-bottom: 6px; }
+  #toc-header h2 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  #toc-header .tier-tag { font-size: 10px; font-weight: 800; letter-spacing: .06em; color: var(--yellow); background: var(--yellow-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-top: 8px; }
+  #toc nav a { display: block; padding: 5px 16px 5px 20px; font-size: 12.5px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+  main { margin-left: var(--sidebar-w); padding: 48px 48px 96px; max-width: calc(var(--sidebar-w) + var(--content-max) + 96px); width: 100%; }
+  article { max-width: var(--content-max); }
+  .doc-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 2px solid var(--border); }
+  .doc-header .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+  .tag-phase { background: var(--accent-light); color: var(--accent); }
+  .tag-topic { background: var(--purple-light); color: var(--purple); }
+  .tag-tier  { background: var(--yellow-light); color: var(--yellow); }
+  .tag-prereq{ background: var(--teal-light); color: var(--teal); }
+  .tag-date  { background: var(--surface-alt);  color: var(--text-muted); }
+  .doc-header h1 { font-size: 30px; font-weight: 800; line-height: 1.25; letter-spacing: -.02em; color: var(--text); }
+  section { margin-bottom: 52px; scroll-margin-top: 32px; }
+  h2.section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -.01em; }
+  h2.section-title .num { font-size: 11px; font-weight: 800; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; letter-spacing: .04em; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 24px 0 10px; }
+  h4 { font-size: 13.5px; font-weight: 700; color: var(--text); margin: 18px 0 8px; }
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+  code { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-family: "SF Mono","Fira Code",Menlo,monospace; font-size: 12.5px; }
+  ul.plain { margin: 0 0 14px 20px; }
+  ul.plain li { margin-bottom: 7px; font-size: 14.5px; line-height: 1.6; }
+  ol.steps { margin: 0 0 14px 22px; }
+  ol.steps li { margin-bottom: 8px; font-size: 14.5px; line-height: 1.6; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 14px; border-left: 3px solid; }
+  .callout-goal  { background: var(--accent-light); border-color: var(--accent); color: #1e40af; }
+  .callout-tip   { background: var(--yellow-light); border-color: var(--yellow); color: #92400e; }
+  .callout-warn  { background: var(--red-light); border-color: var(--red); color: #7f1d1d; }
+  .callout-quote { background: var(--surface-alt); border-color: var(--border); color: var(--text-muted); font-style: italic; }
+  .callout-teal  { background: var(--teal-light); border-color: var(--teal); color: #134e4a; }
+  .the-question { background: var(--surface); border: 2px solid var(--accent); border-radius: 12px; padding: 16px 20px; margin-top: 18px; font-size: 15.5px; }
+  .the-question .lbl { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); display: block; margin-bottom: 5px; }
+  .the-question em { color: var(--text); font-weight: 600; }
+  .definition { background: var(--purple-light); border-left: 4px solid var(--purple); border-radius: 8px; padding: 16px 20px; margin: 18px 0 24px; font-size: 15px; font-weight: 600; color: #4c1d95; line-height: 1.6; }
+  .mental-model { background: var(--teal-light); border-left: 3px solid var(--teal); border-radius: 8px; padding: 14px 18px; margin: 18px 0; font-size: 14px; color: #134e4a; }
+  .mental-model .mm-name { font-weight: 800; }
+  .mental-model .mm-break { display: block; margin-top: 7px; font-style: italic; opacity: .85; }
+  .bridge { background: linear-gradient(90deg, var(--accent-light), transparent); border-left: 4px solid var(--accent); border-radius: 8px; padding: 13px 18px; margin-top: 28px; font-size: 14.5px; color: #1e40af; font-weight: 600; }
+  .bridge .arrow { font-weight: 800; margin-right: 6px; }
+  .checkpoint { background: var(--surface); border: 2px solid var(--green); border-radius: 12px; padding: 16px 20px; margin-top: 26px; }
+  .checkpoint > .cp-title { font-size: 12px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--green); margin-bottom: 12px; display: flex; align-items: center; gap: 7px; }
+  .checkpoint.gate { border-color: var(--red); }
+  .checkpoint.gate > .cp-title { color: var(--red); }
+  .cheatsheet { background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 24px 28px; font-family: "SF Mono","Fira Code","Cascadia Code",Menlo,monospace; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-x: auto; margin-top: 16px; }
+  .cheatsheet .label { color: #cba6f7; font-weight: 700; letter-spacing: .08em; display: block; margin-top: 18px; margin-bottom: 4px; border-bottom: 1px solid #313244; padding-bottom: 3px; }
+  .cheatsheet .label:first-child { margin-top: 0; }
+  .diagram-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 16px 14px; margin: 20px 0 28px; overflow-x: auto; }
+  .diagram-wrap .diagram-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); margin-bottom: 12px; }
+  .diagram-wrap svg { display: block; width: 100%; height: auto; }
+  .diagram-wrap p.caption { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 10px; margin-bottom: 0; font-style: italic; }
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; font-size: 14.5px; line-height: 1.55; }
+  .checklist li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 2px; background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .checklist li.checked .cb { background: var(--green); border-color: var(--green); }
+  .checklist li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .checklist li.checked .text { color: var(--text-muted); text-decoration: line-through; }
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: var(--surface-alt); padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.5; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+  .misconception { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .misconception .wrong { background: var(--red-light); padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; }
+  .misconception .right { padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; color: #065f46; background: var(--green-light); }
+  .misconception .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .quiz-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .quiz-q { padding: 14px 18px; font-size: 14.5px; font-weight: 600; cursor: pointer; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .quiz-q:hover { background: var(--surface-alt); }
+  .quiz-num { flex-shrink: 0; width: 24px; height: 24px; background: var(--accent); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; margin-top: 1px; }
+  .checkpoint.gate .quiz-num { background: var(--red); }
+  .quiz-q .qtext { flex: 1; font-weight: 500; }
+  .quiz-toggle { font-size: 11px; color: var(--text-muted); flex-shrink: 0; margin-top: 3px; }
+  .quiz-hint { display: none; padding: 10px 18px 14px; font-size: 13px; color: #92400e; background: var(--yellow-light); border-top: 1px solid var(--border); line-height: 1.6; }
+  .quiz-item.open .quiz-hint { display: block; }
+  .reading-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .reading-list li { display: flex; align-items: flex-start; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; font-size: 14px; }
+  .reading-list li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 1px; cursor: pointer; background: var(--surface); display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .reading-list li.checked .cb { background: var(--green); border-color: var(--green); }
+  .reading-list li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .reading-list li.checked .rtext { color: var(--text-muted); text-decoration: line-through; }
+  .notes-area { width: 100%; min-height: 200px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: inherit; font-size: 14px; color: var(--text); resize: vertical; line-height: 1.6; }
+  .notes-area:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .connections { display: flex; flex-direction: column; gap: 12px; }
+  .conn-card { display: flex; align-items: flex-start; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14px; }
+  .conn-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .conn-label { font-weight: 700; margin-bottom: 3px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .tradeoff-box { background: var(--surface-alt); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 16px 20px; font-size: 14.5px; font-style: italic; color: var(--text); margin-top: 14px; line-height: 1.65; }
+  .trigger-list { list-style: none; display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+  .trigger-list li { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--orange); border-radius: 8px; padding: 10px 16px; font-size: 14px; font-style: italic; color: var(--text); }
+  @media (max-width: 900px) { #toc { display: none; } main { margin-left: 0; padding: 24px 20px 60px; } }
+</style>
+</head>
+<body>
+
+<aside id="toc">
+  <div id="toc-header">
+    <span class="phase-tag">Phase D · Topic 11</span>
+    <h2>11.1 REST</h2>
+    <span class="tier-tag">🥇 T1 · ~3h</span>
+  </div>
+  <nav>
+    <a href="#s0">🧭 The Question</a>
+    <a href="#s1">🎯 Quick Reference</a>
+    <a href="#s2">📋 Cheatsheet</a>
+    <a href="#s3">🧠 The Mindmap</a>
+    <a href="#s4">🔥 The Problem</a>
+    <a href="#s5">💡 The Core Idea</a>
+    <a href="#s6">⚙️ How It Works</a>
+    <a href="#s7">⚖️ The Decision</a>
+    <a href="#s8">🎯 In the Interview</a>
+    <a href="#s9">🧪 Mastery Gate</a>
+    <a href="#s10">🔗 Connections</a>
+    <a href="#s11">✍️ My Notes</a>
+  </nav>
+</aside>
+
+<main>
+<article>
+
+  <header class="doc-header">
+    <div class="meta">
+      <span class="tag tag-phase">Phase D — Networking</span>
+      <span class="tag tag-topic">Topic 11 — API Design &amp; Service Boundaries</span>
+      <span class="tag tag-tier">🥇 T1 Core · ~3h</span>
+      <span class="tag tag-prereq">Prereqs: 3.1, 3.5</span>
+      <span class="tag tag-date">Not yet studied</span>
+    </div>
+    <h1>11.1 REST — Principles, Resource Design, HTTP Methods, Status Codes</h1>
+  </header>
+
+  <!-- ══════════════════ §0 ══════════════════ -->
+  <section id="s0">
+    <h2 class="section-title"><span class="num">§0</span> 🧭 The Question This Answers</h2>
+
+    <p>3.1 established that a stateless server treats every request as self-contained, with no session memory tying one request to the next. 3.5 established that some operations can be repeated safely and some can't, and that the difference is a property of the operation, not an accident of implementation. REST is what you get when you take both of those constraints seriously and build an entire API style around them: <strong>every resource gets one address, every operation on it goes through a small fixed vocabulary of HTTP methods whose safety and idempotency are already standardized, and every outcome is reported through a status code the client didn't have to be taught.</strong></p>
+
+    <p>The tension is that an API is a promise to every client who will ever call it, present and future, and you cannot renegotiate that promise per client. The obvious move — invent whatever endpoints and response shapes feel natural for today's feature — produces an API that only the person who wrote it can predict. REST's bet is that borrowing HTTP's own semantics, which browsers, proxies, caches, and load balancers already understand, is cheaper and more durable than inventing your own.</p>
+
+    <div class="the-question">
+      <span class="lbl">The question</span>
+      <em>Given a domain of things your system manages, how do you name them, and which verb-and-status-code pairs do you use to let a client that has never seen your API correctly predict how to create, read, update, and delete each one?</em>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> Before naming the rules, what actually broke when APIs were built without them?</div>
+  </section>
+
+  <!-- ══════════════════ §1 ══════════════════ -->
+  <section id="s1">
+    <h2 class="section-title"><span class="num">§1</span> 🎯 Interview Quick Reference Card</h2>
+    <div class="callout callout-quote">Not a summary — a live-recall tool, built for retrieval speed under interview pressure. If you need the reasoning behind anything here, that's what §2 (cheatsheet) and the rest of the doc are for.</div>
+
+    <h3>The checklist — walk this on the whiteboard, in order</h3>
+    <ol class="steps">
+      <li>Name the resource (the noun) — <code>/orders</code>, not <code>/createOrder</code></li>
+      <li>Split collection vs. item — <code>/orders</code> (list, create) vs. <code>/orders/{id}</code> (read, update, delete)</li>
+      <li>Assign a method per operation — GET / POST / PUT / PATCH / DELETE</li>
+      <li>Define the status code for the success case AND every failure case, per method</li>
+      <li>Push filter/sort/search into query params on the same resource — never a new endpoint</li>
+    </ol>
+
+    <h3>Trigger → action</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Interviewer says</th><th>You do</th></tr></thead>
+        <tbody>
+          <tr><td>"Design the API for this"</td><td>Resource first, method second, status code third — never start with a verb</td></tr>
+          <tr><td>"What if the user doesn't exist?"</td><td><code>404</code>. Not <code>400</code> (400 = malformed request, not "not found")</td></tr>
+          <tr><td>"What if it exists but isn't theirs?"</td><td><code>404</code> (hide existence) or <code>403</code> (explicit deny) — pick deliberately, say why</td></tr>
+          <tr><td>"Double-click / duplicate submit?"</td><td><code>Idempotency-Key</code> header on POST, checked + stored transactionally with the write</td></tr>
+          <tr><td>"New endpoint or a query param?"</td><td>Query param, if it's filtering/sorting/paging the SAME resource</td></tr>
+          <tr><td>"How do you version this?"</td><td>Defer to 11.5 — but name URI vs. header versioning as the two options</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Fast disambiguation — the pairs that get confused live</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Pair</th><th>The distinction</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Safe vs. idempotent</strong></td><td>Safe = no state change at all (GET). Idempotent = N calls leave the same end state as 1 (PUT, DELETE) — but the state DID change on the first call. Different axes.</td></tr>
+          <tr><td><strong>PUT vs. PATCH</strong></td><td>PUT = full replacement, omitted fields get nulled. PATCH = only touches fields present in the body.</td></tr>
+          <tr><td><strong>401 vs. 403</strong></td><td>401 = not authenticated, go log in. 403 = authenticated, but never allowed — don't retry with new credentials.</td></tr>
+          <tr><td><strong>404 vs. 403 (privacy)</strong></td><td>Return 404 instead of 403 when you don't want to confirm the resource exists at all.</td></tr>
+          <tr><td><strong>409 vs. 422</strong></td><td>409 = conflicts with CURRENT STATE (concurrent edit) → retry after refetch. 422 = invalid regardless of state → fix the payload.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Status codes, one line each</h3>
+    <div class="cheatsheet" style="font-size: 12.5px;">2xx  200 OK · 201 Created (+Location) · 202 Accepted (async) · 204 No Content
+3xx  301 Moved Permanently · 304 Not Modified (ETag)
+4xx  400 malformed · 401 no auth · 403 forbidden · 404 not found · 409 conflict
+     · 422 invalid · 429 rate limited
+5xx  500 internal · 502 bad gateway · 503 unavailable · 504 timeout</div>
+
+    <h3>The script — say this close to verbatim</h3>
+    <div class="tradeoff-box">"I'd model this as a resource — <code>/orders</code> as the collection, <code>/orders/{id}</code> for a single order — rather than action-style endpoints, so a client only has to learn the method vocabulary once and it applies everywhere. Creating an order is <code>POST /orders</code>, returning <code>201 Created</code> with a <code>Location</code> header. For duplicate submits, POST isn't idempotent by default, so I'd require a client-generated <code>Idempotency-Key</code> header — the same mechanism Stripe uses. Reading an order is <code>GET /orders/{id}</code>, returning <code>404</code> if it doesn't exist and <code>403</code> if it exists but belongs to someone else — different failures, different codes. The cost is that a client needing several resources in one screen still needs multiple round trips or a purpose-built aggregation endpoint; I'd only reach for GraphQL if that pattern repeated across many screens."</div>
+
+    <h3>If pushed on idempotency-key mechanics specifically</h3>
+    <div class="tradeoff-box">Key + result must be stored in the SAME transaction as the write. Retry looks up the key BEFORE creating anything: found + completed → return the stored response verbatim; found + in-progress → don't race it, return 409/425 or wait; not found → proceed and record transactionally.</div>
+  </section>
+
+  <!-- ══════════════════ §2 ══════════════════ -->
+  <section id="s2">
+    <h2 class="section-title"><span class="num">§2</span> 📋 Cheatsheet</h2>
+
+    <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+    <div class="callout callout-tip">⏭️ <strong>First time through this topic?</strong> Skip to §3 and come back here for revision.</div>
+
+<div class="cheatsheet"><span class="label">§ 1  WHY IT EXISTS</span>RPC-style APIs (getUser, updateUserEmail, deleteUserAccount) work fine for one
+team, one client, one week. They stop working as an API surface, because
+every verb is bespoke: nothing about the name tells you whether it's safe to
+retry, whether it can be cached, or what "success" looks like — every client
+has to read the docs (or the source) for every single endpoint. REST's fix is
+to stop inventing verbs and instead map your domain onto HTTP's own, already-
+standardized vocabulary: a fixed set of methods with known safety/idempotency/
+cacheability properties, and a fixed set of status codes with known meaning.
+The API surface shrinks from "one convention per endpoint" to "one convention,
+applied consistently."
+<span class="label">§ 2  WHAT IT IS</span>RESOURCE             A noun in your domain — a user, an order, a link — addressed
+                    by a URI. Not a verb, not an action.
+COLLECTION vs. ITEM  /orders is a collection; /orders/{id} is one item in it.
+                    Same noun, two granularities, two different valid method sets.
+UNIFORM INTERFACE    The core REST constraint: every resource, no matter its
+                    domain, is manipulated through the SAME small set of HTTP
+                    methods — not a bespoke method per resource.
+SAFE                 Doesn't change server state (GET, HEAD, OPTIONS).
+IDEMPOTENT           N identical requests = the same server state as 1 request
+                    (GET, PUT, DELETE — but NOT POST, and NOT always PATCH).
+<span class="label">§ 3  THE MECHANISM</span>NAME THE RESOURCE     Nouns, plural collections: /orders not /getOrders.
+PICK THE METHOD       GET reads, POST creates (non-idempotent), PUT replaces
+                    wholesale (idempotent), PATCH updates partially, DELETE
+                    removes (idempotent).
+PICK THE STATUS CODE  2xx = it worked, 3xx = go elsewhere, 4xx = YOU (the
+                    client) did something the server won't honor, 5xx = the
+                    SERVER failed, not you. The class must match who's at fault.
+STAY STATELESS        No server-side session; every request carries everything
+                    needed to process it (auth token, pagination cursor, etc.)
+                    — this is 3.1's constraint, and it's what makes horizontal
+                    scaling and edge caching of a REST API possible at all.
+<span class="label">§ 4  USE / AVOID</span>USE PUT when: the client sends the full resource representation and the
+  operation is naturally idempotent (replace-in-place).
+USE PATCH when: the client sends only the fields that changed.
+USE POST when: creating a new resource whose URI the server assigns, or for
+  a genuinely non-idempotent action with no natural resource identity.
+AVOID verbs in the URL (/createOrder, /getUserById) — that's RPC wearing a
+  REST costume; the method (POST/GET) already carries the verb.
+AVOID returning 200 OK with {"success": false} in the body — this is the
+  single most common REST anti-pattern; the status code IS the outcome.
+AVOID nesting resources more than ~2 levels deep (/orders/{id}/items is fine;
+  /orders/{id}/items/{id}/reviews/{id}/comments is not — flatten with a
+  top-level resource + filter instead).
+<span class="label">§ 5  STATUS CODE TAXONOMY</span>2xx  200 OK · 201 Created (+Location header) · 202 Accepted (async, not done
+     yet) · 204 No Content (success, empty body — typical for DELETE/PUT)
+3xx  301 Moved Permanently · 304 Not Modified (conditional GET via ETag —
+     the cache-validation payoff of statelessness)
+4xx  400 Bad Request (malformed) · 401 Unauthorized (no/bad credentials) ·
+     403 Forbidden (authenticated, but not allowed) · 404 Not Found ·
+     405 Method Not Allowed · 409 Conflict (concurrent write collision) ·
+     422 Unprocessable Entity (well-formed, semantically invalid) ·
+     429 Too Many Requests (rate limited)
+5xx  500 Internal Server Error · 502 Bad Gateway · 503 Service Unavailable
+     (often WITH a Retry-After header) · 504 Gateway Timeout
+THE RULE: 4xx = client's fault, fix the request. 5xx = server's fault, retry
+  later (ideally with backoff). Never blur that line to avoid admitting a bug.
+<span class="label">§ 6  NUMBERS TO ANCHOR THE DISCUSSION</span>GET/HEAD/OPTIONS are safe AND idempotent. PUT/DELETE are idempotent but NOT
+  safe (they change state). POST is neither. PATCH is neither, by default,
+  though a specific PATCH body CAN be written to be idempotent.
+Stripe's idempotency key: a client-generated key on POST, honored for 24
+  hours — this is 3.5's idempotency retrofitted onto the one REST method
+  that doesn't get it for free.
+RFC 9110 (HTTP Semantics, obsoletes 7231) defines the methods and status
+  codes; RFC 5789 defines PATCH; RFC 7807 / 9457 defines the "problem
+  details" JSON error body shape.
+GitHub's REST API paginates via the Link header (rel="next") rather than
+  a body field — pagination metadata living in HTTP, not your JSON schema.
+<span class="label">§ 7  INTERVIEW TRIGGERS + GOTCHA</span>→ "Design the API for this system"              → resources first, methods
+                                                    second, status codes third
+→ "What would you return if the user doesn't    → 404, and know WHY not 400
+   exist?"                                         (400 = malformed request,
+                                                    not "doesn't exist")
+→ "How do you handle a duplicate submit /       → idempotency key on POST,
+   double-click on this create endpoint?"          or make it PUT if you can
+→ "Should this be a new endpoint or a query      → query param, if it's
+   parameter?"                                     filtering/sorting the
+                                                    same resource
+GOTCHA: Treating "idempotent" and "safe" as the same property. PUT is
+  idempotent but NOT safe — calling it once vs. one thousand times leaves
+  the SAME end state, but it still changed something on the first call. GET
+  is both. Confusing the two is the fastest way to look like you memorized
+  a table instead of understanding it.</div>
+  </section>
+
+  <!-- ══════════════════ §3 ══════════════════ -->
+  <section id="s3">
+    <h2 class="section-title"><span class="num">§3</span> 🧠 The Mindmap</h2>
+    <div class="callout callout-quote">The picture to hold in your head while you study. Everything below hangs off this.</div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Concept map — one address per resource, one vocabulary to act on it</div>
+      <svg viewBox="0 0 1060 700" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="mmArrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" fill="#b8b4ac"/>
+          </marker>
+        </defs>
+
+        <g stroke="#b8b4ac" stroke-width="1.8" fill="none" marker-end="url(#mmArrow)">
+          <path d="M468,318 L215,222"/>
+          <path d="M530,308 L530,225"/>
+          <path d="M592,318 L845,222"/>
+          <path d="M468,392 L215,482"/>
+          <path d="M530,400 L530,475"/>
+          <path d="M592,392 L845,482"/>
+        </g>
+
+        <ellipse cx="530" cy="355" rx="170" ry="55" fill="#a5d8ff" stroke="#1971c2" stroke-width="2.5"/>
+        <text x="530" y="345" text-anchor="middle" font-size="16" font-weight="800" fill="#0b3d66">REST — API DESIGN</text>
+        <text x="530" y="368" text-anchor="middle" font-size="12.5" font-style="italic" fill="#1971c2">"one address per resource,</text>
+        <text x="530" y="385" text-anchor="middle" font-size="12.5" font-style="italic" fill="#1971c2">one fixed vocabulary to act on it"</text>
+
+        <!-- TOP LEFT : the principles -->
+        <rect x="30" y="30" width="270" height="190" rx="10" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+        <text x="46" y="55" font-size="13.5" font-weight="800" fill="#1e3a8a">🏛️ THE PRINCIPLES</text>
+        <text x="46" y="81"  font-size="12.5" fill="#1e3a8a">client-server separation</text>
+        <text x="46" y="102" font-size="12.5" fill="#1e3a8a">stateless (3.1)</text>
+        <text x="46" y="123" font-size="12.5" fill="#1e3a8a">uniform interface — the core one</text>
+        <text x="46" y="144" font-size="12.5" fill="#1e3a8a">cacheable — explicit via headers</text>
+        <text x="46" y="165" font-size="12.5" fill="#1e3a8a">layered system</text>
+        <text x="46" y="196" font-size="11.5" font-style="italic" fill="#3b5bdb">⚠ HATEOAS — rarely built</text>
+        <text x="46" y="211" font-size="11.5" font-style="italic" fill="#3b5bdb">in practice, know it exists</text>
+
+        <!-- TOP CENTRE : resource design -->
+        <rect x="395" y="30" width="270" height="190" rx="10" fill="#ffc9c9" stroke="#c92a2a" stroke-width="2"/>
+        <text x="411" y="55" font-size="13.5" font-weight="800" fill="#7f1d1d">📛 RESOURCE DESIGN</text>
+        <text x="411" y="81"  font-size="12.5" fill="#7f1d1d">nouns, not verbs</text>
+        <text x="411" y="102" font-size="12.5" fill="#7f1d1d">collection vs. item</text>
+        <text x="411" y="123" font-size="12.5" fill="#7f1d1d">nest ≤ 2 levels deep</text>
+        <text x="411" y="144" font-size="12.5" fill="#7f1d1d">query params for filter/sort</text>
+        <text x="411" y="165" font-size="12.5" fill="#7f1d1d">plural, consistent casing</text>
+        <text x="411" y="196" font-size="11.5" font-style="italic" fill="#c92a2a">/orders not /getOrders —</text>
+        <text x="411" y="211" font-size="11.5" font-style="italic" fill="#c92a2a">the RPC-to-REST shift</text>
+
+        <!-- TOP RIGHT : http methods -->
+        <rect x="760" y="30" width="270" height="190" rx="10" fill="#ffd8a8" stroke="#e67700" stroke-width="2"/>
+        <text x="776" y="55" font-size="13.5" font-weight="800" fill="#7c2d12">🔧 HTTP METHODS</text>
+        <text x="776" y="81"  font-size="12.5" fill="#7c2d12">GET — safe, idempotent, cacheable</text>
+        <text x="776" y="102" font-size="12.5" fill="#7c2d12">POST — unsafe, not idempotent</text>
+        <text x="776" y="123" font-size="12.5" fill="#7c2d12">PUT — idempotent, full replace</text>
+        <text x="776" y="144" font-size="12.5" fill="#7c2d12">PATCH — partial, not always idem.</text>
+        <text x="776" y="165" font-size="12.5" fill="#7c2d12">DELETE — idempotent, removes</text>
+        <text x="776" y="196" font-size="11.5" font-style="italic" fill="#e67700">⚠ safe ≠ idempotent —</text>
+        <text x="776" y="211" font-size="11.5" font-style="italic" fill="#e67700">    different axes</text>
+
+        <!-- BOTTOM LEFT : status codes -->
+        <rect x="30" y="490" width="270" height="180" rx="10" fill="#c3fae8" stroke="#0ca678" stroke-width="2"/>
+        <text x="46" y="515" font-size="13.5" font-weight="800" fill="#134e4a">🚦 STATUS CODES</text>
+        <text x="46" y="541" font-size="12.5" fill="#134e4a">2xx success — 200/201/202/204</text>
+        <text x="46" y="562" font-size="12.5" fill="#134e4a">3xx redirect — 301/304</text>
+        <text x="46" y="583" font-size="12.5" fill="#134e4a">4xx client fault — 400…429</text>
+        <text x="46" y="604" font-size="12.5" fill="#134e4a">5xx server fault — 500…504</text>
+        <text x="46" y="635" font-size="11.5" font-style="italic" fill="#0ca678">⚠ never 200 with an error</text>
+        <text x="46" y="650" font-size="11.5" font-style="italic" fill="#0ca678">body — the code IS the outcome</text>
+
+        <!-- BOTTOM CENTRE : (kept empty band for spacing, merged into real systems) -->
+
+        <!-- BOTTOM RIGHT : real systems -->
+        <rect x="760" y="490" width="270" height="180" rx="10" fill="#b2f2bb" stroke="#2f9e44" stroke-width="2"/>
+        <text x="776" y="515" font-size="13.5" font-weight="800" fill="#14532d">🏭 REAL SYSTEMS</text>
+        <text x="776" y="541" font-size="12.5" fill="#14532d">Stripe — idempotency keys</text>
+        <text x="776" y="562" font-size="12.5" fill="#14532d">GitHub — Link header pagination</text>
+        <text x="776" y="583" font-size="12.5" fill="#14532d">Shopify — leaky-bucket limits</text>
+        <text x="776" y="604" font-size="12.5" fill="#14532d">Google AIP — standard+custom methods</text>
+        <text x="776" y="625" font-size="12.5" fill="#14532d">Richardson Maturity Model</text>
+        <text x="776" y="655" font-size="11.5" font-style="italic" fill="#2f9e44">most stop at level 2, deliberately</text>
+
+        <!-- CENTER-BOTTOM connector spanning the middle -->
+        <rect x="395" y="490" width="270" height="180" rx="10" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+        <text x="411" y="515" font-size="13.5" font-weight="800" fill="#4c1d95">🔗 THE CONTRACT</text>
+        <text x="411" y="541" font-size="12.5" fill="#4c1d95">method says WHAT you did</text>
+        <text x="411" y="562" font-size="12.5" fill="#4c1d95">status code says WHAT happened</text>
+        <text x="411" y="583" font-size="12.5" fill="#4c1d95">4xx/5xx boundary = whose fault</text>
+        <text x="411" y="604" font-size="12.5" fill="#4c1d95">statelessness makes it cacheable</text>
+        <text x="411" y="635" font-size="11.5" font-style="italic" fill="#7c3aed">this is where methods and</text>
+        <text x="411" y="650" font-size="11.5" font-style="italic" fill="#7c3aed">status codes meet</text>
+      </svg>
+      <p class="caption">The principles are the constitution; resource design and HTTP methods are the noun and verb layers; status codes are the outcome layer; real systems are the check on your instincts.</p>
+    </div>
+
+    <p><strong>How to read it:</strong> <strong>the principles</strong> are the constitution — everything else is a consequence of taking statelessness and the uniform interface seriously. <strong>Resource design</strong> is the noun layer: what you name and how you shape the URI space. <strong>HTTP methods</strong> are the verb layer: the fixed vocabulary the uniform interface promises, each with a specific safety/idempotency/cacheability signature. <strong>Status codes</strong> are the outcome layer, meeting the methods in <strong>the contract</strong> — how the server reports what the verb did, with the 4xx/5xx boundary encoding whose fault it was. <strong>Real systems</strong> are where you check your design instincts against APIs that get paid to be right.</p>
+  </section>
+
+  <!-- ══════════════════ §4 ══════════════════ -->
+  <section id="s4">
+    <h2 class="section-title"><span class="num">§4</span> 🔥 The Problem</h2>
+
+    <p>Before REST hardened into a convention, most HTTP APIs were RPC dressed up in a browser-friendly transport: <code>/getUser?id=42</code>, <code>/updateUserEmail</code>, <code>/deleteUserAccount</code>. Each endpoint was a bespoke function call, and functionally this works — you can build a complete product on it. The trouble shows up the moment more than one person, or one client, has to use the API without asking the author questions. Nothing about <code>/updateUserEmail</code> tells a caller whether retrying it after a timeout is safe, whether a proxy is allowed to cache the response, or what the response shape looks like on failure versus success — because none of that is standardized, it's whatever the author happened to do that day. Multiply this across fifty endpoints written by different engineers over two years, and the API becomes a pile of one-off conventions that only the docs (if they're current) can decode.</p>
+
+    <p>The instinctive first fix is "let's just agree on conventions as a team" — a style guide, a wiki page, code review discipline. This helps, but it doesn't survive scale for a specific reason: a convention that lives in a wiki is not enforced by anything, so it decays the moment the person who wrote it stops reviewing every PR. It also doesn't help external consumers at all — a third-party developer integrating with your API has no way to know your team's internal wiki exists, let alone what it says. The convention needs to live somewhere a caller can rely on without reading your source: the protocol itself.</p>
+
+    <p>That's the insight REST is built on. HTTP already has a small, standardized vocabulary of methods, each with a documented safety and idempotency contract, and a standardized set of status codes with documented meaning — and every HTTP-aware piece of infrastructure (browsers, CDNs, load balancers, proxies, curl) already understands them. Instead of inventing a bespoke contract per endpoint, REST maps your domain onto resources (nouns) and lets HTTP's existing verbs and status codes carry the semantics that used to live in ad hoc function names and undocumented response shapes. A client who has learned "GET is safe, POST creates, 404 means it's not there, 409 means someone else changed it first" can now predict the behavior of an endpoint they have never called.</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Before / after — bespoke verbs vs. resources + uniform interface</div>
+      <svg viewBox="0 0 1040 420" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <rect x="20" y="20" width="440" height="380" rx="12" fill="#fff5f5" stroke="#c92a2a" stroke-width="2" stroke-dasharray="6 4"/>
+        <text x="40" y="48" font-size="14" font-weight="800" fill="#7f1d1d">BEFORE — one bespoke verb per action</text>
+
+        <g font-family="SF Mono, Menlo, monospace" font-size="12.5" fill="#7f1d1d">
+          <text x="40" y="78">POST /getUser?id=42</text>
+          <text x="40" y="102">POST /createUser</text>
+          <text x="40" y="126">POST /updateUserEmail</text>
+          <text x="40" y="150">POST /deleteUserAccount</text>
+          <text x="40" y="174">POST /listUsersByStatus?status=active</text>
+        </g>
+
+        <text x="40" y="212" font-size="12.5" fill="#2f9e44">✓ works for the team that wrote it</text>
+        <text x="40" y="238" font-size="12.5" fill="#c92a2a">✗ retry safety unknowable from the name</text>
+        <text x="40" y="262" font-size="12.5" fill="#c92a2a">✗ caching impossible — everything is POST</text>
+        <text x="40" y="286" font-size="12.5" fill="#c92a2a">✗ every response shape is bespoke,</text>
+        <text x="54" y="304" font-size="12.5" fill="#c92a2a">success or failure</text>
+        <text x="40" y="328" font-size="12.5" fill="#c92a2a">✗ new consumer must read source or docs</text>
+        <text x="54" y="346" font-size="12.5" fill="#c92a2a">for every single endpoint</text>
+        <text x="40" y="378" font-size="11.5" font-style="italic" fill="#7f1d1d">contract lives in the author's head, not the protocol</text>
+
+        <line x1="470" y1="210" x2="565" y2="210" stroke="#2563eb" stroke-width="3" marker-end="url(#baArrow2)"/>
+        <defs>
+          <marker id="baArrow2" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#2563eb"/>
+          </marker>
+        </defs>
+        <text x="517" y="198" text-anchor="middle" font-size="11" font-weight="800" fill="#2563eb">borrow HTTP's</text>
+        <text x="517" y="224" text-anchor="middle" font-size="11" font-weight="800" fill="#2563eb">own vocabulary</text>
+
+        <rect x="580" y="20" width="440" height="380" rx="12" fill="#f0fdf4" stroke="#2f9e44" stroke-width="2"/>
+        <text x="600" y="48" font-size="14" font-weight="800" fill="#14532d">AFTER — resources + uniform interface</text>
+
+        <g font-family="SF Mono, Menlo, monospace" font-size="12.5" fill="#14532d">
+          <text x="600" y="78">GET /users/42</text>
+          <text x="600" y="102">POST /users</text>
+          <text x="600" y="126">PATCH /users/42</text>
+          <text x="600" y="150">DELETE /users/42</text>
+          <text x="600" y="174">GET /users?status=active</text>
+        </g>
+
+        <text x="600" y="212" font-size="12.5" fill="#2f9e44">✓ retry safety is KNOWN, not guessed —</text>
+        <text x="614" y="230" font-size="12.5" fill="#2f9e44">from the method alone</text>
+        <text x="600" y="254" font-size="12.5" fill="#2f9e44">✓ GET is cacheable by default, proxies/</text>
+        <text x="614" y="272" font-size="12.5" fill="#2f9e44">CDNs already know this</text>
+        <text x="600" y="296" font-size="12.5" fill="#2f9e44">✓ one response-shape convention,</text>
+        <text x="614" y="314" font-size="12.5" fill="#2f9e44">reused across every resource</text>
+        <text x="600" y="338" font-size="12.5" fill="#2f9e44">✓ a caller who's never seen this API</text>
+        <text x="614" y="356" font-size="12.5" fill="#2f9e44">can predict its shape</text>
+        <text x="600" y="382" font-size="11.5" font-style="italic" fill="#14532d">contract lives in the protocol, not the author</text>
+      </svg>
+      <p class="caption">A client who has learned HTTP's vocabulary once can predict the behavior of an endpoint it has never called.</p>
+    </div>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">A teammate argues: "We already have a wiki page documenting our endpoint conventions — isn't that the same protection REST gives us?" Explain precisely what's missing, using the distinction between a convention enforced by the protocol versus one enforced by team discipline.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the second paragraph — the part about what a wiki page does and doesn't survive.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> If the fix is to borrow HTTP's own vocabulary, what exactly does that vocabulary consist of, and how do the pieces build on each other?</div>
+  </section>
+
+  <!-- ══════════════════ §5 ══════════════════ -->
+  <section id="s5">
+    <h2 class="section-title"><span class="num">§5</span> 💡 The Core Idea</h2>
+
+    <div class="definition">REST is the discipline of modeling your domain as addressable resources (nouns) and manipulating every one of them through the same small, standardized set of HTTP methods and status codes — trading the flexibility of a bespoke API surface for the predictability of a uniform one.</div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">The build chain</div>
+      <svg viewBox="0 0 1040 190" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="bcArrow2" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#7c3aed"/>
+          </marker>
+        </defs>
+        <g>
+          <rect x="8" y="30" width="232" height="58" rx="9" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+          <text x="124" y="55" text-anchor="middle" font-size="12.5" font-weight="800" fill="#4c1d95">RESOURCES, NOT</text>
+          <text x="124" y="73" text-anchor="middle" font-size="12.5" font-weight="800" fill="#4c1d95">ACTIONS</text>
+          <text x="124" y="110" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">because a noun can be</text>
+          <text x="124" y="126" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">addressed once and</text>
+          <text x="124" y="142" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">acted on repeatedly</text>
+        </g>
+        <line x1="246" y1="59" x2="274" y2="59" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow2)"/>
+        <g>
+          <rect x="280" y="30" width="232" height="58" rx="9" fill="#ffc9c9" stroke="#c92a2a" stroke-width="2"/>
+          <text x="396" y="55" text-anchor="middle" font-size="12.5" font-weight="800" fill="#7f1d1d">THE UNIFORM</text>
+          <text x="396" y="73" text-anchor="middle" font-size="12.5" font-weight="800" fill="#7f1d1d">INTERFACE</text>
+          <text x="396" y="110" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">therefore every resource</text>
+          <text x="396" y="126" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">is manipulated through</text>
+          <text x="396" y="142" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">the SAME small verb set</text>
+        </g>
+        <line x1="518" y1="59" x2="546" y2="59" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow2)"/>
+        <g>
+          <rect x="552" y="30" width="232" height="58" rx="9" fill="#c3fae8" stroke="#0ca678" stroke-width="2"/>
+          <text x="668" y="55" text-anchor="middle" font-size="12.5" font-weight="800" fill="#134e4a">STATUS CODES ARE</text>
+          <text x="668" y="73" text-anchor="middle" font-size="12.5" font-weight="800" fill="#134e4a">THE CONTRACT</text>
+          <text x="668" y="110" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">so the outcome of every</text>
+          <text x="668" y="126" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">method call is reported</text>
+          <text x="668" y="142" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">through a known vocabulary</text>
+        </g>
+        <line x1="790" y1="59" x2="818" y2="59" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow2)"/>
+        <g>
+          <rect x="824" y="30" width="208" height="58" rx="9" fill="#ffd8a8" stroke="#e67700" stroke-width="2"/>
+          <text x="928" y="55" text-anchor="middle" font-size="12.5" font-weight="800" fill="#7c2d12">STATELESSNESS MAKES</text>
+          <text x="928" y="73" text-anchor="middle" font-size="12.5" font-weight="800" fill="#7c2d12">IT ALL WORK</text>
+          <text x="928" y="110" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">which means it can be</text>
+          <text x="928" y="126" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">cached and scaled</text>
+          <text x="928" y="142" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">horizontally</text>
+        </g>
+        <text x="520" y="178" text-anchor="middle" font-size="11.5" font-style="italic" fill="#7c3aed">read the connective words under the arrows — each block exists because of the one before it</text>
+      </svg>
+      <p class="caption">Four ideas, one chain. Skip a link and the next block stops making sense.</p>
+    </div>
+
+    <h3>Resources, Not Actions</h3>
+    <p>Everything starts with naming: a resource is a noun in your domain — a user, an order, a link, a message — addressed by a single URI, not a verb describing an action. <code>/orders</code> names a <em>collection</em> of orders; <code>/orders/{id}</code> names one <em>item</em> within it, and the same noun supports both granularities at different specificity. This single shift is what separates REST from RPC: instead of <code>createOrder</code>, <code>getOrder</code>, <code>cancelOrder</code> as three unrelated function names, you have one resource, <code>/orders</code>, and three different HTTP methods applied to it. Naming conventions follow from this directly — plural collection names (<code>/orders</code>, not <code>/order</code>), lowercase and hyphenated (not camelCase) paths, and nesting kept shallow: <code>/orders/{id}/items</code> is a legitimate one-level nesting (items genuinely belong to an order), but <code>/orders/{id}/items/{id}/reviews/{id}/comments</code> should be flattened into a top-level <code>/comments?item_id=...</code> resource instead, because deep nesting couples every client to your internal ownership hierarchy.</p>
+
+    <h3>The Uniform Interface</h3>
+    <p>Once resources are nouns, the uniform interface is the promise that <em>every</em> resource, regardless of domain, is manipulated through the <em>same</em> fixed set of HTTP methods — not a bespoke method per resource. <code>GET</code> reads without changing anything. <code>POST</code> creates a new resource whose URI the server typically assigns, or triggers a genuinely non-idempotent action. <code>PUT</code> replaces a resource wholesale with the representation the client sends. <code>PATCH</code> applies a partial update. <code>DELETE</code> removes it. This is the single biggest leverage point in REST: a client that understands these five verbs in the abstract can correctly guess the behavior of an endpoint on a resource it has never seen before, because the verb's meaning doesn't change per resource.</p>
+
+    <h3>Status Codes Are the Contract</h3>
+    <p>The uniform interface tells you <em>what you did</em>; the status code tells you <em>what happened</em>. This is where safety and idempotency (3.5) become externally visible: the response has to communicate not just success or failure, but which category of failure, because a client's correct reaction differs completely between "retry me" and "don't ever retry me with the same input." <code>2xx</code> means it worked, <code>3xx</code> means look elsewhere, <code>4xx</code> means the fault is in the request the client sent, <code>5xx</code> means the fault is on the server and the client did nothing wrong. Getting this class right is not bikeshedding — a client's retry logic, its error UI, and its logging pipeline all branch on this exact classification, and a misclassified code (returning <code>500</code> for a validation failure, say) actively breaks automated retry behavior for every consumer of the API.</p>
+
+    <h3>Statelessness Makes It All Work</h3>
+    <p>None of the above holds together without 3.1's constraint: no session lives on the server between requests. Every request must carry everything needed to process it — an auth token, a pagination cursor, the full intent of the call — because the server is not allowed to remember the previous one. This is what makes a <code>GET</code> response cacheable by an intermediary that has never talked to your application server directly: the response only depends on the request itself, not on some hidden server-side state the cache can't see. It's also what makes REST APIs horizontally scalable behind a plain load balancer with no sticky sessions (3.1's own payoff) — any server can answer any request, because no server is privileged with memory of what came before.</p>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">Explain why <code>PATCH</code> is the method most likely to be <em>accidentally</em> non-idempotent, using a concrete example of a PATCH body that breaks idempotency and one that doesn't.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read "The Uniform Interface" and think about what a PATCH body can contain besides literal field values.</div>
+      </div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">2</span>
+          <span class="qtext">A teammate proposes <code>POST /orders/{id}/cancel</code> instead of a <code>PATCH /orders/{id}</code> that sets <code>status: "cancelled"</code>. Using the build chain above, explain what's actually being traded, and say whether this is a violation of REST or a legitimate design choice.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, trace the build chain from RESOURCES, NOT ACTIONS through STATUS CODES ARE THE CONTRACT — the answer is about whether "cancel" has a legitimate resource-state reading.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> You know the vocabulary. What actually happens, endpoint by endpoint, when you sit down to design one?</div>
+  </section>
+
+  <!-- ══════════════════ §6 ══════════════════ -->
+  <section id="s6">
+    <h2 class="section-title"><span class="num">§6</span> ⚙️ How It Actually Works</h2>
+
+    <h3>Designing an endpoint (happy path)</h3>
+    <ol class="steps">
+      <li>Identify the resource: what noun does this represent, and does it live at the top level (<code>/orders</code>) or nested under a parent it's genuinely owned by (<code>/orders/{id}/items</code>)?</li>
+      <li>Decide collection vs. item operations: <code>GET /orders</code> (list, paginated) and <code>POST /orders</code> (create) live on the collection; <code>GET/PUT/PATCH/DELETE /orders/{id}</code> live on the item.</li>
+      <li>For each method the resource supports, define the success status code (<code>201</code> + <code>Location</code> header for creation, <code>200</code> for a read/update that returns a body, <code>204</code> for a delete or an update with no body to return) and every plausible failure status code (<code>404</code> if the item doesn't exist, <code>409</code> if a concurrent write conflicts, <code>422</code> if the body is well-formed JSON but violates a business rule).</li>
+      <li>Decide what's a <em>new resource</em> versus a <em>query parameter</em> on an existing one: filtering, sorting, and pagination (<code>GET /orders?status=pending&amp;sort=-created_at&amp;cursor=...</code>) are the same resource, narrowed — not a new endpoint per filter combination.</li>
+      <li>Shape the error body consistently across every endpoint (RFC 7807/9457 "problem details" is the standard convention: <code>{"type", "title", "status", "detail"}</code>), so a client's error-handling code doesn't branch per endpoint.</li>
+    </ol>
+
+    <div class="mental-model">
+      🗺️ <span class="mm-name">Mental model — the library checkout desk.</span> A library doesn't invent a new procedure for every book; every book (resource) has one call number (URI), and the desk offers the same fixed set of actions on any of them — check out (create a loan, <code>POST</code>), look up (<code>GET</code>), renew in place (<code>PUT</code>/<code>PATCH</code>), return (<code>DELETE</code>). You don't need to ask the librarian how "checking out" works differently for a specific book; the procedure is uniform across the entire catalog.
+      <span class="mm-break">Where it breaks down: a librarian can use judgment on an edge case ("this book is reference-only, no checkout"); a REST API has to encode that judgment explicitly as a status code (403) rather than relying on a human to notice.</span>
+    </div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Mechanism flow — the endpoint design pipeline</div>
+      <svg viewBox="0 0 1040 260" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="mfArrow2" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#2563eb"/>
+          </marker>
+        </defs>
+
+        <rect x="20" y="30" width="180" height="70" rx="9" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+        <text x="110" y="56" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1e3a8a">① identify the</text>
+        <text x="110" y="74" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1e3a8a">resource (the noun)</text>
+        <text x="110" y="92" text-anchor="middle" font-size="10.5" font-style="italic" fill="#1e3a8a">top-level or nested?</text>
+
+        <line x1="206" y1="65" x2="234" y2="65" stroke="#2563eb" stroke-width="2.5" marker-end="url(#mfArrow2)"/>
+
+        <rect x="240" y="30" width="190" height="70" rx="9" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+        <text x="335" y="56" text-anchor="middle" font-size="12.5" font-weight="700" fill="#92400e">② split into collection</text>
+        <text x="335" y="74" text-anchor="middle" font-size="12.5" font-weight="700" fill="#92400e">vs. item URIs</text>
+        <text x="335" y="92" text-anchor="middle" font-size="10.5" font-style="italic" fill="#92400e">/orders vs. /orders/{id}</text>
+
+        <line x1="436" y1="65" x2="464" y2="65" stroke="#2563eb" stroke-width="2.5" marker-end="url(#mfArrow2)"/>
+
+        <rect x="470" y="30" width="190" height="70" rx="9" fill="#ffd8a8" stroke="#e67700" stroke-width="2"/>
+        <text x="565" y="56" text-anchor="middle" font-size="12.5" font-weight="700" fill="#7c2d12">③ assign method</text>
+        <text x="565" y="74" text-anchor="middle" font-size="12.5" font-weight="700" fill="#7c2d12">per operation</text>
+        <text x="565" y="92" text-anchor="middle" font-size="10.5" font-style="italic" fill="#7c2d12">GET/POST/PUT/PATCH/DELETE</text>
+
+        <line x1="666" y1="65" x2="694" y2="65" stroke="#2563eb" stroke-width="2.5" marker-end="url(#mfArrow2)"/>
+
+        <rect x="700" y="30" width="190" height="70" rx="9" fill="#c3fae8" stroke="#0ca678" stroke-width="2"/>
+        <text x="795" y="56" text-anchor="middle" font-size="12.5" font-weight="700" fill="#134e4a">④ define status code</text>
+        <text x="795" y="74" text-anchor="middle" font-size="12.5" font-weight="700" fill="#134e4a">per method × outcome</text>
+        <text x="795" y="92" text-anchor="middle" font-size="10.5" font-style="italic" fill="#134e4a">success AND every failure</text>
+
+        <path d="M795,100 L795,130 L565,130 L565,158" stroke="#2563eb" stroke-width="2.5" fill="none" marker-end="url(#mfArrow2)"/>
+
+        <rect x="330" y="164" width="470" height="76" rx="9" fill="#b2f2bb" stroke="#2f9e44" stroke-width="2.5"/>
+        <text x="565" y="190" text-anchor="middle" font-size="13" font-weight="800" fill="#14532d">⑤ filters / sort / page as query params on</text>
+        <text x="565" y="210" text-anchor="middle" font-size="13" font-weight="800" fill="#14532d">the SAME resource — never a new endpoint</text>
+        <text x="565" y="230" text-anchor="middle" font-size="11.5" font-style="italic" fill="#2f9e44">→ DONE: consistent error body shape across every endpoint</text>
+      </svg>
+      <p class="caption">Five steps, always in this order: name it, split it, assign the verb, define every outcome, then narrow with query params.</p>
+    </div>
+
+    <h3>Failure and edge cases</h3>
+    <ul class="plain">
+      <li><strong>The "always 200" anti-pattern.</strong> A team under deadline pressure starts returning <code>200 OK</code> for every response and putting <code>{"success": false, "error": "..."}</code> in the body for failures. This defeats HTTP-aware infrastructure entirely — a caching proxy will happily cache a <code>200</code> error response, load balancer health checks and automated monitoring stop being able to distinguish real failures from successes without parsing every response body, and every client has to implement bespoke error detection instead of checking the status code.</li>
+      <li><strong>PUT used as a partial update.</strong> A client sends <code>PUT /users/42</code> with only the changed fields, expecting the rest to be left alone. PUT's contract is <em>full replacement</em> — a compliant server implementation nulls out every field the client didn't include, silently destroying data the client never intended to touch. This is a PATCH use case wearing PUT's method name.</li>
+      <li><strong>409 vs. 422 confusion.</strong> A <code>409 Conflict</code> means the request is fine in isolation but collides with the <em>current state</em> of the resource (two users editing the same order simultaneously, an optimistic-lock version mismatch). A <code>422</code> means the request itself is semantically invalid regardless of current state (an end date before a start date). Conflating them tells the client the wrong thing to do next: retry-after-refetch (<code>409</code>) versus fix-the-payload (<code>422</code>).</li>
+      <li><strong>Pagination drift under concurrent writes.</strong> Offset-based pagination (<code>?page=2&amp;limit=20</code>) shifts under you if rows are inserted or deleted between page fetches — a client can see the same item twice or skip one entirely. Cursor-based pagination (<code>?cursor=&lt;opaque_token&gt;</code>, referencing a stable sort key like an ID or timestamp) avoids this because each cursor is anchored to a specific row, not a row <em>count</em>.</li>
+    </ul>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Structural — HTTP method properties</div>
+      <svg viewBox="0 0 1040 360" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <g font-size="11.5" font-weight="800" fill="#6b6861">
+          <rect x="20" y="20" width="130" height="34" fill="#f3f2ef" stroke="#e5e3de"/>
+          <rect x="150" y="20" width="110" height="34" fill="#f3f2ef" stroke="#e5e3de"/>
+          <rect x="260" y="20" width="220" height="34" fill="#f3f2ef" stroke="#e5e3de"/>
+          <rect x="480" y="20" width="150" height="34" fill="#f3f2ef" stroke="#e5e3de"/>
+          <rect x="630" y="20" width="390" height="34" fill="#f3f2ef" stroke="#e5e3de"/>
+          <text x="34" y="42">METHOD</text>
+          <text x="164" y="42">SAFE?</text>
+          <text x="274" y="42">IDEMPOTENT?</text>
+          <text x="494" y="42">CACHEABLE?</text>
+          <text x="644" y="42">PURPOSE</text>
+        </g>
+
+        <!-- GET/HEAD/OPTIONS -->
+        <g font-size="12" fill="#1a1917">
+          <rect x="20" y="54" width="130" height="30" fill="#f0fdf4" stroke="#e5e3de"/>
+          <rect x="150" y="54" width="110" height="30" fill="#f0fdf4" stroke="#e5e3de"/>
+          <rect x="260" y="54" width="220" height="30" fill="#f0fdf4" stroke="#e5e3de"/>
+          <rect x="480" y="54" width="150" height="30" fill="#f0fdf4" stroke="#e5e3de"/>
+          <rect x="630" y="54" width="390" height="30" fill="#f0fdf4" stroke="#e5e3de"/>
+          <text x="34" y="74" font-weight="700">GET</text>
+          <text x="164" y="74" fill="#2f9e44" font-weight="700">YES</text>
+          <text x="274" y="74" fill="#2f9e44" font-weight="700">YES</text>
+          <text x="494" y="74" fill="#2f9e44" font-weight="700">YES (default)</text>
+          <text x="644" y="74">read a resource</text>
+
+          <rect x="20" y="84" width="130" height="30" fill="#f0fdf4" stroke="#e5e3de"/>
+          <rect x="150" y="84" width="110" height="30" fill="#f0fdf4" stroke="#e5e3de"/>
+          <rect x="260" y="84" width="220" height="30" fill="#f0fdf4" stroke="#e5e3de"/>
+          <rect x="480" y="84" width="150" height="30" fill="#f0fdf4" stroke="#e5e3de"/>
+          <rect x="630" y="84" width="390" height="30" fill="#f0fdf4" stroke="#e5e3de"/>
+          <text x="34" y="104" font-weight="700">HEAD</text>
+          <text x="164" y="104" fill="#2f9e44" font-weight="700">YES</text>
+          <text x="274" y="104" fill="#2f9e44" font-weight="700">YES</text>
+          <text x="494" y="104" fill="#2f9e44" font-weight="700">YES</text>
+          <text x="644" y="104">read headers only</text>
+
+          <rect x="20" y="114" width="130" height="30" fill="#f0fdf4" stroke="#e5e3de"/>
+          <rect x="150" y="114" width="110" height="30" fill="#f0fdf4" stroke="#e5e3de"/>
+          <rect x="260" y="114" width="220" height="30" fill="#f0fdf4" stroke="#e5e3de"/>
+          <rect x="480" y="114" width="150" height="30" fill="#f0fdf4" stroke="#e5e3de"/>
+          <rect x="630" y="114" width="390" height="30" fill="#f0fdf4" stroke="#e5e3de"/>
+          <text x="34" y="134" font-weight="700">OPTIONS</text>
+          <text x="164" y="134" fill="#2f9e44" font-weight="700">YES</text>
+          <text x="274" y="134" fill="#2f9e44" font-weight="700">YES</text>
+          <text x="494" y="134" fill="#c92a2a" font-weight="700">NO</text>
+          <text x="644" y="134">discover allowed methods / CORS</text>
+        </g>
+
+        <!-- POST/PUT/PATCH/DELETE -->
+        <g font-size="12" fill="#1a1917">
+          <rect x="20" y="152" width="130" height="44" fill="#fff5f5" stroke="#e5e3de"/>
+          <rect x="150" y="152" width="110" height="44" fill="#fff5f5" stroke="#e5e3de"/>
+          <rect x="260" y="152" width="220" height="44" fill="#fff5f5" stroke="#e5e3de"/>
+          <rect x="480" y="152" width="150" height="44" fill="#fff5f5" stroke="#e5e3de"/>
+          <rect x="630" y="152" width="390" height="44" fill="#fff5f5" stroke="#e5e3de"/>
+          <text x="34" y="174" font-weight="700">POST</text>
+          <text x="164" y="174" fill="#c92a2a" font-weight="700">NO</text>
+          <text x="274" y="174" fill="#c92a2a" font-weight="700">NO (by default)</text>
+          <text x="274" y="190" font-size="10.5" font-style="italic" fill="#6b6861">fixable w/ idempotency key</text>
+          <text x="494" y="174" fill="#c92a2a" font-weight="700">NO (rare)</text>
+          <text x="644" y="174">create; non-idempotent action</text>
+
+          <rect x="20" y="196" width="130" height="34" fill="#fff5f5" stroke="#e5e3de"/>
+          <rect x="150" y="196" width="110" height="34" fill="#fff5f5" stroke="#e5e3de"/>
+          <rect x="260" y="196" width="220" height="34" fill="#fff5f5" stroke="#e5e3de"/>
+          <rect x="480" y="196" width="150" height="34" fill="#fff5f5" stroke="#e5e3de"/>
+          <rect x="630" y="196" width="390" height="34" fill="#fff5f5" stroke="#e5e3de"/>
+          <text x="34" y="218" font-weight="700">PUT</text>
+          <text x="164" y="218" fill="#c92a2a" font-weight="700">NO</text>
+          <text x="274" y="218" fill="#2f9e44" font-weight="700">YES</text>
+          <text x="494" y="218" fill="#c92a2a" font-weight="700">NO</text>
+          <text x="644" y="218">replace wholesale</text>
+
+          <rect x="20" y="230" width="130" height="44" fill="#fff5f5" stroke="#e5e3de"/>
+          <rect x="150" y="230" width="110" height="44" fill="#fff5f5" stroke="#e5e3de"/>
+          <rect x="260" y="230" width="220" height="44" fill="#fff5f5" stroke="#e5e3de"/>
+          <rect x="480" y="230" width="150" height="44" fill="#fff5f5" stroke="#e5e3de"/>
+          <rect x="630" y="230" width="390" height="44" fill="#fff5f5" stroke="#e5e3de"/>
+          <text x="34" y="252" font-weight="700">PATCH</text>
+          <text x="164" y="252" fill="#c92a2a" font-weight="700">NO</text>
+          <text x="274" y="252" fill="#d97706" font-weight="700">NOT GUARANTEED</text>
+          <text x="274" y="268" font-size="10.5" font-style="italic" fill="#6b6861">depends on body semantics</text>
+          <text x="494" y="252" fill="#c92a2a" font-weight="700">NO</text>
+          <text x="644" y="252">partial update</text>
+
+          <rect x="20" y="274" width="130" height="30" fill="#fff5f5" stroke="#e5e3de"/>
+          <rect x="150" y="274" width="110" height="30" fill="#fff5f5" stroke="#e5e3de"/>
+          <rect x="260" y="274" width="220" height="30" fill="#fff5f5" stroke="#e5e3de"/>
+          <rect x="480" y="274" width="150" height="30" fill="#fff5f5" stroke="#e5e3de"/>
+          <rect x="630" y="274" width="390" height="30" fill="#fff5f5" stroke="#e5e3de"/>
+          <text x="34" y="294" font-weight="700">DELETE</text>
+          <text x="164" y="294" fill="#c92a2a" font-weight="700">NO</text>
+          <text x="274" y="294" fill="#2f9e44" font-weight="700">YES</text>
+          <text x="494" y="294" fill="#c92a2a" font-weight="700">NO</text>
+          <text x="644" y="294">remove</text>
+        </g>
+
+        <rect x="20" y="312" width="1000" height="40" rx="8" fill="#ffc9c9" stroke="#c92a2a" stroke-width="2"/>
+        <text x="520" y="337" text-anchor="middle" font-size="12.5" font-weight="800" fill="#7f1d1d">THE TRAP: "safe" and "idempotent" are DIFFERENT axes — PUT/DELETE are idempotent but NOT safe. GET is both.</text>
+      </svg>
+      <p class="caption">Collapsing "safe" and "idempotent" into one property is the single most common REST misconception.</p>
+    </div>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">Walk through exactly what happens to a <code>users</code> row if a client sends <code>PUT /users/42</code> with a body containing only <code>{"email": "new@example.com"}</code>, omitting the <code>name</code> and <code>phone</code> fields that were previously set. Explain why this is a design bug and what the client should have sent instead.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the "PUT used as a partial update" failure case.</div>
+      </div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">2</span>
+          <span class="qtext">A client polls <code>GET /orders?page=3&amp;limit=20</code> while other users are actively creating and cancelling orders. Explain precisely how it can end up seeing the same order twice across two page fetches, and name the specific pagination scheme that avoids it.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the "Pagination drift" failure case and the difference between anchoring on a row count versus a row identity.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> You can design and build an endpoint correctly. In a live design, which choices do you actually defend, and what do they cost?</div>
+  </section>
+
+  <!-- ══════════════════ §7 ══════════════════ -->
+  <section id="s7">
+    <h2 class="section-title"><span class="num">§7</span> ⚖️ The Decision — When, and What It Costs</h2>
+
+    <p>The default for a CRUD-shaped API — the majority of internal admin tools, most public product APIs, most resource-oriented backends — is resource-oriented REST over HTTP with JSON bodies, and you should be able to say so without hedging. It has the largest tooling ecosystem of any API style, every HTTP-aware piece of infrastructure (CDNs, browsers, proxies, API gateways, curl) already speaks it, and a human can debug it by reading a URL and a status code without special tooling. You leave that default at specific, nameable boundaries, and each boundary points toward one of REST's alternatives (covered in depth in 11.2 and 11.3, but worth naming here as the edges of REST's territory).</p>
+
+    <p><strong>The client needs to shape exactly which fields it gets, across multiple resources, in one round trip.</strong> REST's resource shape is fixed by the server — a mobile client that only needs a user's name and avatar still gets the full user object, and a client that needs a user <em>and</em> their last five orders has to make two round trips (or you build a bespoke aggregation endpoint, which is REST quietly re-inventing RPC). This is REST's over-fetching/under-fetching problem, and it's the entire reason GraphQL (11.3) exists.</p>
+
+    <p><strong>The call is internal, high-fanout, and latency-sensitive service-to-service traffic, not a public or browser-facing surface.</strong> JSON-over-HTTP/1.1's text parsing and per-request overhead cost real latency and CPU at high call volume between your own services. gRPC (11.2) trades REST's human-readability and universal tooling for a binary wire format and code-generated clients, and is a common choice for the service mesh, not the public edge.</p>
+
+    <p><strong>The resource genuinely has no natural CRUD shape.</strong> Some operations are actions with real side effects, not state transitions on a single resource (<code>POST /payments/{id}/refund</code> triggering a multi-system workflow). REST tolerates this via action-style POST endpoints, but if the majority of your API looks like this, resource modeling has stopped paying for itself and you may be looking at an RPC-shaped problem that REST is being forced onto.</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Decision tree — REST, or one of its alternatives</div>
+      <svg viewBox="0 0 1040 420" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <g stroke="#b8b4ac" stroke-width="2" fill="none">
+          <path d="M520,58 L520,76 L200,76 L200,100"/>
+          <path d="M520,58 L520,76 L840,76 L840,100"/>
+          <path d="M200,186 L200,206 L620,206 L620,232"/>
+          <path d="M840,186 L840,206 L840,232"/>
+        </g>
+
+        <rect x="300" y="20" width="440" height="38" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2.5"/>
+        <text x="520" y="44" text-anchor="middle" font-size="12.5" font-weight="800" fill="#1e3a8a">What does the client actually need from this call?</text>
+
+        <text x="140" y="92" text-anchor="middle" font-size="10.5" font-weight="800" fill="#2f9e44">CRUD on a well-defined resource</text>
+        <rect x="20" y="100" width="360" height="86" rx="9" fill="#b2f2bb" stroke="#2f9e44" stroke-width="2.5"/>
+        <text x="200" y="126" text-anchor="middle" font-size="13" font-weight="800" fill="#14532d">Is this call internal, high-fanout,</text>
+        <text x="200" y="146" text-anchor="middle" font-size="13" font-weight="800" fill="#14532d">service-to-service, latency-sensitive?</text>
+        <text x="200" y="170" text-anchor="middle" font-size="10.5" font-style="italic" fill="#14532d">answered in the two boxes below</text>
+
+        <text x="900" y="92" text-anchor="middle" font-size="10.5" font-weight="800" fill="#c92a2a">needs exact field shape, several resources</text>
+        <rect x="700" y="100" width="320" height="86" rx="9" fill="#c3fae8" stroke="#0ca678" stroke-width="2.5"/>
+        <text x="840" y="130" text-anchor="middle" font-size="13" font-weight="800" fill="#134e4a">GraphQL (11.3)</text>
+        <text x="840" y="152" text-anchor="middle" font-size="11.5" fill="#134e4a">Accept added complexity for</text>
+        <text x="840" y="170" text-anchor="middle" font-size="11.5" fill="#134e4a">query flexibility</text>
+
+        <text x="410" y="226" text-anchor="middle" font-size="10.5" font-weight="800" fill="#2f9e44">no — public / browser-facing</text>
+        <rect x="140" y="232" width="360" height="86" rx="9" fill="#a5d8ff" stroke="#1971c2" stroke-width="2.5"/>
+        <text x="320" y="258" text-anchor="middle" font-size="13" font-weight="800" fill="#0b3d66">RESOURCE-ORIENTED REST</text>
+        <text x="320" y="280" text-anchor="middle" font-size="11.5" fill="#0b3d66">JSON over HTTP. Default. Human-</text>
+        <text x="320" y="298" text-anchor="middle" font-size="11.5" fill="#0b3d66">debuggable, cacheable by proxies/CDNs</text>
+
+        <text x="840" y="226" text-anchor="middle" font-size="10.5" font-weight="800" fill="#c92a2a">yes — internal, latency-sensitive</text>
+        <rect x="660" y="232" width="360" height="86" rx="9" fill="#ffd8a8" stroke="#e67700" stroke-width="2.5"/>
+        <text x="840" y="258" text-anchor="middle" font-size="13" font-weight="800" fill="#7c2d12">gRPC (11.2)</text>
+        <text x="840" y="280" text-anchor="middle" font-size="11.5" fill="#7c2d12">Binary, code-generated, streaming —</text>
+        <text x="840" y="298" text-anchor="middle" font-size="11.5" fill="#7c2d12">pay setup cost for raw performance</text>
+
+        <rect x="20" y="340" width="1000" height="60" rx="9" fill="#f3f2ef" stroke="#b8b4ac" stroke-width="2"/>
+        <text x="520" y="364" text-anchor="middle" font-size="12" font-weight="700" fill="#1a1917">The default is the leftmost box (REST). Every other path is a justified departure —</text>
+        <text x="520" y="384" text-anchor="middle" font-size="12" fill="#1a1917">named against a specific boundary condition, not a stylistic preference.</text>
+      </svg>
+      <p class="caption">Leave the REST default only at a nameable boundary — field-shape flexibility, or internal latency-sensitive fanout.</p>
+    </div>
+
+    <h3>Trade-offs</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>✅ Benefit</th><th>❌ Cost / Limitation</th></tr></thead>
+        <tbody>
+          <tr><td><span class="benefit">Cacheable by default via HTTP semantics</span> — GET responses can be cached by proxies/CDNs with zero application code, using standard headers (<code>Cache-Control</code>, <code>ETag</code>)</td><td>The resource shape is fixed server-side; a client needing a different shape either over-fetches (wastes bandwidth) or under-fetches (needs N follow-up calls) — REST has no native way to let the client specify exactly which fields it wants</td></tr>
+          <tr><td><span class="benefit">Universal tooling and human debuggability</span> — curl, browser dev tools, every API gateway and load balancer already understands HTTP methods and status codes with zero custom integration</td><td>Chatty for deeply related data — fetching a resource and its nested relations often means multiple round trips (or a bespoke aggregation endpoint that quietly breaks the uniform-interface promise)</td></tr>
+          <tr><td><span class="benefit">Versionable and evolvable at the URI or header level</span> without breaking clients who don't opt in (deep dive in 11.5)</td><td>No native support for streaming or bidirectional communication — a REST endpoint is fundamentally request/response, so real-time or long-lived connections need a different protocol layered alongside it (WebSockets, SSE — Topic 13)</td></tr>
+          <tr><td><span class="benefit">Statelessness (3.1) gives you free horizontal scaling</span> — any server behind the load balancer can answer any request, no sticky sessions or shared session store required</td><td>JSON-over-text has real serialization and parsing overhead compared to a binary format, which matters at high internal service-to-service call volume even though it rarely matters at the public edge</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>In production</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>System</th><th>How it applies</th><th>The nuance</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Stripe</strong></td><td>Textbook resource modeling (<code>/customers</code>, <code>/charges</code>, <code>/subscriptions</code>), plus a client-supplied <code>Idempotency-Key</code> header honored for 24 hours on POST</td><td>This is 3.5's idempotency retrofitted onto the one uniform-interface method that doesn't get it for free — POST is inherently non-idempotent, so Stripe adds an explicit mechanism rather than pretending the problem doesn't exist</td></tr>
+          <tr><td><strong>GitHub REST API</strong></td><td>Pagination metadata lives in the <code>Link</code> response header (<code>rel="next"</code>, <code>rel="last"</code>), not in the JSON body</td><td>Keeps pagination out of your response schema entirely — it's HTTP infrastructure, not application data, which is exactly the statelessness argument applied to a concrete design choice</td></tr>
+          <tr><td><strong>Shopify</strong></td><td>Leaky-bucket rate limiting communicated via response headers, with <code>429 Too Many Requests</code> and a <code>Retry-After</code> value when exceeded</td><td>The status code alone isn't enough — a well-designed 429 response tells the client exactly how long to back off, rather than leaving it to guess-and-retry</td></tr>
+          <tr><td><strong>Google API Improvement Proposals (AIPs)</strong></td><td>Standard methods (<code>List</code>, <code>Get</code>, <code>Create</code>, <code>Update</code>, <code>Delete</code>) map directly onto REST's GET/POST/PATCH/DELETE, plus explicitly-named "custom methods" (<code>:cancel</code>, <code>:batchGet</code>) for actions that don't fit CRUD</td><td>An explicit, documented escape hatch for the "genuinely an action, not a state transition" case from the decision rule above — rather than silently abusing PATCH or inventing ad hoc verbs</td></tr>
+          <tr><td><strong>Richardson Maturity Model</strong></td><td>A framework (levels 0–3: single endpoint/RPC → resources → HTTP verbs → HATEOAS) for grading how RESTful an API actually is</td><td>Most production APIs — including Stripe's and GitHub's — deliberately stop at level 2 (resources + verbs + status codes) and skip HATEOAS (level 3, hypermedia links driving client navigation); this is a legitimate, load-bearing engineering choice, not an incomplete implementation</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">A team is designing an internal API that a mobile app will call directly to render a dashboard requiring a user's profile, their last 10 orders, and each order's shipment status — three logically separate resources in one screen. Using the decision tree above, would you reach for plain REST, and if not, what would you actually do? Justify against the specific cost you'd be accepting either way.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the first boundary condition — the client needing an exact field shape across multiple resources — and the trade-off row about chatty nested data.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> Can you defend this under interview pressure — and hold up when the interviewer pushes on the cost you claimed you'd pay?</div>
+  </section>
+
+  <!-- ══════════════════ §8 ══════════════════ -->
+  <section id="s8">
+    <h2 class="section-title"><span class="num">§8</span> 🎯 In the Interview</h2>
+
+    <h3>When an interviewer asks / says</h3>
+    <ul class="trigger-list">
+      <li>"Design the API for this system — what would the endpoints look like?"</li>
+      <li>"What status code would you return if the user tries to fetch an order that doesn't exist / belongs to someone else?"</li>
+      <li>"How would you handle someone double-clicking submit on this create-order button?"</li>
+      <li>"Should this be a new endpoint, or a parameter on the existing one?"</li>
+    </ul>
+
+    <h3>What you say / do</h3>
+    <p>This lands immediately after the data model in the high-level design phase, right as you sketch endpoints on the whiteboard — and it resurfaces hard in the deep dive the moment the interviewer asks about a specific edge case (duplicate submits, concurrent edits, a resource that doesn't exist). Lead with the resource, not the verb: name the noun, then walk through which HTTP methods it supports and why, then the status codes each one can return. Never present an endpoint as <code>POST /doSomething</code> without first asking yourself what resource it's actually operating on.</p>
+
+    <h3>The trade-off statement (memorize this pattern)</h3>
+    <div class="tradeoff-box">"I'd model this as a resource — <code>/orders</code> as the collection, <code>/orders/{id}</code> for a single order — rather than action-style endpoints, so a client only has to learn the method vocabulary once and it applies everywhere. Creating an order is <code>POST /orders</code>, returning <code>201 Created</code> with a <code>Location</code> header pointing at the new resource. For the double-click case specifically, POST isn't idempotent by default, so I'd require a client-generated <code>Idempotency-Key</code> header — the same mechanism Stripe uses — and the server rejects or short-circuits a duplicate key within a bounded window instead of creating two orders. Reading an order is <code>GET /orders/{id}</code>, returning <code>404</code> if it doesn't exist and <code>403</code> if it exists but belongs to someone else — those are different failures with different client reactions, so I keep them as different codes rather than collapsing both into a generic error. The cost of this approach is that a mobile client rendering a dashboard across several resources still needs multiple round trips or a purpose-built aggregation endpoint; I'd only reach for something like GraphQL if that pattern repeated across many screens with genuinely different field needs, not for one fixed layout."</div>
+
+    <h3>⚠️ Traps</h3>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "I'd just use POST for everything, it's simpler and I don't have to think about which verb applies."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> This throws away the entire point of the uniform interface — safety, idempotency, and cacheability all become unknowable from the outside, and every caching proxy, retry policy, and monitoring tool in the request path loses the ability to reason about the call. "Simpler for me to write today" and "predictable for every future caller" are different goals, and REST optimizes for the second.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "Return 200 OK with <code>{success: false}</code> in the body — that way the client always gets the same top-level shape."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> This is the single most common REST anti-pattern. It defeats every piece of HTTP-aware infrastructure that reasons about status codes — caches will cache the "failure," monitoring can't distinguish real errors from successes without parsing bodies, and automated retry logic that correctly backs off on 5xx will retry a "success" response forever. The status code IS the outcome; don't duplicate it inconsistently in the body.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "404 and 401 are basically the same thing when the resource doesn't exist for this user — just return whichever is easier."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> They tell the client to do completely different things. 401 means "you're not authenticated at all, go log in." 403 means "you're authenticated, but not allowed — don't retry with different credentials, you'll never be allowed." 404 means "this doesn't exist" — and is often deliberately returned instead of 403 for another user's private resource, specifically to avoid leaking that the resource exists at all. Which one you pick is a real security and UX decision, not a coin flip.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "PUT and PATCH are basically interchangeable, I'll just use whichever one I remember."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> PUT replaces the entire resource; a client that sends a partial PUT body silently nulls out every field it omitted. PATCH updates only what's present in the body. Using PUT for a partial update is a data-loss bug waiting for the first client that doesn't send every field.</div></div>
+    </div>
+
+    <div class="checkpoint gate">
+      <div class="cp-title">🚨 Checkpoint — adversarial stress test (the gate)</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">You've designed <code>POST /orders</code> with a client-generated <code>Idempotency-Key</code> header to handle duplicate submits. The interviewer pushes: <em>"Your mobile client is on a flaky connection. It sends the POST, the server creates the order and starts writing the response, and the connection drops before the client receives it. The client, seeing a timeout, retries with the SAME idempotency key. Walk me through exactly what the server needs to have stored, and at what point in the original request's lifecycle, for the retry to return the correct result instead of either creating a second order or hanging."</em></span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 A complete answer covers: the idempotency key and its result must be persisted transactionally WITH the order creation itself (same transaction or a durable, atomically-committed record), not as an afterthought written after the response is sent — otherwise a crash between "order created" and "key recorded" reintroduces the duplicate. It covers the retry path: look up the key BEFORE attempting creation; if found with a completed result, return that stored result (same status code, same body) rather than re-executing the creation logic; if found but still in-progress (the original request hasn't finished), the retry should NOT proceed concurrently — it needs to either wait or return a 409/425-style "still processing" response, because letting both requests race is exactly the concurrent-duplicate bug the key was supposed to prevent. If you can't answer this cleanly, you are not done.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> Can you combine what you've learned across sections, not just recall each one?</div>
+  </section>
+
+  <!-- ══════════════════ §9 ══════════════════ -->
+  <section id="s9">
+    <h2 class="section-title"><span class="num">§9</span> 🧪 Mastery Gate</h2>
+    <div class="callout callout-quote">Synthesis only. Each question requires combining two or more sections.</div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">1</span>
+        <span class="qtext">A junior engineer argues that adding a server-side session (storing the last resource a client viewed, to support a "back" navigation shortcut) is a minor, harmless addition to an otherwise REST-compliant API. Using the build chain from §5 and the caching mechanics from §6, explain everything that specifically breaks once that session exists — not in the abstract, but naming the concrete infrastructure behavior that stops working.</span>
+        <span class="quiz-toggle">▼ Hint</span>
+      </div>
+      <div class="quiz-hint">💡 Sections combined: §5 + §6 + subtopic 3.1.</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">2</span>
+        <span class="qtext">You're designing the API for a real-time collaborative document editor (think Google Docs) where two users can edit overlapping sections of the same document within seconds of each other. Decide how PUT, PATCH, and status codes (specifically around conflict handling) apply to a document's content field, and justify why plain last-write-wins PUT semantics are or are not acceptable here.</span>
+        <span class="quiz-toggle">▼ Hint</span>
+      </div>
+      <div class="quiz-hint">💡 Sections combined: §7 + §8, applied to a system not mentioned elsewhere in this doc.</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">3</span>
+        <span class="qtext">An interviewer asks you to design pagination for an infinite-scroll social feed where new posts are inserted at the top constantly, and the client is expected to keep scrolling for tens of thousands of posts across a long session. Explain why naive offset pagination fails here specifically (not generically), and design the cursor scheme that avoids it — including what the cursor is anchored to and why.</span>
+        <span class="quiz-toggle">▼ Hint</span>
+      </div>
+      <div class="quiz-hint">💡 Sections combined: §4 + §6 + §8.</div>
+    </div>
+
+    <h3>Mastery criteria — tick only what you can demonstrate on demand</h3>
+    <ul class="checklist">
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can design a resource-oriented URI structure (collections, items, nesting depth, query params for filter/sort/search) for a novel domain</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can correctly assign HTTP methods to CRUD operations and explain each method's safe/idempotent/cacheable properties without confusing safe and idempotent</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can select the correct status code for a given outcome, including the 4xx-vs-5xx fault-attribution boundary and the 409-vs-422 and 401-vs-403 distinctions</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can design pagination (cursor vs. offset) and explain precisely why offset pagination fails under concurrent writes</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can explain why statelessness is a precondition for HTTP-level caching and horizontal scaling of a REST API, not an unrelated constraint</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can name the boundary conditions where REST stops being the right default and gRPC or GraphQL become the better choice</span></li>
+    </ul>
+
+    <div class="callout callout-tip">💡 <strong>Rule of thumb:</strong> If you can teach it to someone else and field their follow-up questions, you've mastered it.</div>
+  </section>
+
+  <!-- ══════════════════ §10 ══════════════════ -->
+  <section id="s10">
+    <h2 class="section-title"><span class="num">§10</span> 🔗 Connections &amp; Sources</h2>
+
+    <div class="connections">
+      <div class="conn-card">
+        <span class="conn-icon">⬅️</span>
+        <div><div class="conn-label">Builds on</div><strong>3.1 Stateless vs. Stateful Architecture</strong>, which supplies the constraint that makes HTTP-level caching and horizontal scaling of a REST API possible at all — every request self-describing is a REST precondition, not a REST feature. Also <strong>3.5 Idempotency</strong>, which supplies the exact vocabulary (safe, idempotent) this subtopic applies to each HTTP method, and which is what Stripe's idempotency-key pattern retrofits onto POST.</div>
+      </div>
+      <div class="conn-card">
+        <span class="conn-icon">➡️</span>
+        <div><div class="conn-label">Enables</div><strong>11.2 gRPC</strong>, the direct alternative when internal, high-fanout, latency-sensitive service-to-service calls make binary serialization and code generation worth their setup cost over REST's text-based ubiquity. <strong>11.3 GraphQL</strong>, which exists specifically to solve REST's over-fetching/under-fetching problem for clients that need field-level shape control across multiple resources. <strong>11.5 API Versioning</strong>, which is the deep dive on how a REST API evolves its resource shapes without breaking existing clients. <strong>11.7 API Gateway Patterns</strong>, where the REST endpoints designed here get fronted by a gateway that handles auth, rate limiting, and routing at the edge.</div>
+      </div>
+      <div class="conn-card">
+        <span class="conn-icon">⚡</span>
+        <div><div class="conn-label">Tension with</div><strong>11.3 GraphQL</strong> directly, on the fixed-shape-vs-client-driven-shape axis — REST's uniform interface is exactly the constraint GraphQL relaxes, and neither is strictly better, only better for a given consumer shape. Also <strong>8.5 Query patterns and optimization</strong> — a REST resource's shape is a public contract that's expensive to change, while the underlying query patterns serving it may need to evolve freely, creating pressure between API stability and storage-layer flexibility.</div>
+      </div>
+    </div>
+
+    <h3>📚 Further reading</h3>
+    <ul class="reading-list">
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Roy Fielding's dissertation, Chapter 5 — "Representational State Transfer (REST)"</strong> — <a href="https://ics.uci.edu/~fielding/pubs/dissertation/rest_arch_style.htm">dissertation</a> — the original source; read it once for the constraints (client-server, stateless, cacheable, layered system, uniform interface), skip the rest</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>RFC 9110 — HTTP Semantics</strong> — <a href="https://www.rfc-editor.org/rfc/rfc9110.html">RFC</a> — the authoritative definition of every method's safety/idempotency/cacheability properties and every status code's meaning</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>RFC 9457 (obsoletes 7807) — Problem Details for HTTP APIs</strong> — <a href="https://www.rfc-editor.org/rfc/rfc9457.html">RFC</a> — the standard JSON error-body shape referenced in §6</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Stripe API Reference</strong> — <a href="https://stripe.com/docs/api">docs</a> — widely regarded as the best-designed production REST API; read the idempotency and pagination sections specifically</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Google AIP (API Improvement Proposals)</strong> — <a href="https://google.aip.dev/">site</a> — the standard-methods-plus-custom-methods framework referenced in §7's "In production" table</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Martin Fowler — "Richardson Maturity Model"</strong> — <a href="https://martinfowler.com/articles/richardsonMaturityModel.html">article</a> — the levels-0-through-3 framework for grading how RESTful an API actually is</span></li>
+    </ul>
+  </section>
+
+  <!-- ══════════════════ §11 ══════════════════ -->
+  <section id="s11">
+    <h2 class="section-title"><span class="num">§11</span> ✍️ My Notes</h2>
+    <div class="callout callout-quote">Personal observations, model answers from drilling sessions, things that confused me. Saved locally in this browser.</div>
+    <textarea class="notes-area" placeholder="Your notes, model answers, and annotations…"></textarea>
+  </section>
+
+</article>
+</main>
+
+<script>
+// TOC active state
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('#toc nav a');
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(a => a.classList.remove('active'));
+      const a = document.querySelector(`#toc nav a[href="#${e.target.id}"]`);
+      if (a) a.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+sections.forEach(s => obs.observe(s));
+
+function toggle(cb) { cb.closest('li').classList.toggle('checked'); }
+function toggleReading(cb) { cb.closest('li').classList.toggle('checked'); }
+function toggleQuiz(q) {
+  const item = q.closest('.quiz-item');
+  item.classList.toggle('open');
+  q.querySelector('.quiz-toggle').textContent = item.classList.contains('open') ? '▲ Hide' : '▼ Hint';
+}
+
+// Notes auto-save
+const notesArea = document.querySelector('.notes-area');
+const NOTES_KEY = 'notes_11_1';
+if (localStorage.getItem(NOTES_KEY)) notesArea.value = localStorage.getItem(NOTES_KEY);
+notesArea.addEventListener('input', () => {
+  try { localStorage.setItem(NOTES_KEY, notesArea.value); } catch(e) {}
+});
+</script>
+</body>
+</html>
