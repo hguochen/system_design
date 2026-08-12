@@ -523,9 +523,92 @@ WHY ROTATION DOESN'T FIX IT, AND WHAT DOES
 
    > 💡 *If you hesitate, re-read the anatomy diagram — specifically the "signing input" bracket and the note about why alg-confusion attacks re-sign rather than edit in place.*
 
+MODEL ANSWER — §6 Checkpoint 1 (what the signature covers, three attacks)
+
+WHAT THE SIGNATURE COVERS
+  Exactly: base64url(header) + "." + base64url(payload) — every byte
+  to the left of the second dot, INCLUDING the header. The signature
+  segment itself is not covered.
+
+(a) EDIT THE PAYLOAD, LEAVE THE SIGNATURE
+    The signature encodes a digest of the ORIGINAL bytes. The
+    verifier computes a fresh digest over the bytes now present —
+    which are different — and compares. Mismatch.
+    FAILURE REASON: the signature does not match the content.
+    → 401
+
+(b) EDIT THE PAYLOAD, RE-SIGN WITH THE ATTACKER'S OWN KEY PAIR
+    The token is now internally consistent: that signature IS a
+    valid signature over exactly these bytes. But the verifier does
+    not use the attacker's public key — it uses the ISSUER'S, from
+    its cached JWKS. The math doesn't hold across a different key
+    pair.
+    FAILURE REASON: the signature matches the content but was
+    produced by the wrong key.
+    → 401
+
+(c) EDIT THE PAYLOAD AND RE-SIGN SUCCESSFULLY
+    The attacker sets alg: HS256 and computes
+    HMAC-SHA256(signing_input, rsa_public_key_bytes), having
+    downloaded the public key from the JWKS endpoint.
+
+    The verifier reads alg from the header, dispatches to the HMAC
+    path, and passes it the only key material it has for this
+    issuer — the RSA public key. It computes the identical HMAC
+    over the identical input. Match. Valid.
+    → 200, as any identity the attacker chose
+
+WHAT MUST BE TRUE OF THE VERIFIER FOR (c)
+  It must read `alg` from the token's header and dispatch on it,
+  rather than pinning the expected algorithm in its own config.
+
+  Note what does NOT happen: the attacker never supplies a key.
+  The verifier uses its own key throughout. The attack changes the
+  ROLE that key plays — public verification key vs. HMAC shared
+  secret — by changing one attacker-controlled string.
+
 2. A service verifies RS256 tokens correctly — pinned algorithm, allowlisted `kid`, valid signature, unexpired. It has no `aud` check. Explain concretely what an attacker with a legitimately-issued token can now do, why the signature check is completely powerless to stop it, and why this is a different class of bug from algorithm confusion.
 
    > 💡 *If you hesitate, re-read "Missing `aud` (and `iss`) check" — the key point is that in this attack nothing about the token is forged.*
+
+MODEL ANSWER — §6 Checkpoint 2 (missing aud check)
+
+THE PRECONDITION
+  Both the analytics API and the payments API verify against the
+  SAME issuer — one IdP, one signing key, one JWKS. This is the
+  normal architecture, and it is what lets a token minted for one
+  pass the signature check at the other.
+
+WHAT THE ATTACKER DOES
+  Nothing to the token. They hold a legitimately issued token with
+  aud: "analytics-api" — obtained honestly, it's their own token —
+  and simply send it to the payments API instead. Every byte is
+  exactly as the issuer minted it. aud still reads "analytics-api".
+  The payments API just never looks at it.
+
+WHY THE SIGNATURE IS POWERLESS
+  The signature attests to one thing: the issuer produced these
+  exact bytes. It genuinely protects the aud claim from tampering —
+  but protecting a value is not the same as acting on it. The
+  signature can guarantee aud says "analytics-api"; it has no
+  opinion about whether the service reading it is analytics-api.
+  Nothing was forged, so an integrity check has nothing to detect.
+
+WHY IT IS A DIFFERENT CLASS OF BUG
+  Algorithm confusion → "is this token real?" answered WRONG.
+    An authentication/integrity failure. A forgery got in.
+  Missing aud     → "is this token FOR ME?" never asked.
+    An authorization/scope failure. A genuine token was used
+    outside the scope it was issued for.
+
+  The proof they're different classes: perfect cryptography does
+  not help. ES512, HSM-held keys, flawless rotation, algorithm
+  pinned — still fully vulnerable, because recipient scope is not
+  a cryptographic property.
+
+  This is 23.1's shape again: a valid credential used against
+  something it was never scoped to — IDOR/BOLA, one layer down,
+  at the token rather than the resource.
 
 > **→ Next:** You can mint and validate them safely. In a live design, when do you actually reach for a JWT — and what does that choice cost you?
 
@@ -587,6 +670,48 @@ The baseline isn't a judgment call: if you use JWTs, you pin the algorithm, allo
 1. You are designing auth for an internal banking operations tool: five services, roughly 400 employees, and a hard compliance requirement that revoking an employee's access takes effect immediately — not within fifteen minutes. An engineer proposes RS256 JWTs with a five-minute lifetime, arguing that five minutes is "basically immediate." Using the decision tree, say what you would actually build, name specifically what you are giving up relative to plain JWTs, and explain why the five-minute argument does or doesn't survive the requirement as written.
 
    > 💡 *If you hesitate, re-read the second boundary condition and the first branch of the decision tree — the question is whether a bounded window satisfies a requirement phrased as "immediately," and what the small-hot-denylist middle path buys you.*
+
+MODEL ANSWER — §7 Checkpoint (banking ops tool, immediate revocation)
+
+WHAT I'D BUILD
+  RS256 JWTs with a jti claim, plus a Redis denylist checked on
+  every request. Short access-token lifetime (15 min) is still
+  worth keeping as defence in depth, but it is not the control —
+  the denylist is.
+
+  The denylist holds only tokens revoked BEFORE their natural
+  expiry, with each entry TTL'd to the token's remaining lifetime
+  so it deletes itself. With 400 employees it is normally empty
+  and occasionally holds a handful of entries. It never grows.
+  That is what keeps this branch cheap.
+
+WHAT I'M GIVING UP
+  1. Local, self-contained verification — the reason JWTs were
+     chosen. Identity is a shared synchronous dependency on the
+     hot path again. Not all the way back to session lookups (the
+     denylist is tiny and memory-resident), but partially undone.
+  2. A new critical-path dependency: Redis is now in the auth
+     path of every request. Replicated with automatic failover,
+     and I FAIL CLOSED — because fail-open makes the control
+     bypassable by DoSing Redis, and a control that turns off
+     when a component is unavailable is not a control.
+  3. Latency on every authorization decision.
+
+DOES THE FIVE-MINUTE ARGUMENT SURVIVE? NO — THREE REASONS
+  1. It doesn't even deliver five minutes. The refresh token is
+     still valid, so the employee mints fresh access tokens for
+     as long as the refresh lifetime allows. Bounding the access
+     token requires revoking the refresh token, which requires
+     server-side state — the exact thing the proposal avoids.
+  2. The window opens at the worst possible moment. You revoke
+     BECAUSE something happened; that is when the person is most
+     motivated and most attentive.
+  3. "Immediately" is a written compliance control. An auditor
+     asks you to demonstrate that access ends at revocation. The
+     honest answer under this proposal is "up to five minutes
+     later," which fails the control as written. If five minutes
+     is truly acceptable, get the requirement changed in writing
+     — don't reinterpret it.
 
 > **→ Next:** Can you defend this under interview pressure — and hold up when the interviewer pushes on the validation code rather than the design?
 
