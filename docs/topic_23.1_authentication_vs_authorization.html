@@ -156,7 +156,7 @@
       <span class="tag tag-topic">Topic 23 — Security</span>
       <span class="tag tag-tier">🥇 T1 Core · ~3h</span>
       <span class="tag tag-prereq">Prereqs: 3.2, 3.4</span>
-      <span class="tag tag-date">Not yet studied</span>
+      <span class="tag tag-date">Studied 2026-08-11</span>
     </div>
     <h1>23.1 Authentication vs. Authorization</h1>
   </header>
@@ -324,82 +324,105 @@ GOTCHA: Treating "the token is valid" as "the request is allowed." A
     <div class="callout callout-quote">The picture to hold in your head while you study. Everything below hangs off this.</div>
 
     <div class="diagram-wrap">
-      <div class="diagram-title">Concept map — two independent questions, checked at every layer</div>
-      <svg viewBox="0 0 1060 700" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+      <div class="diagram-title">Two parallel tracks, one dependency — authenticate, then authorize</div>
+      <svg viewBox="0 0 1040 700" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
         <defs>
           <marker id="mmArrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
             <path d="M0,0 L8,4 L0,8 Z" fill="#b8b4ac"/>
           </marker>
+          <marker id="mmArrowBlue" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" fill="#2563eb"/>
+          </marker>
         </defs>
 
-        <g stroke="#b8b4ac" stroke-width="1.8" fill="none" marker-end="url(#mmArrow)">
-          <path d="M468,318 L215,222"/>
-          <path d="M530,308 L530,225"/>
-          <path d="M592,318 L845,222"/>
-          <path d="M468,392 L215,482"/>
-          <path d="M592,392 L845,482"/>
+        <!-- top question -->
+        <rect x="320" y="16" width="400" height="40" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+        <text x="520" y="41" text-anchor="middle" font-size="12.5" font-weight="800" fill="#1e3a8a">Does this request get to proceed at all?</text>
+
+        <g stroke="#b8b4ac" stroke-width="1.8" fill="none">
+          <path d="M520,56 L520,70"/>
+          <path d="M270,70 L770,70"/>
+          <path d="M270,70 L270,96" marker-end="url(#mmArrow)"/>
+          <path d="M770,70 L770,96" marker-end="url(#mmArrow)"/>
         </g>
 
-        <ellipse cx="530" cy="355" rx="170" ry="55" fill="#a5d8ff" stroke="#1971c2" stroke-width="2.5"/>
-        <text x="530" y="345" text-anchor="middle" font-size="15" font-weight="800" fill="#0b3d66">AUTHENTICATION vs.</text>
-        <text x="530" y="364" text-anchor="middle" font-size="15" font-weight="800" fill="#0b3d66">AUTHORIZATION</text>
-        <text x="530" y="384" text-anchor="middle" font-size="11.5" font-style="italic" fill="#1971c2">"who are you" vs. "what can you do"</text>
+        <!-- LEFT COLUMN : authentication -->
+        <rect x="40" y="100" width="460" height="460" rx="12" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2.5"/>
+        <text x="56" y="128" font-size="15" font-weight="800" fill="#1e3a8a">🔑 AUTHENTICATION</text>
+        <text x="56" y="148" font-size="11.5" font-style="italic" fill="#3b5bdb">"who are you?" — runs FIRST</text>
+        <line x1="56" y1="162" x2="484" y2="162" stroke="#b8c6f0" stroke-width="1.5"/>
 
-        <!-- TOP LEFT : authentication -->
-        <rect x="30" y="30" width="270" height="190" rx="10" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
-        <text x="46" y="55" font-size="13.5" font-weight="800" fill="#1e3a8a">🔑 AUTHENTICATION</text>
-        <text x="46" y="81"  font-size="12.5" fill="#1e3a8a">proves who you are</text>
-        <text x="46" y="102" font-size="12.5" fill="#1e3a8a">session lookup (3.2)</text>
-        <text x="46" y="123" font-size="12.5" fill="#1e3a8a">JWT signature check (3.4)</text>
-        <text x="46" y="144" font-size="12.5" fill="#1e3a8a">OAuth token (23.2)</text>
-        <text x="46" y="165" font-size="12.5" fill="#1e3a8a">produces a verified identity</text>
-        <text x="46" y="196" font-size="11.5" font-style="italic" fill="#3b5bdb">⚠ once per request —</text>
-        <text x="46" y="211" font-size="11.5" font-style="italic" fill="#3b5bdb">near the edge</text>
+        <text x="56" y="184" font-size="11" font-weight="800" letter-spacing=".04em" fill="#3b5bdb">MECHANISM</text>
+        <text x="56" y="204" font-size="12" fill="#1e3a8a">session (3.2) · JWT (3.4) · OAuth token (23.2)</text>
+        <line x1="56" y1="218" x2="484" y2="218" stroke="#b8c6f0" stroke-width="1.5"/>
 
-        <!-- TOP CENTRE : authorization -->
-        <rect x="395" y="30" width="270" height="190" rx="10" fill="#ffc9c9" stroke="#c92a2a" stroke-width="2"/>
-        <text x="411" y="55" font-size="13.5" font-weight="800" fill="#7f1d1d">🔒 AUTHORIZATION</text>
-        <text x="411" y="81"  font-size="12.5" fill="#7f1d1d">decides what you can do</text>
-        <text x="411" y="102" font-size="12.5" fill="#7f1d1d">subject + action + resource</text>
-        <text x="411" y="123" font-size="12.5" fill="#7f1d1d">RBAC — role-based</text>
-        <text x="411" y="144" font-size="12.5" fill="#7f1d1d">ABAC / ReBAC — attribute/relation</text>
-        <text x="411" y="165" font-size="12.5" fill="#7f1d1d">policy: allow / deny</text>
-        <text x="411" y="196" font-size="11.5" font-style="italic" fill="#c92a2a">⚠ re-evaluated every</text>
-        <text x="411" y="211" font-size="11.5" font-style="italic" fill="#c92a2a">request, never cached</text>
+        <text x="56" y="240" font-size="11" font-weight="800" letter-spacing=".04em" fill="#3b5bdb">WHERE ENFORCED</text>
+        <text x="56" y="260" font-size="12" fill="#1e3a8a">ONCE — near the edge (gateway / middleware)</text>
+        <line x1="56" y1="274" x2="484" y2="274" stroke="#b8c6f0" stroke-width="1.5"/>
 
-        <!-- TOP RIGHT : enforcement points -->
-        <rect x="760" y="30" width="270" height="190" rx="10" fill="#ffd8a8" stroke="#e67700" stroke-width="2"/>
-        <text x="776" y="55" font-size="13.5" font-weight="800" fill="#7c2d12">🏛️ ENFORCEMENT POINTS</text>
-        <text x="776" y="81"  font-size="12.5" fill="#7c2d12">edge/gateway — coarse-grained</text>
-        <text x="776" y="102" font-size="12.5" fill="#7c2d12">service/resource — fine-grained</text>
-        <text x="776" y="123" font-size="12.5" fill="#7c2d12">defense in depth — check at</text>
-        <text x="776" y="144" font-size="12.5" fill="#7c2d12">MULTIPLE layers, not one</text>
-        <text x="776" y="196" font-size="11.5" font-style="italic" fill="#e67700">⚠ never trust the gateway</text>
-        <text x="776" y="211" font-size="11.5" font-style="italic" fill="#e67700">    as the only check</text>
+        <text x="56" y="296" font-size="11" font-weight="800" letter-spacing=".04em" fill="#3b5bdb">OUTPUT</text>
+        <text x="56" y="316" font-size="12" fill="#1e3a8a">verified identity attached to request context</text>
+        <line x1="56" y1="330" x2="484" y2="330" stroke="#b8c6f0" stroke-width="1.5"/>
 
-        <!-- BOTTOM LEFT : failure modes -->
-        <rect x="30" y="490" width="270" height="180" rx="10" fill="#c3fae8" stroke="#0ca678" stroke-width="2"/>
-        <text x="46" y="515" font-size="13.5" font-weight="800" fill="#134e4a">💥 FAILURE MODES</text>
-        <text x="46" y="541" font-size="12.5" fill="#134e4a">IDOR/BOLA — valid token,</text>
-        <text x="46" y="562" font-size="12.5" fill="#134e4a">wrong resource (OWASP #1)</text>
-        <text x="46" y="583" font-size="12.5" fill="#134e4a">stale JWT claims — revoked</text>
-        <text x="46" y="604" font-size="12.5" fill="#134e4a">but still valid till expiry</text>
-        <text x="46" y="635" font-size="11.5" font-style="italic" fill="#0ca678">⚠ 401 vs 403 confusion —</text>
-        <text x="46" y="650" font-size="11.5" font-style="italic" fill="#0ca678">different remediation paths</text>
+        <text x="56" y="352" font-size="13" font-weight="800" fill="#1e3a8a">FAILS →  401 Unauthorized</text>
+        <line x1="56" y1="366" x2="484" y2="366" stroke="#b8c6f0" stroke-width="1.5"/>
 
-        <!-- BOTTOM RIGHT : real systems -->
-        <rect x="760" y="490" width="270" height="180" rx="10" fill="#b2f2bb" stroke="#2f9e44" stroke-width="2"/>
-        <text x="776" y="515" font-size="13.5" font-weight="800" fill="#14532d">🏭 REAL SYSTEMS</text>
-        <text x="776" y="541" font-size="12.5" fill="#14532d">Google Zanzibar — ReBAC</text>
-        <text x="776" y="562" font-size="12.5" fill="#14532d">AWS IAM — explicit deny wins</text>
-        <text x="776" y="583" font-size="12.5" fill="#14532d">GitHub — RBAC + scoped PATs</text>
-        <text x="776" y="604" font-size="12.5" fill="#14532d">OPA — centralized policy engine</text>
-        <text x="776" y="635" font-size="11.5" font-style="italic" fill="#2f9e44">most combine RBAC + ReBAC</text>
+        <text x="56" y="388" font-size="11" font-style="italic" fill="#3b5bdb">⚠ real systems: Auth0, Okta — separate</text>
+        <text x="56" y="404" font-size="11" font-style="italic" fill="#3b5bdb">   authN entirely from authZ policy</text>
+        <text x="56" y="422" font-size="11" font-style="italic" fill="#3b5bdb">⚠ risk: stolen long-lived tokens replay</text>
+        <text x="56" y="438" font-size="11" font-style="italic" fill="#3b5bdb">   as the original identity</text>
+
+        <!-- inline "then" connector between the two headers -->
+        <line x1="502" y1="130" x2="534" y2="130" stroke="#2563eb" stroke-width="2.5" marker-end="url(#mmArrowBlue)"/>
+        <text x="518" y="121" text-anchor="middle" font-size="10" font-weight="800" fill="#2563eb">then</text>
+
+        <!-- RIGHT COLUMN : authorization -->
+        <rect x="540" y="100" width="460" height="460" rx="12" fill="#ffc9c9" stroke="#c92a2a" stroke-width="2.5"/>
+        <text x="556" y="128" font-size="15" font-weight="800" fill="#7f1d1d">🔒 AUTHORIZATION</text>
+        <text x="556" y="148" font-size="11.5" font-style="italic" fill="#c92a2a">"what can you do?" — runs SECOND</text>
+        <line x1="556" y1="162" x2="984" y2="162" stroke="#f0b8b8" stroke-width="1.5"/>
+
+        <text x="556" y="184" font-size="11" font-weight="800" letter-spacing=".04em" fill="#c92a2a">MECHANISM</text>
+        <text x="556" y="204" font-size="12" fill="#7f1d1d">RBAC · ABAC · ReBAC (Zanzibar-style)</text>
+        <line x1="556" y1="218" x2="984" y2="218" stroke="#f0b8b8" stroke-width="1.5"/>
+
+        <text x="556" y="240" font-size="11" font-weight="800" letter-spacing=".04em" fill="#c92a2a">WHERE ENFORCED</text>
+        <text x="556" y="260" font-size="11.5" fill="#7f1d1d">EVERY layer — gateway (coarse) + resource (fine)</text>
+        <line x1="556" y1="274" x2="984" y2="274" stroke="#f0b8b8" stroke-width="1.5"/>
+
+        <text x="556" y="296" font-size="11" font-weight="800" letter-spacing=".04em" fill="#c92a2a">OUTPUT</text>
+        <text x="556" y="316" font-size="12" fill="#7f1d1d">allow/deny for (identity, action, resource)</text>
+        <line x1="556" y1="330" x2="984" y2="330" stroke="#f0b8b8" stroke-width="1.5"/>
+
+        <text x="556" y="352" font-size="13" font-weight="800" fill="#7f1d1d">FAILS →  403 Forbidden</text>
+        <line x1="556" y1="366" x2="984" y2="366" stroke="#f0b8b8" stroke-width="1.5"/>
+
+        <text x="556" y="388" font-size="11" font-style="italic" fill="#c92a2a">⚠ real systems: Zanzibar, AWS IAM, OPA,</text>
+        <text x="556" y="404" font-size="11" font-style="italic" fill="#c92a2a">   GitHub</text>
+        <text x="556" y="422" font-size="11" font-style="italic" fill="#c92a2a">⚠ risk: IDOR/BOLA (OWASP #1), stale JWT</text>
+        <text x="556" y="438" font-size="11" font-style="italic" fill="#c92a2a">   permission claims</text>
+
+        <!-- convergence -->
+        <g stroke="#2f9e44" stroke-width="2" fill="none">
+          <path d="M270,560 L270,585 L520,585"/>
+          <path d="M770,560 L770,585 L520,585"/>
+          <path d="M520,585 L520,604" marker-end="url(#mmArrow2green)"/>
+        </g>
+        <defs>
+          <marker id="mmArrow2green" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#2f9e44"/>
+          </marker>
+        </defs>
+
+        <rect x="270" y="610" width="500" height="76" rx="10" fill="#b2f2bb" stroke="#2f9e44" stroke-width="2.5"/>
+        <text x="520" y="636" text-anchor="middle" font-size="13" font-weight="800" fill="#14532d">REQUEST ALLOWED only if BOTH gates pass,</text>
+        <text x="520" y="656" text-anchor="middle" font-size="13" font-weight="800" fill="#14532d">in order: authenticate → authorize</text>
+        <text x="520" y="674" text-anchor="middle" font-size="11" font-style="italic" fill="#2f9e44">401 if gate 1 fails · 403 if gate 2 fails</text>
       </svg>
-      <p class="caption">Authentication and authorization are independent facts about a request; enforcement points name where each is checked; failure modes catalog what breaks when a layer is skipped; real systems check the model against production.</p>
+      <p class="caption">Authentication and authorization are parallel tracks, not unordered facts — the second column consumes the first column's output, and both gates must pass, in order, for a request to succeed.</p>
     </div>
 
-    <p><strong>How to read it:</strong> <strong>authentication</strong> and <strong>authorization</strong> are the two top branches because they are genuinely independent facts about a request — one can succeed while the other fails, and the rest of the map exists to keep that independence intact. <strong>Enforcement points</strong> is where the map gets architectural: it names <em>where</em> each check actually runs, and insists authorization is re-checked at every layer, not inherited from the edge. <strong>Failure modes</strong> is the catalog of what goes wrong specifically when that discipline slips — most of them trace back to skipping a layer or trusting stale state. <strong>Real systems</strong> is where production access-control models (RBAC, ABAC, ReBAC, centralized policy engines) get checked against how big companies actually built this.</p>
+    <p><strong>How to read it:</strong> the two columns are parallel tracks answering different questions, not independent unordered facts — authentication runs first, and its output (a verified identity) is exactly what authorization consumes, so the connector between the columns encodes a real dependency, not just a comparison. Each track carries the same four dimensions — mechanism, where enforced, output, failure code — so you can read straight across a row and see precisely where the two diverge (once vs. every layer, 401 vs. 403). The footnote rows attach real systems and failure modes to the side of the comparison they actually belong to, rather than floating as unrelated branches. The convergence at the bottom is the actual rule this whole subtopic teaches: a request is allowed only if both gates pass, in that order.</p>
   </section>
 
   <!-- ══════════════════ §4 ══════════════════ -->

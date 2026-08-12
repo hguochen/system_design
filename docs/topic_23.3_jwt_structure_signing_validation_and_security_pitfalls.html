@@ -1,0 +1,1211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>23.3 JWT — Structure, Signing, Validation, and Security Pitfalls</title>
+<style>
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface-alt: #f3f2ef;
+    --border: #e5e3de; --text: #1a1917; --text-muted: #6b6861;
+    --accent: #2563eb; --accent-light: #dbeafe;
+    --green: #16a34a; --green-light: #dcfce7;
+    --red: #dc2626; --red-light: #fee2e2;
+    --yellow: #d97706; --yellow-light: #fef3c7;
+    --purple: #7c3aed; --purple-light: #ede9fe;
+    --orange: #ea580c; --orange-light: #ffedd5;
+    --teal: #0d9488; --teal-light: #ccfbf1;
+    --code-bg: #1e1e2e; --code-text: #cdd6f4;
+    --sidebar-w: 240px; --content-max: 820px;
+    font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; }
+  #toc { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0 48px; z-index: 100; }
+  #toc-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  #toc-header .phase-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-bottom: 6px; }
+  #toc-header h2 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  #toc-header .tier-tag { font-size: 10px; font-weight: 800; letter-spacing: .06em; color: var(--yellow); background: var(--yellow-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-top: 8px; }
+  #toc nav a { display: block; padding: 5px 16px 5px 20px; font-size: 12.5px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+  main { margin-left: var(--sidebar-w); padding: 48px 48px 96px; max-width: calc(var(--sidebar-w) + var(--content-max) + 96px); width: 100%; }
+  article { max-width: var(--content-max); }
+  .doc-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 2px solid var(--border); }
+  .doc-header .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+  .tag-phase { background: var(--accent-light); color: var(--accent); }
+  .tag-topic { background: var(--purple-light); color: var(--purple); }
+  .tag-tier  { background: var(--yellow-light); color: var(--yellow); }
+  .tag-prereq{ background: var(--teal-light); color: var(--teal); }
+  .tag-date  { background: var(--surface-alt);  color: var(--text-muted); }
+  .doc-header h1 { font-size: 30px; font-weight: 800; line-height: 1.25; letter-spacing: -.02em; color: var(--text); }
+  section { margin-bottom: 52px; scroll-margin-top: 32px; }
+  h2.section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -.01em; }
+  h2.section-title .num { font-size: 11px; font-weight: 800; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; letter-spacing: .04em; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 24px 0 10px; }
+  h4 { font-size: 13.5px; font-weight: 700; color: var(--text); margin: 18px 0 8px; }
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+  code { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-family: "SF Mono","Fira Code",Menlo,monospace; font-size: 12.5px; }
+  ul.plain { margin: 0 0 14px 20px; }
+  ul.plain li { margin-bottom: 7px; font-size: 14.5px; line-height: 1.6; }
+  ol.steps { margin: 0 0 14px 22px; }
+  ol.steps li { margin-bottom: 8px; font-size: 14.5px; line-height: 1.6; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 14px; border-left: 3px solid; }
+  .callout-goal  { background: var(--accent-light); border-color: var(--accent); color: #1e40af; }
+  .callout-tip   { background: var(--yellow-light); border-color: var(--yellow); color: #92400e; }
+  .callout-warn  { background: var(--red-light); border-color: var(--red); color: #7f1d1d; }
+  .callout-quote { background: var(--surface-alt); border-color: var(--border); color: var(--text-muted); font-style: italic; }
+  .callout-teal  { background: var(--teal-light); border-color: var(--teal); color: #134e4a; }
+  .the-question { background: var(--surface); border: 2px solid var(--accent); border-radius: 12px; padding: 16px 20px; margin-top: 18px; font-size: 15.5px; }
+  .the-question .lbl { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); display: block; margin-bottom: 5px; }
+  .the-question em { color: var(--text); font-weight: 600; }
+  .definition { background: var(--purple-light); border-left: 4px solid var(--purple); border-radius: 8px; padding: 16px 20px; margin: 18px 0 24px; font-size: 15px; font-weight: 600; color: #4c1d95; line-height: 1.6; }
+  .mental-model { background: var(--teal-light); border-left: 3px solid var(--teal); border-radius: 8px; padding: 14px 18px; margin: 18px 0; font-size: 14px; color: #134e4a; }
+  .mental-model .mm-name { font-weight: 800; }
+  .mental-model .mm-break { display: block; margin-top: 7px; font-style: italic; opacity: .85; }
+  .bridge { background: linear-gradient(90deg, var(--accent-light), transparent); border-left: 4px solid var(--accent); border-radius: 8px; padding: 13px 18px; margin-top: 28px; font-size: 14.5px; color: #1e40af; font-weight: 600; }
+  .bridge .arrow { font-weight: 800; margin-right: 6px; }
+  .checkpoint { background: var(--surface); border: 2px solid var(--green); border-radius: 12px; padding: 16px 20px; margin-top: 26px; }
+  .checkpoint > .cp-title { font-size: 12px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--green); margin-bottom: 12px; display: flex; align-items: center; gap: 7px; }
+  .checkpoint.gate { border-color: var(--red); }
+  .checkpoint.gate > .cp-title { color: var(--red); }
+  .cheatsheet { background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 24px 28px; font-family: "SF Mono","Fira Code","Cascadia Code",Menlo,monospace; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-x: auto; margin-top: 16px; }
+  .cheatsheet .label { color: #cba6f7; font-weight: 700; letter-spacing: .08em; display: block; margin-top: 18px; margin-bottom: 4px; border-bottom: 1px solid #313244; padding-bottom: 3px; }
+  .cheatsheet .label:first-child { margin-top: 0; }
+  .diagram-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 16px 14px; margin: 20px 0 28px; overflow-x: auto; }
+  .diagram-wrap .diagram-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); margin-bottom: 12px; }
+  .diagram-wrap svg { display: block; width: 100%; height: auto; }
+  .diagram-wrap p.caption { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 10px; margin-bottom: 0; font-style: italic; }
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; font-size: 14.5px; line-height: 1.55; }
+  .checklist li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 2px; background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .checklist li.checked .cb { background: var(--green); border-color: var(--green); }
+  .checklist li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .checklist li.checked .text { color: var(--text-muted); text-decoration: line-through; }
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: var(--surface-alt); padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.5; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+  .misconception { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .misconception .wrong { background: var(--red-light); padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; }
+  .misconception .right { padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; color: #065f46; background: var(--green-light); }
+  .misconception .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .quiz-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .quiz-q { padding: 14px 18px; font-size: 14.5px; font-weight: 600; cursor: pointer; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .quiz-q:hover { background: var(--surface-alt); }
+  .quiz-num { flex-shrink: 0; width: 24px; height: 24px; background: var(--accent); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; margin-top: 1px; }
+  .checkpoint.gate .quiz-num { background: var(--red); }
+  .quiz-q .qtext { flex: 1; font-weight: 500; }
+  .quiz-toggle { font-size: 11px; color: var(--text-muted); flex-shrink: 0; margin-top: 3px; }
+  .quiz-hint { display: none; padding: 10px 18px 14px; font-size: 13px; color: #92400e; background: var(--yellow-light); border-top: 1px solid var(--border); line-height: 1.6; }
+  .quiz-item.open .quiz-hint { display: block; }
+  .reading-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .reading-list li { display: flex; align-items: flex-start; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; font-size: 14px; }
+  .reading-list li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 1px; cursor: pointer; background: var(--surface); display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .reading-list li.checked .cb { background: var(--green); border-color: var(--green); }
+  .reading-list li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .reading-list li.checked .rtext { color: var(--text-muted); text-decoration: line-through; }
+  .notes-area { width: 100%; min-height: 200px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: inherit; font-size: 14px; color: var(--text); resize: vertical; line-height: 1.6; }
+  .notes-area:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .connections { display: flex; flex-direction: column; gap: 12px; }
+  .conn-card { display: flex; align-items: flex-start; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14px; }
+  .conn-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .conn-label { font-weight: 700; margin-bottom: 3px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .tradeoff-box { background: var(--surface-alt); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 16px 20px; font-size: 14.5px; font-style: italic; color: var(--text); margin-top: 14px; line-height: 1.65; }
+  .trigger-list { list-style: none; display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+  .trigger-list li { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--orange); border-radius: 8px; padding: 10px 16px; font-size: 14px; font-style: italic; color: var(--text); }
+  @media (max-width: 900px) { #toc { display: none; } main { margin-left: 0; padding: 24px 20px 60px; } }
+</style>
+</head>
+<body>
+
+<aside id="toc">
+  <div id="toc-header">
+    <span class="phase-tag">Phase G · Topic 23</span>
+    <h2>23.3 JWT — Structure, Signing &amp; Pitfalls</h2>
+    <span class="tier-tag">🥇 T1 · ~3h</span>
+  </div>
+  <nav>
+    <a href="#s0">🧭 The Question</a>
+    <a href="#s1">🎯 Quick Reference</a>
+    <a href="#s2">📋 Cheatsheet</a>
+    <a href="#s3">🧠 The Mindmap</a>
+    <a href="#s4">🔥 The Problem</a>
+    <a href="#s5">💡 The Core Idea</a>
+    <a href="#s6">⚙️ How It Works</a>
+    <a href="#s7">⚖️ The Decision</a>
+    <a href="#s8">🎯 In the Interview</a>
+    <a href="#s9">🧪 Mastery Gate</a>
+    <a href="#s10">🔗 Connections</a>
+    <a href="#s11">✍️ My Notes</a>
+  </nav>
+</aside>
+
+<main>
+<article>
+
+  <header class="doc-header">
+    <div class="meta">
+      <span class="tag tag-phase">Phase G — Security</span>
+      <span class="tag tag-topic">Topic 23 — Security</span>
+      <span class="tag tag-tier">🥇 T1 Core · ~3h</span>
+      <span class="tag tag-prereq">Prereqs: 3.4, 23.1, 23.2</span>
+      <span class="tag tag-date">Studied 2026-08-11</span>
+    </div>
+    <h1>23.3 JWT — Structure, Signing, Validation, and Security Pitfalls</h1>
+  </header>
+
+  <!-- ══════════════════ §0 ══════════════════ -->
+  <section id="s0">
+    <h2 class="section-title"><span class="num">§0</span> 🧭 The Question This Answers</h2>
+
+    <p>3.4 established <em>why</em> a JWT is attractive: a self-contained, signed token means any service can establish identity without a round trip to a session store, which is what makes a stateless tier genuinely stateless. 23.1 established that establishing identity is only half the job — a verified identity still has to be checked against a policy before anything is allowed. Both of those treated the token as a sealed box: something the auth server hands out and the resource server trusts.</p>
+
+    <p>This subtopic opens the box. That matters because almost every real JWT vulnerability lives in the gap between "the library returned true" and "this token actually means what I think it means." A signature that verifies proves exactly one thing — that some key produced these exact bytes. It says nothing about <em>which</em> key, <em>which</em> algorithm, <em>who</em> the token was meant for, or <em>whether it is still supposed to work</em>. Every one of those is a separate check the verifier has to perform deliberately, and the format is flexible enough — the algorithm is named in a header the attacker controls — that a verifier written the obvious way can be talked into validating a token the attacker signed themselves.</p>
+
+    <div class="the-question">
+      <span class="lbl">The question</span>
+      <em>What exactly is inside a JWT, what does its signature actually prove, and which checks must the verifier perform — in what order — before trusting a single claim, given that skipping any one of them can hand an attacker the ability to mint their own identity?</em>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> Before opening up the format, what problem forced tokens to be self-contained and signed in the first place — and why doesn't a simpler encoding work?</div>
+  </section>
+
+  <!-- ══════════════════ §1 ══════════════════ -->
+  <section id="s1">
+    <h2 class="section-title"><span class="num">§1</span> 🎯 Interview Quick Reference Card</h2>
+    <div class="callout callout-quote">Not a summary — a live-recall tool, built for retrieval speed under interview pressure. If you need the reasoning behind anything here, that's what §2 (cheatsheet) and the rest of the doc are for.</div>
+
+    <h3>The checklist — walk this on the whiteboard, in order</h3>
+    <ol class="steps">
+      <li>Draw the three dot-separated segments and name them: <code>header.payload.signature</code> — all three base64url-encoded, the first two are plain readable JSON</li>
+      <li>Say the sentence that prevents half the mistakes: <strong>base64url is encoding, not encryption</strong> — anyone holding the token can read every claim</li>
+      <li>Name what the signature covers: the bytes <code>base64url(header) + "." + base64url(payload)</code> — change one character of either and verification fails</li>
+      <li>Name the signing choice and what it actually decides: HS256 (shared secret — every verifier can also mint) vs. RS256/ES256 (private key mints, public key verifies — verifiers <em>cannot</em> mint)</li>
+      <li>Walk the validation order out loud: <strong>pin the expected algorithm → resolve the key (allowlisted <code>kid</code>) → verify the signature → check <code>exp</code>/<code>nbf</code> → check <code>iss</code> and <code>aud</code> → only then read claims</strong></li>
+      <li>Name the structural cost: the issuer cannot take the token back — it is valid until <code>exp</code>, so revocation means short lifetimes, refresh rotation, or reintroducing a server-side check (<code>jti</code> denylist)</li>
+      <li>Name the pitfall class unprompted: <code>alg: none</code>, RS256→HS256 confusion, missing <code>aud</code> check, <code>kid</code>/<code>jku</code> injection — all of them are "the verifier let the token decide how it would be verified"</li>
+    </ol>
+
+    <h3>Trigger → action</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Interviewer says</th><th>You do</th></tr></thead>
+        <tbody>
+          <tr><td>"How do the services authenticate requests to each other?"</td><td>RS256 JWT verified locally against a cached JWKS — name that verification needs no round trip, then price the revocation gap unprompted</td></tr>
+          <tr><td>"Walk me through what's inside a JWT."</td><td>Three segments, what's in each, which bytes the signature covers, then the validation order — structure <em>and</em> validation, never structure alone</td></tr>
+          <tr><td>"How do you log someone out?"</td><td>Say plainly that client-side deletion changes nothing server-side; give short TTL + refresh rotation, and <code>jti</code> denylist if instant revocation is required</td></tr>
+          <tr><td>"What could go wrong with how you validate that?"</td><td>Algorithm pinning first — <code>alg: none</code> and RS256→HS256 confusion — then missing <code>aud</code>, then <code>kid</code> injection</td></tr>
+          <tr><td>"Can we just put the user's permissions in the token?"</td><td>Only slow-changing coarse claims; name the staleness window (23.1) and the size cost per request</td></tr>
+          <tr><td>"HS256 or RS256?"</td><td>Frame it as <em>who is allowed to mint</em>, not as crypto strength — the moment a second party verifies, go asymmetric</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Fast disambiguation — the pairs that get confused live</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Pair</th><th>The distinction</th></tr></thead>
+        <tbody>
+          <tr><td><strong>JWT vs. JWS vs. JWE</strong></td><td>JWS = signed (integrity, contents readable). JWE = encrypted (contents hidden). "JWT" in practice almost always means a JWS. If you need secrecy you need JWE — signing does not give it to you.</td></tr>
+          <tr><td><strong>Encoded vs. encrypted</strong></td><td>base64url is a transport encoding with no key and no secrecy — reversible by anyone. Encryption requires a key to reverse. A JWT payload is the former.</td></tr>
+          <tr><td><strong>HS256 vs. RS256</strong></td><td>HS256 = one shared secret, so anyone who can verify can also forge. RS256 = private key signs, public key verifies, so verification confers no minting power. The choice is about trust topology, not strength.</td></tr>
+          <tr><td><strong>Access vs. refresh vs. ID token</strong></td><td>Access = presented to an API to get in. Refresh = presented to the auth server only, to get a new access token. ID token (OIDC) = tells the <em>client</em> who the user is; <code>aud</code> is the client_id, and it is not an API credential.</td></tr>
+          <tr><td><strong><code>exp</code> vs. <code>iat</code> vs. <code>nbf</code></strong></td><td><code>exp</code> = stop accepting after. <code>iat</code> = when it was issued (use for max-age policies). <code>nbf</code> = do not accept before. All seconds since epoch, all need a small skew leeway (~60s), not an unbounded one.</td></tr>
+          <tr><td><strong>JWT vs. opaque token</strong></td><td>JWT = self-describing, verified locally, no round trip, cannot be revoked early. Opaque = random string, meaningless without an introspection call, revocable instantly. You are trading a lookup for revocability.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>High-yield anchors</h3>
+    <div class="cheatsheet" style="font-size: 12.5px;">RFC 7519 = JWT.  RFC 7515 = JWS (the signing input definition).
+RFC 8725 = JWT Best Current Practices — the pitfalls doc; "do not trust
+  the alg header" is its headline recommendation.
+Typical sizes: ~300–800 bytes signed. Servers commonly cap total request
+  headers at 8 KB — a bloated token surfaces as a 431/400, not a 401.
+Typical lifetimes: access token 5–15 min, refresh token 7–30 days with
+  rotation. AWS Cognito defaults: 1 h access, up to 30 d refresh.
+2015 — Auth0 disclosed the `alg: none` and RS256→HS256 confusion flaws
+  across many JWT libraries. Both are verifier bugs, not format bugs.
+Signing input is EXACTLY: base64url(header) + "." + base64url(payload)</div>
+
+    <h3>The script — say this close to verbatim</h3>
+    <div class="tradeoff-box">"I'd use RS256 JWTs issued by the auth service. Each downstream service verifies locally against the issuer's JWKS, cached and keyed by <code>kid</code>, so identity verification costs no round trip on the hot path — which is the whole reason to pick JWTs over opaque tokens with introspection. The verification isn't just the signature: I'd pin the expected algorithm to RS256 in the verifier config rather than reading it from the token's header, check <code>exp</code> with about sixty seconds of skew leeway, and check <code>iss</code> and <code>aud</code> so an access token minted for the payments API can't be replayed against the admin API. The cost I'm accepting is that I can't revoke a token before it expires — nothing server-side can reach out and cancel a signed string — so I'd keep access tokens at fifteen minutes with a rotating refresh token, and accept that a stolen token is good for up to fifteen minutes. If instant revocation became a hard requirement — say a compliance rule that terminating an employee cuts access immediately — I'd add a <code>jti</code> denylist check on every request, or move to opaque tokens with introspection, and pay the lookup I was trying to avoid."</div>
+
+    <h3>If pushed on validation safety specifically</h3>
+    <div class="tradeoff-box">The single most important line in a JWT verifier is the one that specifies the algorithm out of band. If the verifier reads <code>alg</code> from the token's own header and dispatches on it, an attacker can set <code>alg</code> to <code>none</code> and strip the signature, or switch RS256 to HS256 and HMAC the token using the <em>public</em> key as the shared secret — which they have, because it's published. Rotating the key pair does not fix that, because the new public key is public too. The fix is pinning: the verifier is configured to accept exactly RS256 with exactly this key set, and anything else is rejected before the signature is even examined.</div>
+  </section>
+
+  <!-- ══════════════════ §2 ══════════════════ -->
+  <section id="s2">
+    <h2 class="section-title"><span class="num">§2</span> 📋 Cheatsheet</h2>
+
+    <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+    <div class="callout callout-tip">⏭️ <strong>First time through this topic?</strong> Skip to §3 and come back here for revision.</div>
+
+<div class="cheatsheet"><span class="label">§ 1  WHY IT EXISTS</span>Server-side sessions require every service that wants to know who is
+calling to consult a shared store, which turns identity into a
+synchronous dependency shared by the whole fleet. The obvious escape —
+just put the user's ID and role in the cookie — fails immediately,
+because the client can edit it. Encrypting it instead is worse in a
+different way: you now need every verifier to hold the decryption key,
+and the contents were never actually secret in the first place. The
+insight is that the claims don't need to be hidden, they need to be
+unforgeable. Sign them, publish the verification key, and any service
+can confirm the issuer produced these exact bytes without asking the
+issuer anything.
+<span class="label">§ 2  WHAT IT IS</span>JWT                     Three base64url segments joined by dots:
+                        header.payload.signature. RFC 7519.
+HEADER                  JSON: `alg` (signing algorithm), `typ`, and
+                        usually `kid` (which key signed this).
+                        ATTACKER-CONTROLLED — never trust `alg`.
+PAYLOAD                 JSON claims. Registered: iss, sub, aud, exp,
+                        nbf, iat, jti. Plus whatever custom claims you
+                        add. READABLE BY ANYONE HOLDING THE TOKEN.
+SIGNATURE               Computed over base64url(header) + "." +
+                        base64url(payload). Proves those exact bytes
+                        came from the holder of the signing key.
+                        Proves nothing else.
+JWS vs JWE              JWS = signed, contents readable (what people
+                        mean by "JWT"). JWE = encrypted, contents
+                        hidden. Signing is not encryption.
+<span class="label">§ 3  THE MECHANISM</span>MINT                    Auth server builds header + payload, signs the
+                        joined bytes with its private key (RS256) or
+                        shared secret (HS256), appends the signature.
+CARRY                   Client sends `Authorization: Bearer &lt;jwt&gt;` on
+                        every request. Pure bearer — possession is the
+                        whole credential, no binding to the holder.
+VALIDATE (ordered)      1. Pin expected alg (from config, NOT the
+                           token's header)
+                        2. Resolve the key — allowlisted `kid` against
+                           a cached JWKS; never fetch a URL named in
+                           the token
+                        3. Verify the signature
+                        4. Check `exp` / `nbf` with ~60s skew leeway
+                        5. Check `iss` and `aud` — is this token for
+                           THIS service, from the expected issuer
+                        6. Only now read the claims and hand identity
+                           to authorization (23.1)
+FAIL                    Any of steps 1–5 failing is a 401 — identity
+                        was never established. A claim failing an
+                        authorization policy is a 403.
+<span class="label">§ 4  USE / AVOID</span>USE JWT when: many independent services (or a third party) must verify
+  identity without a round trip to the issuer, and a bounded staleness
+  window is acceptable.
+USE opaque tokens + introspection when: instant revocation is a hard
+  requirement, or the token's contents are sensitive, or you already
+  run a session store the lookup would hit anyway.
+USE HS256 when: a single service both issues and verifies — a monolith
+  talking only to itself.
+USE RS256/ES256 when: anyone other than the issuer verifies. Verifying
+  must not confer the ability to mint.
+AVOID putting fine-grained, fast-changing permissions in the payload —
+  they freeze at issuance and stay valid until expiry (23.1's
+  revocation problem, in token form).
+AVOID putting anything sensitive in the payload. It is readable, and it
+  is often logged, cached, and stored on the client.
+AVOID letting the token choose its own algorithm or its own key source
+  (`alg`, `jku`, `x5u`, unbounded `kid`). That is the whole pitfall
+  class in one sentence.
+AVOID treating "the signature verified" as "the token is valid" — that
+  skips `exp`, `iss`, and `aud`, and accepts tokens minted for a
+  different service.
+<span class="label">§ 5  NUMBERS TO ANCHOR THE DISCUSSION</span>RFC 7519 (JWT) · RFC 7515 (JWS) · RFC 8725 (JWT Best Current Practices,
+  whose headline rule is "do not trust the alg header").
+Sizes: ~300–800 bytes typical; ~8 KB is a common total-header server
+  limit — bloated tokens fail as 431/400, not 401.
+Lifetimes: 5–15 min access + 7–30 day rotating refresh is the common
+  shape. AWS Cognito defaults to 1 h access, up to 30 d refresh.
+2015: Auth0 disclosed `alg: none` acceptance and RS256→HS256 confusion
+  across many libraries — both are verifier bugs, not format bugs.
+Clock skew leeway: ~60 seconds is standard. Unbounded leeway is a bug.
+<span class="label">§ 6  INTERVIEW TRIGGERS + GOTCHA</span>→ "What's inside a JWT?"                 → three segments, then the
+                                            VALIDATION ORDER, not just
+                                            the structure
+→ "How do you log a user out?"            → client-side deletion changes
+                                            nothing; short TTL + refresh
+                                            rotation, or a jti denylist
+→ "HS256 or RS256?"                       → it's a question about who may
+                                            MINT, not about strength
+→ "What could go wrong in validation?"    → alg pinning first, then aud,
+                                            then kid/jku injection
+GOTCHA: Assuming a valid signature means a valid token. The signature
+  proves only that some key produced these bytes. Which algorithm,
+  which key, for which audience, and still-in-date are four separate
+  checks the verifier must make deliberately — and the classic attacks
+  all work by getting the verifier to skip one of them.</div>
+  </section>
+
+  <!-- ══════════════════ §3 ══════════════════ -->
+  <section id="s3">
+    <h2 class="section-title"><span class="num">§3</span> 🧠 The Mindmap</h2>
+    <div class="callout callout-quote">The picture to hold in your head while you study. Everything below hangs off this.</div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">The life of one token — and the gate each classic attack defeats</div>
+      <svg viewBox="0 0 1040 640" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="mm3Arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#2563eb"/>
+          </marker>
+          <marker id="mm3Down" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" fill="#c92a2a"/>
+          </marker>
+        </defs>
+
+        <rect x="300" y="8" width="440" height="34" rx="8" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="2"/>
+        <text x="520" y="30" text-anchor="middle" font-size="12.5" font-weight="800" fill="#1e3a8a">Read left to right — this is one token's life</text>
+
+        <!-- ① MINT -->
+        <rect x="12" y="60" width="228" height="240" rx="11" fill="#ede9fe" stroke="#7c3aed" stroke-width="2.5"/>
+        <text x="28" y="86" font-size="13.5" font-weight="800" fill="#4c1d95">① MINT</text>
+        <text x="28" y="103" font-size="10.5" font-style="italic" fill="#7c3aed">auth server</text>
+        <line x1="28" y1="112" x2="224" y2="112" stroke="#c4b5fd" stroke-width="1.5"/>
+        <text x="28" y="132" font-size="11" font-weight="800" fill="#7c3aed">HEADER</text>
+        <text x="28" y="149" font-size="11.5" fill="#4c1d95">alg · typ · kid</text>
+        <text x="28" y="173" font-size="11" font-weight="800" fill="#7c3aed">PAYLOAD</text>
+        <text x="28" y="190" font-size="11.5" fill="#4c1d95">iss · sub · aud · exp</text>
+        <text x="28" y="206" font-size="11.5" fill="#4c1d95">nbf · iat · jti + custom</text>
+        <text x="28" y="230" font-size="11" font-weight="800" fill="#7c3aed">SIGNATURE</text>
+        <text x="28" y="247" font-size="11.5" fill="#4c1d95">over b64(h) + "." + b64(p)</text>
+        <text x="28" y="272" font-size="11" font-style="italic" fill="#7c3aed">HS256 secret · RS256 private</text>
+        <text x="28" y="288" font-size="11" font-style="italic" fill="#7c3aed">key — this choice decides</text>
+
+        <line x1="244" y1="180" x2="272" y2="180" stroke="#2563eb" stroke-width="2.5" marker-end="url(#mm3Arrow)"/>
+
+        <!-- ② CARRY -->
+        <rect x="278" y="60" width="228" height="240" rx="11" fill="#e7f5ff" stroke="#1c7ed6" stroke-width="2.5"/>
+        <text x="294" y="86" font-size="13.5" font-weight="800" fill="#0b4a8f">② CARRY</text>
+        <text x="294" y="103" font-size="10.5" font-style="italic" fill="#1c7ed6">client</text>
+        <line x1="294" y1="112" x2="490" y2="112" stroke="#a5d8ff" stroke-width="1.5"/>
+        <text x="294" y="136" font-size="11.5" font-family="SF Mono, Menlo, monospace" fill="#0b4a8f">Authorization:</text>
+        <text x="294" y="153" font-size="11.5" font-family="SF Mono, Menlo, monospace" fill="#0b4a8f">  Bearer &lt;jwt&gt;</text>
+        <line x1="294" y1="168" x2="490" y2="168" stroke="#a5d8ff" stroke-width="1.5"/>
+        <text x="294" y="190" font-size="11.5" font-weight="700" fill="#0b4a8f">pure bearer credential</text>
+        <text x="294" y="210" font-size="11.5" fill="#0b4a8f">possession IS the proof</text>
+        <text x="294" y="230" font-size="11.5" fill="#0b4a8f">nothing binds it to a holder</text>
+        <text x="294" y="256" font-size="11" font-style="italic" fill="#1c7ed6">the issuer has now lost</text>
+        <text x="294" y="272" font-size="11" font-style="italic" fill="#1c7ed6">all control of this string</text>
+
+        <line x1="510" y1="180" x2="538" y2="180" stroke="#2563eb" stroke-width="2.5" marker-end="url(#mm3Arrow)"/>
+
+        <!-- ③ VALIDATE -->
+        <rect x="544" y="60" width="228" height="240" rx="11" fill="#c3fae8" stroke="#0ca678" stroke-width="2.5"/>
+        <text x="560" y="86" font-size="13.5" font-weight="800" fill="#134e4a">③ VALIDATE</text>
+        <text x="560" y="103" font-size="10.5" font-style="italic" fill="#0ca678">resource server — ORDERED</text>
+        <line x1="560" y1="112" x2="756" y2="112" stroke="#96e6c8" stroke-width="1.5"/>
+        <text x="560" y="132" font-size="11.5" fill="#134e4a">1 · pin alg ← from CONFIG</text>
+        <text x="560" y="152" font-size="11.5" fill="#134e4a">2 · resolve key ← kid → JWKS</text>
+        <text x="560" y="172" font-size="11.5" fill="#134e4a">3 · verify signature</text>
+        <text x="560" y="192" font-size="11.5" fill="#134e4a">4 · exp / nbf (±60s skew)</text>
+        <text x="560" y="212" font-size="11.5" fill="#134e4a">5 · iss / aud</text>
+        <text x="560" y="232" font-size="11.5" fill="#134e4a">6 · hand to authz (23.1)</text>
+        <line x1="560" y1="244" x2="756" y2="244" stroke="#96e6c8" stroke-width="1.5"/>
+        <text x="560" y="264" font-size="11" font-weight="700" fill="#134e4a">gates 1–5 fail → 401</text>
+        <text x="560" y="282" font-size="11" font-weight="700" fill="#134e4a">policy fails → 403</text>
+
+        <line x1="776" y1="180" x2="804" y2="180" stroke="#2563eb" stroke-width="2.5" marker-end="url(#mm3Arrow)"/>
+
+        <!-- ④ EXPIRE / REVOKE -->
+        <rect x="810" y="60" width="218" height="240" rx="11" fill="#ffd8a8" stroke="#e67700" stroke-width="2.5"/>
+        <text x="826" y="86" font-size="13.5" font-weight="800" fill="#7c2d12">④ EXPIRE / REVOKE</text>
+        <text x="826" y="103" font-size="10.5" font-style="italic" fill="#c2410c">where the cost lands</text>
+        <line x1="826" y1="112" x2="1012" y2="112" stroke="#fcc888" stroke-width="1.5"/>
+        <text x="826" y="134" font-size="11.5" fill="#7c2d12">exp reached → dead</text>
+        <text x="826" y="156" font-size="11.5" font-weight="700" fill="#7c2d12">before exp → NOTHING</text>
+        <text x="826" y="172" font-size="11.5" font-weight="700" fill="#7c2d12">server-side can stop it</text>
+        <line x1="826" y1="186" x2="1012" y2="186" stroke="#fcc888" stroke-width="1.5"/>
+        <text x="826" y="206" font-size="11" font-weight="800" fill="#c2410c">MITIGATIONS</text>
+        <text x="826" y="224" font-size="11.5" fill="#7c2d12">short TTL (5–15 min)</text>
+        <text x="826" y="242" font-size="11.5" fill="#7c2d12">rotating refresh token</text>
+        <text x="826" y="260" font-size="11.5" fill="#7c2d12">jti denylist per request</text>
+        <text x="826" y="278" font-size="11.5" fill="#7c2d12">token-version claim</text>
+
+        <!-- downward links to warnings -->
+        <g stroke="#c92a2a" stroke-width="1.8" fill="none">
+          <path d="M126,300 L126,326" marker-end="url(#mm3Down)"/>
+          <path d="M392,300 L392,326" marker-end="url(#mm3Down)"/>
+          <path d="M658,300 L658,326" marker-end="url(#mm3Down)"/>
+          <path d="M919,300 L919,326" marker-end="url(#mm3Down)"/>
+        </g>
+
+        <!-- warning boxes -->
+        <rect x="12" y="332" width="228" height="150" rx="10" fill="#fff5f5" stroke="#c92a2a" stroke-width="2" stroke-dasharray="5 4"/>
+        <text x="28" y="356" font-size="11.5" font-weight="800" fill="#7f1d1d">⚠ WHAT BREAKS HERE</text>
+        <text x="28" y="380" font-size="11" fill="#7f1d1d">secrets in the payload — it is</text>
+        <text x="28" y="396" font-size="11" fill="#7f1d1d">ENCODED, not encrypted</text>
+        <text x="28" y="420" font-size="11" fill="#7f1d1d">HS256 with external verifiers:</text>
+        <text x="28" y="436" font-size="11" fill="#7f1d1d">every verifier can also MINT</text>
+        <text x="28" y="460" font-size="11" fill="#7f1d1d">fat payloads — every request</text>
+        <text x="28" y="476" font-size="11" fill="#7f1d1d">pays the bytes, forever</text>
+
+        <rect x="278" y="332" width="228" height="150" rx="10" fill="#fff5f5" stroke="#c92a2a" stroke-width="2" stroke-dasharray="5 4"/>
+        <text x="294" y="356" font-size="11.5" font-weight="800" fill="#7f1d1d">⚠ WHAT BREAKS HERE</text>
+        <text x="294" y="380" font-size="11" fill="#7f1d1d">localStorage → any XSS on the</text>
+        <text x="294" y="396" font-size="11" fill="#7f1d1d">page reads the token</text>
+        <text x="294" y="420" font-size="11" fill="#7f1d1d">HttpOnly cookie fixes that but</text>
+        <text x="294" y="436" font-size="11" fill="#7f1d1d">hands you CSRF instead</text>
+        <text x="294" y="460" font-size="11" fill="#7f1d1d">token in a URL → logs, history,</text>
+        <text x="294" y="476" font-size="11" fill="#7f1d1d">Referer headers</text>
+
+        <rect x="544" y="332" width="228" height="150" rx="10" fill="#fff5f5" stroke="#c92a2a" stroke-width="2" stroke-dasharray="5 4"/>
+        <text x="560" y="356" font-size="11.5" font-weight="800" fill="#7f1d1d">⚠ WHAT BREAKS HERE</text>
+        <text x="560" y="380" font-size="11" fill="#7f1d1d">skip gate 1 → alg:none, or</text>
+        <text x="560" y="396" font-size="11" fill="#7f1d1d">RS256→HS256 confusion:</text>
+        <text x="560" y="412" font-size="11" font-weight="800" fill="#7f1d1d">attacker MINTS ANY IDENTITY</text>
+        <text x="560" y="436" font-size="11" fill="#7f1d1d">skip gate 2 → kid / jku</text>
+        <text x="560" y="452" font-size="11" fill="#7f1d1d">injection: verifier fetches</text>
+        <text x="560" y="468" font-size="11" fill="#7f1d1d">the ATTACKER'S key</text>
+
+        <rect x="810" y="332" width="218" height="150" rx="10" fill="#fff5f5" stroke="#c92a2a" stroke-width="2" stroke-dasharray="5 4"/>
+        <text x="826" y="356" font-size="11.5" font-weight="800" fill="#7f1d1d">⚠ WHAT BREAKS HERE</text>
+        <text x="826" y="380" font-size="11" fill="#7f1d1d">"logout" that only deletes</text>
+        <text x="826" y="396" font-size="11" fill="#7f1d1d">the client's copy changes</text>
+        <text x="826" y="412" font-size="11" font-weight="800" fill="#7f1d1d">NOTHING</text>
+        <text x="826" y="436" font-size="11" fill="#7f1d1d">revoked role, fired employee,</text>
+        <text x="826" y="452" font-size="11" fill="#7f1d1d">stolen token — all still valid</text>
+        <text x="826" y="468" font-size="11" fill="#7f1d1d">until exp</text>
+
+        <!-- skipped gate 5 callout -->
+        <rect x="278" y="502" width="494" height="52" rx="9" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+        <text x="525" y="524" text-anchor="middle" font-size="11.5" font-weight="800" fill="#92400e">⚠ skip gate 5 (aud) → a genuine, correctly-signed token minted for</text>
+        <text x="525" y="542" text-anchor="middle" font-size="11.5" font-weight="800" fill="#92400e">service A is replayed against service B — nothing is forged</text>
+
+        <rect x="180" y="572" width="680" height="54" rx="10" fill="#b2f2bb" stroke="#2f9e44" stroke-width="2.5"/>
+        <text x="520" y="594" text-anchor="middle" font-size="12.5" font-weight="800" fill="#14532d">THE RULE: the token never decides how it is verified.</text>
+        <text x="520" y="614" text-anchor="middle" font-size="11.5" font-style="italic" fill="#2f9e44">Every classic JWT attack is one gate a specific stage failed to enforce.</text>
+      </svg>
+      <p class="caption">A timeline, not a taxonomy — each stage's guarantees are consumed by the next, and every ⚠ is a gate that stage failed to enforce.</p>
+    </div>
+
+    <p><strong>How to read it:</strong> this is a timeline, not a set of categories — read it left to right as the life of a single token, because each stage's guarantees are consumed by the next one. Stage ① decides what the token can ever say and who is capable of saying it (the HS256/RS256 choice is made here and constrains everything downstream). Stage ② is where the token stops being under the issuer's control at all. Stage ③ is the only stage where anything is <em>enforced</em>, which is why it is an ordered chain rather than a bag of checks: gate 1 decides which key material is even eligible, so a verifier that skips it makes gates 2 and 3 meaningless. Stage ④ is where the format's central cost lands — the issuer has no reach into a token already in the wild. The ⚠ notes hanging below each stage are deliberately positioned: every one of the classic JWT attacks is a specific gate that a specific stage failed to enforce, so if you can name the stage, you can reconstruct the attack.</p>
+  </section>
+
+  <!-- ══════════════════ §4 ══════════════════ -->
+  <section id="s4">
+    <h2 class="section-title"><span class="num">§4</span> 🔥 The Problem</h2>
+
+    <p>Before self-contained tokens, identity worked the way 3.2 described: the server issues an opaque random session ID, keeps the real user record in a store, and looks it up on every request. This is correct, revocable, and completely under the server's control — deleting the row logs the user out instantly. It also means that every service that wants to know who is calling must reach the same store. In a single application that is a local Redis call. Across twenty services in three regions, plus a mobile client and a partner API, identity has quietly become a synchronous shared dependency on the hot path of every request: extra latency, extra failure surface, and the exact stateful coupling that 3.6's share-nothing thinking exists to avoid.</p>
+
+    <p>The instinctive first fix is to stop looking anything up and just carry the answer with the request — put <code>user_id=1042&amp;role=admin</code> in a cookie and read it. This fails in one move, and it fails <em>silently</em>: the client holds the cookie, so the client edits it, and <code>role=admin</code> costs an attacker one keystroke. The second instinct is to encrypt the cookie so the client can't tamper with it. That is closer, but it solves the wrong problem and creates a new one. It solves secrecy, when what was needed was integrity — the user's own ID and role were never secret from the user. And it requires every service that needs to read identity to hold the decryption key, which means every verifier can also produce valid tokens. You have handed twenty services the ability to mint admin credentials in order to let them read a user ID.</p>
+
+    <p>The insight that resolves this is to separate the two properties that "encrypt it" was conflating. The claims do not need to be hidden — they need to be <strong>unforgeable</strong>. Cryptographically sign the claims instead of encrypting them, and you get a token whose contents anyone can read but no one can alter without detection. Publish the verification key, and any service, in any region, run by anyone, can confirm that the issuer produced these exact bytes without asking the issuer anything. Identity verification stops being a network call and becomes a local computation.</p>
+
+    <p>That is genuinely the right trade — and it moves the entire security burden to a place it did not previously exist. With a session lookup, the store either returns a valid session or it doesn't; there is no interpretation. With a signed token, "valid" is now whatever the verifier decides to check, and the format hands the attacker input into that decision: the algorithm is named in a header the attacker can rewrite, and so is the key identifier. Every JWT vulnerability in the rest of this document is a consequence of this trade — not a flaw in signing, but a verifier that let the token influence how it would be verified.</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Before / after — identity by lookup vs. identity by signature</div>
+      <svg viewBox="0 0 1040 430" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="baArrow3" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#2563eb"/>
+          </marker>
+        </defs>
+
+        <rect x="20" y="20" width="440" height="390" rx="12" fill="#fff5f5" stroke="#c92a2a" stroke-width="2" stroke-dasharray="6 4"/>
+        <text x="40" y="48" font-size="14" font-weight="800" fill="#7f1d1d">BEFORE — identity by lookup</text>
+
+        <g font-family="SF Mono, Menlo, monospace" font-size="12" fill="#7f1d1d">
+          <text x="40" y="76">session_id = cookie["sid"]</text>
+          <text x="40" y="96">user = store.get(session_id)</text>
+          <text x="40" y="116">if not user: 401</text>
+        </g>
+        <text x="330" y="96" font-size="11" font-weight="800" fill="#c92a2a">◀ network hop</text>
+
+        <text x="40" y="150" font-size="12.5" fill="#2f9e44">✓ instantly revocable — delete the</text>
+        <text x="54" y="168" font-size="12.5" fill="#2f9e44">row and it's over</text>
+        <text x="40" y="192" font-size="12.5" fill="#2f9e44">✓ "valid" has exactly one meaning:</text>
+        <text x="54" y="210" font-size="12.5" fill="#2f9e44">the row exists</text>
+        <text x="40" y="236" font-size="12.5" fill="#c92a2a">✗ every service needs the store on</text>
+        <text x="54" y="254" font-size="12.5" fill="#c92a2a">its hot path</text>
+        <text x="40" y="278" font-size="12.5" fill="#c92a2a">✗ identity is a shared, synchronous</text>
+        <text x="54" y="296" font-size="12.5" fill="#c92a2a">dependency</text>
+        <text x="40" y="320" font-size="12.5" fill="#c92a2a">✗ store outage = fleet-wide auth</text>
+        <text x="54" y="338" font-size="12.5" fill="#c92a2a">outage</text>
+
+        <text x="40" y="372" font-size="11.5" font-style="italic" fill="#7f1d1d">naive escape 1: put user_id + role in the</text>
+        <text x="40" y="388" font-size="11.5" font-style="italic" fill="#7f1d1d">cookie → the client just edits it</text>
+        <text x="40" y="404" font-size="11.5" font-style="italic" fill="#7f1d1d">escape 2: encrypt it → every verifier now mints</text>
+
+        <line x1="470" y1="215" x2="565" y2="215" stroke="#2563eb" stroke-width="3" marker-end="url(#baArrow3)"/>
+        <text x="517" y="203" text-anchor="middle" font-size="11" font-weight="800" fill="#2563eb">sign, don't</text>
+        <text x="517" y="229" text-anchor="middle" font-size="11" font-weight="800" fill="#2563eb">hide</text>
+
+        <rect x="580" y="20" width="440" height="390" rx="12" fill="#f0fdf4" stroke="#2f9e44" stroke-width="2"/>
+        <text x="600" y="48" font-size="14" font-weight="800" fill="#14532d">AFTER — identity by signature</text>
+
+        <g font-family="SF Mono, Menlo, monospace" font-size="12" fill="#14532d">
+          <text x="600" y="76">jwt = header.payload.signature</text>
+          <text x="600" y="96">verify_locally(jwt, pubkey)</text>
+          <text x="600" y="116">if not ok: 401</text>
+        </g>
+        <text x="880" y="96" font-size="11" font-weight="800" fill="#2f9e44">◀ CPU only</text>
+
+        <text x="600" y="150" font-size="12.5" fill="#2f9e44">✓ no round trip: any service, any</text>
+        <text x="614" y="168" font-size="12.5" fill="#2f9e44">region, verifies alone</text>
+        <text x="600" y="192" font-size="12.5" fill="#2f9e44">✓ contents readable but unforgeable</text>
+        <text x="614" y="210" font-size="12.5" fill="#2f9e44">— integrity, not secrecy</text>
+        <text x="600" y="234" font-size="12.5" fill="#2f9e44">✓ verification key can be published</text>
+        <text x="614" y="252" font-size="12.5" fill="#2f9e44">without granting minting power</text>
+        <text x="600" y="278" font-size="12.5" fill="#c92a2a">✗ cannot be revoked before exp</text>
+        <text x="600" y="302" font-size="12.5" fill="#c92a2a">✗ "valid" now means whatever the</text>
+        <text x="614" y="320" font-size="12.5" fill="#c92a2a">verifier checks — and the token</text>
+        <text x="614" y="338" font-size="12.5" fill="#c92a2a">influences that (alg, kid are input)</text>
+
+        <text x="600" y="380" font-size="11.5" font-style="italic" fill="#14532d">the security burden moved: from "does the row</text>
+        <text x="600" y="396" font-size="11.5" font-style="italic" fill="#14532d">exist" to "what did the verifier bother to check"</text>
+      </svg>
+      <p class="caption">Signing buys local verification and gives up revocability — and shifts correctness from the store to whatever the verifier remembers to check.</p>
+    </div>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">A teammate proposes skipping JWTs entirely: "we'll just AES-encrypt the user ID and role into the cookie with a key all our services share — the client can't read or change it, so it's strictly better than signing." Explain precisely which security property this actually provides, which one the system actually needed, and the specific operational failure this design creates that a signed token with an asymmetric key pair does not.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the second paragraph — the part separating "hidden" from "unforgeable," and the sentence about what happens when every verifier holds the key.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> If signing is the answer, what exactly is being signed — and what does the resulting token actually contain?</div>
+  </section>
+
+  <!-- ══════════════════ §5 ══════════════════ -->
+  <section id="s5">
+    <h2 class="section-title"><span class="num">§5</span> 💡 The Core Idea</h2>
+
+    <div class="definition">A JWT is three base64url-encoded segments — a header naming how it was signed, a payload of readable claims, and a signature over the first two — and the signature proves only that some key produced those exact bytes, which means every other property the verifier cares about must be checked separately and deliberately.</div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">The build chain</div>
+      <svg viewBox="0 0 1040 200" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="bcArrow3" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#7c3aed"/>
+          </marker>
+        </defs>
+        <g>
+          <rect x="8" y="30" width="232" height="62" rx="9" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+          <text x="124" y="54" text-anchor="middle" font-size="12" font-weight="800" fill="#4c1d95">THREE SEGMENTS,</text>
+          <text x="124" y="70" text-anchor="middle" font-size="12" font-weight="800" fill="#4c1d95">TWO OF THEM</text>
+          <text x="124" y="86" text-anchor="middle" font-size="12" font-weight="800" fill="#4c1d95">READABLE JSON</text>
+          <text x="124" y="118" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">because base64url is an</text>
+          <text x="124" y="134" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">encoding, not encryption</text>
+        </g>
+        <line x1="246" y1="61" x2="274" y2="61" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow3)"/>
+        <g>
+          <rect x="280" y="30" width="232" height="62" rx="9" fill="#ffc9c9" stroke="#c92a2a" stroke-width="2"/>
+          <text x="396" y="54" text-anchor="middle" font-size="12" font-weight="800" fill="#7f1d1d">THE SIGNATURE</text>
+          <text x="396" y="70" text-anchor="middle" font-size="12" font-weight="800" fill="#7f1d1d">MAKES THEM UNFORGEABLE,</text>
+          <text x="396" y="86" text-anchor="middle" font-size="12" font-weight="800" fill="#7f1d1d">NOT SECRET</text>
+          <text x="396" y="118" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">therefore the only property</text>
+          <text x="396" y="134" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">added is integrity — and who</text>
+          <text x="396" y="150" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">holds the key decides who mints</text>
+        </g>
+        <line x1="518" y1="61" x2="546" y2="61" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow3)"/>
+        <g>
+          <rect x="552" y="30" width="232" height="62" rx="9" fill="#c3fae8" stroke="#0ca678" stroke-width="2"/>
+          <text x="668" y="54" text-anchor="middle" font-size="12" font-weight="800" fill="#134e4a">SO VALIDATION IS AN</text>
+          <text x="668" y="70" text-anchor="middle" font-size="12" font-weight="800" fill="#134e4a">ORDERED CHAIN,</text>
+          <text x="668" y="86" text-anchor="middle" font-size="12" font-weight="800" fill="#134e4a">NOT ONE CHECK</text>
+          <text x="668" y="118" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">so signature-valid ≠ token-</text>
+          <text x="668" y="134" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">valid: alg, key, exp, iss, aud</text>
+          <text x="668" y="150" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">are separate necessary conditions</text>
+        </g>
+        <line x1="790" y1="61" x2="818" y2="61" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow3)"/>
+        <g>
+          <rect x="824" y="30" width="208" height="62" rx="9" fill="#ffd8a8" stroke="#e67700" stroke-width="2"/>
+          <text x="928" y="62" text-anchor="middle" font-size="12" font-weight="800" fill="#7c2d12">AND THE ISSUER</text>
+          <text x="928" y="78" text-anchor="middle" font-size="12" font-weight="800" fill="#7c2d12">CANNOT TAKE IT BACK</text>
+          <text x="928" y="118" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">because a signed string is</text>
+          <text x="928" y="134" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">valid until exp no matter</text>
+          <text x="928" y="150" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">what changes server-side</text>
+        </g>
+        <text x="520" y="186" text-anchor="middle" font-size="11.5" font-style="italic" fill="#7c3aed">read the connective words under the arrows — each block exists because of the one before it</text>
+      </svg>
+      <p class="caption">Four ideas, one chain. Skip a link and the next block stops making sense.</p>
+    </div>
+
+    <h3>Three Segments, Two of Them Readable JSON</h3>
+    <p>Everything starts with the physical shape of the token, because most JWT mistakes are made by people who never looked at one. A JWT is <code>xxxxx.yyyyy.zzzzz</code> — three base64url strings joined by dots. Decode the first and you get the <strong>header</strong>: a small JSON object naming the signing algorithm (<code>alg</code>, e.g. <code>RS256</code>), the type (<code>typ: "JWT"</code>), and usually a key identifier (<code>kid</code>) telling the verifier which of the issuer's keys signed this one. Decode the second and you get the <strong>payload</strong>: the claims. Some are registered by RFC 7519 and carry defined meanings — <code>iss</code> (who issued it), <code>sub</code> (who it's about), <code>aud</code> (who it's <em>for</em>), <code>exp</code>/<code>nbf</code>/<code>iat</code> (validity window, in seconds since epoch), <code>jti</code> (a unique token ID) — and the rest are whatever the issuer added. The third segment is the signature, and it is the only part that isn't plain text. The load-bearing consequence: <strong>base64url is an encoding, not encryption.</strong> Paste any JWT into jwt.io and you will read every claim in it. A token containing a user's internal database ID, their email, and their plan tier is broadcasting all three to anyone who ever holds the token — including, often, your own access logs.</p>
+
+    <h3>The Signature Makes Them Unforgeable, Not Secret</h3>
+    <p>Given that the payload is readable, the signature's job is narrow and precise: it guarantees that these exact bytes came from a holder of the signing key. The signing input is exactly <code>base64url(header) + "." + base64url(payload)</code> — note that it covers the <em>header too</em>, which is why an attacker cannot quietly flip <code>alg</code> without invalidating the signature, and why the classic attacks work by getting the verifier to accept a signature the attacker computed rather than by forging the original one. Two families of algorithm are in play, and choosing between them is not a question of cryptographic strength. <strong>HMAC (HS256)</strong> uses one shared secret for both signing and verifying — which means every party that can verify a token can also mint one. <strong>Asymmetric (RS256, ES256)</strong> signs with a private key and verifies with the corresponding public key, so verification confers no minting power at all and the public key can be published openly, typically at a JWKS endpoint like <code>/.well-known/jwks.json</code>. That distinction is the whole decision: the moment anyone other than the issuer verifies your tokens, symmetric signing hands them the ability to impersonate anyone.</p>
+
+    <h3>So Validation Is an Ordered Chain, Not One Check</h3>
+    <p>Because the signature establishes only integrity of bytes, everything else the verifier believes about a token is a separate check it has to make. And the order matters, which is the part candidates almost always miss. First, <strong>pin the algorithm</strong> — decided by the verifier's configuration, never read from the token's header, because the header is attacker-controlled input. Second, <strong>resolve the key</strong>: look up <code>kid</code> against an allowlisted, cached JWKS, and never fetch a key from a URL the token names. Third, <strong>verify the signature</strong> with that pinned algorithm and that resolved key. Fourth, check <code>exp</code> and <code>nbf</code> with a small clock-skew leeway of around sixty seconds. Fifth, check <code>iss</code> and <code>aud</code> — this is what stops a perfectly valid token minted for the payments API from being replayed against the admin API, since both trust the same issuer and the same key. Only after all five does the verifier have an identity worth handing to authorization (23.1), where the claims are evaluated against a policy and a failure means <code>403</code> rather than <code>401</code>. Gate one decides which key material is even eligible, so a verifier that skips it has made gates two and three meaningless — that is precisely why "the signature verified" is not the same sentence as "the token is valid."</p>
+
+    <h3>And the Issuer Cannot Take It Back</h3>
+    <p>The last consequence follows directly from what makes the first three attractive. A verifier that never contacts the issuer also never learns anything the issuer discovers later. Fire an employee, change a user's role, detect a stolen device — none of it touches a token already in the wild, because that token is a self-contained signed string and nothing about revoking a database row changes its signature. It stays valid until <code>exp</code>, full stop. Every mitigation is a deliberate reintroduction of exactly the statefulness JWTs were adopted to remove: keep access tokens short (5–15 minutes) and pair them with a rotating refresh token so the staleness window is bounded; maintain a <code>jti</code> denylist checked on every request, which restores instant revocation at the cost of the lookup you were avoiding; or store a token-version counter on the user record and reject tokens minted before the current version. There is no fourth option that keeps both properties — that tension is the honest answer to "how do you log someone out," and stating it unprompted is what separates a good interview answer from a memorized one.</p>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">Your team is debating what to put in the JWT payload. Someone argues that since the token is cryptographically signed and travels only over TLS, it is safe to include the user's internal account number and their support-tier flag. Explain what is and isn't protected here, and give a concrete way that data leaks even though every request is encrypted in transit and the signature is unbreakable.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read "Three Segments, Two of Them Readable JSON" — specifically the sentence about what base64url is, and the last sentence about where tokens end up.</div>
+      </div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">2</span>
+          <span class="qtext">Explain why choosing between HS256 and RS256 is a decision about <em>who is allowed to mint tokens</em> rather than a decision about cryptographic strength — and then use that to explain why the RS256→HS256 confusion attack is possible at all. Trace the link from "The Signature Makes Them Unforgeable, Not Secret" into "So Validation Is an Ordered Chain."</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the second and third concept blocks together — the answer hinges on what the verifier holds in each scheme, and on which gate decides what that held material is used for.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> You know the pieces and the order. What actually happens, byte by byte, when a token is minted and then checked?</div>
+  </section>
+
+  <!-- ══════════════════ §6 ══════════════════ -->
+  <section id="s6">
+    <h2 class="section-title"><span class="num">§6</span> ⚙️ How It Actually Works</h2>
+
+    <h3>One request, end to end (happy path)</h3>
+    <ol class="steps">
+      <li>The user authenticates (password, OAuth2 code exchange — 23.2, whatever the mechanism). The auth server builds a header, <code>{"alg":"RS256","typ":"JWT","kid":"2026-08"}</code>, and a payload, <code>{"iss":"https://auth.acme.com","sub":"user_1042","aud":"payments-api","exp":1786483200,"iat":1786482300,"jti":"a3f9…"}</code>.</li>
+      <li>It base64url-encodes each, joins them with a dot to form the <strong>signing input</strong>, signs that byte string with its RSA private key, base64url-encodes the signature, and appends it after a second dot. The result is <code>header.payload.signature</code> — typically 300–800 bytes.</li>
+      <li>The client stores the token and sends it on every request as <code>Authorization: Bearer &lt;jwt&gt;</code>. Nothing binds the token to this client: it is a pure bearer credential, so possession is the entire proof.</li>
+      <li>The resource server splits on dots, decodes the header, and runs the gate chain: pin <code>RS256</code> from its own config; look up <code>kid: "2026-08"</code> in its cached copy of the issuer's JWKS (refreshed periodically, not per request); verify the signature over the first two segments; check <code>exp</code>/<code>nbf</code> against the current time with ~60s leeway; check <code>iss</code> matches the expected issuer and <code>aud</code> equals <code>payments-api</code>.</li>
+      <li>All gates pass, so a verified identity (<code>sub: user_1042</code> plus claims) goes into the request context, and authorization takes over from there (23.1). A failure at any gate is a <code>401</code> — no identity was ever established. A failure at the authorization step is a <code>403</code>.</li>
+    </ol>
+
+    <div class="mental-model">
+      🗺️ <span class="mm-name">Mental model — the wax-sealed public notice.</span> A JWT is a public notice with the issuer's wax seal pressed into it. Anyone can walk up and read the whole notice — that's the point, it's a notice. What the seal provides is that no one can alter a word without visibly breaking it, and anyone who knows what the issuer's seal looks like can check it themselves without travelling to the issuer's office.
+      <span class="mm-break">Where it breaks down: a wax seal is checked by a human who also notices the notice is three years old, addressed to a different town, and stamped by a seal design the office stopped using. Software notices none of that unless you write the check — the seal verifying is one gate, and <code>exp</code>, <code>aud</code>, and the key's identity are gates that don't exist until you add them.</span>
+    </div>
+
+    <div class="mental-model">
+      🗺️ <span class="mm-name">Mental model — the concert wristband.</span> Once the box office prints and clamps a wristband on you, every gate inside the venue can verify it independently, instantly, with no radio call back to the box office. That independence is exactly the JWT's payoff.
+      <span class="mm-break">Where it breaks down: the box office cannot un-print a wristband already on someone's wrist — which is the revocation problem exactly — and unlike a physical wristband, a bearer token can be copied and used from two continents at once, because nothing binds it to a wearer. That's why proof-of-possession schemes (mTLS-bound tokens, DPoP) exist, and why "short lifetime" is the standard answer instead of "revoke it."</span>
+    </div>
+
+    <h3>Failure &amp; edge cases</h3>
+    <ul class="plain">
+      <li><strong><code>alg: none</code>.</strong> The spec defines an "unsecured JWT" with <code>alg: "none"</code> and an empty signature. Libraries that dispatch on the header's <code>alg</code> will happily take that path: the attacker rewrites the payload to <code>sub: admin</code>, sets <code>alg</code> to <code>none</code>, drops the signature, and the verifier returns valid. This is the purest form of the whole pitfall class — the token told the verifier how to verify it.</li>
+      <li><strong>RS256 → HS256 algorithm confusion.</strong> More subtle and more dangerous. The verifier is configured with the issuer's RSA <em>public</em> key, which is public by design. The attacker rewrites the header to <code>alg: HS256</code> and computes an HMAC over their forged token <em>using that public key as the shared secret</em>. A verifier that dispatches on the header now calls the HMAC path with the same key bytes it would have used for RSA verification — and the HMAC matches, because the attacker had the key. The attacker can now mint any identity they like. Rotating the key pair does not help: the new public key is also public. The only fix is pinning the algorithm out of band.</li>
+      <li><strong><code>kid</code> and <code>jku</code> injection.</strong> <code>kid</code> is attacker-controlled input used to <em>locate</em> a key. If it is interpolated into a file path (<code>keys/{kid}.pem</code>) or a SQL query, it becomes path traversal or injection. Worse, the JOSE spec allows <code>jku</code> and <code>x5u</code> headers naming a <em>URL</em> to fetch the key from — honour those and the attacker simply hosts their own key. Allowlist <code>kid</code> values; never fetch key material from a location the token specifies.</li>
+      <li><strong>Missing <code>aud</code> (and <code>iss</code>) check.</strong> Every service behind one identity provider trusts the same signing key. Without an audience check, a token legitimately issued for the low-privilege analytics API verifies perfectly against the admin API. This is a confused-deputy failure that a signature check cannot possibly catch, because the signature is genuinely valid. The OIDC version of the same mistake: sending an <strong>ID token</strong> (whose <code>aud</code> is a client_id, meant to tell the client who the user is) to a backend as if it were an access token.</li>
+      <li><strong>No revocation.</strong> Logout that only deletes the client's copy changes nothing — a copy of the token keeps working until <code>exp</code>. "Sign out of all devices," employee termination, and stolen-token response all require reintroducing server-side state (<code>jti</code> denylist, token-version claim) or living with the window (5–15 min TTL + refresh rotation).</li>
+      <li><strong>Storage and exfiltration.</strong> In <code>localStorage</code>, any XSS on the page reads the token directly. In an <code>HttpOnly; Secure; SameSite=Lax</code> cookie, XSS cannot read it — but you have taken on CSRF and must handle it. And a token placed in a URL query string ends up in server logs, browser history, and <code>Referer</code> headers sent to third parties.</li>
+      <li><strong>Payload bloat and clock skew.</strong> Stuffing a permission list into the payload grows every single request; many servers cap total request headers around 8 KB, so this surfaces as a <code>431</code>/<code>400</code>, not an auth error. And <code>exp</code> comparisons need a small leeway (~60s) for clock drift between issuer and verifier — but leeway measured in minutes quietly extends every token's real lifetime.</li>
+    </ul>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Structural — anatomy of a token, and exactly what the signature covers</div>
+      <svg viewBox="0 0 1040 450" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="anDown" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" fill="#6b6861"/>
+          </marker>
+        </defs>
+
+        <!-- the token bar -->
+        <rect x="20" y="28" width="400" height="42" rx="7" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+        <text x="220" y="54" text-anchor="middle" font-size="12" font-family="SF Mono, Menlo, monospace" fill="#4c1d95">eyJhbGciOiJSUzI1NiIsImtpZCI6…</text>
+        <text x="428" y="55" font-size="18" font-weight="800" fill="#1a1917">.</text>
+        <rect x="440" y="28" width="340" height="42" rx="7" fill="#e7f5ff" stroke="#1c7ed6" stroke-width="2"/>
+        <text x="610" y="54" text-anchor="middle" font-size="12" font-family="SF Mono, Menlo, monospace" fill="#0b4a8f">eyJzdWIiOiJ1c2VyXzEwNDIiLC4uLn0</text>
+        <text x="788" y="55" font-size="18" font-weight="800" fill="#1a1917">.</text>
+        <rect x="800" y="28" width="220" height="42" rx="7" fill="#ffc9c9" stroke="#c92a2a" stroke-width="2"/>
+        <text x="910" y="54" text-anchor="middle" font-size="12" font-family="SF Mono, Menlo, monospace" fill="#7f1d1d">SflKxwRJSMeKKF2QT4…</text>
+
+        <text x="220" y="88" text-anchor="middle" font-size="11" font-weight="800" letter-spacing=".05em" fill="#7c3aed">HEADER (base64url)</text>
+        <text x="610" y="88" text-anchor="middle" font-size="11" font-weight="800" letter-spacing=".05em" fill="#1c7ed6">PAYLOAD (base64url)</text>
+        <text x="910" y="88" text-anchor="middle" font-size="11" font-weight="800" letter-spacing=".05em" fill="#c92a2a">SIGNATURE</text>
+
+        <!-- signing input bracket -->
+        <path d="M20,104 L20,116 L780,116 L780,104" fill="none" stroke="#2f9e44" stroke-width="2.5"/>
+        <path d="M400,116 L400,130" fill="none" stroke="#2f9e44" stroke-width="2.5"/>
+        <rect x="230" y="130" width="340" height="30" rx="7" fill="#b2f2bb" stroke="#2f9e44" stroke-width="2"/>
+        <text x="400" y="150" text-anchor="middle" font-size="12" font-weight="800" fill="#14532d">SIGNING INPUT — both segments AND the dot</text>
+
+        <!-- arrows down to decoded -->
+        <g stroke="#6b6861" stroke-width="1.5" fill="none">
+          <path d="M220,164 L220,190" marker-end="url(#anDown)"/>
+          <path d="M610,164 L610,190" marker-end="url(#anDown)"/>
+          <path d="M910,96 L910,190" marker-end="url(#anDown)"/>
+        </g>
+
+        <!-- decoded header -->
+        <rect x="20" y="196" width="400" height="112" rx="9" fill="#faf5ff" stroke="#7c3aed" stroke-width="1.8"/>
+        <g font-family="SF Mono, Menlo, monospace" font-size="12" fill="#4c1d95">
+          <text x="38" y="220">{"alg":"RS256",</text>
+          <text x="38" y="240"> "typ":"JWT",</text>
+          <text x="38" y="260"> "kid":"2026-08"}</text>
+        </g>
+        <text x="38" y="286" font-size="11" font-weight="800" fill="#c92a2a">⚠ ATTACKER-CONTROLLED.</text>
+        <text x="38" y="301" font-size="11" fill="#7f1d1d">Read `kid` only to LOOK UP an allowlisted key.</text>
+
+        <!-- decoded payload -->
+        <rect x="440" y="196" width="340" height="112" rx="9" fill="#f1f9ff" stroke="#1c7ed6" stroke-width="1.8"/>
+        <g font-family="SF Mono, Menlo, monospace" font-size="11.5" fill="#0b4a8f">
+          <text x="456" y="218">{"iss":"https://auth.acme.com",</text>
+          <text x="456" y="236"> "sub":"user_1042",</text>
+          <text x="456" y="254"> "aud":"payments-api",</text>
+          <text x="456" y="272"> "exp":1786483200, "jti":"a3f9…"}</text>
+        </g>
+        <text x="456" y="298" font-size="11" font-weight="800" fill="#c92a2a">⚠ READABLE BY ANYONE. base64url ≠ encryption.</text>
+
+        <!-- signature note -->
+        <rect x="800" y="196" width="220" height="112" rx="9" fill="#fff5f5" stroke="#c92a2a" stroke-width="1.8"/>
+        <text x="816" y="220" font-size="11.5" font-weight="800" fill="#7f1d1d">RSA-SHA256 over the</text>
+        <text x="816" y="238" font-size="11.5" font-weight="800" fill="#7f1d1d">bytes LEFT of this dot</text>
+        <text x="816" y="262" font-size="11" fill="#7f1d1d">covers the HEADER too —</text>
+        <text x="816" y="278" font-size="11" fill="#7f1d1d">which is why alg-confusion</text>
+        <text x="816" y="294" font-size="11" fill="#7f1d1d">attacks RE-SIGN rather</text>
+
+        <!-- the three attacker cases -->
+        <rect x="20" y="330" width="1000" height="106" rx="10" fill="#f3f2ef" stroke="#e5e3de" stroke-width="2"/>
+        <text x="40" y="354" font-size="12" font-weight="800" letter-spacing=".05em" fill="#6b6861">WHAT AN ATTACKER CAN AND CANNOT DO</text>
+        <text x="40" y="378" font-size="12" fill="#c92a2a">✗ edit one character of the payload, leave the signature → verification FAILS</text>
+        <text x="40" y="398" font-size="12" fill="#c92a2a">✗ edit the payload and re-sign with a key they generated → FAILS (verifier uses the issuer's key)</text>
+        <text x="40" y="418" font-size="12" font-weight="700" fill="#7f1d1d">✓ edit the payload and re-sign with a key the VERIFIER can be tricked into using → SUCCEEDS — this is exactly what alg-confusion and kid-injection achieve</text>
+      </svg>
+      <p class="caption">The signature covers everything left of the second dot — so attacks don't edit in place, they get the verifier to use a key the attacker controls.</p>
+    </div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Mechanism flow — mint, carry, validate, use</div>
+      <svg viewBox="0 0 1040 330" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="mfArrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#2563eb"/>
+          </marker>
+          <marker id="mfRed" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#c92a2a"/>
+          </marker>
+          <marker id="mfGreen" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#2f9e44"/>
+          </marker>
+        </defs>
+
+        <rect x="12" y="30" width="200" height="110" rx="10" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+        <text x="28" y="54" font-size="12.5" font-weight="800" fill="#4c1d95">① MINT</text>
+        <text x="28" y="76" font-size="11.5" fill="#4c1d95">build header + payload</text>
+        <text x="28" y="96" font-size="11.5" fill="#4c1d95">sign(signing_input,</text>
+        <text x="38" y="112" font-size="11.5" fill="#4c1d95">private_key)</text>
+        <text x="28" y="130" font-size="11.5" fill="#4c1d95">append signature</text>
+
+        <line x1="216" y1="85" x2="248" y2="85" stroke="#2563eb" stroke-width="2.5" marker-end="url(#mfArrow)"/>
+
+        <rect x="254" y="30" width="200" height="110" rx="10" fill="#e7f5ff" stroke="#1c7ed6" stroke-width="2"/>
+        <text x="270" y="54" font-size="12.5" font-weight="800" fill="#0b4a8f">② CARRY</text>
+        <text x="270" y="78" font-size="11.5" font-family="SF Mono, Menlo, monospace" fill="#0b4a8f">Authorization:</text>
+        <text x="270" y="95" font-size="11.5" font-family="SF Mono, Menlo, monospace" fill="#0b4a8f">  Bearer &lt;jwt&gt;</text>
+        <text x="270" y="120" font-size="11.5" font-style="italic" fill="#1c7ed6">pure bearer — possession</text>
+        <text x="270" y="135" font-size="11.5" font-style="italic" fill="#1c7ed6">is the whole credential</text>
+
+        <line x1="458" y1="85" x2="490" y2="85" stroke="#2563eb" stroke-width="2.5" marker-end="url(#mfArrow)"/>
+
+        <rect x="496" y="20" width="290" height="160" rx="10" fill="#c3fae8" stroke="#0ca678" stroke-width="2.5"/>
+        <text x="512" y="44" font-size="12.5" font-weight="800" fill="#134e4a">③ VALIDATE — ordered gates</text>
+        <text x="512" y="68" font-size="11.5" fill="#134e4a">1 · pin alg</text>
+        <text x="660" y="68" font-size="11" font-style="italic" fill="#0ca678">← from CONFIG</text>
+        <text x="512" y="90" font-size="11.5" fill="#134e4a">2 · resolve key</text>
+        <text x="660" y="90" font-size="11" font-style="italic" fill="#0ca678">← allowlisted kid</text>
+        <text x="512" y="112" font-size="11.5" fill="#134e4a">3 · verify signature</text>
+        <text x="512" y="134" font-size="11.5" fill="#134e4a">4 · exp / nbf</text>
+        <text x="660" y="134" font-size="11" font-style="italic" fill="#0ca678">← ±60s skew</text>
+        <text x="512" y="156" font-size="11.5" fill="#134e4a">5 · iss / aud</text>
+        <text x="660" y="156" font-size="11" font-style="italic" fill="#0ca678">← for THIS service</text>
+
+        <line x1="790" y1="85" x2="822" y2="85" stroke="#2563eb" stroke-width="2.5" marker-end="url(#mfArrow)"/>
+
+        <rect x="828" y="30" width="200" height="110" rx="10" fill="#ffd8a8" stroke="#e67700" stroke-width="2"/>
+        <text x="844" y="54" font-size="12.5" font-weight="800" fill="#7c2d12">④ USE</text>
+        <text x="844" y="78" font-size="11.5" fill="#7c2d12">verified identity is</text>
+        <text x="844" y="94" font-size="11.5" fill="#7c2d12">now in the request ctx</text>
+        <text x="844" y="118" font-size="11.5" fill="#7c2d12">hand to authorization</text>
+        <text x="844" y="134" font-size="11.5" fill="#7c2d12">policy (23.1)</text>
+
+        <!-- outcomes -->
+        <line x1="641" y1="180" x2="641" y2="212" stroke="#c92a2a" stroke-width="2.5" marker-end="url(#mfRed)"/>
+        <rect x="420" y="218" width="442" height="40" rx="8" fill="#ffc9c9" stroke="#c92a2a" stroke-width="2"/>
+        <text x="641" y="243" text-anchor="middle" font-size="12.5" font-weight="800" fill="#7f1d1d">ANY gate 1–5 fails → 401 (identity was never established)</text>
+
+        <line x1="928" y1="140" x2="928" y2="212" stroke="#2f9e44" stroke-width="2.5" marker-end="url(#mfGreen)"/>
+        <rect x="420" y="270" width="442" height="40" rx="8" fill="#b2f2bb" stroke="#2f9e44" stroke-width="2"/>
+        <text x="641" y="295" text-anchor="middle" font-size="12.5" font-weight="800" fill="#14532d">policy denies → 403 · policy allows → 2xx</text>
+        <line x1="928" y1="238" x2="928" y2="270" stroke="#2f9e44" stroke-width="2.5" marker-end="url(#mfGreen)"/>
+        <text x="948" y="262" font-size="10.5" font-style="italic" fill="#2f9e44">then</text>
+      </svg>
+      <p class="caption">Gate failures are 401 — no identity was established. Policy failures are 403 — the identity was fine, the permission wasn't (23.1).</p>
+    </div>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">Walk through exactly which bytes the signature covers, and use that to explain three separate attacker attempts and their outcomes: (a) editing <code>"sub"</code> in the payload and leaving the signature alone, (b) editing the payload and re-signing with a key the attacker generated, and (c) editing the payload and re-signing in a way that actually succeeds. What has to be true of the <em>verifier</em> for case (c) to work?</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the anatomy diagram — specifically the "signing input" bracket and the note about why alg-confusion attacks re-sign rather than edit in place.</div>
+      </div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">2</span>
+          <span class="qtext">A service verifies RS256 tokens correctly — pinned algorithm, allowlisted <code>kid</code>, valid signature, unexpired. It has no <code>aud</code> check. Explain concretely what an attacker with a legitimately-issued token can now do, why the signature check is completely powerless to stop it, and why this is a different class of bug from algorithm confusion.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read "Missing <code>aud</code> (and <code>iss</code>) check" — the key point is that in this attack nothing about the token is forged.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> You can mint and validate them safely. In a live design, when do you actually reach for a JWT — and what does that choice cost you?</div>
+  </section>
+
+  <!-- ══════════════════ §7 ══════════════════ -->
+  <section id="s7">
+    <h2 class="section-title"><span class="num">§7</span> ⚖️ The Decision — When, and What It Costs</h2>
+
+    <p>The baseline isn't a judgment call: if you use JWTs, you pin the algorithm, allowlist the key, and check <code>exp</code>, <code>iss</code>, and <code>aud</code>. Skipping any of those isn't a trade-off, it's a bug. The actual decisions are three: whether a self-contained token is the right shape at all, which signing family to use, and what you allow into the payload.</p>
+
+    <p><strong>Many independent verifiers, and a bounded staleness window is acceptable.</strong> This is the case JWTs exist for. Twenty services, three regions, a mobile client, a partner API — each one verifies locally against a cached JWKS and never touches the auth service on the hot path. You get regional independence, no shared bottleneck, and no fleet-wide auth outage when the identity store has a bad day. What you accept in exchange is that revocation is not instantaneous, which you bound with short access-token lifetimes rather than eliminate.</p>
+
+    <p><strong>Instant revocation is a hard requirement, or the contents are sensitive.</strong> Then an opaque token with server-side introspection is the honest answer, and reaching for JWTs anyway means quietly reimplementing the session store you were avoiding. A compliance rule that terminating an employee must cut access <em>now</em>, a system where token theft is high-impact, or a design that already runs a session store the lookup would hit regardless — in all three the JWT's central payoff has been cancelled and you're paying its central cost for nothing. The middle path exists: JWTs with a <code>jti</code> denylist consulted on every request, which is worth it only when the denylist is small and hot (a few thousand revoked IDs in Redis) rather than a full session lookup in disguise.</p>
+
+    <p><strong>Anyone other than the issuer verifies your tokens.</strong> Then the signing family is decided for you: asymmetric, RS256 or ES256. Symmetric HS256 is legitimate exactly when one service both issues and verifies — a monolith talking to itself, where sharing a secret with yourself costs nothing. The moment a second party verifies, HS256 hands them minting power, and "our internal services are trusted" stops being true the first time one of them is compromised or a partner is added.</p>
+
+    <p><strong>And what goes in the payload.</strong> Identity plus coarse, slow-changing claims. Fine-grained permissions in the token look efficient and are 23.1's revocation problem in concrete form — frozen at issuance, valid until expiry, no matter what changed server-side. Nothing sensitive, because it is readable. Nothing large, because every request pays the bytes.</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Decision tree</div>
+      <svg viewBox="0 0 1040 500" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="dtArrow3" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" fill="#6b6861"/>
+          </marker>
+        </defs>
+
+        <rect x="270" y="16" width="500" height="52" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="2.5"/>
+        <text x="520" y="38" text-anchor="middle" font-size="12.5" font-weight="800" fill="#92400e">Must a token stop working the INSTANT it is revoked?</text>
+        <text x="520" y="57" text-anchor="middle" font-size="11" font-style="italic" fill="#b45309">compliance, immediate termination, high-value operations</text>
+
+        <g stroke="#6b6861" stroke-width="1.8" fill="none">
+          <path d="M520,68 L520,86"/>
+          <path d="M260,86 L780,86"/>
+          <path d="M260,86 L260,112" marker-end="url(#dtArrow3)"/>
+          <path d="M780,86 L780,112" marker-end="url(#dtArrow3)"/>
+        </g>
+        <text x="330" y="80" text-anchor="middle" font-size="11" font-weight="800" fill="#c92a2a">yes</text>
+        <text x="712" y="80" text-anchor="middle" font-size="11" font-weight="800" fill="#2f9e44">no — a bounded window is OK</text>
+
+        <!-- left branch -->
+        <rect x="60" y="118" width="400" height="48" rx="9" fill="#f3f2ef" stroke="#b8b4ac" stroke-width="2"/>
+        <text x="260" y="139" text-anchor="middle" font-size="12" font-weight="700" fill="#1a1917">Is the revoked set small and hot?</text>
+        <text x="260" y="157" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">a few thousand jti in Redis, not a full session lookup</text>
+
+        <g stroke="#6b6861" stroke-width="1.8" fill="none">
+          <path d="M260,166 L260,184"/>
+          <path d="M150,184 L370,184"/>
+          <path d="M150,184 L150,210" marker-end="url(#dtArrow3)"/>
+          <path d="M370,184 L370,210" marker-end="url(#dtArrow3)"/>
+        </g>
+        <text x="118" y="178" text-anchor="middle" font-size="11" font-weight="800" fill="#6b6861">no</text>
+        <text x="402" y="178" text-anchor="middle" font-size="11" font-weight="800" fill="#6b6861">yes</text>
+
+        <rect x="24" y="216" width="240" height="120" rx="10" fill="#ffc9c9" stroke="#c92a2a" stroke-width="2"/>
+        <text x="144" y="240" text-anchor="middle" font-size="12.5" font-weight="800" fill="#7f1d1d">Opaque token +</text>
+        <text x="144" y="258" text-anchor="middle" font-size="12.5" font-weight="800" fill="#7f1d1d">introspection</text>
+        <text x="144" y="284" text-anchor="middle" font-size="11" fill="#7f1d1d">You wanted a session store.</text>
+        <text x="144" y="302" text-anchor="middle" font-size="11" fill="#7f1d1d">Build one — a JWT here pays</text>
+        <text x="144" y="320" text-anchor="middle" font-size="11" fill="#7f1d1d">the cost for a cancelled payoff.</text>
+
+        <rect x="278" y="216" width="240" height="120" rx="10" fill="#ffd8a8" stroke="#e67700" stroke-width="2"/>
+        <text x="398" y="240" text-anchor="middle" font-size="12.5" font-weight="800" fill="#7c2d12">JWT + jti denylist</text>
+        <text x="398" y="258" text-anchor="middle" font-size="12.5" font-weight="800" fill="#7c2d12">checked per request</text>
+        <text x="398" y="284" text-anchor="middle" font-size="11" fill="#7c2d12">Keeps local verification for</text>
+        <text x="398" y="302" text-anchor="middle" font-size="11" fill="#7c2d12">everything else, pays one</text>
+        <text x="398" y="320" text-anchor="middle" font-size="11" fill="#7c2d12">small lookup for revocability.</text>
+
+        <!-- right branch -->
+        <rect x="580" y="118" width="420" height="48" rx="9" fill="#f3f2ef" stroke="#b8b4ac" stroke-width="2"/>
+        <text x="790" y="139" text-anchor="middle" font-size="12" font-weight="700" fill="#1a1917">Does anyone OTHER than the issuer verify?</text>
+        <text x="790" y="157" text-anchor="middle" font-size="11" font-style="italic" fill="#6b6861">another service, another team, a third party</text>
+
+        <g stroke="#6b6861" stroke-width="1.8" fill="none">
+          <path d="M790,166 L790,184"/>
+          <path d="M665,184 L915,184"/>
+          <path d="M665,184 L665,210" marker-end="url(#dtArrow3)"/>
+          <path d="M915,184 L915,210" marker-end="url(#dtArrow3)"/>
+        </g>
+        <text x="633" y="178" text-anchor="middle" font-size="11" font-weight="800" fill="#6b6861">no</text>
+        <text x="947" y="178" text-anchor="middle" font-size="11" font-weight="800" fill="#6b6861">yes</text>
+
+        <rect x="545" y="216" width="240" height="120" rx="10" fill="#e7f5ff" stroke="#1c7ed6" stroke-width="2"/>
+        <text x="665" y="240" text-anchor="middle" font-size="12.5" font-weight="800" fill="#0b4a8f">HS256 is fine</text>
+        <text x="665" y="266" text-anchor="middle" font-size="11" fill="#0b4a8f">One service issues AND</text>
+        <text x="665" y="284" text-anchor="middle" font-size="11" fill="#0b4a8f">verifies; the shared secret</text>
+        <text x="665" y="302" text-anchor="middle" font-size="11" fill="#0b4a8f">never leaves the boundary.</text>
+        <text x="665" y="322" text-anchor="middle" font-size="11" font-style="italic" fill="#1c7ed6">revisit the day a 2nd party verifies</text>
+
+        <rect x="799" y="216" width="240" height="120" rx="10" fill="#c3fae8" stroke="#0ca678" stroke-width="2"/>
+        <text x="919" y="240" text-anchor="middle" font-size="12.5" font-weight="800" fill="#134e4a">RS256 / ES256 +</text>
+        <text x="919" y="258" text-anchor="middle" font-size="12.5" font-weight="800" fill="#134e4a">published JWKS</text>
+        <text x="919" y="284" text-anchor="middle" font-size="11" fill="#134e4a">kid-based rotation. Verifying</text>
+        <text x="919" y="302" text-anchor="middle" font-size="11" fill="#134e4a">must not confer the ability</text>
+        <text x="919" y="320" text-anchor="middle" font-size="11" fill="#134e4a">to mint.</text>
+
+        <!-- payload rule, applies to all -->
+        <rect x="120" y="376" width="800" height="98" rx="10" fill="#ede9fe" stroke="#7c3aed" stroke-width="2.5"/>
+        <text x="520" y="400" text-anchor="middle" font-size="12.5" font-weight="800" fill="#4c1d95">…and whichever branch you land on, the payload rule is the same</text>
+        <text x="520" y="424" text-anchor="middle" font-size="11.5" fill="#4c1d95">✓ identity + coarse, slow-changing claims</text>
+        <text x="520" y="444" text-anchor="middle" font-size="11.5" fill="#7f1d1d">✗ fine-grained permissions (frozen at issuance — 23.1's problem in token form)</text>
+        <text x="520" y="464" text-anchor="middle" font-size="11.5" fill="#7f1d1d">✗ anything sensitive (readable) · ✗ anything large (every request pays the bytes)</text>
+      </svg>
+      <p class="caption">Three decisions, not one: token shape, signing family, and payload contents — the last of which applies no matter how the first two land.</p>
+    </div>
+
+    <h3>Trade-offs</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>✅ Benefit</th><th>❌ Cost / Limitation</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><span class="benefit">Verification is local</span> — any service in any region confirms identity with a signature check and no round trip, so identity stops being a shared synchronous dependency</td>
+            <td>The issuer permanently loses reach into tokens already in the wild: a fired employee, a changed role, or a stolen token stays valid until <code>exp</code>, and every mitigation reintroduces exactly the server-side state you removed</td>
+          </tr>
+          <tr>
+            <td><span class="benefit">Asymmetric signing lets you publish the verification key</span> to anyone, including third parties, without granting them the ability to mint</td>
+            <td>You now own key-rotation infrastructure — JWKS endpoints, <code>kid</code> tagging, overlapping key validity windows, cache TTLs — and a botched rotation is a fleet-wide authentication outage rather than a localized bug</td>
+          </tr>
+          <tr>
+            <td><span class="benefit">Claims travel with the request</span>, so a service knows who is calling without a lookup and can act on <code>sub</code>, tenant, or scope immediately</td>
+            <td>Every claim costs bytes on every single request forever; servers commonly cap total headers around 8 KB, so a bloated token surfaces as a <code>431</code>/<code>400</code> that looks nothing like an auth problem while you debug it</td>
+          </tr>
+          <tr>
+            <td><span class="benefit">A mature, standardized format</span> with well-tested libraries in every language, so you are not designing a token format yourself</td>
+            <td>The standard's flexibility — <code>alg</code>, <code>kid</code>, <code>jku</code> all sitting in an attacker-controlled header — is itself the attack surface, so your safety depends on how you configured the library rather than on the format being sound</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>In production</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>System</th><th>How it applies</th><th>The nuance</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Auth0 / Okta</strong></td>
+            <td>Issue RS256 JWTs by default and publish verification keys at <code>/.well-known/jwks.json</code>, with <code>kid</code>-tagged rotation and overlapping key validity</td>
+            <td>The asymmetric default is deliberate: customer APIs verify these tokens, and symmetric signing would hand every customer API the ability to mint tokens for every other one</td>
+          </tr>
+          <tr>
+            <td><strong>AWS Cognito</strong></td>
+            <td>Issues separate RS256 ID and access tokens, defaulting to 1 h access lifetime with refresh tokens valid up to 30 days</td>
+            <td>Tokens carry a <code>token_use</code> claim (<code>id</code> vs <code>access</code>) and you must check it — a verifier that only checks the signature and <code>exp</code> will accept an ID token where an access token was required, which is the OIDC form of the missing-audience bug</td>
+          </tr>
+          <tr>
+            <td><strong>Google / OIDC ID tokens</strong></td>
+            <td>The ID token's <code>aud</code> is the <em>client_id</em> of the application, not an API — it exists to tell the client which user just signed in</td>
+            <td>Forwarding an ID token to a backend as a bearer credential is one of the most common OIDC misuses in production; the backend should be issued its own access token with itself as the audience</td>
+          </tr>
+          <tr>
+            <td><strong>GitHub Actions OIDC</strong></td>
+            <td>Workflows request a short-lived JWT (minutes) and exchange it with AWS/GCP for cloud credentials, removing long-lived secrets from CI entirely</td>
+            <td>The cloud side must pin the <code>sub</code> claim to a specific repo and ref — a trust policy that only checks the issuer lets <em>any</em> repository in the organization assume the role, which has caused real incidents</td>
+          </tr>
+          <tr>
+            <td><strong>Kubernetes service account tokens</strong></td>
+            <td>Projected, bound tokens carry an explicit <code>aud</code>, a bounded <code>exp</code>, and a binding to the pod's lifetime, replacing the legacy never-expiring secret-mounted tokens</td>
+            <td>The migration away from non-expiring tokens happened specifically because of the no-revocation property: a leaked legacy token was valid forever, and there was nothing to expire</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">You are designing auth for an internal banking operations tool: five services, roughly 400 employees, and a hard compliance requirement that revoking an employee's access takes effect immediately — not within fifteen minutes. An engineer proposes RS256 JWTs with a five-minute lifetime, arguing that five minutes is "basically immediate." Using the decision tree, say what you would actually build, name specifically what you are giving up relative to plain JWTs, and explain why the five-minute argument does or doesn't survive the requirement as written.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the second boundary condition and the first branch of the decision tree — the question is whether a bounded window satisfies a requirement phrased as "immediately," and what the small-hot-denylist middle path buys you.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> Can you defend this under interview pressure — and hold up when the interviewer pushes on the validation code rather than the design?</div>
+  </section>
+
+  <!-- ══════════════════ §8 ══════════════════ -->
+  <section id="s8">
+    <h2 class="section-title"><span class="num">§8</span> 🎯 In the Interview</h2>
+
+    <h3>When an interviewer asks / says</h3>
+    <ul class="trigger-list">
+      <li>"How do your services authenticate requests from each other?"</li>
+      <li>"Walk me through what's actually inside a JWT and how the server verifies it."</li>
+      <li>"How would you log a user out, or revoke access if a token is stolen?"</li>
+      <li>"What could go wrong with the way you're validating those tokens?"</li>
+    </ul>
+
+    <h3>What you say / do</h3>
+    <p>This lands in the high-level design the moment you say "stateless services" — the interviewer will want to know how identity travels without a session store — and it comes back hard in the deep dive from two directions: logout/revocation, and a security probe on the validation itself. Deliver it in a fixed order. Name the choice (RS256 JWT, 15-minute access token, rotating refresh). Give the mechanism reason (each service verifies locally against a cached JWKS, so identity costs no network hop on the hot path). Price it without being asked (you cannot revoke before <code>exp</code>, so a stolen token is good for its full lifetime — that's <em>why</em> fifteen minutes). Name the switch condition (if instant revocation becomes a hard requirement, add a <code>jti</code> denylist or move to opaque tokens and accept the lookup). If the interviewer probes validation rather than design, drop straight into algorithm pinning — it is the highest-signal thing you can say about JWTs.</p>
+
+    <h3>The trade-off statement (memorize this pattern)</h3>
+    <div class="tradeoff-box">"I'd use RS256 JWTs issued by the auth service, and every downstream service verifies locally against the issuer's JWKS, cached and keyed by <code>kid</code>. That's the whole reason to pick JWTs over opaque tokens — the payments service confirms identity with a signature check instead of a network call to the auth service on every request, so identity isn't a shared synchronous dependency across the fleet. Validation is more than the signature, though: I pin <code>RS256</code> in the verifier's config rather than reading <code>alg</code> from the token's header, I allowlist the <code>kid</code> against the cached key set, and I check <code>exp</code> with about sixty seconds of skew leeway plus <code>iss</code> and <code>aud</code> — so an access token minted for the analytics API can't be replayed against the admin API, which a signature check alone would never catch because that signature is genuinely valid. The cost I'm accepting is that nothing server-side can cancel a token already in the wild: it's valid until it expires, no matter what changes. That's why access tokens are fifteen minutes with a rotating refresh token, and it means a stolen token is usable for up to fifteen minutes. I'd change that if immediate revocation became a hard requirement — then I'd add a <code>jti</code> denylist in Redis checked on every request, which restores instant revocation at the cost of one small lookup, or go to opaque tokens with introspection if the revoked set were large enough that the denylist stopped being cheap."</div>
+
+    <h3>A second trade-off variant — the "is your validation actually safe?" pushback</h3>
+    <div class="tradeoff-box">"The single most important line in the verifier is the one that specifies the algorithm out of band. If the code reads <code>alg</code> from the token's header and dispatches on it, there are two ways in. The attacker can set <code>alg</code> to <code>none</code>, strip the signature, and get accepted as an unsecured token. Or — more dangerously with RS256 — they can switch the header to <code>HS256</code> and HMAC their forged token using the issuer's <em>public</em> key as the shared secret. A verifier that dispatches on the header hands that same public key to the HMAC path, and it matches, because the attacker had the key: it's published. At that point they can mint any identity they want. Rotating the key pair does not fix that, because the new public key is public too. The fix is that the verifier is configured to accept exactly RS256 with exactly this key set and rejects anything else before it looks at the signature at all. Everything else — allowlisting <code>kid</code> so it can't be turned into a path traversal, refusing to honour <code>jku</code> — is the same principle: the token never gets to influence how it is verified."</div>
+
+    <h3>⚠️ Traps</h3>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "JWTs are encrypted, so it's fine to put internal IDs and account details in the payload — it's all going over TLS anyway."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> base64url is an encoding with no key and no secrecy — the payload is readable by anyone who ever holds the token, which includes the client, any XSS on the page, your access logs, and any proxy that logs headers. TLS protects the token in transit; it does nothing once the token is at rest on the client or in a log line. Hiding contents requires JWE, which is a different thing you are almost certainly not using.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "The signature verified, so the token is valid."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> The signature proves only that some key produced these exact bytes. It cannot tell you the token isn't expired, wasn't minted for a completely different service, or wasn't verified with a key the attacker chose. <code>exp</code>, <code>iss</code>, <code>aud</code>, and algorithm pinning are four separate necessary conditions — and the audience check in particular stops an attack where nothing about the token is forged at all.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "Logout is easy — we delete the token from localStorage."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> That deletes one copy on one device and changes nothing server-side. Any copy made beforehand keeps working until <code>exp</code>. Real logout means bounding the window with short lifetimes and refresh rotation, or reintroducing state with a <code>jti</code> denylist or a token-version claim — and "sign out of all devices" is impossible without one of those.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "We read the <code>alg</code> from the header — that's what the field is for."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> That field is attacker-controlled input, and trusting it is the <code>alg: none</code> and RS256→HS256 confusion vulnerability class in one line. RFC 8725's headline recommendation is to determine the algorithm out of band. The verifier decides how it verifies; the token only supplies data to be verified.</div></div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> Can you combine what you've learned across sections, not just recall each one?</div>
+  </section>
+
+  <!-- ══════════════════ §9 ══════════════════ -->
+  <section id="s9">
+    <h2 class="section-title"><span class="num">§9</span> 🧪 Mastery Gate</h2>
+    <div class="callout callout-quote">Synthesis only. Each question requires combining two or more sections.</div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">1</span>
+        <span class="qtext">A team moves their permission checks into the JWT: the payload now carries a full <code>permissions</code> array, and services authorize directly off it with no lookup. They point out — correctly — that this removes a database call from every request. Using the build chain from §5 and the revocation discussion from §6, explain exactly what has been traded away, then connect it to 23.1's rule about where authorization must be enforced: is this design failing at authentication, at authorization, or at both, and what specifically breaks the first time a permission is revoked?</span>
+        <span class="quiz-toggle">▼ Hint</span>
+      </div>
+      <div class="quiz-hint">💡 Sections combined: §5 + §6 + subtopic 23.1.</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">2</span>
+        <span class="qtext">You are designing authentication for a fleet of 50,000 field IoT sensors that report to an ingestion API over intermittent cellular connectivity — a device may be offline for hours and reconnect in bursts. Devices are physically accessible and occasionally stolen, and a stolen device must be cut off. Decide the token type, signing family, and lifetime, and justify each against the decision tree in §7. Then state, in the §8 delivery order, what you would say if an interviewer objected that short-lived tokens are impractical for devices that are frequently offline.</span>
+        <span class="quiz-toggle">▼ Hint</span>
+      </div>
+      <div class="quiz-hint">💡 Sections combined: §7 + §8, applied to a system not mentioned elsewhere in this doc.</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">3</span>
+        <span class="qtext">An interviewer asks you to design "sign out of all devices" for an existing JWT-based system with fifteen-minute access tokens and thirty-day refresh tokens. Walk through what happens to each token type when the user clicks it, name precisely which server-side state you are forced to reintroduce and where it is checked, and explain why §4's original motivation for adopting JWTs is partially — but only partially — undone by your answer.</span>
+        <span class="quiz-toggle">▼ Hint</span>
+      </div>
+      <div class="quiz-hint">💡 Sections combined: §4 + §6 + §7.</div>
+    </div>
+
+    <h3>Mastery criteria — tick only what you can demonstrate on demand</h3>
+    <ul class="checklist">
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can draw the three JWT segments from memory, name what's in each, and state exactly which bytes the signature covers</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can explain why base64url encoding is not encryption, and decide correctly what may and may not go in a payload</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can walk the full validation order — pin algorithm → resolve key → verify signature → <code>exp</code>/<code>nbf</code> → <code>iss</code>/<code>aud</code> → claims — and say what an attacker gains from skipping each one</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can explain the RS256→HS256 algorithm confusion attack end to end, including why the public key is what makes it work and why key rotation doesn't fix it</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can choose between HS256 and RS256/ES256 for a given topology and justify it as a decision about who may mint, not about cryptographic strength</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can design revocation for a JWT system and state precisely what server-side state it reintroduces and where it is checked</span></li>
+    </ul>
+
+    <div class="callout callout-tip">💡 <strong>Rule of thumb:</strong> If you can teach it to someone else and field their follow-up questions, you've mastered it.</div>
+  </section>
+
+  <!-- ══════════════════ §10 ══════════════════ -->
+  <section id="s10">
+    <h2 class="section-title"><span class="num">§10</span> 🔗 Connections &amp; Sources</h2>
+
+    <div class="connections">
+      <div class="conn-card">
+        <span class="conn-icon">⬅️</span>
+        <div><div class="conn-label">Builds on</div><strong>3.4 JWT as Stateless Session Token</strong>, which established <em>why</em> a self-contained token is worth having — this subtopic is the inside of the box 3.4 handed you sealed, and the revocation cost 3.4 named in the abstract becomes concrete here as <code>exp</code>, <code>jti</code> denylists, and refresh rotation. <strong>23.1 Authentication vs. Authorization</strong>, which supplies the rule that makes §6's gate chain land correctly: every validation gate failing is a <code>401</code> because no identity was established, while a claim failing a policy is a <code>403</code>. <strong>23.2 OAuth2</strong>, which is the flow that actually issues these tokens and defines the access/refresh/ID token distinction that §6's audience bug depends on.</div>
+      </div>
+      <div class="conn-card">
+        <span class="conn-icon">➡️</span>
+        <div><div class="conn-label">Enables</div><strong>23.4 RBAC — Roles, Permissions, Policy Enforcement Points</strong>, where the question of whether role claims belong in the token payload gets its full treatment — §5 and §7 here give you the staleness argument it builds on. <strong>23.6 TLS/SSL — Handshake, Certificates, mTLS</strong>, which supplies both the transport that keeps a bearer token from being read off the wire and the proof-of-possession mechanism (mTLS-bound tokens) that answers §6's "a bearer token can be used from two continents at once." <strong>23.7 Encryption at Rest</strong> and <strong>23.9 Secrets Management</strong>, which answer where the signing private key actually lives. <strong>11.7 API Gateway Patterns</strong>, the concrete place JWT validation is usually terminated in a real architecture.</div>
+      </div>
+      <div class="conn-card">
+        <span class="conn-icon">⚡</span>
+        <div><div class="conn-label">Tension with</div><strong>3.2 Session Management Approaches</strong> directly — the statefulness JWTs were adopted to eliminate is precisely the statefulness revocation requires back, and a <code>jti</code> denylist is a session store wearing a smaller hat. Also <strong>3.7 Horizontal Scaling of Stateless Tiers</strong>: the moment you add a per-request denylist lookup for instant revocation, the identity path stops being purely local again and reacquires a shared dependency — the same tension 23.1 flagged between JWT-embedded claims and live authorization lookups, now visible at the token layer instead of the policy layer.</div>
+      </div>
+    </div>
+
+    <h3>📚 Further reading</h3>
+    <ul class="reading-list">
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>RFC 8725 — JSON Web Token Best Current Practices</strong> — <a href="https://datatracker.ietf.org/doc/html/rfc8725">spec</a> — the single highest-yield document here; §3.1 ("Perform Algorithm Verification") is the formal statement of the pinning rule that defeats both <code>alg: none</code> and RS256→HS256 confusion</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>RFC 7519 — JSON Web Token</strong> — <a href="https://datatracker.ietf.org/doc/html/rfc7519">spec</a> — the format itself; read §4.1 on registered claims (<code>iss</code>, <code>sub</code>, <code>aud</code>, <code>exp</code>, <code>nbf</code>, <code>iat</code>, <code>jti</code>) and skip the rest</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>RFC 7515 — JSON Web Signature</strong> — <a href="https://datatracker.ietf.org/doc/html/rfc7515">spec</a> — the precise definition of the signing input (<code>base64url(header) + "." + base64url(payload)</code>) used in §6's anatomy diagram</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Auth0 — "Critical Vulnerabilities in JSON Web Token Libraries"</strong> — <a href="https://auth0.com/blog/critical-vulnerabilities-in-json-web-token-libraries/">blog</a> — the 2015 disclosure of <code>alg: none</code> and algorithm confusion, with concrete verifier code; read this before the RFC if you learn better from the attack than the rule</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>OWASP — JSON Web Token Cheat Sheet</strong> — <a href="https://cheatsheetseries.owasp.org/cheatsheets/JSON_Web_Token_for_Java_Cheat_Sheet.html">cheat sheet</a> — the practitioner checklist covering storage, revocation, and the token-theft cases from §6</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>jwt.io debugger</strong> — <a href="https://jwt.io">tool</a> — decode a real token from your own system and read its payload; do this once and "base64url is not encryption" stops being a fact you memorized</span></li>
+    </ul>
+  </section>
+
+  <!-- ══════════════════ §11 ══════════════════ -->
+  <section id="s11">
+    <h2 class="section-title"><span class="num">§11</span> ✍️ My Notes</h2>
+    <div class="callout callout-quote">Personal observations, model answers from drilling sessions, things that confused me. Saved locally in this browser.</div>
+    <textarea class="notes-area" placeholder="Your notes, model answers, and annotations…"></textarea>
+  </section>
+
+</article>
+</main>
+
+<script>
+// TOC active state
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('#toc nav a');
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(a => a.classList.remove('active'));
+      const a = document.querySelector(`#toc nav a[href="#${e.target.id}"]`);
+      if (a) a.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+sections.forEach(s => obs.observe(s));
+
+function toggle(cb) { cb.closest('li').classList.toggle('checked'); }
+function toggleReading(cb) { cb.closest('li').classList.toggle('checked'); }
+function toggleQuiz(q) {
+  const item = q.closest('.quiz-item');
+  item.classList.toggle('open');
+  q.querySelector('.quiz-toggle').textContent = item.classList.contains('open') ? '▲ Hide' : '▼ Hint';
+}
+
+// Notes auto-save
+const notesArea = document.querySelector('.notes-area');
+const NOTES_KEY = 'notes_23_3';
+if (localStorage.getItem(NOTES_KEY)) notesArea.value = localStorage.getItem(NOTES_KEY);
+notesArea.addEventListener('input', () => {
+  try { localStorage.setItem(NOTES_KEY, notesArea.value); } catch(e) {}
+});
+</script>
+</body>
+</html>

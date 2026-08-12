@@ -4,7 +4,7 @@
 > **Phase:** G — Security Branch
 > **Depth Tier:** 🥇 T1 (Core) — budget ~3h
 > **Prereqs:** 3.2 (Session Management Approaches), 3.4 (JWT as Stateless Session Token)
-> **Date studied:** 2026-08-10
+> **Date studied:** 2026-08-11
 
 ---
 
@@ -175,31 +175,46 @@ GOTCHA: Treating "the token is valid" as "the request is allowed." A
 > *The picture to hold in your head while you study. Everything below hangs off this.*
 
 ```
-                          ┌───────────────────────────────────┐
-                          │   AUTHENTICATION vs. AUTHORIZATION  │
-                          │  "who are you?" vs. "what can you   │
-                          │   do?" — two separate questions"    │
-                          └──────────────────┬───────────────────┘
-                                             │
-   ┌────────────────┬────────────────────────┼────────────────────┬────────────────┐
-   ▼                ▼                        ▼                    ▼                ▼
-AUTHENTICATION   AUTHORIZATION          ENFORCEMENT          FAILURE MODES     REAL SYSTEMS
-├ proves who     ├ decides what           POINTS            ├ IDOR / BOLA —   ├ Zanzibar —
-│  you are       │  you can do          ├ edge / gateway —    valid token,      Google's
-├ mechanisms:    ├ inputs: subject +      coarse-grained      wrong resource     ReBAC model
-│  session (3.2),│  action + resource    ├ service / resource ├ stale JWT       ├ AWS IAM —
-│  JWT (3.4),    ├ models: RBAC, ABAC,     level —              claims —          explicit
-│  OAuth token    │  ReBAC/ACL              fine-grained        revoked but       Deny beats
-├ once per        └ re-evaluated every   ├ defense in depth —   still valid       Allow
-│  request        request, never          check at MULTIPLE   ├ trusting the    ├ GitHub —
-└ fails → 401      cached                  layers                gateway blindly   role + scoped
-                                          └ never skip the      → confused         PAT hybrid
-                                            resource-level        deputy         ├ OPA — central
-                                            check               └ 401 vs 403       policy engine
-                                                                   confusion        sidecar
+                    ┌─────────────────────────────────────────┐
+                    │    Does this request get to proceed?     │
+                    └────────────────────┬──────────────────────┘
+                                         │
+                 ┌────────────────────────┴────────────────────────┐
+                 ▼                                                 ▼
+   ┌───────────────────────────────┐   runs    ┌───────────────────────────────┐
+   │     🔑 AUTHENTICATION           │   FIRST   │     🔒 AUTHORIZATION            │
+   │     "who are you?"              │ ────────▶ │     "what can you do?"          │
+   ├───────────────────────────────┤           ├───────────────────────────────┤
+   │ MECHANISM                       │           │ MECHANISM                       │
+   │  session (3.2) · JWT (3.4) ·    │           │  RBAC · ABAC · ReBAC             │
+   │  OAuth token (23.2)             │           │  (Zanzibar-style)                │
+   ├───────────────────────────────┤           ├───────────────────────────────┤
+   │ WHERE ENFORCED                  │           │ WHERE ENFORCED                  │
+   │  ONCE — near the edge           │           │  EVERY layer — gateway          │
+   │  (gateway / middleware)         │           │  (coarse) + resource (fine)     │
+   ├───────────────────────────────┤           ├───────────────────────────────┤
+   │ OUTPUT                          │           │ OUTPUT                          │
+   │  verified identity attached     │           │  allow/deny for (identity,      │
+   │  to request context             │           │  action, resource)              │
+   ├───────────────────────────────┤           ├───────────────────────────────┤
+   │ FAILS →  401 Unauthorized       │           │ FAILS →  403 Forbidden          │
+   ├───────────────────────────────┤           ├───────────────────────────────┤
+   │ ⚠ real systems: Auth0, Okta     │           │ ⚠ real systems: Zanzibar,       │
+   │ ⚠ risk: stolen long-lived       │           │   AWS IAM, OPA, GitHub          │
+   │   tokens replay as the          │           │ ⚠ risk: IDOR/BOLA (OWASP #1),   │
+   │   original identity             │           │   stale JWT permission claims   │
+   └────────────────┬────────────────┘           └────────────────┬────────────────┘
+                    │                                             │
+                    └──────────────────────┬──────────────────────┘
+                                           ▼
+                    ┌─────────────────────────────────────────────┐
+                    │  REQUEST ALLOWED only if BOTH gates pass,    │
+                    │  in order: authenticate → authorize          │
+                    │  (401 if gate 1 fails · 403 if gate 2 fails) │
+                    └─────────────────────────────────────────────┘
 ```
 
-**How to read it:** **authentication** and **authorization** are the two top branches because they are genuinely independent facts about a request — one can succeed while the other fails, and the rest of the map exists to keep that independence intact. **Enforcement points** is where the map gets architectural: it names *where* each check actually runs, and insists authorization is re-checked at every layer, not inherited from the edge. **Failure modes** is the catalog of what goes wrong specifically when that discipline slips — most of them trace back to skipping a layer or trusting stale state. **Real systems** is where production access-control models (RBAC, ABAC, ReBAC, centralized policy engines) get checked against how big companies actually built this.
+**How to read it:** the two columns are parallel tracks answering different questions, not independent unordered facts — authentication runs first, and its output (a verified identity) is exactly what authorization consumes, so the arrow between the columns encodes a real dependency, not just a comparison. Each track carries the same four dimensions — mechanism, where enforced, output, failure code — so you can read straight across a row and see precisely where the two diverge (once vs. every layer, 401 vs. 403). The footnote rows attach real systems and failure modes to the side of the comparison they actually belong to, rather than floating as unrelated branches. The convergence at the bottom is the actual rule this whole subtopic teaches: a request is allowed only if both gates pass, in that order.
 
 ---
 
@@ -242,6 +257,41 @@ The instinctive first fix is to sprinkle permission checks wherever someone noti
 1. A teammate says: "Our gateway already validates the JWT on every request — isn't that enough access control?" Explain precisely what question the gateway's check answers and what question it leaves completely unanswered, using a concrete example of a request that would pass the gateway's check but should still be rejected.
 
    > 💡 *If you hesitate, re-read the second paragraph — the part distinguishing "does this request carry a valid token" from "does this resource belong to this identity."*
+
+MODEL ANSWER — §4 Checkpoint (gateway JWT question, closing out both examples)
+
+WHAT THE GATEWAY'S CHECK ANSWERS
+  Authentication only — it verifies the JWT's signature and confirms
+  the request carries a valid, unexpired token issued to a known
+  identity. That's it. It proves "this request comes from user X."
+
+WHAT IT LEAVES UNANSWERED
+  Authorization — whether user X is allowed to perform THIS action
+  on THIS resource. The gateway doesn't know what resource is being
+  targeted or the caller's role/ownership relationship to it; it only
+  knows the token is valid.
+
+CONCRETE EXAMPLE — AUTHORIZATION FAILS, AUTHENTICATION PASSES
+  A logged-in social media user has a valid JWT (user 123). They send
+  PUT /users/456/profile to edit someone else's profile. The gateway
+  validates the token — passes. The service must separately check:
+  does the identity in the token match the resource being edited?
+  It doesn't, so this is rejected with 403, even though the gateway's
+  check passed cleanly.
+
+CONCRETE EXAMPLE — AUTHENTICATION FAILS (never reaches authorization)
+  The same user's JWT has expired, or the request carries no
+  Authorization header at all. The gateway's signature/expiry check
+  fails immediately — 401, before any identity is established.
+  Authorization is never evaluated, because there's no identity yet
+  to evaluate it against.
+
+WHY THIS MATTERS
+  These are two independent, separately-testable failure paths — one
+  can fail while the other would have passed. An expired token editing
+  THEIR OWN profile still gets 401 — authorization never got a chance
+  to say yes. A valid token editing SOMEONE ELSE'S profile gets 403 —
+  authentication already said yes, and it didn't matter.
 
 > **→ Next:** If the fix is two separate checks, what exactly does each one consist of, and how do they build on each other?
 
@@ -288,9 +338,60 @@ None of the above matters if it only runs once, at the edge, and every downstrea
 
    > 💡 *If you hesitate, re-read "Authentication Establishes Identity" and "Enforcement Must Happen at Every Layer" — the answer is about what information each check depends on and whether that information is available at the edge.*
 
+MODEL ANSWER — §5 Checkpoint 1 (why authenticate once, authorize every layer)
+
+WHAT'S INVARIANT vs. WHAT ISN'T
+  Authentication's output — a verified identity — doesn't change as a
+  request travels deeper into the system. The same subject is the
+  same subject at the gateway, in the service, and at the resource
+  layer. Nothing about moving deeper changes who the requester is,
+  so verifying it once is sufficient — there's no new information
+  further down that would change the answer.
+
+  Authorization's inputs (action + resource) are NOT invariant. A
+  gateway only sees a route; it has no idea which specific document,
+  order, or account is being targeted, or what precisely will be
+  done to it. Only the layer that actually owns the resource has
+  that information. So the SAME identity has to be re-evaluated
+  against a DIFFERENT (action, resource) pair at each layer that
+  adds resource-specific context the earlier layer didn't have.
+
+ONE-LINE VERSION
+  Authenticate once because identity is a fact about the requester.
+  Authorize repeatedly because permission is a fact about the
+  requester PLUS a specific action PLUS a specific resource — and
+  only the deepest layer knows the resource.
+
 2. A teammate proposes hardcoding `if user.role == 'admin'` checks directly inside each service's business logic instead of using RBAC role definitions or a policy engine. Using the build chain, explain what's being traded, and say whether this is ever a legitimate choice.
 
    > 💡 *If you hesitate, trace from AUTHORIZATION EVALUATES POLICY through ENFORCEMENT MUST HAPPEN AT EVERY LAYER — the answer is about consistency and auditability versus simplicity for a small, stable permission set.*
+
+MODEL ANSWER — §5 Checkpoint 2 (hardcoded admin check — legitimate?)
+
+WHEN IT'S FINE
+  Exactly when the role IS the full permission, with no exceptions —
+  "admin can do literally everything, on every resource, with no
+  restriction ever." At that point the check has degenerated into a
+  pure identity check with no action/resource dependency, so a
+  centralized RBAC table or policy engine would just always answer
+  "yes" anyway — there's no real decision being encoded, so nothing
+  is lost by skipping the infrastructure for it.
+
+WHEN IT BREAKS
+  The moment ANY restriction needs to exist — "admin can do
+  everything EXCEPT delete another tenant's billing records," say —
+  the hardcoded check has no way to express the exception without
+  scattering a new conditional at every place that exception applies.
+  This reintroduces exactly the problem §4 already diagnosed: checks
+  spread across the codebase with no single place to audit "what can
+  this role actually do."
+
+THE TRADE, PRECISELY
+  Hardcoding buys simplicity (no policy table, no lookup) at the
+  cost of expressiveness — it can only encode "yes, unconditionally"
+  or "no, unconditionally" per role. Any conditional permission
+  requires moving to RBAC (or further, ABAC/ReBAC) specifically
+  because that's what buys you the ability to say "yes, except."
 
 > **→ Next:** You know the two mechanisms. What actually happens, request by request, once you sit down to enforce them?
 
@@ -367,9 +468,53 @@ CLIENT                EDGE / GATEWAY              SERVICE                RESOURC
 
    > 💡 *If you hesitate, re-read "Stale permissions in a long-lived JWT" and trace which of the two checks (authentication vs. authorization) actually depends on current server-side state.*
 
+MODEL ANSWER — §6 Checkpoint 1 (revoked role, unexpired JWT)
+
+VERDICT
+  The request succeeds. The revocation has zero effect until the
+  token expires.
+
+WHAT'S CHECKED AT EACH STEP
+  Every layer that evaluates this request — endpoint-level and
+  resource-level alike — reads the SAME source: the role claim
+  baked into the JWT's payload at issuance. None of them queries a
+  live, current record of the user's actual role.
+
+WHY THE REVOCATION DOESN'T MATTER
+  Revoking the role server-side changes a database row. It does not
+  touch the token's signature or its payload — the token is a
+  self-contained, already-signed artifact. Since nothing in this
+  design re-derives authorization from current state, the token's
+  frozen-at-issuance claim keeps winning at every layer, all the way
+  to expiry.
+
+
 2. A service behind the gateway receives a request directly from another internal service, bypassing the gateway entirely (a legitimate internal call, not an attack). Explain precisely what breaks if that service has no authorization check of its own and was relying entirely on the gateway having already checked it.
 
    > 💡 *If you hesitate, re-read "Trusting the gateway as the only enforcement point" and the enforcement-points diagram — think about what happens to a request that never passes through the box performing the check.*
+
+MODEL ANSWER — §6 Checkpoint 2 (gateway-bypassing internal call)
+
+WHAT'S ACTUALLY MISSING
+  Not a weaker check — no check at all. If the service assumes the
+  gateway already handled authorization and never verifies anything
+  itself, then a request that arrives without passing through the
+  gateway is evaluated against nothing.
+
+WHY THIS BREAKS EVEN FOR A "LEGITIMATE" CALLER
+  A caller with genuinely narrow permissions is only ever restricted
+  BY a check. Remove the check, and narrow permissions become
+  meaningless — that caller now has the same unconditional access as
+  anyone else who can reach the endpoint over the network, because
+  there is nothing left to distinguish "allowed" from "not allowed."
+
+THE GENERAL LESSON
+  Centralizing authentication at the gateway is safe because identity
+  doesn't change downstream (§5). Centralizing authorization at the
+  gateway is NOT safe, because any path that bypasses that single
+  enforcement point — compromised service, debug tool, internal
+  service-to-service call — inherits zero protection, not degraded
+  protection.
 
 > **→ Next:** You can design and enforce both checks correctly. In a live design, which policy model do you actually pick, and what does each one cost?
 
@@ -435,6 +580,25 @@ The default for any system with more than one role or more than one resource own
 1. You're designing permissions for a multi-tenant project-management SaaS: each company (tenant) has its own workspace, users have roles (admin/member/viewer) within their own workspace, and a document can additionally be shared with specific individuals outside the normal role hierarchy. Using the decision tree above, name which policy model(s) you'd combine, and justify against the specific cost each one adds.
 
    > 💡 *If you hesitate, re-read the second and third boundary conditions — tenant/ownership scoping needs one model, individual sharing on top of a role hierarchy needs another; they aren't mutually exclusive.*
+
+MODEL ANSWER — §7 Checkpoint (multi-tenant SaaS policy model)
+
+RBAC — for the workspace role hierarchy
+  admin/member/viewer within a tenant maps cleanly to a fixed role
+  set. Simple, auditable, no per-resource lookup needed.
+
+ABAC/ReBAC — for the cross-hierarchy document share
+  "Shared with this specific individual" depends on the relationship
+  between THIS document and THIS person, not on their role — no
+  fixed role can express it. This is literally Zanzibar's use case:
+  doc:123#viewer@bob, evaluated independently of workspace role.
+
+THE COMBINED COST
+  Not just "manage two policy tables" — RBAC's cost is now paired
+  with standing up a second evaluation path (a relationship/attribute
+  store plus the query logic to check it) alongside the RBAC lookup,
+  and every access decision may now need to consult BOTH before
+  answering allow/deny.
 
 > **→ Next:** Can you defend this under interview pressure — and hold up when the interviewer pushes on the cost you claimed you'd pay?
 
