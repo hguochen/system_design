@@ -251,6 +251,25 @@ Making it worse: the multiplication factor isn't even a stable, predictable N. R
 
    > 💡 *If you hesitate, re-read the "multiplication bug, made concrete" example and the paragraph before it about the enforced limit depending on load-balancing behavior.*
 
+Defining "correct" at the instance level is a scoping error: each instance
+only has visibility into requests it personally received, so "I'm at
+100/100" is a true statement about that instance's local view, but it says
+nothing about the client's actual total request rate across all 10
+instances. With no instance aware of what the other nine have admitted,
+the system has no representation of the client's true aggregate rate
+anywhere — the "limit" only exists per-instance, not globally.
+
+This is why the load balancer, not the algorithm, ends up determining the
+real enforced limit. The algorithm is correct in isolation — each bucket
+correctly enforces its own 100/min. But how much total throughput a
+client gets past all 10 buckets combined depends entirely on how the load
+balancer happens to spread that client's requests: perfectly even
+routing produces the largest violation (up to 1,000/min admitted), while
+skewed routing onto fewer instances produces a smaller — but still
+uncontrolled — violation. Nothing about the rate-limiting algorithm
+changed in either case; only the routing pattern did. That's the tell
+that "correct" was defined at the wrong scope.
+
 > **→ Next:** If the fix is centralizing state in Redis, what exactly does that design look like, and what does it cost that local state never had to pay?
 
 ---
@@ -303,9 +322,60 @@ Even a fully correct, atomic, sharded design pays one unavoidable cost that loca
 
    > 💡 *If you hesitate, re-read "Atomicity Across the Network" — the sentence about the race being between however many instances happen to call Redis in the same few milliseconds.*
 
+Pointing every instance at the same Redis key removes the "each instance
+has its own independent 100-request budget" problem — there's now only
+one true count, and every instance is reading and writing against it.
+But if the check ("is there room?") and the write ("deduct one") are two
+separate round trips instead of one atomic step, a race window opens:
+two (or more) instances can both read the count before either one writes
+its deduction, both see "under the limit," and both proceed to admit —
+one unit of remaining capacity ends up admitting more than one request.
+
+This is why it only shrinks the bug rather than fixing it. §4's
+multiplication was bounded by N — 10 instances, each holding a full,
+independent 100-request local budget, for up to 1,000 admitted. The
+non-atomic shared-Redis version has no such per-instance budget anymore;
+the only thing that can over-admit is however many requests happen to
+race inside the brief network-round-trip window between one instance's
+read and its write. That window is milliseconds wide, so the possible
+over-admission is bounded by concurrent request volume during that
+narrow gap — a handful of extra admissions, not a full second copy of
+the limit per instance. Making the check-and-deduct one atomic Lua
+script closes that window entirely, because Redis executes it as a
+single indivisible step no other client's command can interleave with.
+
 2. Trace the link from "Sharding for Aggregate Throughput" into "The Failure Policy": both respond to Redis becoming a shared, load-bearing dependency, but they respond to different failure shapes. Name precisely which failure shape each concept addresses, and explain why solving one does nothing for the other.
 
    > 💡 *If you hesitate, re-read the closing sentences of both concept blocks — one names a throughput ceiling, the other names unreachability.*
+
+Sharding for Aggregate Throughput and The Failure Policy respond to two
+genuinely different failure shapes, and fixing one does nothing for the
+other because they sit on independent axes.
+
+Sharding addresses a THROUGHPUT CEILING: as aggregate check volume from
+every instance and every client grows, one Redis node's capacity to
+handle requests per second becomes the bottleneck. Spreading rate-limit
+keys across a Redis Cluster's hash slots spreads that request load
+across multiple nodes, raising the ceiling on total volume the system
+can check per second. This says nothing about availability — a sharded
+cluster is just as capable of becoming unreachable as a single node is
+(a network partition, a node crash, a shard's primary failing before a
+replica is promoted). More shards means more capacity while Redis is
+healthy; it does not mean Redis is less likely to become unreachable.
+
+The Failure Policy addresses UNREACHABILITY: what every instance should
+do the moment it cannot reach Redis at all, regardless of how many nodes
+exist or how much spare capacity they had. Fail-open and fail-closed are
+both answers to "Redis is gone right now" — they add no request-handling
+capacity, because they only ever activate once the throughput question
+is already moot (there's no check happening at all).
+
+So a system can be perfectly sharded and still go fully unreachable
+(sharding solved a capacity problem it never had an availability
+problem to begin with), and a system can have a perfect fail-open/
+fail-closed policy and still buckle under load the moment Redis is
+healthy but overwhelmed (the policy only fires on unreachability, not
+on being slow-but-up). Neither concept substitutes for the other.
 
 > **→ Next:** You know the shape of the design. What actually happens, step by step, on a real request — and what specifically breaks when it's distributed rather than local?
 
@@ -377,9 +447,57 @@ Even a fully correct, atomic, sharded design pays one unavoidable cost that loca
 
    > 💡 *If you hesitate, re-read "Atomicity Across the Network" in §5 and step 3–4 of the happy path — the single-threaded, one-script guarantee.*
 
+Two instances race like this: Instance A sends GET on the client's key
+and gets back count = limit - 1 (one under the limit). Before A's SET
+lands, Instance B — handling a different request from the same client
+at nearly the same moment — also sends GET and also gets count =
+limit - 1, because A's write hasn't happened yet. Both instances now
+independently evaluate "count < limit" as true, and both proceed:
+A performs its SET, incrementing the count and admitting its request;
+B performs its SET, also incrementing the count and admitting its
+request. Two requests get admitted against what was only one unit of
+remaining headroom — the client is over-admitted by exactly the width
+of that GET-to-SET gap, for however many instances raced into it.
+
+The fix is to make the read (GET-equivalent), the comparison, and the
+write (SET-equivalent) one atomic step — a Redis Lua script run via
+EVAL/EVALSHA. Because Redis executes scripts single-threaded, only one
+instance's script can run at a time on that key: whichever script runs
+first reads the true current count, decides admit, and writes the
+increment, all before the second instance's script is allowed to even
+begin. The second instance's script then reads the already-updated
+count, correctly sees the limit is reached, and returns reject. The
+three separate round trips (GET / compare / SET) collapse into one
+indivisible operation, closing the window entirely rather than just
+narrowing it.
+
 2. Using the primary-failover edge case above, explain why a Redis Cluster or Sentinel setup providing high availability for the *infrastructure* does not, by itself, guarantee the rate limit was never briefly over-admitted during a failover — and name what kind of error this produces (over-admission or under-admission), and why.
 
    > 💡 *If you hesitate, re-read "A primary failover can briefly lose very recent writes."*
+
+Redis Cluster and Sentinel give you HA at the infrastructure layer — if
+the primary dies, a replica gets promoted automatically, so the rate
+limiter doesn't stay fully down. But that promotion doesn't guarantee
+the promoted replica's data is identical to what the primary had at the
+instant it failed, because Redis replication is asynchronous: the
+primary acknowledges writes to clients before confirming the replica
+has received them. Any writes that hadn't yet propagated to the replica
+at the moment of failure are simply gone — the promoted node starts
+serving traffic from a count that's stale by whatever that replication
+lag was.
+
+Because the promoted replica treats its own (lower, stale) count as
+ground truth and keeps applying the same check-and-deduct logic against
+it, it will keep admitting requests for a window after the real,
+pre-failure count had already reached the configured limit — the system
+believes there's still headroom that, in reality, was already consumed
+before the failover. This is an over-admission error, not
+under-admission: the gap in the data makes the system think a client
+has sent fewer requests than it actually has, so it lets more through
+than the limit intends. The failure mode has the same shape as 25.4's
+sliding window counter systematically under-counting a burst, except
+here the imprecision is injected by infrastructure failover timing
+rather than by the algorithm's own design.
 
 > **→ Next:** You can run this correctly end to end. In a real design, which choices do you actually make — fail-open or closed, sharded or not, synchronous or leased — and what does each one cost?
 
@@ -461,8 +579,33 @@ The baseline design — one shared Redis, atomic Lua-script checks, every instan
 1. A ride-hailing company's surge-pricing service needs to cap fare-calculation requests at 500/second globally, across app instances deployed in 3 regions, and product wants the cap to be as close to exact as reasonably possible without adding hundreds of milliseconds of latency to every request. Using the decision tree and the cross-region latency diagram, propose a design, and explain specifically what you'd give up compared to a single global Redis, and why that trade is the right one for the stated latency requirement.
 
    > 💡 *If you hesitate, re-read the "cross-region latency" diagram and the third boundary condition (aggregate throughput / per-region split).*
-
+With a separate region 
 > **→ Next:** Can you deliver this cleanly under interview pressure, including when the interviewer pushes on the Redis-outage question specifically?
+
+Design: split the global 500/sec into a fixed slice per region — roughly
+500/3 ≈ 166–167/sec each — enforced by a region-local Redis, with no
+cross-region round trip on any check. This avoids the hundreds-of-
+milliseconds latency tax a single global Redis would impose on the two
+non-local regions for every single request, which directly satisfies
+product's latency constraint.
+
+What I give up compared to a single global Redis: global exactness.
+With a fixed per-region slice, each region's Redis has no visibility
+into the other regions' traffic, so the split is static rather than
+responsive to real demand. If traffic isn't evenly spread — say region 1
+gets disproportionately more fare-calculation load than regions 2 and 3
+— region 1 will start rejecting requests once it hits its 166/sec slice,
+even though the true global total across all three regions could still
+be well under 500/sec, because regions 2 and 3's unused headroom can't
+be borrowed. The system behaves conservatively-correct (never exceeds
+500/sec globally) but not exactly-correct (it can under-utilize the
+configured limit and reject legitimate traffic it didn't need to).
+
+That's the right trade for this requirement specifically because product
+explicitly prioritized latency over exactness ("as close to exact as
+reasonably possible, without adding hundreds of ms") — a single global
+Redis would guarantee exactness but violate the latency constraint on
+every non-local-region request, which is the one hard constraint stated.
 
 ---
 
