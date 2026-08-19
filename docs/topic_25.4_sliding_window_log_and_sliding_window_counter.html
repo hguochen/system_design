@@ -1,0 +1,1122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>25.4 Sliding Window Log and Sliding Window Counter</title>
+<style>
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface-alt: #f3f2ef;
+    --border: #e5e3de; --text: #1a1917; --text-muted: #6b6861;
+    --accent: #2563eb; --accent-light: #dbeafe;
+    --green: #16a34a; --green-light: #dcfce7;
+    --red: #dc2626; --red-light: #fee2e2;
+    --yellow: #d97706; --yellow-light: #fef3c7;
+    --purple: #7c3aed; --purple-light: #ede9fe;
+    --orange: #ea580c; --orange-light: #ffedd5;
+    --teal: #0d9488; --teal-light: #ccfbf1;
+    --code-bg: #1e1e2e; --code-text: #cdd6f4;
+    --sidebar-w: 240px; --content-max: 820px;
+    font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; }
+  #toc { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0 48px; z-index: 100; }
+  #toc-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  #toc-header .phase-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-bottom: 6px; }
+  #toc-header h2 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  #toc-header .tier-tag { font-size: 10px; font-weight: 800; letter-spacing: .06em; color: var(--yellow); background: var(--yellow-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-top: 8px; }
+  #toc nav a { display: block; padding: 5px 16px 5px 20px; font-size: 12.5px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+  main { margin-left: var(--sidebar-w); padding: 48px 48px 96px; max-width: calc(var(--sidebar-w) + var(--content-max) + 96px); width: 100%; }
+  article { max-width: var(--content-max); }
+  .doc-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 2px solid var(--border); }
+  .doc-header .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+  .tag-phase { background: var(--accent-light); color: var(--accent); }
+  .tag-topic { background: var(--purple-light); color: var(--purple); }
+  .tag-tier  { background: var(--yellow-light); color: var(--yellow); }
+  .tag-prereq{ background: var(--teal-light); color: var(--teal); }
+  .tag-date  { background: var(--surface-alt);  color: var(--text-muted); }
+  .doc-header h1 { font-size: 30px; font-weight: 800; line-height: 1.25; letter-spacing: -.02em; color: var(--text); }
+  section { margin-bottom: 52px; scroll-margin-top: 32px; }
+  h2.section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -.01em; }
+  h2.section-title .num { font-size: 11px; font-weight: 800; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; letter-spacing: .04em; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 24px 0 10px; }
+  h4 { font-size: 13.5px; font-weight: 700; color: var(--text); margin: 18px 0 8px; }
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+  code { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-family: "SF Mono","Fira Code",Menlo,monospace; font-size: 12.5px; }
+  ul.plain { margin: 0 0 14px 20px; }
+  ul.plain li { margin-bottom: 7px; font-size: 14.5px; line-height: 1.6; }
+  ol.steps { margin: 0 0 14px 22px; }
+  ol.steps li { margin-bottom: 8px; font-size: 14.5px; line-height: 1.6; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 14px; border-left: 3px solid; }
+  .callout-goal  { background: var(--accent-light); border-color: var(--accent); color: #1e40af; }
+  .callout-tip   { background: var(--yellow-light); border-color: var(--yellow); color: #92400e; }
+  .callout-warn  { background: var(--red-light); border-color: var(--red); color: #7f1d1d; }
+  .callout-quote { background: var(--surface-alt); border-color: var(--border); color: var(--text-muted); font-style: italic; }
+  .callout-teal  { background: var(--teal-light); border-color: var(--teal); color: #134e4a; }
+  .the-question { background: var(--surface); border: 2px solid var(--accent); border-radius: 12px; padding: 16px 20px; margin-top: 18px; font-size: 15.5px; }
+  .the-question .lbl { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); display: block; margin-bottom: 5px; }
+  .the-question em { color: var(--text); font-weight: 600; }
+  .definition { background: var(--purple-light); border-left: 4px solid var(--purple); border-radius: 8px; padding: 16px 20px; margin: 18px 0 24px; font-size: 15px; font-weight: 600; color: #4c1d95; line-height: 1.6; }
+  .mental-model { background: var(--teal-light); border-left: 3px solid var(--teal); border-radius: 8px; padding: 14px 18px; margin: 18px 0; font-size: 14px; color: #134e4a; }
+  .mental-model .mm-name { font-weight: 800; }
+  .mental-model .mm-break { display: block; margin-top: 7px; font-style: italic; opacity: .85; }
+  .bridge { background: linear-gradient(90deg, var(--accent-light), transparent); border-left: 4px solid var(--accent); border-radius: 8px; padding: 13px 18px; margin-top: 28px; font-size: 14.5px; color: #1e40af; font-weight: 600; }
+  .bridge .arrow { font-weight: 800; margin-right: 6px; }
+  .checkpoint { background: var(--surface); border: 2px solid var(--green); border-radius: 12px; padding: 16px 20px; margin-top: 26px; }
+  .checkpoint > .cp-title { font-size: 12px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--green); margin-bottom: 12px; display: flex; align-items: center; gap: 7px; }
+  .cheatsheet { background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 24px 28px; font-family: "SF Mono","Fira Code","Cascadia Code",Menlo,monospace; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-x: auto; margin-top: 16px; }
+  .cheatsheet .label { color: #cba6f7; font-weight: 700; letter-spacing: .08em; display: block; margin-top: 18px; margin-bottom: 4px; border-bottom: 1px solid #313244; padding-bottom: 3px; }
+  .cheatsheet .label:first-child { margin-top: 0; }
+  .diagram-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 16px 14px; margin: 20px 0 28px; overflow-x: auto; }
+  .diagram-wrap .diagram-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); margin-bottom: 12px; }
+  .diagram-wrap svg { display: block; width: 100%; height: auto; }
+  .diagram-wrap p.caption { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 10px; margin-bottom: 0; font-style: italic; }
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; font-size: 14.5px; line-height: 1.55; }
+  .checklist li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 2px; background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .checklist li.checked .cb { background: var(--green); border-color: var(--green); }
+  .checklist li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .checklist li.checked .text { color: var(--text-muted); text-decoration: line-through; }
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: var(--surface-alt); padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.5; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+  .misconception { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .misconception .wrong { background: var(--red-light); padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; }
+  .misconception .right { padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; color: #065f46; background: var(--green-light); }
+  .misconception .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .quiz-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .quiz-q { padding: 14px 18px; font-size: 14.5px; font-weight: 600; cursor: pointer; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .quiz-q:hover { background: var(--surface-alt); }
+  .quiz-num { flex-shrink: 0; width: 24px; height: 24px; background: var(--accent); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; margin-top: 1px; }
+  .quiz-q .qtext { flex: 1; font-weight: 500; }
+  .quiz-toggle { font-size: 11px; color: var(--text-muted); flex-shrink: 0; margin-top: 3px; }
+  .quiz-hint { display: none; padding: 10px 18px 14px; font-size: 13px; color: #92400e; background: var(--yellow-light); border-top: 1px solid var(--border); line-height: 1.6; }
+  .quiz-item.open .quiz-hint { display: block; }
+  .reading-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .reading-list li { display: flex; align-items: flex-start; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; font-size: 14px; }
+  .reading-list li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 1px; cursor: pointer; background: var(--surface); display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .reading-list li.checked .cb { background: var(--green); border-color: var(--green); }
+  .reading-list li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .reading-list li.checked .rtext { color: var(--text-muted); text-decoration: line-through; }
+  .notes-area { width: 100%; min-height: 200px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: inherit; font-size: 14px; color: var(--text); resize: vertical; line-height: 1.6; }
+  .notes-area:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .connections { display: flex; flex-direction: column; gap: 12px; }
+  .conn-card { display: flex; align-items: flex-start; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14px; }
+  .conn-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .conn-label { font-weight: 700; margin-bottom: 3px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .tradeoff-box { background: var(--surface-alt); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 16px 20px; font-size: 14.5px; font-style: italic; color: var(--text); margin-top: 14px; line-height: 1.65; }
+  .trigger-list { list-style: none; display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+  .trigger-list li { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--orange); border-radius: 8px; padding: 10px 16px; font-size: 14px; font-style: italic; color: var(--text); }
+  .flow-table { width: 100%; border-collapse: collapse; margin: 14px 0 18px; font-size: 14px; }
+  .flow-table th { background: var(--surface-alt); padding: 9px 14px; text-align: left; font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--accent); border-bottom: 2px solid var(--border); width: 190px; }
+  .flow-table td { padding: 10px 14px; border-bottom: 1px solid var(--border); line-height: 1.55; }
+  .flow-table tr:last-child td, .flow-table tr:last-child th { border-bottom: none; }
+  @media (max-width: 900px) { #toc { display: none; } main { margin-left: 0; padding: 24px 20px 60px; } }
+</style>
+</head>
+<body>
+
+<aside id="toc">
+  <div id="toc-header">
+    <span class="phase-tag">Phase H · Topic 25</span>
+    <h2>25.4 Sliding Window Log &amp; Counter</h2>
+    <span class="tier-tag">🥇 T1 · ~3h</span>
+  </div>
+  <nav>
+    <a href="#s0">🧭 The Question</a>
+    <a href="#s1">🎯 Quick Reference</a>
+    <a href="#s2">📋 Cheatsheet</a>
+    <a href="#s3">🧠 The Mindmap</a>
+    <a href="#s4">🔥 The Problem</a>
+    <a href="#s5">💡 The Core Idea</a>
+    <a href="#s6">⚙️ How It Works</a>
+    <a href="#s7">⚖️ The Decision</a>
+    <a href="#s8">🎯 In the Interview</a>
+    <a href="#s9">🧪 Mastery Gate</a>
+    <a href="#s10">🔗 Connections</a>
+    <a href="#s11">✍️ My Notes</a>
+  </nav>
+</aside>
+
+<main>
+<article>
+
+  <header class="doc-header">
+    <div class="meta">
+      <span class="tag tag-phase">Phase H — System Archetypes</span>
+      <span class="tag tag-topic">Topic 25 — Rate Limiting Systems</span>
+      <span class="tag tag-tier">🥇 T1 Core · ~3h</span>
+      <span class="tag tag-prereq">Prereqs: 25.1</span>
+      <span class="tag tag-date">Studied 2026-08-18</span>
+    </div>
+    <h1>25.4 Sliding Window Log and Sliding Window Counter</h1>
+  </header>
+
+  <!-- ══════════════════ §0 ══════════════════ -->
+  <section id="s0">
+    <h2 class="section-title"><span class="num">§0</span> 🧭 The Question This Answers</h2>
+
+    <p>25.1 fixed one half of the fixed-window problem and left the other half standing. Token bucket eliminates the boundary bug — there's no reset clock to double up around — but it does that by tracking an <em>aggregate</em> budget (how many tokens are banked), not a per-timestamp count. It can tell you "is there room right now," but it can never answer "exactly how many requests happened in the last 60 seconds," because it never recorded when any individual request occurred. Most of the time that's fine. Some of the time — a contractual quota, a billing boundary, an audit requirement — it isn't, and "close enough" is not an acceptable answer.</p>
+
+    <p>The tension this subtopic resolves is the same one every rate limiter in this topic keeps running into, now sharpened: how do you get a rolling-window guarantee — "no more than N requests in <em>any</em> W-second span, not just calendar-aligned ones" — and how exact does that guarantee actually need to be, given that exactness has a real memory cost attached to it. The naive fix — record every request's timestamp and count how many are still recent enough to matter — is exact by construction and has zero boundary bug, but its memory grows with how much traffic a client sends, forever, for as long as that client keeps sending traffic. The sliding window counter is the answer to "can I keep the no-boundary guarantee and give back the O(1) memory," at the cost of turning an exact count into a good estimate.</p>
+
+    <div class="the-question">
+      <span class="lbl">The question</span>
+      <em>How do you enforce a rolling-window rate limit that has no reset boundary, and how do you choose between paying for exact precision and paying for constant memory?</em>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> Before either algorithm, what exactly is still broken after token bucket — and what does the most obvious fix cost you?</div>
+  </section>
+
+  <!-- ══════════════════ §1 ══════════════════ -->
+  <section id="s1">
+    <h2 class="section-title"><span class="num">§1</span> 🎯 Interview Quick Reference Card</h2>
+    <div class="callout callout-quote">Not a summary — a live-recall tool, built for retrieval speed under interview pressure. If you need the reasoning behind anything here, that's what §2 (cheatsheet) and the rest of the doc are for.</div>
+
+    <h3>The checklist — walk this on the whiteboard, in order</h3>
+    <ol class="steps">
+      <li>Name why fixed window still isn't enough: the boundary bug — a client can send a full quota at the end of one window and again at the start of the next</li>
+      <li>Name the fix at the definitional level: the window is <code>[now - W, now]</code>, recomputed on <strong>every</strong> request — there's no clock tick to reset on, so there's no boundary to exploit</li>
+      <li>Name the two variants and the axis they trade on: <strong>sliding window log</strong> (exact count, memory grows with request volume) vs. <strong>sliding window counter</strong> (O(1) memory, estimated count)</li>
+      <li>State the log mechanism: one Redis sorted set per client key, timestamp as score — on each request, prune everything older than <code>W</code> (<code>ZREMRANGEBYSCORE</code>), count what's left (<code>ZCARD</code>), and if under the limit, add this request (<code>ZADD</code>) and admit</li>
+      <li>State the counter mechanism: two fixed-window counters, <code>previous</code> and <code>current</code> — <code>estimated_count = previous × (1 − elapsed_fraction) + current</code>; if under the limit, increment <code>current</code> and admit</li>
+      <li>Name the concurrency requirement unprompted: prune-count-add (log) or read-weight-increment (counter) must be one atomic step per request — same Lua-script pattern as token bucket (25.1), or it races</li>
+      <li>Name the response contract: <code>429</code> + <code>Retry-After</code>, same <code>X-RateLimit-*</code> headers as 25.1/25.7</li>
+    </ol>
+
+    <h3>Trigger → action</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Interviewer says</th><th>You do</th></tr></thead>
+        <tbody>
+          <tr><td>"How would you fix the fixed-window boundary problem exactly?"</td><td>Redefine the window as <code>now - W</code> to <code>now</code>, recomputed every request — no clock-anchored reset, so no boundary</td></tr>
+          <tr><td>"How would you implement an exact rolling rate limit?"</td><td>Sliding window log: a Redis sorted set per client, timestamp as score; prune, count, add — atomically</td></tr>
+          <tr><td>"That sorted set will grow forever for a busy client, won't it?"</td><td>No — it's pruned every check, but its steady-state size is proportional to that client's request volume, not constant. Name the fix: sliding window counter, O(1) state</td></tr>
+          <tr><td>"Is the counter's estimate exact?"</td><td>No — state the assumption unprompted: it assumes requests are spread evenly across the previous window; a burst concentrated at one edge breaks the estimate</td></tr>
+          <tr><td>"How does this compare to token bucket?"</td><td>Token bucket trades precision for O(1) state via <em>aggregate</em> accounting; sliding window log keeps precision at the cost of memory; sliding window counter is the deliberate middle ground</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Fast disambiguation — the pairs that get confused live</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Pair</th><th>The distinction</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Sliding window log vs. sliding window counter</strong></td><td>Log stores every timestamp still inside the window — exact, O(requests-in-window) memory. Counter stores two aggregate numbers — approximate, O(1) memory. Same no-boundary guarantee, opposite cost.</td></tr>
+          <tr><td><strong>Sliding window vs. fixed window</strong></td><td>Fixed window's boundary is a clock tick that resets. Sliding window's boundary is <code>now - W</code> — it never resets, it just moves forward with every check.</td></tr>
+          <tr><td><strong>Sliding window counter vs. token bucket</strong></td><td>Both are ~O(1) state, but they answer different questions. Counter estimates "how many requests happened in the last W seconds" (a rolling count). Token bucket tracks "how much capacity is currently banked" (an aggregate budget). Neither can answer the other's question.</td></tr>
+          <tr><td><strong>Pruning vs. expiry (log)</strong></td><td>Pruning (<code>ZREMRANGEBYSCORE</code>) removes entries that have aged out of the window on <em>every single check</em> — it's the enforcement mechanism. A <code>TTL</code> on the whole key is a separate, coarser safety net for keys that go fully idle, not how the count stays correct.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>High-yield anchors</h3>
+    <div class="cheatsheet" style="font-size: 12.5px;">Log memory: one ZSET entry per request currently inside the window — for
+  a limit of 100/min that's up to ~100 live entries per active key; for
+  10k/hour, up to 10k. Proportional to volume, not O(1).
+Counter formula: estimated_count = previous_window_count *
+  (1 - elapsed_fraction_of_current_window) + current_window_count.
+Redis ops for the log: ZADD (insert) / ZREMRANGEBYSCORE (prune) / ZCARD
+  (count) — three ops, one atomic Lua script per request.
+Counter's one assumption to name unprompted: requests are spread evenly
+  across the previous window. A real burst at one edge breaks the estimate
+  in a describable direction (§6).
+HTTP contract: same as 25.1/25.7 — 429 Too Many Requests, Retry-After,
+  X-RateLimit-Limit / -Remaining / -Reset.</div>
+
+    <h3>The script — say this close to verbatim</h3>
+    <div class="tradeoff-box">"I'd fix the fixed-window boundary bug with a sliding window: instead of resetting on a clock tick, define the window as the last W seconds relative to right now, recomputed on every request, so there's no instant to double up around. For an exact, auditable count, I'd implement it as a sliding window log — one Redis sorted set per client, timestamp as the score — and on every request I prune anything older than W seconds, count what's left, and if that's under the limit I add the new timestamp and admit, otherwise I reject with a 429 and a Retry-After computed from when the oldest in-window entry ages out. The cost I'm accepting is memory: unlike token bucket's two numbers per key, the log holds one entry per request currently inside the window, so a high-volume client can mean thousands of entries per key, growing and shrinking continuously. If that memory cost is a real problem — high request volume, long windows — I'd switch to the sliding window counter instead: keep just two counters, the previous fixed window and the current one, and estimate the rolling count as a weighted blend of the two based on how far into the current window we are. That gets O(1) state back, at the cost of assuming requests are spread evenly across the previous window, which is usually close enough but is only an estimate, not an exact count."</div>
+
+    <h3>If pushed on the memory cost specifically</h3>
+    <div class="tradeoff-box">"That's exactly the sliding window log's real cost, and it's worth pricing before anyone asks: the sorted set holds one entry per request that's still inside the window, not two aggregate numbers like token bucket, so a client sending 500 requests a minute against a 60-second window can have up to 500 live entries at once, continuously churning as old ones age out and new ones get added. It never grows unbounded, because every check prunes entries older than the window before counting — but the steady-state size is proportional to that client's request volume, not a constant. If that's too much memory at the scale I'm operating — millions of keys, some with high per-key volume — I'd switch to the sliding window counter, which caps state at exactly two numbers per key regardless of volume, and accept its weighted-interpolation estimate instead of the log's exact count."</div>
+  </section>
+
+  <!-- ══════════════════ §2 ══════════════════ -->
+  <section id="s2">
+    <h2 class="section-title"><span class="num">§2</span> 📋 Cheatsheet</h2>
+
+    <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+    <div class="callout callout-tip">⏭️ <strong>First time through this topic?</strong> Skip to §3 and come back here for revision.</div>
+
+<div class="cheatsheet"><span class="label">§ 1  WHY IT EXISTS</span>Token bucket (25.1) kills the fixed-window boundary bug, but it tracks
+an aggregate budget, not individual request timestamps — it can answer
+"is there room right now" but never "exactly how many requests happened
+in the last 60 seconds." Some designs need that exact rolling answer
+(contractual quotas, billing, audits). The naive fix — record every
+request's timestamp, count how many are still within the window — is
+exact and has no boundary bug, but its memory grows with how much
+traffic a client sends, forever, as long as traffic keeps coming.
+<span class="label">§ 2  WHAT IT IS</span>WINDOW        The span [now - W, now], recomputed on every single
+              request. Never resets on a clock tick — it just slides.
+SLIDING LOG   One entry per request, timestamp as the value, kept in a
+              structure that supports range queries (Redis sorted set).
+SLIDING       Two fixed-window counters (previous, current) blended by a
+COUNTER       weight based on how far into the current window "now" is.
+PRUNE         Removing log entries older than W — happens on every
+              check, not on a timer.
+<span class="label">§ 3  THE MECHANISM</span>LOG            ZREMRANGEBYSCORE (prune stale) -&gt; ZCARD (count) -&gt; if
+               count &lt; limit: ZADD (insert) + ADMIT, else REJECT.
+COUNTER        elapsed_fraction = time_into_current_window / W;
+               estimate = prev_count*(1-elapsed_fraction) + curr_count;
+               if estimate &lt; limit: curr_count += 1, ADMIT, else REJECT.
+ATOMICITY      Both variants need prune/read + count/weight + write to
+               happen as ONE atomic step per request — split into
+               separate calls, it races under concurrency (same failure
+               mode as token bucket's check-and-deduct, 25.1).
+<span class="label">§ 4  USE / AVOID</span>USE sliding window LOG when: the count must be exact and auditable
+  (contractual "no more than N in any rolling W," billing, compliance),
+  and per-key request volume is low enough that O(requests) memory is
+  affordable.
+USE sliding window COUNTER when: you want the no-boundary guarantee at
+  O(1) memory and can accept a close estimate instead of an exact count.
+AVOID the LOG when per-key volume is high and windows are long — the
+  ZSET can grow to thousands of entries per busy key.
+AVOID assuming the COUNTER is exact — it assumes uniform request
+  distribution inside the previous window; a real burst at one edge
+  breaks that assumption in a specific, describable direction (§6).
+<span class="label">§ 5  LOG VS. COUNTER VS. TOKEN BUCKET</span>LOG           Exact count of requests in [now-W, now]. Memory scales
+              with per-key request volume. Best when precision matters.
+COUNTER       Estimated count via 2-number weighted interpolation. O(1)
+              memory. Best when precision can be approximate.
+TOKEN BUCKET  Answers a different question entirely — "how much budget
+              is banked," not "how many requests in the last W seconds."
+              Coarser, but cheapest and simplest when a burst/sustained
+              pair is all you actually need (25.1).
+<span class="label">§ 6  NUMBERS TO ANCHOR THE DISCUSSION</span>Log memory: ~1 entry per in-window request per key — 100/min limit ⇒ up
+  to ~100 live entries per active key.
+Counter formula: estimate = prev*(1-elapsed_fraction) + curr.
+Redis ops (log): ZADD / ZREMRANGEBYSCORE / ZCARD, one atomic Lua script.
+HTTP: 429 Too Many Requests · Retry-After (seconds) · X-RateLimit-Limit /
+  -Remaining / -Reset (same contract as 25.1/25.7).
+<span class="label">§ 7  INTERVIEW TRIGGERS + GOTCHA</span>→ "Fix the boundary bug exactly?"      → window = now-W to now, no reset
+→ "Exact rolling count?"               → sliding window log, Redis ZSET
+→ "Won't the ZSET grow forever?"       → pruned every check; switch to
+                                          counter if volume makes it big
+GOTCHA: Treating the sliding window counter's estimate as exact. It
+  assumes requests are spread evenly across the previous window — a
+  client that fires all its previous-window traffic in the last instant
+  before the boundary makes the estimate wrong in a specific, provable
+  direction (§6).</div>
+  </section>
+
+  <!-- ══════════════════ §3 ══════════════════ -->
+  <section id="s3">
+    <h2 class="section-title"><span class="num">§3</span> 🧠 The Mindmap</h2>
+    <div class="callout callout-quote">The picture to hold in your head while you study. Everything below hangs off this.</div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Sliding window — five facets radiating from one definition</div>
+      <svg viewBox="0 0 1040 580" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="mmArrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" fill="#94908a"/>
+          </marker>
+        </defs>
+
+        <rect x="380" y="8" width="280" height="42" rx="10" fill="#1a1917" stroke="#1a1917" stroke-width="2"/>
+        <text x="520" y="34" text-anchor="middle" font-size="14" font-weight="800" fill="#ffffff">SLIDING WINDOW</text>
+
+        <g stroke="#94908a" stroke-width="1.6" fill="none">
+          <path d="M488,50 L108,96" marker-end="url(#mmArrow)"/>
+          <path d="M508,50 L304,96" marker-end="url(#mmArrow)"/>
+          <path d="M520,50 L520,96" marker-end="url(#mmArrow)"/>
+          <path d="M532,50 L736,96" marker-end="url(#mmArrow)"/>
+          <path d="M552,50 L932,96" marker-end="url(#mmArrow)"/>
+        </g>
+
+        <!-- ① THE FIX -->
+        <rect x="10" y="100" width="196" height="240" rx="10" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+        <text x="26" y="124" font-size="12.5" font-weight="800" fill="#4c1d95">① THE FIX</text>
+        <text x="26" y="140" font-size="10" font-style="italic" fill="#7c3aed">(why no boundary)</text>
+        <line x1="26" y1="148" x2="190" y2="148" stroke="#c4b5fd" stroke-width="1.3"/>
+        <text x="26" y="168" font-size="11" fill="#4c1d95">window = [now-W, now]</text>
+        <text x="26" y="190" font-size="11" fill="#4c1d95">recomputed every</text>
+        <text x="26" y="206" font-size="11" fill="#4c1d95">request</text>
+        <text x="26" y="228" font-size="11" fill="#4c1d95">no clock tick to</text>
+        <text x="26" y="244" font-size="11" fill="#4c1d95">reset on, ever</text>
+
+        <!-- ② LOG VARIANT -->
+        <rect x="216" y="100" width="196" height="240" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+        <text x="232" y="124" font-size="12.5" font-weight="800" fill="#1e3a8a">② LOG VARIANT</text>
+        <line x1="232" y1="132" x2="396" y2="132" stroke="#93c5fd" stroke-width="1.3"/>
+        <text x="232" y="152" font-size="11" fill="#1e3a8a">Redis ZSET per key,</text>
+        <text x="232" y="168" font-size="11" fill="#1e3a8a">score = timestamp</text>
+        <text x="232" y="190" font-size="11" fill="#1e3a8a">ZREMRANGEBYSCORE:</text>
+        <text x="232" y="206" font-size="11" fill="#1e3a8a">prune stale entries</text>
+        <text x="232" y="228" font-size="11" fill="#1e3a8a">ZCARD: count</text>
+        <text x="232" y="250" font-size="11" fill="#1e3a8a">ZADD: insert on</text>
+        <text x="232" y="266" font-size="11" fill="#1e3a8a">admit only</text>
+
+        <!-- ③ COUNTER VARIANT -->
+        <rect x="422" y="100" width="196" height="240" rx="10" fill="#ccfbf1" stroke="#0d9488" stroke-width="2"/>
+        <text x="438" y="124" font-size="12.5" font-weight="800" fill="#134e4a">③ COUNTER VARIANT</text>
+        <line x1="438" y1="132" x2="602" y2="132" stroke="#5eead4" stroke-width="1.3"/>
+        <text x="438" y="152" font-size="11" fill="#134e4a">2 fixed-window</text>
+        <text x="438" y="168" font-size="11" fill="#134e4a">counters</text>
+        <text x="438" y="190" font-size="11" fill="#134e4a">weighted blend by</text>
+        <text x="438" y="206" font-size="11" fill="#134e4a">elapsed fraction</text>
+        <text x="438" y="228" font-size="11" fill="#134e4a">assumes uniform</text>
+        <text x="438" y="244" font-size="11" fill="#134e4a">distribution in</text>
+        <text x="438" y="260" font-size="11" fill="#134e4a">prev window</text>
+
+        <!-- ④ THE TRADE-OFF AXIS -->
+        <rect x="628" y="100" width="196" height="240" rx="10" fill="#ffedd5" stroke="#ea580c" stroke-width="2"/>
+        <text x="644" y="124" font-size="12.5" font-weight="800" fill="#7c2d12">④ THE TRADE-OFF</text>
+        <text x="644" y="140" font-size="12.5" font-weight="800" fill="#7c2d12">AXIS</text>
+        <line x1="644" y1="148" x2="808" y2="148" stroke="#fdba74" stroke-width="1.3"/>
+        <text x="644" y="168" font-size="11" fill="#7c2d12">log: exact,</text>
+        <text x="644" y="184" font-size="11" fill="#7c2d12">O(requests) memory</text>
+        <text x="644" y="206" font-size="11" fill="#7c2d12">counter: O(1),</text>
+        <text x="644" y="222" font-size="11" fill="#7c2d12">estimate</text>
+        <text x="644" y="244" font-size="11" fill="#7c2d12">neither has fixed</text>
+        <text x="644" y="260" font-size="11" fill="#7c2d12">window's boundary bug</text>
+
+        <!-- ⑤ WHERE IT LIVES -->
+        <rect x="834" y="100" width="196" height="240" rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+        <text x="850" y="124" font-size="12.5" font-weight="800" fill="#14532d">⑤ WHERE IT LIVES</text>
+        <line x1="850" y1="132" x2="1014" y2="132" stroke="#86efac" stroke-width="1.3"/>
+        <text x="850" y="152" font-size="11" fill="#14532d">gateway / Redis</text>
+        <text x="850" y="168" font-size="11" fill="#14532d">(11.7)</text>
+        <text x="850" y="190" font-size="11" fill="#14532d">contrast: fixed</text>
+        <text x="850" y="206" font-size="11" fill="#14532d">window (25.3), token</text>
+        <text x="850" y="222" font-size="11" fill="#14532d">bucket (25.1)</text>
+        <text x="850" y="244" font-size="11" fill="#14532d">feeds: 25.5</text>
+        <text x="850" y="260" font-size="11" fill="#14532d">distributed Redis</text>
+
+        <rect x="120" y="364" width="800" height="80" rx="10" fill="#f3f2ef" stroke="#e5e3de" stroke-width="1.5"/>
+        <text x="520" y="392" text-anchor="middle" font-size="12" font-weight="800" fill="#1a1917">① is the foundation both ② and ③ depend on — say it first. ② and ③ are parallel</text>
+        <text x="520" y="412" text-anchor="middle" font-size="12" font-weight="800" fill="#1a1917">choices, picked via ④'s trade-off, not a default. Close with ⑤.</text>
+      </svg>
+      <p class="caption">Five parallel facets around one no-reset definition — the log and the counter are two ways to build the same guarantee.</p>
+    </div>
+
+    <p><strong>How to read it:</strong> ① is the foundation every other branch depends on — say it first, it's the single sentence that explains why <em>both</em> variants below have no boundary bug at all. ② and ③ are the two ways to actually build ①, and they are parallel choices, not a sequence — pick based on ④'s trade-off, don't default to one without naming why. ④ is the axis the whole subtopic hangs on: it's not "which is better," it's "what are you willing to pay for." ⑤ closes the answer by placing this back where it's enforced and what it contrasts against, the same way 25.1's mindmap did — don't skip it, it's how you signal you know this fits into a bigger picture, not just as an isolated algorithm.</p>
+  </section>
+
+  <!-- ══════════════════ §4 ══════════════════ -->
+  <section id="s4">
+    <h2 class="section-title"><span class="num">§4</span> 🔥 The Problem</h2>
+
+    <p>Token bucket (25.1) solved the fixed-window boundary bug, but it did so by changing what's being tracked, not by making the tracking more precise. A bucket's <code>tokens</code> number is an aggregate — "how much budget is currently available" — and that number alone cannot answer a more specific question a real system sometimes has to answer exactly: how many requests, precisely, occurred in the last 60 seconds, right now, no approximation. If a contract says "no more than 1,000 calls in any rolling 24-hour window," or a billing system charges per request-over-quota, "the bucket has room" is not the same statement as "exactly 743 requests happened in the last 24 hours" — and the difference matters when money or compliance is on the line.</p>
+
+    <p>The instinctive fix is the most literal one possible: keep a log. For each client, record the timestamp of every request. To check whether a new request is allowed, discard any timestamps older than the window, count what's left, and admit only if that count is under the limit. This is not an approximation of anything — it is, by construction, an exact count of requests in <code>[now - W, now]</code>, recomputed fresh on every single check. Because the window boundary is defined relative to <em>now</em> rather than to a fixed clock tick, there is no instant at which the count resets to zero and a client can "reload" a full quota — the fixed-window boundary bug simply has no equivalent here, for the same structural reason token bucket has none: nothing ever resets.</p>
+
+    <p>But the log's exactness has a cost token bucket never had to pay: memory that scales with traffic. Token bucket's state is two numbers, full stop, regardless of how many requests a client sends. The log's state is one entry <em>per request currently inside the window</em> — a client sending 500 requests a minute against a 60-second window can have up to 500 live entries at any moment, continuously churning as old ones expire and new ones arrive. For a low-volume client this is nothing. For a high-volume client, or a long window (a daily quota logged at second-level granularity), it can mean thousands of entries per key, held in memory, for every active key, all the time. The insight that resolves this without giving back the no-boundary guarantee is to stop storing individual timestamps and instead approximate the same rolling count from two aggregate numbers — the counts of the current and immediately preceding fixed windows — blended by how far into the current window "now" happens to be. That's the sliding window counter: the log's no-boundary guarantee, at O(1) memory, in exchange for an estimate instead of an exact count.</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Before / after — a fixed clock boundary vs. a boundary that follows "now"</div>
+      <svg viewBox="0 0 1040 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <rect x="10" y="10" width="500" height="280" rx="12" fill="#fff5f5" stroke="#dc2626" stroke-width="2"/>
+        <text x="260" y="38" text-anchor="middle" font-size="13.5" font-weight="800" fill="#7f1d1d">BEFORE — fixed window (25.1's baseline)</text>
+        <line x1="26" y1="50" x2="494" y2="50" stroke="#fecaca" stroke-width="1.4"/>
+        <text x="26" y="76" font-size="12" font-family="SF Mono, Menlo, monospace" fill="#7f1d1d">window = current calendar minute</text>
+        <text x="26" y="96" font-size="12" font-family="SF Mono, Menlo, monospace" fill="#7f1d1d">count resets to 0 at each boundary</text>
+        <line x1="26" y1="114" x2="494" y2="114" stroke="#fecaca" stroke-width="1.4"/>
+        <text x="26" y="138" font-size="12" font-weight="700" fill="#7f1d1d">✗ boundary doubling: full quota at</text>
+        <text x="26" y="156" font-size="12" fill="#7f1d1d">   :59 + full quota at :00 = 2× burst</text>
+        <text x="26" y="180" font-size="12" font-weight="700" fill="#7f1d1d">✗ token bucket (25.1) fixes the</text>
+        <text x="26" y="198" font-size="12" fill="#7f1d1d">   boundary but tracks only an</text>
+        <text x="26" y="216" font-size="12" fill="#7f1d1d">   aggregate budget — never an exact</text>
+        <text x="26" y="234" font-size="12" fill="#7f1d1d">   "requests in the last W seconds"</text>
+        <text x="26" y="252" font-size="12" fill="#7f1d1d">   count</text>
+
+        <rect x="530" y="10" width="500" height="280" rx="12" fill="#f0fdf4" stroke="#16a34a" stroke-width="2"/>
+        <text x="780" y="38" text-anchor="middle" font-size="13.5" font-weight="800" fill="#14532d">AFTER — sliding window (this doc)</text>
+        <line x1="546" y1="50" x2="1014" y2="50" stroke="#bbf7d0" stroke-width="1.4"/>
+        <text x="546" y="76" font-size="12" font-family="SF Mono, Menlo, monospace" fill="#14532d">window = [now - W, now],</text>
+        <text x="546" y="94" font-size="12" font-family="SF Mono, Menlo, monospace" fill="#14532d">recomputed on EVERY request</text>
+        <line x1="546" y1="112" x2="1014" y2="112" stroke="#bbf7d0" stroke-width="1.4"/>
+        <text x="546" y="136" font-size="12" fill="#14532d">✓ no boundary to double around —</text>
+        <text x="546" y="154" font-size="12" fill="#14532d">   the count is always relative to now</text>
+        <text x="546" y="178" font-size="12" font-weight="700" fill="#14532d">✓ TWO implementations of the same</text>
+        <text x="546" y="196" font-size="12" fill="#14532d">   no-boundary idea:</text>
+        <text x="546" y="214" font-size="12" fill="#14532d">   LOG (exact, memory scales with</text>
+        <text x="546" y="232" font-size="12" fill="#14532d">   volume) and COUNTER (O(1),</text>
+        <text x="546" y="250" font-size="12" fill="#14532d">   estimated)</text>
+      </svg>
+      <p class="caption">Fixed window's clock-tick boundary vs. a boundary that always trails "now" by exactly W — the second has no reset instant to exploit.</p>
+    </div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">The boundary bug, made concrete — the same traffic, two views</div>
+      <svg viewBox="0 0 1040 240" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <rect x="20" y="20" width="480" height="90" rx="10" fill="#f3f2ef" stroke="#94908a" stroke-width="2"/>
+        <text x="30" y="42" font-size="12" font-weight="800" fill="#1a1917">WINDOW 1 (14:03:00–14:03:59)</text>
+        <g fill="#2563eb">
+          <circle cx="420" cy="75" r="5"/><circle cx="432" cy="75" r="5"/><circle cx="444" cy="75" r="5"/><circle cx="456" cy="75" r="5"/><circle cx="468" cy="75" r="5"/>
+          <circle cx="420" cy="90" r="5"/><circle cx="432" cy="90" r="5"/><circle cx="444" cy="90" r="5"/><circle cx="456" cy="90" r="5"/><circle cx="468" cy="90" r="5"/>
+        </g>
+        <text x="444" y="60" text-anchor="middle" font-size="11" font-weight="700" fill="#1e3a8a">10 reqs @ :59</text>
+
+        <rect x="540" y="20" width="480" height="90" rx="10" fill="#f3f2ef" stroke="#94908a" stroke-width="2"/>
+        <text x="550" y="42" font-size="12" font-weight="800" fill="#1a1917">WINDOW 2 (14:04:00–14:04:59)</text>
+        <g fill="#2563eb">
+          <circle cx="572" cy="75" r="5"/><circle cx="584" cy="75" r="5"/><circle cx="596" cy="75" r="5"/><circle cx="608" cy="75" r="5"/><circle cx="620" cy="75" r="5"/>
+          <circle cx="572" cy="90" r="5"/><circle cx="584" cy="90" r="5"/><circle cx="596" cy="90" r="5"/><circle cx="608" cy="90" r="5"/><circle cx="620" cy="90" r="5"/>
+        </g>
+        <text x="596" y="60" text-anchor="middle" font-size="11" font-weight="700" fill="#1e3a8a">10 reqs @ :00</text>
+
+        <line x1="520" y1="10" x2="520" y2="120" stroke="#dc2626" stroke-width="2" stroke-dasharray="5 4"/>
+        <text x="520" y="132" text-anchor="middle" font-size="11" font-weight="800" fill="#dc2626">▲ RESET HAPPENS HERE</text>
+
+        <rect x="20" y="150" width="1000" height="42" rx="8" fill="#fee2e2" stroke="#dc2626" stroke-width="1.6"/>
+        <text x="520" y="167" text-anchor="middle" font-size="11.5" fill="#7f1d1d">Each fixed window independently reports "10/10 — within limit." But any real 1-second span</text>
+        <text x="520" y="184" text-anchor="middle" font-size="11.5" font-weight="700" fill="#7f1d1d">straddling 14:03:59–14:04:00 saw all 20 requests — double the limit, and fixed window never sees it.</text>
+
+        <rect x="20" y="200" width="1000" height="30" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="1.6"/>
+        <text x="520" y="220" text-anchor="middle" font-size="11.5" font-weight="700" fill="#14532d">A sliding window over this SAME traffic has no reset to hide behind — its [now−1s, now] view sees all 20 and rejects.</text>
+      </svg>
+    </div>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">A candidate argues that token bucket already "solves sliding windows" because it has no reset boundary, so a separate sliding window algorithm is redundant. Using the distinction drawn in the first paragraph, explain precisely what question token bucket's tokens number can and cannot answer, and why "no boundary bug" is not the same claim as "exact rolling count."</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the first paragraph — the sentence distinguishing "the bucket has room" from "exactly 743 requests happened in the last 24 hours."</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> If a log gives you exactness and a counter gives you back O(1) memory, what exactly are the two mechanisms, and how do they both eliminate the boundary?</div>
+  </section>
+
+  <!-- ══════════════════ §5 ══════════════════ -->
+  <section id="s5">
+    <h2 class="section-title"><span class="num">§5</span> 💡 The Core Idea</h2>
+
+    <div class="definition">A sliding window rate limiter defines its window as <code>[now - W, now]</code>, recomputed on every request instead of reset on a clock tick, and then answers "how many requests fall inside it" either exactly — by keeping a timestamped log, at a memory cost proportional to request volume — or approximately — by blending two adjacent fixed-window counters into an O(1) estimate — making the choice between them a direct trade of precision against memory, not a trade against correctness.</div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">The build chain</div>
+      <svg viewBox="0 0 1040 220" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="bcArrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#7c3aed"/>
+          </marker>
+        </defs>
+        <g>
+          <rect x="4" y="30" width="240" height="76" rx="9" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+          <text x="124" y="52" text-anchor="middle" font-size="11.5" font-weight="800" fill="#4c1d95">THE WINDOW FOLLOWS</text>
+          <text x="124" y="68" text-anchor="middle" font-size="11.5" font-weight="800" fill="#4c1d95">"NOW," NOT A CLOCK</text>
+          <text x="124" y="126" text-anchor="middle" font-size="10.5" font-style="italic" fill="#6b6861">because the boundary</text>
+          <text x="124" y="141" text-anchor="middle" font-size="10.5" font-style="italic" fill="#6b6861">must move with every</text>
+          <text x="124" y="156" text-anchor="middle" font-size="10.5" font-style="italic" fill="#6b6861">check to have no reset</text>
+        </g>
+        <line x1="248" y1="68" x2="276" y2="68" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow)"/>
+        <g>
+          <rect x="282" y="30" width="240" height="76" rx="9" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+          <text x="402" y="52" text-anchor="middle" font-size="11.5" font-weight="800" fill="#1e3a8a">LOG: EXACT VIA</text>
+          <text x="402" y="68" text-anchor="middle" font-size="11.5" font-weight="800" fill="#1e3a8a">PER-REQUEST TIMESTAMPS</text>
+          <text x="402" y="126" text-anchor="middle" font-size="10.5" font-style="italic" fill="#6b6861">because answering "how</text>
+          <text x="402" y="141" text-anchor="middle" font-size="10.5" font-style="italic" fill="#6b6861">many in [now-W,now]"</text>
+          <text x="402" y="156" text-anchor="middle" font-size="10.5" font-style="italic" fill="#6b6861">exactly needs every ts</text>
+        </g>
+        <line x1="526" y1="68" x2="554" y2="68" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow)"/>
+        <g>
+          <rect x="560" y="30" width="240" height="76" rx="9" fill="#ccfbf1" stroke="#0d9488" stroke-width="2"/>
+          <text x="680" y="52" text-anchor="middle" font-size="11.5" font-weight="800" fill="#134e4a">COUNTER: O(1) VIA</text>
+          <text x="680" y="68" text-anchor="middle" font-size="11.5" font-weight="800" fill="#134e4a">WEIGHTED INTERPOLATION</text>
+          <text x="680" y="126" text-anchor="middle" font-size="10.5" font-style="italic" fill="#6b6861">because the log's per-</text>
+          <text x="680" y="141" text-anchor="middle" font-size="10.5" font-style="italic" fill="#6b6861">request cost is too much</text>
+          <text x="680" y="156" text-anchor="middle" font-size="10.5" font-style="italic" fill="#6b6861">at high volume</text>
+        </g>
+        <line x1="804" y1="68" x2="832" y2="68" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow)"/>
+        <g>
+          <rect x="838" y="30" width="198" height="76" rx="9" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+          <text x="937" y="52" text-anchor="middle" font-size="11.5" font-weight="800" fill="#14532d">THE CHOICE IS</text>
+          <text x="937" y="68" text-anchor="middle" font-size="11.5" font-weight="800" fill="#14532d">PRECISION VS. MEMORY</text>
+          <text x="937" y="126" text-anchor="middle" font-size="10.5" font-style="italic" fill="#6b6861">because both already</text>
+          <text x="937" y="141" text-anchor="middle" font-size="10.5" font-style="italic" fill="#6b6861">fixed the boundary — this</text>
+          <text x="937" y="156" text-anchor="middle" font-size="10.5" font-style="italic" fill="#6b6861">is what's left to decide</text>
+        </g>
+      </svg>
+    </div>
+
+    <h3>The Window Follows "Now," Not a Clock</h3>
+    <p>Everything starts from redefining what "the window" even means. A fixed window is anchored to the clock — minute 14:03, then minute 14:04 — and resets the instant the clock ticks over. A sliding window has no clock anchor at all: at the moment any request arrives, the window is simply <code>[now - W, now]</code>, recomputed fresh for that exact instant. There is no reset event, because there is nothing to reset — the window boundary is a moving target that always trails "now" by exactly <code>W</code> seconds.</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Watch the window slide — three snapshots of the same 8 requests, W = 60s</div>
+      <svg viewBox="0 0 1040 400" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <!-- shared request x-positions: t=12,18,25,33,41,52,57,60 -->
+        <!-- FRAME 1: now=60, window [0,60], all in -->
+        <text x="20" y="30" font-size="12" font-weight="800" fill="#1a1917">FRAME 1 — now = 60s. window = [0, 60]</text>
+        <g fill="#2563eb">
+          <circle cx="191" cy="55" r="6"/><circle cx="247" cy="55" r="6"/><circle cx="312" cy="55" r="6"/><circle cx="386" cy="55" r="6"/>
+          <circle cx="460" cy="55" r="6"/><circle cx="562" cy="55" r="6"/><circle cx="608" cy="55" r="6"/><circle cx="636" cy="55" r="6"/>
+        </g>
+        <text x="636" y="42" text-anchor="middle" font-size="10" fill="#1e3a8a" font-weight="700">now</text>
+        <line x1="80" y1="78" x2="636" y2="78" stroke="#2563eb" stroke-width="3"/>
+        <line x1="80" y1="72" x2="80" y2="84" stroke="#2563eb" stroke-width="3"/>
+        <line x1="636" y1="72" x2="636" y2="84" stroke="#2563eb" stroke-width="3"/>
+        <text x="358" y="96" text-anchor="middle" font-size="11" fill="#1e3a8a">window: [0, 60]</text>
+        <text x="900" y="60" text-anchor="middle" font-size="13" font-weight="800" fill="#14532d">count = 8</text>
+
+        <!-- FRAME 2: now=75, window [15,75] -->
+        <text x="20" y="150" font-size="12" font-weight="800" fill="#1a1917">FRAME 2 — now = 75s (+15s). window = [15, 75]</text>
+        <circle cx="191" cy="175" r="6" fill="none" stroke="#b8b3ab" stroke-width="2"/>
+        <g fill="#2563eb">
+          <circle cx="247" cy="175" r="6"/><circle cx="312" cy="175" r="6"/><circle cx="386" cy="175" r="6"/>
+          <circle cx="460" cy="175" r="6"/><circle cx="562" cy="175" r="6"/><circle cx="608" cy="175" r="6"/><circle cx="636" cy="175" r="6"/>
+        </g>
+        <text x="775" y="162" text-anchor="middle" font-size="10" fill="#1e3a8a" font-weight="700">now</text>
+        <line x1="219" y1="198" x2="775" y2="198" stroke="#2563eb" stroke-width="3"/>
+        <line x1="219" y1="192" x2="219" y2="204" stroke="#2563eb" stroke-width="3"/>
+        <line x1="775" y1="192" x2="775" y2="204" stroke="#2563eb" stroke-width="3"/>
+        <text x="497" y="216" text-anchor="middle" font-size="11" fill="#1e3a8a">window: [15, 75] — 12s aged out (gray), nothing "reset"</text>
+        <text x="900" y="180" text-anchor="middle" font-size="13" font-weight="800" fill="#14532d">count = 7</text>
+
+        <!-- FRAME 3: now=95, window [35,95] -->
+        <text x="20" y="270" font-size="12" font-weight="800" fill="#1a1917">FRAME 3 — now = 95s (+35s). window = [35, 95]</text>
+        <g fill="none" stroke="#b8b3ab" stroke-width="2">
+          <circle cx="191" cy="295" r="6"/><circle cx="247" cy="295" r="6"/><circle cx="312" cy="295" r="6"/><circle cx="386" cy="295" r="6"/>
+        </g>
+        <g fill="#2563eb">
+          <circle cx="460" cy="295" r="6"/><circle cx="562" cy="295" r="6"/><circle cx="608" cy="295" r="6"/><circle cx="636" cy="295" r="6"/>
+        </g>
+        <text x="960" y="282" text-anchor="middle" font-size="10" fill="#1e3a8a" font-weight="700">now</text>
+        <line x1="404" y1="318" x2="960" y2="318" stroke="#2563eb" stroke-width="3"/>
+        <line x1="404" y1="312" x2="404" y2="324" stroke="#2563eb" stroke-width="3"/>
+        <line x1="960" y1="312" x2="960" y2="324" stroke="#2563eb" stroke-width="3"/>
+        <text x="682" y="336" text-anchor="middle" font-size="11" fill="#1e3a8a">window: [35, 95] — three more aged out, one at a time</text>
+        <text x="900" y="300" text-anchor="middle" font-size="13" font-weight="800" fill="#14532d">count = 4</text>
+
+        <rect x="20" y="356" width="1000" height="34" rx="8" fill="#f3f2ef" stroke="#e5e3de" stroke-width="1.5"/>
+        <text x="520" y="378" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1a1917">No frame ever resets to 0 — the window just keeps trailing "now," and entries fall out one at a time.</text>
+      </svg>
+    </div>
+
+    <p>This single redefinition is what removes the fixed-window boundary bug (§4) by construction: a client trying to send a full quota "right before the reset" and another full quota "right after" finds there is no reset to time an attack around, only a boundary that has already moved by the time the second burst arrives.</p>
+
+    <h3>Sliding Window Log: Exact via Per-Request Timestamps</h3>
+    <p>Given that the window is now defined relative to <em>now</em>, the most literal way to answer "how many requests are inside it" is to know every request's exact timestamp and check each one against the boundary directly. That's the sliding window log: for each client key, keep every request's timestamp in a structure that supports efficient range queries — a Redis sorted set, timestamp as the score. On each check: discard entries older than <code>now - W</code> (they're no longer inside the window by definition), count what remains, and if that count is under the limit, record this request's timestamp too and admit it.</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">The ZSET itself, visualized as a timeline</div>
+      <svg viewBox="0 0 1040 170" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <text x="20" y="26" font-size="12" fill="#4a4742">ZSET key = "ratelimit:client:123" (score = request timestamp, seconds) — now = 60.0, W = 20s</text>
+        <g fill="#b8b3ab">
+          <circle cx="140" cy="70" r="7"/><circle cx="230" cy="70" r="7"/>
+        </g>
+        <text x="140" y="92" text-anchor="middle" font-size="10.5" fill="#7f1d1d">35.0</text>
+        <text x="230" y="92" text-anchor="middle" font-size="10.5" fill="#7f1d1d">38.5</text>
+        <g fill="#2563eb">
+          <circle cx="380" cy="70" r="7"/><circle cx="530" cy="70" r="7"/><circle cx="680" cy="70" r="7"/><circle cx="800" cy="70" r="7"/>
+        </g>
+        <text x="380" y="92" text-anchor="middle" font-size="10.5" fill="#1e3a8a">42.1</text>
+        <text x="530" y="92" text-anchor="middle" font-size="10.5" fill="#1e3a8a">50.2</text>
+        <text x="680" y="92" text-anchor="middle" font-size="10.5" fill="#1e3a8a">55.9</text>
+        <text x="800" y="92" text-anchor="middle" font-size="10.5" fill="#1e3a8a">58.0</text>
+        <line x1="300" y1="40" x2="300" y2="110" stroke="#dc2626" stroke-width="2" stroke-dasharray="5 4"/>
+        <text x="300" y="30" text-anchor="middle" font-size="10.5" font-weight="700" fill="#dc2626">prune cutoff = 40.0</text>
+        <text x="185" y="130" text-anchor="middle" font-size="11" fill="#7f1d1d">pruned by ZREMRANGEBYSCORE — 2 removed</text>
+        <line x1="360" y1="145" x2="820" y2="145" stroke="#16a34a" stroke-width="2"/>
+        <line x1="360" y1="139" x2="360" y2="151" stroke="#16a34a" stroke-width="2"/>
+        <line x1="820" y1="139" x2="820" y2="151" stroke="#16a34a" stroke-width="2"/>
+        <text x="590" y="163" text-anchor="middle" font-size="11" font-weight="700" fill="#14532d">kept: 4 entries → ZCARD = 4. New request @ 60.0 → ZADD → count becomes 5</text>
+      </svg>
+    </div>
+
+    <p>Because every timestamp is real and every comparison is exact, the resulting count is not an approximation of anything — it is, precisely, the number of requests that occurred in the last <code>W</code> seconds, which is exactly what §4 established token bucket cannot answer.</p>
+
+    <h3>Sliding Window Counter: O(1) via Weighted Interpolation</h3>
+    <p>The log's exactness comes from tracking one entry per request, and §4 already named the cost that creates: memory proportional to how much traffic a client sends within the window. The sliding window counter keeps the same no-boundary definition from the first concept block but answers the "how many" question with only two numbers instead of one per request: a count for the <em>previous</em> fixed window and a count for the <em>current</em> one. The estimate is a weighted blend — <code>estimate = previous_count × (1 - elapsed_fraction) + current_count</code>, where <code>elapsed_fraction</code> is how far "now" is into the current fixed window. If the estimate is under the limit, the current window's counter increments and the request is admitted. This assumes requests are spread evenly across the previous window — which is usually a reasonable approximation, but is an assumption, not a fact derived from any individual timestamp, because no individual timestamp was ever recorded.</p>
+
+    <h3>The Choice Is Precision vs. Memory, Not a Correctness Fix</h3>
+    <p>Because both variants already solve the boundary problem the same way — by defining the window relative to now — choosing between them is never about fixing a bug. It's a direct trade: the log pays memory proportional to request volume to get an exact count; the counter pays approximation error to get O(1) memory. Neither is "more correct" than the other in the way sliding window is more correct than fixed window — they are two different, valid answers to "how precisely do I need to know the rolling count," and the right choice depends entirely on what the number is being used for downstream (§7).</p>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">Using only the definition from "The Window Follows 'Now,' Not a Clock," explain why a sliding window — either variant — cannot exhibit the "full quota at the end of one window, full quota at the start of the next" attack that fixed window is vulnerable to, even though the sliding window counter is only an estimate.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the first concept block — the sentence about the boundary being "a moving target that always trails 'now' by exactly W seconds."</div>
+      </div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">2</span>
+          <span class="qtext">Trace the link from "Sliding Window Log" into "Sliding Window Counter": explain precisely what specific cost of the log the counter is designed to eliminate, and what it gives up in exchange to eliminate it.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the second concept block's cost claim and the third concept block's opening sentence, which names exactly what's kept and what's changed.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> You know the shape of both mechanisms. What actually happens, step by step, on a real request — for each variant — and what breaks?</div>
+  </section>
+
+  <!-- ══════════════════ §6 ══════════════════ -->
+  <section id="s6">
+    <h2 class="section-title"><span class="num">§6</span> ⚙️ How It Actually Works</h2>
+
+    <h3>Happy path — sliding window log, one request end to end</h3>
+    <ol class="steps">
+      <li>A request arrives tagged with a rate-limit key — API key, user ID, or IP, same convention as 25.1.</li>
+      <li>The limiter identifies that key's sorted set (creating an empty one if this is the first request ever seen for this key).</li>
+      <li><strong>Prune:</strong> remove every entry with a score (timestamp) older than <code>now - W</code> — <code>ZREMRANGEBYSCORE key -inf (now-W)</code>. These requests are no longer inside the window by definition and must not count.</li>
+      <li><strong>Count:</strong> get the number of remaining entries — <code>ZCARD key</code>.</li>
+      <li>If the count is <code>&lt; limit</code>: <strong>add</strong> this request's timestamp as a new entry (<code>ZADD key now request_id</code>) and admit. If the count is <code>≥ limit</code>: do <strong>not</strong> add, reject with <code>429</code>, and compute <code>Retry-After</code> from the <em>oldest</em> remaining entry's timestamp — the request is allowed again once that entry ages out of the window.</li>
+    </ol>
+
+    <h3>Happy path — sliding window counter, one request end to end</h3>
+    <ol class="steps">
+      <li>A request arrives tagged with the same kind of key.</li>
+      <li>The limiter loads (or initializes) two counters for that key: <code>previous_window_count</code> and <code>current_window_count</code>, plus which fixed window is currently "current."</li>
+      <li>If wall-clock time has crossed into a new fixed window since the last check, roll the counters forward: the old <code>current</code> becomes the new <code>previous</code>, and a fresh <code>current</code> starts at 0.</li>
+      <li>Compute <code>elapsed_fraction = (now - current_window_start) / W</code>, then <code>estimate = previous_window_count × (1 - elapsed_fraction) + current_window_count</code>.</li>
+      <li>If <code>estimate &lt; limit</code>: increment <code>current_window_count</code> and admit. If <code>estimate ≥ limit</code>: reject with <code>429</code> and a <code>Retry-After</code> derived from how much <code>elapsed_fraction</code> needs to grow before the estimate drops back under the limit.</li>
+    </ol>
+
+    <div class="mental-model">
+      <span class="mm-name">🗺️ Mental model — the log is a security camera with a rolling buffer; the counter is a water meter with two dials.</span> The log never erases footage on a clock tick — it continuously discards anything older than the retention window and can always answer "exactly how many events in the last W seconds" by counting frames. The counter, instead, only ever reads two meter dials — last billing period's total and this period's total-so-far — and blends them by how far into this period you are, without ever knowing the exact moment any individual reading happened.
+      <span class="mm-break">Where it breaks down: the camera analogy hides the log's real cost — a busier scene means proportionally more footage to store, which is exactly the memory-scaling problem token bucket never has. And the water-meter analogy hides the counter's real assumption — it silently assumes usage was smooth across the previous period, which is invisible in the dial reading itself and is exactly the failure mode below.</span>
+    </div>
+
+    <h3>Failure &amp; edge cases</h3>
+    <ul class="plain">
+      <li><strong>The log's memory growth is real, just bounded per-check.</strong> A busy key's sorted set holds one entry per request currently inside the window — it never grows <em>unboundedly</em>, because every check prunes anything stale before counting, but its steady-state size tracks that client's request volume directly. A key sending 10,000 requests/hour against a 1-hour window can steady-state at up to 10,000 live entries. This is the direct, unavoidable price of exactness, not a bug to be fixed.</li>
+      <li><strong>The counter's uniform-distribution assumption can be provably wrong.</strong> It's accurate exactly when traffic is smooth, and wrong in a specific, describable direction when it isn't — see the two cases below.</li>
+      <li><strong>Both variants need one atomic operation per request, same as token bucket (25.1).</strong> Log: prune + count + add must happen as one atomic step (a Redis Lua script covering all three <code>ZSET</code> operations), or two concurrent requests can both count a pre-prune, pre-add state and both admit past the limit. Counter: read-both-counters + compute-estimate + increment must be equally atomic, for the identical reason.</li>
+      <li><strong>Clock source consistency matters for both</strong>, exactly as it did for token bucket — the log's <code>now - W</code> cutoff and the counter's <code>elapsed_fraction</code> both depend on a consistent clock across whatever process is doing the check.</li>
+      <li><strong>Idle-key cleanup differs by variant.</strong> A log's sorted set for an idle key naturally shrinks to zero live entries as its old timestamps age past pruning — but the empty key itself should still be <code>TTL</code>'d so it doesn't linger forever. A counter's two numbers need the same idle-key <code>TTL</code>, since neither variant benefits from holding state for a key nobody is using.</li>
+    </ul>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">The counter's estimate, worked both directions (the SAME near-boundary burst, checked at two different times)</div>
+      <svg viewBox="0 0 1040 340" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <text x="20" y="26" font-size="12.5" font-weight="800" fill="#14532d">CASE A — burst near the boundary, checked SHORTLY AFTER crossing (elapsed_fraction ≈ 0.05)</text>
+        <rect x="20" y="36" width="490" height="60" rx="8" fill="#f3f2ef" stroke="#94908a" stroke-width="2"/>
+        <text x="30" y="52" font-size="10.5" fill="#4a4742">PREV WINDOW</text>
+        <g fill="#dc2626">
+          <circle cx="430" cy="72" r="5"/><circle cx="442" cy="72" r="5"/><circle cx="454" cy="72" r="5"/><circle cx="466" cy="72" r="5"/><circle cx="478" cy="72" r="5"/>
+          <circle cx="490" cy="72" r="5"/><circle cx="430" cy="83" r="5"/><circle cx="442" cy="83" r="5"/><circle cx="454" cy="83" r="5"/><circle cx="466" cy="83" r="5"/>
+        </g>
+        <text x="458" y="60" text-anchor="middle" font-size="10" font-weight="700" fill="#7f1d1d">100 reqs, right before the boundary</text>
+        <rect x="510" y="36" width="510" height="60" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+        <text x="520" y="52" font-size="10.5" fill="#1e3a8a">CURRENT WINDOW</text>
+        <text x="765" y="72" text-anchor="middle" font-size="11" fill="#6b6861" font-style="italic">0 requests so far</text>
+        <line x1="510" y1="30" x2="510" y2="102" stroke="#dc2626" stroke-width="2" stroke-dasharray="4 3"/>
+        <text x="700" y="112" font-size="11" fill="#4a4742">elapsed_fraction ≈ 0.05 (just crossed the boundary)</text>
+        <rect x="20" y="120" width="1000" height="42" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="1.6"/>
+        <text x="520" y="138" text-anchor="middle" font-size="12" font-weight="700" fill="#14532d">estimate = 100×(1 − 0.05) + 0 = 95 → a true log check would show ≈100 (still almost</text>
+        <text x="520" y="154" text-anchor="middle" font-size="12" font-weight="700" fill="#14532d">entirely inside the true window) — close enough, correctly flags it</text>
+
+        <text x="20" y="196" font-size="12.5" font-weight="800" fill="#7f1d1d">CASE B — the SAME burst, checked much LATER into the current window (elapsed_fraction ≈ 0.8)</text>
+        <rect x="20" y="206" width="490" height="60" rx="8" fill="#f3f2ef" stroke="#94908a" stroke-width="2"/>
+        <text x="30" y="222" font-size="10.5" fill="#4a4742">PREV WINDOW</text>
+        <g fill="#dc2626">
+          <circle cx="430" cy="242" r="5"/><circle cx="442" cy="242" r="5"/><circle cx="454" cy="242" r="5"/><circle cx="466" cy="242" r="5"/><circle cx="478" cy="242" r="5"/>
+          <circle cx="490" cy="242" r="5"/><circle cx="430" cy="253" r="5"/><circle cx="442" cy="253" r="5"/><circle cx="454" cy="253" r="5"/><circle cx="466" cy="253" r="5"/>
+        </g>
+        <text x="458" y="230" text-anchor="middle" font-size="10" font-weight="700" fill="#7f1d1d">same 100 reqs — now "8/10ths old"</text>
+        <rect x="510" y="206" width="510" height="60" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+        <text x="520" y="222" font-size="10.5" fill="#1e3a8a">CURRENT WINDOW</text>
+        <text x="765" y="242" text-anchor="middle" font-size="11" fill="#6b6861" font-style="italic">0 requests so far</text>
+        <line x1="510" y1="200" x2="510" y2="272" stroke="#dc2626" stroke-width="2" stroke-dasharray="4 3"/>
+        <text x="700" y="282" font-size="11" fill="#4a4742">elapsed_fraction ≈ 0.8 (near the current window's end)</text>
+        <rect x="20" y="290" width="1000" height="42" rx="8" fill="#fee2e2" stroke="#dc2626" stroke-width="1.6"/>
+        <text x="520" y="308" text-anchor="middle" font-size="12" font-weight="700" fill="#7f1d1d">estimate = 100×(1 − 0.8) + 0 = 20 → but a true log check would STILL show ≈100 (the burst</text>
+        <text x="520" y="324" text-anchor="middle" font-size="12" font-weight="700" fill="#7f1d1d">is recent enough to remain fully inside the rolling window) — UNDER-counts by 80</text>
+      </svg>
+      <p class="caption">The error tracks elapsed time since the boundary, not where within the previous window the burst sat. (Mirror image: a burst concentrated <em>early</em> in the previous window — already fully aged out by the time you check late — still gets partial credit, causing an <em>over</em>-count instead.)</p>
+    </div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Mechanism flow, end to end (sliding window log)</div>
+      <svg viewBox="0 0 1040 230" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="mfArrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#2563eb"/>
+          </marker>
+        </defs>
+        <rect x="8" y="20" width="230" height="120" rx="9" fill="#f3f2ef" stroke="#94908a" stroke-width="2"/>
+        <text x="123" y="44" text-anchor="middle" font-size="12" font-weight="800" fill="#1a1917">① REQUEST ARRIVES</text>
+        <text x="123" y="70" text-anchor="middle" font-size="11" fill="#4a4742">key = API key /</text>
+        <text x="123" y="86" text-anchor="middle" font-size="11" fill="#4a4742">user / IP</text>
+
+        <line x1="242" y1="80" x2="270" y2="80" stroke="#2563eb" stroke-width="2.5" marker-end="url(#mfArrow)"/>
+
+        <rect x="276" y="20" width="230" height="120" rx="9" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+        <text x="391" y="42" text-anchor="middle" font-size="11.5" font-weight="800" fill="#4c1d95">② PRUNE</text>
+        <text x="391" y="58" text-anchor="middle" font-size="10" font-style="italic" fill="#7c3aed">(ZREMRANGEBYSCORE)</text>
+        <text x="391" y="80" text-anchor="middle" font-size="10.5" fill="#4c1d95">remove entries older</text>
+        <text x="391" y="96" text-anchor="middle" font-size="10.5" fill="#4c1d95">than now - W</text>
+
+        <line x1="510" y1="80" x2="538" y2="80" stroke="#2563eb" stroke-width="2.5" marker-end="url(#mfArrow)"/>
+
+        <rect x="544" y="20" width="230" height="120" rx="9" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+        <text x="659" y="44" text-anchor="middle" font-size="12" font-weight="800" fill="#1e3a8a">③ COUNT (ZCARD)</text>
+        <text x="659" y="70" text-anchor="middle" font-size="10.5" fill="#1e3a8a">count = remaining</text>
+        <text x="659" y="86" text-anchor="middle" font-size="10.5" fill="#1e3a8a">entries in the sorted</text>
+        <text x="659" y="102" text-anchor="middle" font-size="10.5" fill="#1e3a8a">set</text>
+
+        <line x1="778" y1="80" x2="806" y2="80" stroke="#2563eb" stroke-width="2.5" marker-end="url(#mfArrow)"/>
+
+        <rect x="812" y="20" width="220" height="120" rx="9" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+        <text x="922" y="42" text-anchor="middle" font-size="11.5" font-weight="800" fill="#14532d">④ CHECK + ADD</text>
+        <text x="922" y="58" text-anchor="middle" font-size="10" font-style="italic" fill="#16a34a">(atomic)</text>
+        <text x="922" y="78" text-anchor="middle" font-size="10.5" fill="#14532d">count &lt; limit →</text>
+        <text x="922" y="94" text-anchor="middle" font-size="10.5" font-weight="700" fill="#14532d">ZADD now, ADMIT</text>
+        <text x="922" y="112" text-anchor="middle" font-size="10.5" font-weight="700" fill="#7f1d1d">else → REJECT</text>
+
+        <line x1="922" y1="140" x2="922" y2="168" stroke="#dc2626" stroke-width="2" marker-end="url(#mfArrow)"/>
+        <rect x="712" y="174" width="420" height="50" rx="9" fill="#fee2e2" stroke="#dc2626" stroke-width="2"/>
+        <text x="922" y="196" text-anchor="middle" font-size="11" font-weight="700" fill="#7f1d1d">REJECT → 429 + Retry-After from</text>
+        <text x="922" y="212" text-anchor="middle" font-size="11" font-weight="700" fill="#7f1d1d">the oldest remaining entry's age-out time</text>
+      </svg>
+    </div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Structural diagram — the counter's two fixed windows and the weight (timeline)</div>
+      <svg viewBox="0 0 1040 260" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <rect x="40" y="30" width="460" height="100" rx="10" fill="#f3f2ef" stroke="#94908a" stroke-width="2"/>
+        <text x="270" y="58" text-anchor="middle" font-size="13" font-weight="800" fill="#1a1917">PREVIOUS WINDOW</text>
+        <text x="270" y="86" text-anchor="middle" font-size="14" font-family="SF Mono, Menlo, monospace" fill="#4a4742">previous_count = 80</text>
+
+        <rect x="500" y="30" width="500" height="100" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+        <text x="750" y="58" text-anchor="middle" font-size="13" font-weight="800" fill="#1e3a8a">CURRENT WINDOW</text>
+        <text x="750" y="86" text-anchor="middle" font-size="14" font-family="SF Mono, Menlo, monospace" fill="#1e3a8a">current_count = 20</text>
+
+        <line x1="650" y1="130" x2="650" y2="168" stroke="#dc2626" stroke-width="2.5"/>
+        <circle cx="650" cy="130" r="5" fill="#dc2626"/>
+        <text x="650" y="188" text-anchor="middle" font-size="11.5" fill="#7f1d1d">"now" — elapsed_fraction ≈ 0.3</text>
+        <text x="650" y="204" text-anchor="middle" font-size="11.5" fill="#7f1d1d">into the current window</text>
+
+        <rect x="180" y="216" width="680" height="34" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="1.6"/>
+        <text x="520" y="238" text-anchor="middle" font-size="12.5" font-family="SF Mono, Menlo, monospace" font-weight="700" fill="#14532d">estimate = 80 × (1 − 0.3) + 20 = 76</text>
+      </svg>
+      <p class="caption">The counter blends two aggregate numbers by how far "now" sits into the current window — an estimate of what a log would show if traffic were spread evenly.</p>
+    </div>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">Walk through exactly what a naive, non-atomic sliding window log implementation does when two requests for the same key arrive close enough together that both run ZCARD before either runs ZADD — assume the count is one under the limit for both. Name precisely which three operations from the happy-path list have to become one atomic step to prevent this.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read "Both variants need one atomic operation per request" and steps 3–5 of the log's happy path.</div>
+      </div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">2</span>
+          <span class="qtext">Using the concrete numeric example in "The counter's uniform-distribution assumption can be provably wrong," explain in your own words why the sliding window counter's estimate can be roughly accurate for a burst that happened right at a window boundary when checked shortly after, but can severely under-count that same burst when checked much later into the current window.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the "counter's estimate, worked both directions" diagram — Case A and Case B walk through the same burst checked at two different times.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> You can run both mechanisms correctly. In a real design, which one do you actually reach for, and what does that choice cost against token bucket and fixed window?</div>
+  </section>
+
+  <!-- ══════════════════ §7 ══════════════════ -->
+  <section id="s7">
+    <h2 class="section-title"><span class="num">§7</span> ⚖️ The Decision — When, and What It Costs</h2>
+
+    <p>The baseline question isn't "sliding window or not" — if you've already ruled out fixed window's boundary bug, you're choosing a sliding-window shape by default. The real decisions are: which variant, and whether a sliding window is even the right tool compared to token bucket's coarser but cheaper aggregate accounting.</p>
+
+    <p><strong>The guarantee needs to be exact — auditable, contractual, or billing-grade.</strong> This is the sliding window log's case: a customer contract that says "no more than 1,000 calls in any rolling 24-hour window," a billing system that charges per request over quota, or any context where "approximately correct" isn't a defensible engineering answer. You get a count that is, by construction, exactly right, at the cost of memory that scales with that client's request volume inside the window.</p>
+
+    <p><strong>An approximate rolling guarantee is genuinely fine, and per-key volume or window length makes the log's memory a real problem.</strong> This is the sliding window counter's case — the default once you've decided you need <em>some</em> rolling-window precision beyond what token bucket offers, but don't need it exact. Two numbers per key, regardless of volume, at the cost of an estimate that assumes uniform distribution within the previous window and is measurably wrong when that assumption fails (§6).</p>
+
+    <p><strong>A burst/sustained pair is actually all the design needs — not a rolling count at all.</strong> If nobody downstream cares about "exactly how many requests in the last W seconds" and the real requirement is closer to "tolerate normal bursts, bound the long-run average," token bucket (25.1) is simpler, cheaper, and answers the actual question being asked. Reaching for a sliding window here is solving a more precise problem than the one that exists.</p>
+
+    <p><strong>How much per-key volume are you actually expecting, and for how long a window?</strong> This is the concrete sizing question that decides log vs. counter once "exact" is established as a requirement. A window of a few seconds to a few minutes at moderate volume keeps the log's memory trivial. A daily or weekly window at high volume can mean tens of thousands of entries per key — at that point, either accept the memory cost because exactness is genuinely non-negotiable, or push back on whether the requirement really demands per-request exactness rather than a periodic reconciliation job that audits the true count out-of-band.</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Decision tree</div>
+      <svg viewBox="0 0 1040 360" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <rect x="220" y="10" width="600" height="60" rx="10" fill="#f3f2ef" stroke="#94908a" stroke-width="2"/>
+        <text x="520" y="34" text-anchor="middle" font-size="12" font-weight="700" fill="#1a1917">Does the guarantee need to be EXACT — provably correct, not</text>
+        <text x="520" y="52" text-anchor="middle" font-size="12" font-weight="700" fill="#1a1917">just a close estimate (contract, billing, audit)?</text>
+
+        <line x1="380" y1="70" x2="220" y2="120" stroke="#94908a" stroke-width="1.6"/>
+        <text x="270" y="98" font-size="11" font-weight="700" fill="#dc2626">yes</text>
+        <line x1="660" y1="70" x2="840" y2="120" stroke="#94908a" stroke-width="1.6"/>
+        <text x="740" y="98" font-size="11" font-weight="700" fill="#16a34a">no, an estimate is fine</text>
+
+        <rect x="30" y="124" width="380" height="60" rx="10" fill="#f3f2ef" stroke="#94908a" stroke-width="2"/>
+        <text x="220" y="148" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1a1917">Is per-key request volume low enough that</text>
+        <text x="220" y="166" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1a1917">O(requests-in-window) memory is affordable?</text>
+
+        <rect x="680" y="124" width="350" height="90" rx="10" fill="#ccfbf1" stroke="#0d9488" stroke-width="2"/>
+        <text x="855" y="150" text-anchor="middle" font-size="12" font-weight="800" fill="#134e4a">Sliding window counter.</text>
+        <text x="855" y="170" text-anchor="middle" font-size="11" fill="#134e4a">O(1) state, no boundary bug,</text>
+        <text x="855" y="186" text-anchor="middle" font-size="11" fill="#134e4a">accept the weighted-interpolation</text>
+        <text x="855" y="202" text-anchor="middle" font-size="11" fill="#134e4a">estimate.</text>
+
+        <line x1="130" y1="184" x2="30" y2="230" stroke="#94908a" stroke-width="1.6"/>
+        <text x="60" y="212" font-size="11" font-weight="700" fill="#16a34a">yes</text>
+        <line x1="310" y1="184" x2="410" y2="230" stroke="#94908a" stroke-width="1.6"/>
+        <text x="370" y="212" font-size="11" font-weight="700" fill="#dc2626">no</text>
+
+        <rect x="10" y="234" width="260" height="100" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+        <text x="140" y="258" text-anchor="middle" font-size="12" font-weight="800" fill="#1e3a8a">Sliding window log.</text>
+        <text x="140" y="278" text-anchor="middle" font-size="11" fill="#1e3a8a">Redis ZSET, exact count,</text>
+        <text x="140" y="294" text-anchor="middle" font-size="11" fill="#1e3a8a">atomic prune-count-add.</text>
+
+        <rect x="288" y="234" width="352" height="120" rx="10" fill="#fee2e2" stroke="#dc2626" stroke-width="2"/>
+        <text x="464" y="256" text-anchor="middle" font-size="11.5" font-weight="800" fill="#7f1d1d">Precision doesn't fit your traffic.</text>
+        <text x="464" y="274" text-anchor="middle" font-size="11" fill="#7f1d1d">Fall back to the counter and accept</text>
+        <text x="464" y="290" text-anchor="middle" font-size="11" fill="#7f1d1d">its estimate, or push back on whether</text>
+        <text x="464" y="306" text-anchor="middle" font-size="11" fill="#7f1d1d">"exact" is really required — or reach</text>
+        <text x="464" y="322" text-anchor="middle" font-size="11" fill="#7f1d1d">for token bucket if that was the real need.</text>
+      </svg>
+    </div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Per-key memory over time, steady busy traffic (limit=100, W=60s)</div>
+      <svg viewBox="0 0 1040 220" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <text x="20" y="24" font-size="12" font-weight="800" fill="#1e3a8a">LOG — sawtooth, tracks in-window volume</text>
+        <line x1="70" y1="30" x2="70" y2="95" stroke="#94908a" stroke-width="1.5"/>
+        <line x1="70" y1="95" x2="1010" y2="95" stroke="#94908a" stroke-width="1.5"/>
+        <text x="55" y="38" font-size="10.5" fill="#6b6861" text-anchor="end">100</text>
+        <text x="55" y="99" font-size="10.5" fill="#6b6861" text-anchor="end">0</text>
+        <path d="M90,38 L160,95 L200,38 L270,95 L310,38 L380,95 L420,38 L490,95 L530,38 L600,95 L640,38 L710,95 L750,38 L820,95 L860,38 L930,95 L970,38"
+              fill="none" stroke="#2563eb" stroke-width="2.5"/>
+
+        <text x="20" y="140" font-size="12" font-weight="800" fill="#14532d">COUNTER — flat, always 2 numbers (TOKEN BUCKET is flat here too — 25.1)</text>
+        <line x1="70" y1="150" x2="70" y2="185" stroke="#94908a" stroke-width="1.5"/>
+        <line x1="70" y1="185" x2="1010" y2="185" stroke="#94908a" stroke-width="1.5"/>
+        <text x="55" y="158" font-size="10.5" fill="#6b6861" text-anchor="end">2</text>
+        <text x="55" y="189" font-size="10.5" fill="#6b6861" text-anchor="end">0</text>
+        <line x1="90" y1="156" x2="970" y2="156" stroke="#16a34a" stroke-width="2.5"/>
+        <text x="1010" y="212" text-anchor="end" font-size="11" fill="#6b6861">time →</text>
+      </svg>
+      <p class="caption">Memory that scales with volume vs. memory that never does — the same precision-vs-memory trade §5 introduced, seen over time.</p>
+    </div>
+
+    <h3>Trade-offs</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>✅ Benefit</th><th>❌ Cost / Limitation</th></tr></thead>
+        <tbody>
+          <tr><td class="benefit">Sliding window log gives an exact, auditable count of requests in any rolling window — the count is derived from real timestamps, not an estimate</td><td class="cost">Memory scales with per-key request volume inside the window — a busy key can mean thousands of live sorted-set entries, unlike token bucket's fixed two numbers</td></tr>
+          <tr><td class="benefit">Sliding window counter keeps the no-boundary guarantee at O(1) state — two numbers per key, same cost class as token bucket</td><td class="cost">The count is an estimate that assumes uniform request distribution within the previous window — provably wrong in a specific, describable direction when that assumption fails (§6)</td></tr>
+          <tr><td class="benefit">Neither variant has the fixed-window boundary bug, because both define the window relative to "now" instead of a clock tick that resets</td><td class="cost">Both need atomic prune/read + count/weight + write per request, same as token bucket's check-and-deduct — a naive split into separate calls races identically</td></tr>
+          <tr><td class="benefit">The log's entries are individually inspectable — you can audit exactly which requests counted, when, for compliance or debugging</td><td class="cost">More operations per request than token bucket's single read-compute-write — prune, count, and conditionally insert are three ZSET operations, not one</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>In production</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>System</th><th>How it applies</th><th>The nuance</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Redis's own documented rate-limiting pattern</strong></td><td>The canonical sliding window log implementation — a sorted set per client key, <code>ZADD</code>/<code>ZREMRANGEBYSCORE</code>/<code>ZCARD</code> — is Redis's own recommended pattern for exact per-key rate limiting</td><td>Widely copied directly into application code because the three-operation shape maps almost one-to-one onto the algorithm itself, with the atomicity requirement usually solved via a Lua script</td></tr>
+          <tr><td><strong>Cloudflare's original Rate Limiting Rules product (pre-GCRA)</strong></td><td>Publicly documented as approximating a rolling window using a weighted blend of the current and previous fixed window counts — the sliding window counter, by name</td><td>Chosen specifically to avoid the log's per-request memory cost at Cloudflare's edge scale, before later products moved to GCRA (25.1) for an even lighter-weight, non-window-based approach</td></tr>
+          <tr><td><strong>Kong Gateway's rate-limiting-advanced plugin</strong></td><td>Offers a sliding-window mode as a configurable alternative to the plugin's default fixed-window counting, specifically to remove the edge-of-window burst behavior</td><td>Positioned as the middle ground between "simple but has the boundary bug" (fixed) and "exact but heavier" (a full log), matching this doc's counter variant</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">A fintech company needs to enforce "no customer may submit more than 50 payment requests in any rolling 60-second window," and their compliance team requires the count to be exactly reproducible for any past 60-second span if a dispute arises. An engineer proposes the sliding window counter because "it's cheaper and close enough." Using the decision tree, say whether you'd approve this design, name specifically what breaks the compliance requirement if you do, and state what you'd build instead.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the first boundary condition ("The guarantee needs to be exact") and the first branch of the decision tree.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> Can you deliver this cleanly under interview pressure, including when the interviewer pushes on the log's memory cost specifically?</div>
+  </section>
+
+  <!-- ══════════════════ §8 ══════════════════ -->
+  <section id="s8">
+    <h2 class="section-title"><span class="num">§8</span> 🎯 In the Interview</h2>
+
+    <h3>When an interviewer asks / says</h3>
+    <ul class="trigger-list">
+      <li>"How would you fix the fixed-window boundary problem exactly?"</li>
+      <li>"Can you enforce an exact rolling limit — no more than N requests in any W-second window?"</li>
+      <li>"That sorted set is going to grow forever for a busy client, isn't it?"</li>
+      <li>"How does this compare to the token bucket you mentioned earlier?"</li>
+    </ul>
+
+    <h3>Where this surfaces in the design flow</h3>
+    <p>Right after you've named the fixed-window boundary bug (or the interviewer names it for you) and they push for a fix that's actually precise, rather than just "no bug." It comes back a second time as a memory-cost pushback the moment you describe the log — expect it, and price it before being asked.</p>
+
+    <h3>What you say / do — delivered in this fixed order</h3>
+    <div class="table-wrap">
+      <table class="flow-table">
+        <tbody>
+          <tr><th>1. Name the choice</th><td>"Sliding window — the window is <code>[now - W, now]</code>, recomputed on every request, not reset on a clock tick." Then name the variant: <strong>log</strong> (exact) or <strong>counter</strong> (approximate) — state which, explicitly, don't leave it implicit.</td></tr>
+          <tr><th>2. Give the mechanism reason</th><td>Log: prune (<code>ZREMRANGEBYSCORE</code>) → count (<code>ZCARD</code>) → add (<code>ZADD</code>), one atomic step. Counter: <code>estimate = previous × (1 − elapsed_fraction) + current</code>, one atomic step.</td></tr>
+          <tr><th>3. Price it unprompted</th><td>Log: memory scales with per-key request volume, not O(1) like token bucket. Counter: it's an <em>estimate</em> — assumes uniform request distribution in the previous window.</td></tr>
+          <tr><th>4. Name the switch condition</th><td>Log → counter once per-key volume or window length makes the sorted set too large. Counter → token bucket if a rolling count was never actually needed, only a burst/sustained pair.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>The trade-off statement (memorize this pattern)</h3>
+    <div class="tradeoff-box">"I'd fix the fixed-window boundary bug with a sliding window: instead of resetting on a clock tick, define the window as the last W seconds relative to right now, recomputed on every request, so there's no instant to double up around. For an exact, auditable count, I'd implement it as a sliding window log — one Redis sorted set per client, timestamp as the score — and on every request I prune anything older than W seconds, count what's left, and if that's under the limit I add the new timestamp and admit, otherwise I reject with a 429 and a Retry-After computed from when the oldest in-window entry ages out. The cost I'm accepting is memory: unlike token bucket's two numbers per key, the log holds one entry per request currently inside the window, so a high-volume client can mean thousands of entries per key, growing and shrinking continuously. If that memory cost is a real problem — high request volume, long windows — I'd switch to the sliding window counter instead: keep just two counters, the previous fixed window and the current one, and estimate the rolling count as a weighted blend of the two based on how far into the current window we are. That gets O(1) state back, at the cost of assuming requests are spread evenly across the previous window, which is usually close enough but is only an estimate, not an exact count."</div>
+
+    <h3>A second trade-off variant — the "won't that sorted set grow forever" pushback</h3>
+    <div class="tradeoff-box">"That's exactly the sliding window log's real cost, and it's worth pricing before anyone asks: the sorted set holds one entry per request that's still inside the window, not two aggregate numbers like token bucket, so a client sending 500 requests a minute against a 60-second window can have up to 500 live entries at once, continuously churning as old ones age out and new ones get added. It never grows unbounded, because every check prunes entries older than the window before counting — but the steady-state size is proportional to that client's request volume, not a constant. If that's too much memory at the scale I'm operating — millions of keys, some with high per-key volume — I'd switch to the sliding window counter, which caps state at exactly two numbers per key regardless of volume, and accept its weighted-interpolation estimate instead of the log's exact count."</div>
+
+    <h3>⚠️ Traps</h3>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "I'll just shrink the fixed window to a few seconds — that fixes the boundary bug."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> It only shrinks the boundary bug's absolute size — a client can still double its effective rate right at any reset instant, however small the window. The fix isn't a smaller window, it's a window that doesn't reset at all (§4/§5).</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "Sliding window log and sliding window counter are basically the same algorithm with different names."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> They're two genuinely different implementations of the same no-boundary definition — one is exact and stores every timestamp, the other is an O(1) estimate built from two aggregate counters. Conflating them under interview pressure loses the "which one, and why" judgment that's the actual point of this subtopic.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "I'll store every request forever so I always have exact history."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> The log has to prune on every check (<code>ZREMRANGEBYSCORE</code>), not just insert — without continuous pruning, the sorted set grows unboundedly instead of staying proportional to current in-window volume, which is a real bug, not just an inefficiency.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "The counter's estimate is basically exact, it's just weighted math."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> It assumes requests are spread evenly across the previous window. A real burst concentrated at one edge of that window breaks the estimate in a specific, provable direction (§6) — it's an approximation with a named failure mode, not a rounding detail.</div></div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> Can you combine what you've learned across sections, not just recall each one?</div>
+  </section>
+
+  <!-- ══════════════════ §9 ══════════════════ -->
+  <section id="s9">
+    <h2 class="section-title"><span class="num">§9</span> 🧪 Mastery Gate</h2>
+    <div class="callout callout-quote">Synthesis only. Each question requires combining two or more sections.</div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">1</span>
+        <span class="qtext">A candidate implementation of the sliding window log inserts new timestamps with ZADD on every request but never runs ZREMRANGEBYSCORE. Using the build chain from §5 and the failure modes from §6, explain precisely what breaks, and why every individual admit/reject decision can still look "correct" in isolation even as the system degrades.</span>
+        <span class="quiz-toggle">▼ Hint</span>
+      </div>
+      <div class="quiz-hint">💡 Sections combined: §5 + §6.</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">2</span>
+        <span class="qtext">You're designing rate limiting for a hospital's medication-dispensing API: nurses' terminals can request at most 20 dispense authorizations per patient in any rolling 12-hour window, and a regulatory audit must be able to reconstruct the exact authorization count for any past 12-hour span for any patient. Decide log vs. counter using the decision tree in §7, justify the choice against the atomicity requirement and memory characteristics from §6, and state one concrete reason per-key volume here is unlikely to make your choice impractical.</span>
+        <span class="quiz-toggle">▼ Hint</span>
+      </div>
+      <div class="quiz-hint">💡 Sections combined: §7 + §6, applied to a system not mentioned elsewhere in this doc.</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">3</span>
+        <span class="qtext">Explain precisely, using the definition from §5's first concept block, why neither sliding window variant can be attacked the way a fixed window can — walk through what a client attempting the fixed-window "hit the boundary from both sides" strategy from §4 would actually experience against a sliding window log, and separately against a sliding window counter.</span>
+        <span class="quiz-toggle">▼ Hint</span>
+      </div>
+      <div class="quiz-hint">💡 Sections combined: §4 + §5.</div>
+    </div>
+
+    <h3>Mastery criteria — tick only what you can demonstrate on demand</h3>
+    <ul class="checklist">
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can explain why token bucket's aggregate accounting cannot answer an exact rolling-window count, and state precisely what question a sliding window answers that token bucket cannot</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can describe the sliding window log mechanism using Redis sorted sets — the data structure, the prune/count/insert operations, and why they must be atomic</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can derive the sliding window counter's weighted-interpolation formula and explain the uniform-distribution assumption it depends on, including a concrete case where that assumption breaks</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can explain why neither sliding window variant exhibits the fixed-window boundary bug, tracing the argument back to the window's definition relative to "now"</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can choose correctly between sliding window log, sliding window counter, and token bucket for a given scenario, justified by precision needs, memory cost, and per-key volume</span></li>
+    </ul>
+
+    <div class="callout callout-tip">💡 <strong>Rule of thumb:</strong> If you can teach it to someone else and field their follow-up questions, you've mastered it.</div>
+  </section>
+
+  <!-- ══════════════════ §10 ══════════════════ -->
+  <section id="s10">
+    <h2 class="section-title"><span class="num">§10</span> 🔗 Connections &amp; Sources</h2>
+
+    <div class="connections">
+      <div class="conn-card">
+        <span class="conn-icon">⬅️</span>
+        <div><div class="conn-label">Builds on</div><strong>25.1 Token Bucket Algorithm</strong>, which establishes the rate-limiting vocabulary this doc reuses directly — per-client key, the <code>429</code>/<code>Retry-After</code> response contract, and the atomic check-and-deduct pattern this doc's prune-count-add and read-weight-increment operations both mirror. It's also the direct contrast this doc is built against: token bucket eliminates the boundary bug via <em>aggregate</em> accounting; this doc eliminates it via a <em>rolling, per-timestamp-or-estimated</em> definition instead.</div>
+      </div>
+      <div class="conn-card">
+        <span class="conn-icon">➡️</span>
+        <div><div class="conn-label">Enables</div><strong>25.5 Distributed rate limiting with Redis</strong>, which takes this doc's ZSET-based sliding window log pattern and its atomicity requirement and builds the full multi-node Redis implementation on top of it, the same way it will for token bucket's distributed case. <strong>25.6 Rate limiting at CDN, gateway, and service layers</strong>, which needs an algorithm choice per layer, and this doc's precision-vs-memory trade-off is one of the concrete axes that choice turns on.</div>
+      </div>
+      <div class="conn-card">
+        <span class="conn-icon">⚡</span>
+        <div><div class="conn-label">Tension with</div><strong>25.1 Token Bucket Algorithm.</strong> Both eliminate the fixed-window boundary bug, but by opposite means: token bucket buys O(1) state by giving up exact per-timestamp precision entirely — it never answers "how many requests in the last W seconds," only "is there budget now." Sliding window log buys exact precision by giving up O(1) state. Neither is strictly better; picking between them (and between the counter as a middle ground) is a genuine, scenario-dependent trade, not a strict upgrade path.</div>
+      </div>
+    </div>
+
+    <h3>📚 Further reading</h3>
+    <ul class="reading-list">
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Cloudflare blog — "Counting things: a lot of different ways to count things at Cloudflare"</strong> — <a href="https://blog.cloudflare.com/counting-things-a-lot-of-different-things/">blog</a> — covers the weighted current/previous-window approximation this doc's counter variant is built on, as historically used at Cloudflare's edge</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Redis docs — Sorted sets</strong> — <a href="https://redis.io/docs/latest/develop/data-types/sorted-sets/">docs</a> — the data structure the sliding window log is built on (<code>ZADD</code>, <code>ZREMRANGEBYSCORE</code>, <code>ZCARD</code>)</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>"An alternative approach to rate limiting"</strong> — <a href="https://engineering.classdojo.com/2015/02/06/rolling-rate-limiter/">blog</a> — walks a Redis-sorted-set rolling rate limiter implementation, the direct blueprint for §6's log mechanism</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Kong Gateway docs — rate-limiting-advanced plugin</strong> — <a href="https://docs.konghq.com/hub/kong-inc/rate-limiting-advanced/">docs</a> — documents the sliding-window algorithm option referenced in §7's production table</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>System Design Primer — Rate limiter section</strong> — <a href="https://github.com/donnemartin/system-design-primer">GitHub</a> — a side-by-side comparison of fixed window, sliding window log, and sliding window counter, useful as a fast cross-check of this doc's trade-offs</span></li>
+    </ul>
+  </section>
+
+  <!-- ══════════════════ §11 ══════════════════ -->
+  <section id="s11">
+    <h2 class="section-title"><span class="num">§11</span> ✍️ My Notes</h2>
+    <div class="callout callout-quote">Personal observations, model answers from drilling sessions, things that confused me. Saved locally in this browser.</div>
+    <textarea class="notes-area" placeholder="Your notes, model answers, and annotations…"></textarea>
+  </section>
+
+</article>
+</main>
+
+<script>
+// TOC active state
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('#toc nav a');
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(a => a.classList.remove('active'));
+      const a = document.querySelector(`#toc nav a[href="#${e.target.id}"]`);
+      if (a) a.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+sections.forEach(s => obs.observe(s));
+
+function toggle(cb) { cb.closest('li').classList.toggle('checked'); }
+function toggleReading(cb) { cb.closest('li').classList.toggle('checked'); }
+function toggleQuiz(q) {
+  const item = q.closest('.quiz-item');
+  item.classList.toggle('open');
+  q.querySelector('.quiz-toggle').textContent = item.classList.contains('open') ? '▲ Hide' : '▼ Hint';
+}
+
+// Notes auto-save
+const notesArea = document.querySelector('.notes-area');
+const NOTES_KEY = 'notes_25_4';
+if (localStorage.getItem(NOTES_KEY)) notesArea.value = localStorage.getItem(NOTES_KEY);
+notesArea.addEventListener('input', () => {
+  try { localStorage.setItem(NOTES_KEY, notesArea.value); } catch(e) {}
+});
+</script>
+
+</body>
+</html>

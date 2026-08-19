@@ -812,11 +812,11 @@ const PHASES = [
         num: 25, emoji: '🚦',
         label: "Rate Limiting Systems",
         subtopics: [
-          { id: '25.1', label: "Token bucket algorithm", file: "topic_25.1_token_bucket_algorithm.html", done: false, tier: "T1", probs: ['1A','2A'] },
+          { id: '25.1', label: "Token bucket algorithm", file: "topic_25.1_token_bucket_algorithm.html", done: true, tier: "T1", probs: ['1A','2A'] },
           { id: '25.2', label: "Leaky bucket algorithm", file: null, done: false, tier: "T2", probs: ['2A'] },
           { id: '25.3', label: "Fixed window counter", file: null, done: false, tier: "T2", probs: ['2A'] },
-          { id: '25.4', label: "Sliding window log and sliding window counter", file: null, done: false, tier: "T1", probs: ['1A','2A'] },
-          { id: '25.5', label: "Distributed rate limiting with Redis", file: null, done: false, tier: "T1", probs: ['1A','2A'] },
+          { id: '25.4', label: "Sliding window log and sliding window counter", file: "topic_25.4_sliding_window_log_and_sliding_window_counter.html", done: true, tier: "T1", probs: ['1A','2A'] },
+          { id: '25.5', label: "Distributed rate limiting with Redis", file: "topic_25.5_distributed_rate_limiting_with_redis.html", done: false, tier: "T1", probs: ['1A','2A'] },
           { id: '25.6', label: "Rate limiting at CDN, gateway, and service layers", file: null, done: false, tier: "T2", probs: ['2A'] },
           { id: '25.7', label: "Client-facing rate limit headers and retry guidance", file: null, done: false, tier: "T3", probs: ['2A'] },
         ]

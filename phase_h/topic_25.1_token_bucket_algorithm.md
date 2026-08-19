@@ -4,7 +4,7 @@
 > **Phase:** H — System Archetypes
 > **Depth Tier:** 🥇 T1 (Core) — budget ~3h
 > **Prereqs:** 2.9 (Backpressure Fundamentals), 11.7 (API Gateway Patterns)
-> **Date studied:** Not yet studied
+> **Date studied:** 2026-08-18
 
 ---
 
