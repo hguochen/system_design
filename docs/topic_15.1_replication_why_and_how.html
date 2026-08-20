@@ -1,0 +1,979 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>15.1 Replication — Why and How</title>
+<style>
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface-alt: #f3f2ef;
+    --border: #e5e3de; --text: #1a1917; --text-muted: #6b6861;
+    --accent: #2563eb; --accent-light: #dbeafe;
+    --green: #16a34a; --green-light: #dcfce7;
+    --red: #dc2626; --red-light: #fee2e2;
+    --yellow: #d97706; --yellow-light: #fef3c7;
+    --purple: #7c3aed; --purple-light: #ede9fe;
+    --orange: #ea580c; --orange-light: #ffedd5;
+    --teal: #0d9488; --teal-light: #ccfbf1;
+    --code-bg: #1e1e2e; --code-text: #cdd6f4;
+    --sidebar-w: 240px; --content-max: 820px;
+    font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; }
+  #toc { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0 48px; z-index: 100; }
+  #toc-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  #toc-header .phase-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-bottom: 6px; }
+  #toc-header h2 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  #toc-header .tier-tag { font-size: 10px; font-weight: 800; letter-spacing: .06em; color: var(--yellow); background: var(--yellow-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-top: 8px; }
+  #toc nav a { display: block; padding: 5px 16px 5px 20px; font-size: 12.5px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+  main { margin-left: var(--sidebar-w); padding: 48px 48px 96px; max-width: calc(var(--sidebar-w) + var(--content-max) + 96px); width: 100%; }
+  article { max-width: var(--content-max); }
+  .doc-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 2px solid var(--border); }
+  .doc-header .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+  .tag-phase { background: var(--accent-light); color: var(--accent); }
+  .tag-topic { background: var(--purple-light); color: var(--purple); }
+  .tag-tier  { background: var(--yellow-light); color: var(--yellow); }
+  .tag-prereq{ background: var(--teal-light); color: var(--teal); }
+  .tag-date  { background: var(--surface-alt);  color: var(--text-muted); }
+  .doc-header h1 { font-size: 30px; font-weight: 800; line-height: 1.25; letter-spacing: -.02em; color: var(--text); }
+  section { margin-bottom: 52px; scroll-margin-top: 32px; }
+  h2.section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -.01em; }
+  h2.section-title .num { font-size: 11px; font-weight: 800; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; letter-spacing: .04em; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 24px 0 10px; }
+  h4 { font-size: 13.5px; font-weight: 700; color: var(--text); margin: 18px 0 8px; }
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+  code { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-family: "SF Mono","Fira Code",Menlo,monospace; font-size: 12.5px; }
+  ul.plain { margin: 0 0 14px 20px; }
+  ul.plain li { margin-bottom: 7px; font-size: 14.5px; line-height: 1.6; }
+  ol.steps { margin: 0 0 14px 22px; }
+  ol.steps li { margin-bottom: 8px; font-size: 14.5px; line-height: 1.6; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 14px; border-left: 3px solid; }
+  .callout-goal  { background: var(--accent-light); border-color: var(--accent); color: #1e40af; }
+  .callout-tip   { background: var(--yellow-light); border-color: var(--yellow); color: #92400e; }
+  .callout-warn  { background: var(--red-light); border-color: var(--red); color: #7f1d1d; }
+  .callout-quote { background: var(--surface-alt); border-color: var(--border); color: var(--text-muted); font-style: italic; }
+  .callout-teal  { background: var(--teal-light); border-color: var(--teal); color: #134e4a; }
+  .the-question { background: var(--surface); border: 2px solid var(--accent); border-radius: 12px; padding: 16px 20px; margin-top: 18px; font-size: 15.5px; }
+  .the-question .lbl { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); display: block; margin-bottom: 5px; }
+  .the-question em { color: var(--text); font-weight: 600; }
+  .definition { background: var(--purple-light); border-left: 4px solid var(--purple); border-radius: 8px; padding: 16px 20px; margin: 18px 0 24px; font-size: 15px; font-weight: 600; color: #4c1d95; line-height: 1.6; }
+  .mental-model { background: var(--teal-light); border-left: 3px solid var(--teal); border-radius: 8px; padding: 14px 18px; margin: 18px 0; font-size: 14px; color: #134e4a; }
+  .mental-model .mm-name { font-weight: 800; }
+  .mental-model .mm-break { display: block; margin-top: 7px; font-style: italic; opacity: .85; }
+  .bridge { background: linear-gradient(90deg, var(--accent-light), transparent); border-left: 4px solid var(--accent); border-radius: 8px; padding: 13px 18px; margin-top: 28px; font-size: 14.5px; color: #1e40af; font-weight: 600; }
+  .bridge .arrow { font-weight: 800; margin-right: 6px; }
+  .checkpoint { background: var(--surface); border: 2px solid var(--green); border-radius: 12px; padding: 16px 20px; margin-top: 26px; }
+  .checkpoint > .cp-title { font-size: 12px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--green); margin-bottom: 12px; display: flex; align-items: center; gap: 7px; }
+  .cheatsheet { background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 24px 28px; font-family: "SF Mono","Fira Code","Cascadia Code",Menlo,monospace; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-x: auto; margin-top: 16px; }
+  .cheatsheet .label { color: #cba6f7; font-weight: 700; letter-spacing: .08em; display: block; margin-top: 18px; margin-bottom: 4px; border-bottom: 1px solid #313244; padding-bottom: 3px; }
+  .cheatsheet .label:first-child { margin-top: 0; }
+  .diagram-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 16px 14px; margin: 20px 0 28px; overflow-x: auto; }
+  .diagram-wrap .diagram-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); margin-bottom: 12px; }
+  .diagram-wrap svg { display: block; width: 100%; height: auto; }
+  .diagram-wrap p.caption { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 10px; margin-bottom: 0; font-style: italic; }
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; font-size: 14.5px; line-height: 1.55; }
+  .checklist li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 2px; background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .checklist li.checked .cb { background: var(--green); border-color: var(--green); }
+  .checklist li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .checklist li.checked .text { color: var(--text-muted); text-decoration: line-through; }
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: var(--surface-alt); padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.5; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+  .misconception { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .misconception .wrong { background: var(--red-light); padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; }
+  .misconception .right { padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; color: #065f46; background: var(--green-light); }
+  .misconception .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .quiz-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .quiz-q { padding: 14px 18px; font-size: 14.5px; font-weight: 600; cursor: pointer; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .quiz-q:hover { background: var(--surface-alt); }
+  .quiz-num { flex-shrink: 0; width: 24px; height: 24px; background: var(--accent); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; margin-top: 1px; }
+  .quiz-q .qtext { flex: 1; font-weight: 500; }
+  .quiz-toggle { font-size: 11px; color: var(--text-muted); flex-shrink: 0; margin-top: 3px; }
+  .quiz-hint { display: none; padding: 10px 18px 14px; font-size: 13px; color: #92400e; background: var(--yellow-light); border-top: 1px solid var(--border); line-height: 1.6; white-space: pre-wrap; }
+  .quiz-item.open .quiz-hint { display: block; }
+  .reading-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .reading-list li { display: flex; align-items: flex-start; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; font-size: 14px; }
+  .reading-list li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 1px; cursor: pointer; background: var(--surface); display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .reading-list li.checked .cb { background: var(--green); border-color: var(--green); }
+  .reading-list li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .reading-list li.checked .rtext { color: var(--text-muted); text-decoration: line-through; }
+  .notes-area { width: 100%; min-height: 200px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: inherit; font-size: 14px; color: var(--text); resize: vertical; line-height: 1.6; }
+  .notes-area:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .connections { display: flex; flex-direction: column; gap: 12px; }
+  .conn-card { display: flex; align-items: flex-start; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14px; }
+  .conn-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .conn-label { font-weight: 700; margin-bottom: 3px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .tradeoff-box { background: var(--surface-alt); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 16px 20px; font-size: 14.5px; font-style: italic; color: var(--text); margin-top: 14px; line-height: 1.65; }
+  .trigger-list { list-style: none; display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+  .trigger-list li { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--orange); border-radius: 8px; padding: 10px 16px; font-size: 14px; font-style: italic; color: var(--text); }
+  .flow-table { width: 100%; border-collapse: collapse; margin: 14px 0 18px; font-size: 14px; }
+  .flow-table th { background: var(--surface-alt); padding: 9px 14px; text-align: left; font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--accent); border-bottom: 2px solid var(--border); width: 190px; }
+  .flow-table td { padding: 10px 14px; border-bottom: 1px solid var(--border); line-height: 1.55; }
+  .flow-table tr:last-child td, .flow-table tr:last-child th { border-bottom: none; }
+  .script-template { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+  .script-step { display: grid; grid-template-columns: 170px 1fr; gap: 14px; background: var(--surface-alt); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 8px; padding: 12px 16px; align-items: start; }
+  .script-step .step-label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--accent); line-height: 1.4; }
+  .script-step .step-text { font-size: 14px; font-style: italic; color: var(--text); line-height: 1.55; }
+  @media (max-width: 900px) { #toc { display: none; } main { margin-left: 0; padding: 24px 20px 60px; } .script-step { grid-template-columns: 1fr; gap: 4px; } }
+</style>
+</head>
+<body>
+
+<aside id="toc">
+  <div id="toc-header">
+    <span class="phase-tag">Phase E · Topic 15</span>
+    <h2>15.1 Replication — Why and How</h2>
+    <span class="tier-tag">🥇 T1 · ~3h</span>
+  </div>
+  <nav>
+    <a href="#s0">🧭 The Question</a>
+    <a href="#s1">🎯 Quick Reference</a>
+    <a href="#s2">📋 Cheatsheet</a>
+    <a href="#s3">🧠 The Mindmap</a>
+    <a href="#s4">🔥 The Problem</a>
+    <a href="#s5">💡 The Core Idea</a>
+    <a href="#s6">⚙️ How It Works</a>
+    <a href="#s7">⚖️ The Decision</a>
+    <a href="#s8">🎯 In the Interview</a>
+    <a href="#s9">🧪 Mastery Gate</a>
+    <a href="#s10">🔗 Connections</a>
+    <a href="#s11">✍️ My Notes</a>
+  </nav>
+</aside>
+
+<main>
+<article>
+
+  <header class="doc-header">
+    <div class="meta">
+      <span class="tag tag-phase">Phase E — Reliability Branch</span>
+      <span class="tag tag-topic">Topic 15 — Distributed Storage Systems</span>
+      <span class="tag tag-tier">🥇 T1 Core · ~3h</span>
+      <span class="tag tag-prereq">Prereqs: 3.6, 7.1</span>
+      <span class="tag tag-date">Studied 2026-08-20</span>
+    </div>
+    <h1>15.1 Replication — Why and How</h1>
+  </header>
+
+  <!-- ══════════════════ §0 ══════════════════ -->
+  <section id="s0">
+    <h2 class="section-title"><span class="num">§0</span> 🧭 The Question This Answers</h2>
+
+    <p>3.6 established the share-nothing shape: independent nodes, no shared disk, no shared state between them. 7.1 established that data gets split across those nodes into partitions so no single machine has to hold everything. Neither of those decisions says anything about what happens to <em>one</em> partition's data once it lands on <em>one</em> node — and by default, it lands on exactly one. That single copy is fast to write and trivial to reason about, precisely because there's only one of it.</p>
+
+    <p>That simplicity is also the whole problem. A single copy of anything ties the data's entire fate to one piece of hardware: one disk that can fail, one machine that can crash, one rack that can lose power, one availability zone that can go dark. None of those events are exotic — they are the ordinary, expected behavior of commodity infrastructure at scale. The question replication exists to answer isn't "should data ever be copied" — it's precise enough to be a real engineering decision.</p>
+
+    <div class="the-question">
+      <span class="lbl">The question</span>
+      <em>How many independent copies of a piece of data do you need, where do those copies have to live relative to each other, and how does a write actually reach all of them — so that losing any single node neither destroys the data nor takes it offline?</em>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> Before the fix, what exactly goes wrong with a single copy — and how bad is it, concretely?</div>
+  </section>
+
+  <!-- ══════════════════ §1 ══════════════════ -->
+  <section id="s1">
+    <h2 class="section-title"><span class="num">§1</span> 🎯 Interview Quick Reference Card</h2>
+    <div class="callout callout-quote">Not a summary — a live-recall tool, built for retrieval speed under interview pressure. If you need the reasoning behind anything here, that's what §2 (cheatsheet) and the rest of the doc are for.</div>
+
+    <h3>The checklist — walk this on the whiteboard, in order</h3>
+    <ol class="steps">
+      <li>Name the two independent risks a single copy carries, unprompted: <strong>durability</strong> (the node's disk fails → data is permanently gone) and <strong>availability</strong> (the node crashes or is partitioned away → data is temporarily unreachable, but not lost).</li>
+      <li>State the definition: replication = keeping <strong>N independent copies</strong> (replicas) of the same data on different nodes, kept in sync by propagating every write to all of them.</li>
+      <li>Name the two propagation mechanisms unprompted: <strong>synchronous</strong> (wait for replica(s) to acknowledge before returning success — safer, slower) and <strong>asynchronous</strong> (return immediately, replicate in the background — faster, riskier). Say that 15.5 is the deep dive on this trade-off.</li>
+      <li>Say why placement matters, not just count: N copies are only independently safe if they don't share a <strong>failure domain</strong> — same rack, same power feed, or same AZ can let one event take out several "independent" copies together.</li>
+      <li>Give a number, not a vibe: <strong>N=3 is the common default</strong>, justified by "tolerates one node/domain failure" — always tie N to a stated failure-tolerance requirement.</li>
+      <li>Name what replication does <em>not</em> give you, unprompted: it doesn't decide which copy is authoritative or how a read should choose (that's leader/follower, 15.2, or quorum, 15.3), and it is not a substitute for backups — it propagates a bad write just as faithfully as a good one.</li>
+      <li>Price it unprompted: N copies cost <strong>N× the storage</strong> and <strong>N−1× the write fan-out</strong> for every single write — replication is a deliberate trade of resources for durability and availability, not a free upgrade.</li>
+    </ol>
+
+    <h3>Trigger → action</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Interviewer says</th><th>You do</th></tr></thead>
+        <tbody>
+          <tr><td>"Why do you need more than one copy of this data?"</td><td>Name both risks explicitly: durability (disk failure → permanent loss) and availability (node crash → temporary outage)</td></tr>
+          <tr><td>"What's your replication factor, and why that number?"</td><td>Give N tied to a stated failure-tolerance requirement — e.g. "N=3, to survive one node or one rack going down"</td></tr>
+          <tr><td>"How do the copies actually stay in sync?"</td><td>Name synchronous vs. asynchronous propagation as the two mechanisms, and that this doc assumes a write path that reaches all N</td></tr>
+          <tr><td>"Does replication protect you if someone deletes the wrong row?"</td><td>No — say so directly: replication propagates every write, including mistakes and corruption, to every copy just as faithfully. That's what backups (20.x) are for</td></tr>
+          <tr><td>"Isn't that the same as sharding?"</td><td>No — orthogonal. Sharding splits <em>different</em> data across nodes for scale; replication copies the <em>same</em> data for durability. Most systems do both — N replicas per shard</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Fast disambiguation — the pairs that get confused live</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Pair</th><th>The distinction</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Replication vs. Sharding/Partitioning (7.1)</strong></td><td>Replication = multiple copies of the <em>same</em> data, for durability/availability. Partitioning = splitting <em>different</em> data across nodes, for scale. Orthogonal — usually combined, N replicas per shard.</td></tr>
+          <tr><td><strong>Replication vs. Backup</strong></td><td>Replication propagates <em>every</em> write — including a bad one — to all copies almost immediately. A backup is a deliberately delayed, point-in-time, restorable snapshot (20.x) that protects against exactly the class of mistake replication can't.</td></tr>
+          <tr><td><strong>Durability vs. Availability</strong> (the two things replication buys)</td><td>Durability = the data is not permanently lost. Availability = the data is currently reachable. A down replica under sync propagation can block write <em>availability</em> without any data being <em>lost</em>; losing all N copies at once is a durability loss with no fix.</td></tr>
+          <tr><td><strong>Replication factor (N) vs. quorum (R/W, 15.3)</strong></td><td>N is how many copies exist — this doc's question. R and W are how many of those N copies must participate in a <em>given</em> read or write — a separate tuning question that assumes N is already fixed.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>High-yield anchors</h3>
+    <div class="cheatsheet" style="font-size: 12.5px;">N = replication factor (number of independent copies)
+Common default: N = 3
+Durability risk (single copy): disk failure = permanent data loss
+Availability risk (single copy): node crash/partition = temporary outage
+Sync propagation: safer, higher write latency
+Async propagation: faster, risk of losing the latest write(s) — see 15.5
+Replication ≠ Sharding (copies of the same data vs. splits of different data)
+Replication ≠ Backup (propagates corruption too — 20.x covers backups)
+Cost: N× storage, (N−1)× write fan-out per write</div>
+
+    <h3>The script — say this close to verbatim</h3>
+    <div class="tradeoff-box">"A single copy of data carries two independent risks: if the node's disk fails, that data is gone permanently — a durability problem — and if the node just crashes or gets partitioned away, the data is temporarily unreachable even though nothing was actually lost — an availability problem. Replication addresses both by keeping N independent copies on different nodes, ideally in different failure domains, and propagating every write to all of them — either synchronously, before acknowledging the write, or asynchronously, in the background. The cost is real: N copies means N times the storage and N minus one times the write fan-out for every single write. And the moment you have more than one copy, you've created a new problem replication doesn't answer by itself — which copy is current, and how a read should choose — which is exactly what leader/follower or quorum reads and writes exist to solve."</div>
+
+    <h3>If pushed on "isn't replication basically a backup?"</h3>
+    <div class="tradeoff-box">"No — replication keeps every copy live and current with every write, including a bad one. If an application bug deletes the wrong row, that deletion propagates to every replica just as faithfully as a correct write would. Backups are deliberately delayed, restorable snapshots that protect against exactly that class of mistake, at the cost of losing whatever changed since the last snapshot. Production systems run both — replication for continuous durability and availability, backups for recovering from logical mistakes replication can't undo."</div>
+  </section>
+
+  <!-- ══════════════════ §2 ══════════════════ -->
+  <section id="s2">
+    <h2 class="section-title"><span class="num">§2</span> 📋 Cheatsheet</h2>
+
+    <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+    <div class="callout callout-tip">⏭️ <strong>First time through this topic?</strong> Skip to §3 and come back here for revision.</div>
+
+<div class="cheatsheet"><span class="label">§ 1  WHY IT EXISTS</span>A single copy of data on a single node carries two independent risks:
+durability (the disk fails, data is gone forever) and availability (the
+node crashes or is partitioned away, data is temporarily unreachable).
+Replication addresses both by keeping multiple independent copies
+instead of trusting any one node.
+<span class="label">§ 2  WHAT IT IS</span>Replica       A copy of the data on a different node — ideally a
+              different failure domain — from the other copies.
+N             Replication factor: how many independent copies exist.
+Propagation   The mechanism that carries a write from wherever it
+              first landed out to the other N−1 replicas.
+<span class="label">§ 3  THE MECHANISM</span>WRITE   arrives at an entry point, applied locally, then propagated to
+        the other N−1 replicas — synchronously (wait for acks) or
+        asynchronously (return immediately, replicate after).
+READ    can be served by any replica holding the data — which one to
+        trust, and how fresh it must be, is a separate question
+        (15.2 leader/follower, or 15.3 quorum).
+WHY IT   No single node's failure can take the only copy with it, as
+WORKS    long as at least one replica survives whatever hit the others
+         — and if the replicas are in independent failure domains,
+         their individual (already small) failure risks multiply
+         together instead of adding.
+<span class="label">§ 4  USE / AVOID</span>USE replication whenever losing a single node must not mean losing
+  data or going fully offline — true for essentially anything that
+  matters in production.
+USE a higher N when you must tolerate more simultaneous failures, or
+  when replicas must span regions to survive a whole-region event.
+AVOID treating replication as a substitute for backups: it propagates
+  bad writes and corruption just as faithfully as good ones.
+AVOID assuming N copies alone tells you which one is current or how
+  to read consistently — that's leader/follower (15.2) or quorum
+  (15.3), layered on top.
+<span class="label">§ 5  SYNC VS. ASYNC (PREVIEW — 15.5 GOES DEEP)</span>SYNC    Write waits for replica(s) to acknowledge before returning
+        success — stronger durability guarantee, higher write latency.
+ASYNC   Write returns immediately, replicates in the background —
+        lower latency, a real window where an "acknowledged" write
+        might exist on fewer than N copies.
+<span class="label">§ 6  NUMBERS TO ANCHOR THE DISCUSSION</span>Common default: N = 3 (tolerates 1 node/domain loss).
+Storage cost: N replicas = N× the raw storage for that data.
+Write cost: every write fans out to N−1 additional nodes.
+Illustrative: 2% annual single-node failure risk → ~0.0008% (1-in-
+  125,000) for all 3 independent copies to fail the same year.
+<span class="label">§ 7  INTERVIEW TRIGGERS + GOTCHA</span>→ "Why not just one well-provisioned node?" → name both risks:
+                                    durability AND availability
+→ "What's your replication factor?"         → give N tied to a
+                                    stated failure-tolerance target
+→ "Is that the same as sharding?"            → no — orthogonal,
+                                    copies vs. splits, usually combined
+GOTCHA: Treating replication as a complete durability/availability
+  solution on its own. It multiplies the number of independent
+  failures that would all have to happen together to lose the data —
+  it does not protect against replicating a bad write, and it creates
+  a new coordination problem (which copy is current) that 15.2/15.3
+  exist to solve.</div>
+  </section>
+
+  <!-- ══════════════════ §3 ══════════════════ -->
+  <section id="s3">
+    <h2 class="section-title"><span class="num">§3</span> 🧠 The Mindmap</h2>
+    <div class="callout callout-quote">The picture to hold in your head while you study. Everything below hangs off this.</div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Replication — hub and five branches</div>
+      <svg viewBox="0 0 1200 470" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <rect x="450" y="10" width="300" height="74" rx="10" fill="#1a1917"/>
+        <text x="600" y="36" text-anchor="middle" font-size="14" font-weight="800" fill="#ffffff">REPLICATION</text>
+        <text x="600" y="54" text-anchor="middle" font-size="9.5" fill="#cbc8c1">"no single node holds the only</text>
+        <text x="600" y="67" text-anchor="middle" font-size="9.5" fill="#cbc8c1">copy of anything that matters"</text>
+
+        <line x1="600" y1="84" x2="122" y2="140" stroke="#94908a" stroke-width="1.4"/>
+        <line x1="600" y1="84" x2="356" y2="140" stroke="#94908a" stroke-width="1.4"/>
+        <line x1="600" y1="84" x2="600" y2="140" stroke="#94908a" stroke-width="1.4"/>
+        <line x1="600" y1="84" x2="844" y2="140" stroke="#94908a" stroke-width="1.4"/>
+        <line x1="600" y1="84" x2="1078" y2="140" stroke="#94908a" stroke-width="1.4"/>
+
+        <!-- Branch 1: red -->
+        <rect x="10" y="140" width="224" height="320" rx="10" fill="#fee2e2" stroke="#dc2626" stroke-width="2"/>
+        <text x="122" y="164" text-anchor="middle" font-size="11.5" font-weight="800" fill="#7f1d1d">THE TWO RISKS</text>
+        <text x="122" y="180" text-anchor="middle" font-size="11.5" font-weight="800" fill="#7f1d1d">IT SOLVES</text>
+        <line x1="24" y1="192" x2="220" y2="192" stroke="#fecaca" stroke-width="1.2"/>
+        <text x="24" y="212" font-size="10.5" font-weight="700" fill="#7f1d1d">durability:</text>
+        <text x="24" y="228" font-size="10" fill="#7f1d1d">disk fails → data</text>
+        <text x="24" y="242" font-size="10" fill="#7f1d1d">gone forever</text>
+        <text x="24" y="264" font-size="10.5" font-weight="700" fill="#7f1d1d">availability:</text>
+        <text x="24" y="280" font-size="10" fill="#7f1d1d">node crashes → temp</text>
+        <text x="24" y="294" font-size="10" fill="#7f1d1d">outage — data isn't</text>
+        <text x="24" y="308" font-size="10" fill="#7f1d1d">lost, just</text>
+        <text x="24" y="322" font-size="10" fill="#7f1d1d">unreachable</text>
+
+        <!-- Branch 2: blue -->
+        <rect x="244" y="140" width="224" height="320" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+        <text x="356" y="164" text-anchor="middle" font-size="11.5" font-weight="800" fill="#1e3a8a">THE CORE</text>
+        <text x="356" y="180" text-anchor="middle" font-size="11.5" font-weight="800" fill="#1e3a8a">MECHANISM</text>
+        <line x1="258" y1="192" x2="454" y2="192" stroke="#93c5fd" stroke-width="1.2"/>
+        <text x="258" y="212" font-size="10" fill="#1e3a8a">replica = a copy on</text>
+        <text x="258" y="226" font-size="10" fill="#1e3a8a">another node</text>
+        <text x="258" y="248" font-size="10" fill="#1e3a8a">N = replication</text>
+        <text x="258" y="262" font-size="10" fill="#1e3a8a">factor</text>
+        <text x="258" y="284" font-size="10" fill="#1e3a8a">propagation: sync</text>
+        <text x="258" y="298" font-size="10" fill="#1e3a8a">(wait, safer, slower)</text>
+        <text x="258" y="312" font-size="10" fill="#1e3a8a">or async (fast,</text>
+        <text x="258" y="326" font-size="10" fill="#1e3a8a">riskier)</text>
+
+        <!-- Branch 3: purple -->
+        <rect x="478" y="140" width="244" height="320" rx="10" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+        <text x="600" y="164" text-anchor="middle" font-size="11.5" font-weight="800" fill="#4c1d95">WHAT IT DOESN'T</text>
+        <text x="600" y="180" text-anchor="middle" font-size="11.5" font-weight="800" fill="#4c1d95">SOLVE</text>
+        <line x1="492" y1="192" x2="708" y2="192" stroke="#c4b5fd" stroke-width="1.2"/>
+        <text x="492" y="212" font-size="10" fill="#4c1d95">bad writes/corruption</text>
+        <text x="492" y="226" font-size="10" fill="#4c1d95">still propagate just</text>
+        <text x="492" y="240" font-size="10" fill="#4c1d95">as faithfully</text>
+        <text x="492" y="262" font-size="10" fill="#4c1d95">which copy is</text>
+        <text x="492" y="276" font-size="10" fill="#4c1d95">current? — a question</text>
+        <text x="492" y="290" font-size="10" fill="#4c1d95">replication alone</text>
+        <text x="492" y="304" font-size="10" fill="#4c1d95">doesn't answer</text>
+
+        <!-- Branch 4: orange -->
+        <rect x="732" y="140" width="224" height="320" rx="10" fill="#ffedd5" stroke="#ea580c" stroke-width="2"/>
+        <text x="844" y="164" text-anchor="middle" font-size="11.5" font-weight="800" fill="#7c2d12">WHAT IT COSTS</text>
+        <line x1="746" y1="180" x2="942" y2="180" stroke="#fdba74" stroke-width="1.2"/>
+        <text x="746" y="200" font-size="10" fill="#7c2d12">N× storage for</text>
+        <text x="746" y="214" font-size="10" fill="#7c2d12">that data</text>
+        <text x="746" y="236" font-size="10" fill="#7c2d12">N−1× write fan-out</text>
+        <text x="746" y="250" font-size="10" fill="#7c2d12">per write</text>
+        <text x="746" y="272" font-size="10" fill="#7c2d12">coordination</text>
+        <text x="746" y="286" font-size="10" fill="#7c2d12">complexity — the</text>
+        <text x="746" y="300" font-size="10" fill="#7c2d12">new problem this</text>
+        <text x="746" y="314" font-size="10" fill="#7c2d12">creates</text>
+
+        <!-- Branch 5: green -->
+        <rect x="966" y="140" width="224" height="320" rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+        <text x="1078" y="164" text-anchor="middle" font-size="11.5" font-weight="800" fill="#14532d">WHERE IT LEADS</text>
+        <line x1="980" y1="180" x2="1176" y2="180" stroke="#86efac" stroke-width="1.2"/>
+        <text x="980" y="200" font-size="10" fill="#14532d">15.2 leader/follower —</text>
+        <text x="980" y="214" font-size="10" fill="#14532d">who decides what's current</text>
+        <text x="980" y="236" font-size="10" fill="#14532d">15.3 quorum R+W&gt;N —</text>
+        <text x="980" y="250" font-size="10" fill="#14532d">a count-based answer</text>
+        <text x="980" y="272" font-size="10" fill="#14532d">15.4 durability &amp; factor —</text>
+        <text x="980" y="286" font-size="10" fill="#14532d">how many copies is enough</text>
+        <text x="980" y="308" font-size="10" fill="#14532d">15.5 sync vs. async depth</text>
+        <text x="980" y="330" font-size="10" fill="#14532d">15.6 replication lag &amp;</text>
+        <text x="980" y="344" font-size="10" fill="#14532d">read anomalies</text>
+      </svg>
+      <p class="caption">The two risks are the why; the mechanism is the how; what it doesn't solve is the honesty check; what it costs is why N is deliberate; where it leads is this doc's own table of contents for the rest of Topic 15.</p>
+    </div>
+
+    <p><strong>How to read it:</strong> The <strong>two risks</strong> branch is the <em>why</em> — everything else on this map exists to address durability, availability, or both. The <strong>core mechanism</strong> branch is the <em>how</em>, at the level this subtopic covers; propagation's two modes are only previewed here and get their own deep dive in 15.5. <strong>What it doesn't solve</strong> is the honesty check — it draws the boundary of this subtopic so you don't overclaim what raw replication buys you in an interview. <strong>What it costs</strong> is why N is a deliberate trade, never a maximized number. <strong>Where it leads</strong> is this doc's own table of contents for the rest of Topic 15 — every subtopic there exists because this one raised a question it deliberately left open.</p>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> Made concrete — what exactly breaks with a single copy, and by how much?</div>
+  </section>
+
+  <!-- ══════════════════ §4 ══════════════════ -->
+  <section id="s4">
+    <h2 class="section-title"><span class="num">§4</span> 🔥 The Problem</h2>
+
+    <p>3.6's share-nothing model means every node's storage is genuinely its own — no shared disk array, no shared state to fall back on if one node dies. 7.1's partitioning splits data across those nodes so no single machine holds everything, but says nothing about what protects any <em>one</em> partition once it lands on <em>one</em> node. By default, it lands on exactly one, and that single copy is fast and simple precisely because there's nothing to keep in sync — there's only one of it.</p>
+
+    <p>That simplicity assumed the underlying hardware would mostly stay up, which was a reasonable assumption when "a server" meant one carefully maintained, heavily protected machine. It stopped being reasonable the moment systems moved onto commodity hardware to get horizontal scale (3.7): cheap machines fail routinely — disks wear out, a machine gets rebooted for a kernel patch, a rack loses power, an entire availability zone goes dark for an afternoon. None of that is exotic; it's the ordinary operating condition of a large fleet. A single copy ties the data's entire fate to exactly one piece of that unreliable hardware — when it goes, either temporarily or permanently, so does every guarantee you had about the data.</p>
+
+    <p>The instinctive first fix is to hunt for a sturdier single machine: RAID arrays, redundant power supplies, an enterprise-grade SAN instead of local disk. This genuinely lowers the <em>probability</em> that any one node fails — but it doesn't remove the <em>property</em> that makes a single copy dangerous: however reliable one machine is, it is still exactly one machine, and eventually something takes the whole box down for a reason RAID can't touch — a firmware bug, an operator error, a full power-supply failure, a data-center-level event. Durability against total node loss can't be purchased by making a single node merely less likely to fail; it can only be bought by not depending on a single node at all.</p>
+
+    <p>The insight that resolves this: stop trusting any one node to be the sole holder of the data. Keep N independent copies on N different pieces of hardware — ideally different racks, ideally different failure domains entirely — and make every write reach all of them (or enough of them). Losing any one node's disk no longer loses the data. Losing any one node no longer takes it offline. The property a single copy could never have — surviving the loss of the specific hardware holding it — is exactly what N independent copies buys.</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Before / after — single copy vs. N=3 independent copies</div>
+      <svg viewBox="0 0 1040 260" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <rect x="10" y="10" width="500" height="240" rx="12" fill="#fff5f5" stroke="#dc2626" stroke-width="2"/>
+        <text x="260" y="38" text-anchor="middle" font-size="13.5" font-weight="800" fill="#7f1d1d">BEFORE — single copy, single node</text>
+        <line x1="26" y1="50" x2="494" y2="50" stroke="#fecaca" stroke-width="1.4"/>
+        <text x="26" y="74" font-size="12" font-family="SF Mono, Menlo, monospace" fill="#7f1d1d">all reads/writes hit ONE node</text>
+        <text x="26" y="94" font-size="12" font-family="SF Mono, Menlo, monospace" fill="#7f1d1d">ONE disk holds the only copy</text>
+        <line x1="26" y1="112" x2="494" y2="112" stroke="#fecaca" stroke-width="1.4"/>
+        <text x="26" y="136" font-size="12" font-weight="700" fill="#7f1d1d">✗ disk failure = permanent</text>
+        <text x="26" y="154" font-size="12" fill="#7f1d1d">   data loss (durability gone)</text>
+        <text x="26" y="178" font-size="12" font-weight="700" fill="#7f1d1d">✗ node crash/partition = data</text>
+        <text x="26" y="196" font-size="12" fill="#7f1d1d">   unreachable until it's back</text>
+        <text x="26" y="214" font-size="12" fill="#7f1d1d">   (availability gone)</text>
+        <text x="26" y="232" font-size="11" fill="#7f1d1d">   ✗ "harden the node" only lowers odds</text>
+
+        <rect x="530" y="10" width="500" height="240" rx="12" fill="#f0fdf4" stroke="#16a34a" stroke-width="2"/>
+        <text x="780" y="38" text-anchor="middle" font-size="13.5" font-weight="800" fill="#14532d">AFTER — N=3 independent copies</text>
+        <line x1="546" y1="50" x2="1014" y2="50" stroke="#bbf7d0" stroke-width="1.4"/>
+        <text x="546" y="74" font-size="12" font-family="SF Mono, Menlo, monospace" fill="#14532d">writes propagate to 2 more replicas</text>
+        <text x="546" y="94" font-size="12" font-family="SF Mono, Menlo, monospace" fill="#14532d">3 different disks each hold a copy</text>
+        <line x1="546" y1="112" x2="1014" y2="112" stroke="#bbf7d0" stroke-width="1.4"/>
+        <text x="546" y="136" font-size="12" font-weight="700" fill="#14532d">✓ one disk failing loses 0 data —</text>
+        <text x="546" y="154" font-size="12" fill="#14532d">   2 other copies still hold it</text>
+        <text x="546" y="178" font-size="12" font-weight="700" fill="#14532d">✓ one node crashing loses 0</text>
+        <text x="546" y="196" font-size="12" fill="#14532d">   availability — 2 other nodes</text>
+        <text x="546" y="214" font-size="12" fill="#14532d">   can still serve it</text>
+        <text x="546" y="232" font-size="11" fill="#14532d">   ✓ independence is what matters (§5)</text>
+      </svg>
+      <p class="caption">Hardening the single node lowers a probability but keeps it a single point of total failure. N independent copies removes the single point entirely.</p>
+    </div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Made concrete — annual failure probability, illustrative single-node AFR of 2%</div>
+      <svg viewBox="0 0 1040 260" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <rect x="10" y="10" width="500" height="220" rx="12" fill="#f3f2ef" stroke="#94908a" stroke-width="2"/>
+        <text x="260" y="36" text-anchor="middle" font-size="13" font-weight="800" fill="#1a1917">SINGLE COPY (1 node)</text>
+        <text x="260" y="58" text-anchor="middle" font-size="10.5" font-style="italic" fill="#4a4742">"independent failure domain" isn't</text>
+        <text x="260" y="72" text-anchor="middle" font-size="10.5" font-style="italic" fill="#4a4742">even a question — there's only 1</text>
+        <line x1="26" y1="84" x2="494" y2="84" stroke="#d8d5cf" stroke-width="1.4"/>
+        <text x="26" y="106" font-size="12" fill="#1a1917">P(data lost this year)</text>
+        <text x="26" y="126" font-size="12" font-family="SF Mono, Menlo, monospace" fill="#1a1917">= P(that one node fails)</text>
+        <text x="26" y="146" font-size="18" font-weight="800" font-family="SF Mono, Menlo, monospace" fill="#dc2626">= 2%</text>
+        <text x="26" y="178" font-size="11" fill="#7f1d1d">2% annual loss risk is not a</text>
+        <text x="26" y="194" font-size="11" fill="#7f1d1d">rounding error — it's a real</text>
+        <text x="26" y="210" font-size="11" fill="#7f1d1d">design flaw for anything that matters.</text>
+
+        <rect x="530" y="10" width="500" height="220" rx="12" fill="#f0fdf4" stroke="#16a34a" stroke-width="2"/>
+        <text x="780" y="36" text-anchor="middle" font-size="13" font-weight="800" fill="#14532d">N = 3 INDEPENDENT COPIES</text>
+        <text x="780" y="58" text-anchor="middle" font-size="10.5" font-style="italic" fill="#134e4a">3 nodes, different racks/AZs —</text>
+        <text x="780" y="72" text-anchor="middle" font-size="10.5" font-style="italic" fill="#134e4a">failures assumed independent</text>
+        <line x1="546" y1="84" x2="1014" y2="84" stroke="#bbf7d0" stroke-width="1.4"/>
+        <text x="546" y="106" font-size="12" fill="#14532d">P(data lost this year)</text>
+        <text x="546" y="126" font-size="12" font-family="SF Mono, Menlo, monospace" fill="#14532d">= P(ALL 3 fail same year)</text>
+        <text x="546" y="146" font-size="16" font-weight="800" font-family="SF Mono, Menlo, monospace" fill="#16a34a">= 0.02×0.02×0.02 ≈ 0.0008%</text>
+        <text x="546" y="178" font-size="11" fill="#14532d">Independence MULTIPLIES the small</text>
+        <text x="546" y="194" font-size="11" fill="#14532d">individual risks together instead of</text>
+        <text x="546" y="210" font-size="11" fill="#14532d">adding them — that's WHY it works.</text>
+      </svg>
+      <p class="caption">≈ 1-in-125,000 annual odds once independence is real — a fundamentally different reduction than merely hardening one node.</p>
+    </div>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">A teammate proposes fixing durability by buying one very expensive, highly reliable enterprise server — RAID array, redundant power supplies, the works — instead of running 3 replicas. Using the "naive fix" discussion and the concrete failure-probability example, explain precisely why this doesn't solve the problem the way N independent copies does, and what property of independent copies it's missing.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the "naive fix" paragraph and the concrete example's contrast between lowering a single P versus multiplying several independent P's together.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> If the fix is N independent copies, what exactly does that design consist of, and what does it actually take to make it work — not just to have more copies lying around?</div>
+  </section>
+
+  <!-- ══════════════════ §5 ══════════════════ -->
+  <section id="s5">
+    <h2 class="section-title"><span class="num">§5</span> 💡 The Core Idea</h2>
+
+    <div class="definition">Replication is the practice of maintaining N independent copies of the same data on different nodes — ideally in different failure domains — and propagating every write to all of them, so that no single node's failure can either destroy the data or take it fully offline.</div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">The build chain</div>
+      <svg viewBox="0 0 1200 220" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="bcArrow151" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#7c3aed"/>
+          </marker>
+        </defs>
+        <g>
+          <rect x="4" y="30" width="280" height="86" rx="9" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+          <text x="144" y="52" text-anchor="middle" font-size="11" font-weight="800" fill="#4c1d95">REPLICAS &amp; REPLICATION</text>
+          <text x="144" y="68" text-anchor="middle" font-size="11" font-weight="800" fill="#4c1d95">FACTOR N</text>
+          <text x="144" y="136" text-anchor="middle" font-size="10" font-style="italic" fill="#6b6861">because §4: no single node</text>
+          <text x="144" y="151" text-anchor="middle" font-size="10" font-style="italic" fill="#6b6861">should hold the only copy</text>
+        </g>
+        <line x1="288" y1="73" x2="312" y2="73" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow151)"/>
+        <g>
+          <rect x="318" y="30" width="270" height="86" rx="9" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+          <text x="453" y="52" text-anchor="middle" font-size="11" font-weight="800" fill="#1e3a8a">PROPAGATION — HOW A</text>
+          <text x="453" y="68" text-anchor="middle" font-size="11" font-weight="800" fill="#1e3a8a">WRITE REACHES ALL N</text>
+          <text x="453" y="136" text-anchor="middle" font-size="10" font-style="italic" fill="#6b6861">because replicas are only</text>
+          <text x="453" y="151" text-anchor="middle" font-size="10" font-style="italic" fill="#6b6861">useful if kept current</text>
+        </g>
+        <line x1="592" y1="73" x2="616" y2="73" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow151)"/>
+        <g>
+          <rect x="622" y="30" width="280" height="86" rx="9" fill="#ccfbf1" stroke="#0d9488" stroke-width="2"/>
+          <text x="762" y="52" text-anchor="middle" font-size="11" font-weight="800" fill="#134e4a">FAILURE-DOMAIN PLACEMENT</text>
+          <text x="762" y="68" text-anchor="middle" font-size="11" font-weight="800" fill="#134e4a">— WHERE THE N COPIES LIVE</text>
+          <text x="762" y="136" text-anchor="middle" font-size="10" font-style="italic" fill="#6b6861">because N only buys</text>
+          <text x="762" y="151" text-anchor="middle" font-size="10" font-style="italic" fill="#6b6861">independence if placed apart</text>
+        </g>
+        <line x1="906" y1="73" x2="930" y2="73" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow151)"/>
+        <g>
+          <rect x="936" y="30" width="260" height="86" rx="9" fill="#ffedd5" stroke="#ea580c" stroke-width="2"/>
+          <text x="1066" y="52" text-anchor="middle" font-size="11" font-weight="800" fill="#7c2d12">THE COST &amp; THE NEW</text>
+          <text x="1066" y="68" text-anchor="middle" font-size="11" font-weight="800" fill="#7c2d12">PROBLEM IT CREATES</text>
+          <text x="1066" y="136" text-anchor="middle" font-size="10" font-style="italic" fill="#6b6861">because correctly placed,</text>
+          <text x="1066" y="151" text-anchor="middle" font-size="10" font-style="italic" fill="#6b6861">synced copies cost real money</text>
+        </g>
+      </svg>
+    </div>
+
+    <h3>Replicas &amp; Replication Factor N</h3>
+    <p>Builds directly on §4's insight: no single node should hold the only copy of anything that matters. A <strong>replica</strong> is simply another node holding an independent copy of the same data, and <strong>N</strong> — the replication factor — is how many such copies exist at once. N is not an implementation detail buried in a config file; it's a deliberate, statable design decision that trades resources for fault tolerance, and it's usually the very first number an interviewer expects when you're asked to design a durable storage layer. N=1 means "no replication" — every risk from §4 is fully present.</p>
+
+    <h3>Propagation — How a Write Reaches All N Copies</h3>
+    <p>Builds on replicas existing at all: a replica is only useful if it actually stays current, and <strong>propagation</strong> is the mechanism that carries a write from wherever it first landed out to the other N−1 copies. There are exactly two shapes this takes. <strong>Synchronous</strong> propagation waits for some or all of the other replicas to acknowledge the write before telling the client it succeeded — a strong "the write is safe on multiple copies" guarantee, at the cost of higher write latency. <strong>Asynchronous</strong> propagation acknowledges the client immediately and replicates in the background — lower latency, but with a real window where the copy the client was told is "safe" actually sits on fewer than N nodes. This doc only introduces the split; 15.5 is the entire subtopic dedicated to its trade-off math.</p>
+
+    <h3>Failure-Domain Placement — Where the N Copies Actually Live</h3>
+    <p>Builds on propagation actually moving data somewhere real: <em>where</em> the copies live matters as much as <em>how many</em> there are. If all N replicas sit in the same rack, a single power or network event can take all of them out together — and N stops meaning what you think it means, because the copies were never independent to begin with. Genuine independence requires the replicas to not share a <strong>failure domain</strong>: different physical machines at minimum, different racks for real hardware independence, different availability zones or regions if the design must survive a whole-datacenter event. §4's multiplicative math (0.02 × 0.02 × 0.02) only holds if the three failures are actually independent events — placement is what makes that assumption true or false.</p>
+
+    <h3>The Cost &amp; the New Problem It Creates</h3>
+    <p>Builds on all three of the above: N replicas, correctly placed and kept in sync, is not free. It costs <strong>N times the storage</strong> for that data, and every single write now fans out to <strong>N−1 additional nodes</strong> instead of touching just one — a real, ongoing operational and infrastructure cost, not a one-time decision. And the moment there is more than one copy, replication creates a brand-new problem it does not answer on its own: with two or more nodes potentially holding the data, <em>something</em> has to decide how writes are ordered across them and which copy a read should trust. That coordination question is exactly what 15.2 (a single leader taking every write) and 15.3 (a quorum of nodes agreeing by count) exist to answer — this doc is the "why keep copies," those two are the "how do you keep them coherent."</p>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">Using only "Replicas &amp; Replication Factor N" and "Propagation," explain why simply raising N — say from 3 to 5 — without also specifying synchronous or asynchronous propagation leaves the durability guarantee undefined.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read "Propagation" — the sentence about a real window where an acknowledged write can sit on fewer than N copies.</div>
+      </div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">2</span>
+          <span class="qtext">Trace the link between "Failure-Domain Placement" and "The Cost &amp; the New Problem It Creates": a team sets N=3 but places all three replicas in the same rack, reasoning "we're already paying 3× storage, so we've bought our durability." Using both concept blocks, explain what they've actually bought and what they haven't.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read "Failure-Domain Placement" — the sentence about a single power/network event taking out same-rack replicas together.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> You know the shape of the design. What actually happens, step by step, on a real write — and what specifically breaks when a node fails or a network partition hits mid-propagation?</div>
+  </section>
+
+  <!-- ══════════════════ §6 ══════════════════ -->
+  <section id="s6">
+    <h2 class="section-title"><span class="num">§6</span> ⚙️ How It Actually Works</h2>
+
+    <h3>Happy path — a write reaches all N replicas, then a later read, N=3</h3>
+    <ol class="steps">
+      <li>A client sends a write for key K to some entry point — which node handles first-contact writes is itself a design choice this doc leaves open; 15.2 covers the common leader-based answer.</li>
+      <li>The entry node applies the write to its own local copy.</li>
+      <li>The entry node propagates the write to the other N−1 replicas over the network, tagged so each replica applies it in the same order the entry node did.</li>
+      <li>Depending on the propagation mode chosen in §5: <strong>synchronous</strong> — the entry node waits for some number of those replicas to acknowledge before telling the client the write succeeded; <strong>asynchronous</strong> — the entry node tells the client success immediately, and propagation continues in the background.</li>
+      <li>Each replica, on receiving the propagated write, applies it to its own local copy, bringing it into sync with the entry node's.</li>
+      <li>A later read can be served by any replica currently holding the data — which one is chosen, and how fresh it's guaranteed to be, depends on the read strategy layered on top of raw replication (15.2 or 15.3).</li>
+    </ol>
+
+    <div class="mental-model">
+      <span class="mm-name">🗺️ Mental model — replication is a photocopier, not a shared filing cabinet.</span> A shared filing cabinet has exactly one physical folder; whoever wants "the current version" reaches into the same drawer, so there's never a copy that can fall behind. Replication instead behaves like handing out photocopies to N different offices the instant a document changes — the original office finishes first, and every other office only has the current version once a courier physically delivers its copy, which takes real time and can fail along the way.
+      <span class="mm-break">Where it breaks down: a delivered photocopy never goes stale until the next edit — but a live replica can also crash or get network-partitioned away entirely, an outcome no photocopy analogy captures. And unlike copies handed out once and then left alone, replicas are continuously being pushed near-simultaneous updates, so at almost any instant some fraction of them may be "copies in transit," not yet fully caught up to the latest version.</span>
+    </div>
+
+    <h3>Failure &amp; edge cases</h3>
+    <ul class="plain">
+      <li><strong>Losing a replica mid-propagation doesn't lose the write, only that replica's copy of it.</strong> As long as at least one other node (the entry node, or another replica) already has the write, propagating it to a healthy replacement later can still catch that replacement up. The write is only genuinely at risk if the specific node(s) holding it happen to be the <em>only</em> ones that received it before all of them fail together.</li>
+      <li><strong>With asynchronous propagation, the entry node failing right after acknowledging a write is exactly the durability gap §5 named.</strong> The client was told "success," but if the entry node's local copy was the only one holding that write when it died, the write is gone despite N being large. (15.5 works out precisely how much risk this is under different configurations.)</li>
+      <li><strong>Two writes to the same key, propagated through different paths (e.g. the entry point failed over mid-write), can arrive at different replicas in different orders, or not at all at some of them.</strong> Plain replication has no built-in mechanism guaranteeing a consistent order across all N copies — that ordering guarantee is exactly what the leader/follower model (15.2) supplies by funneling every write through one place.</li>
+      <li><strong>A network partition can isolate some replicas from the rest entirely.</strong> Isolated replicas keep serving whatever they already had — possibly correct, possibly stale — but stop receiving new writes until the partition heals. That's a live availability/consistency trade-off this doc surfaces but doesn't resolve; 17.x (Consistency Models) formalizes it.</li>
+      <li><strong>Replicating a write is not the same as replicating a <em>good</em> write.</strong> If the write itself is a mistake — an application bug deletes the wrong row — replication propagates that mistake to every copy exactly as reliably as it propagates a correct write. This is precisely why replication and backups are not substitutes for each other.</li>
+    </ul>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Mechanism flow, end to end</div>
+      <svg viewBox="0 0 1040 200" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="mfArrow151" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#2563eb"/>
+          </marker>
+        </defs>
+        <rect x="8" y="20" width="220" height="140" rx="9" fill="#f3f2ef" stroke="#94908a" stroke-width="2"/>
+        <text x="118" y="44" text-anchor="middle" font-size="12" font-weight="800" fill="#1a1917">① CLIENT WRITE</text>
+        <text x="118" y="70" text-anchor="middle" font-size="11" fill="#4a4742">arrives at an</text>
+        <text x="118" y="86" text-anchor="middle" font-size="11" fill="#4a4742">entry point</text>
+
+        <line x1="232" y1="90" x2="260" y2="90" stroke="#2563eb" stroke-width="2.5" marker-end="url(#mfArrow151)"/>
+
+        <rect x="266" y="20" width="240" height="140" rx="9" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+        <text x="386" y="44" text-anchor="middle" font-size="12" font-weight="800" fill="#4c1d95">② ENTRY NODE</text>
+        <text x="386" y="70" text-anchor="middle" font-size="10.5" fill="#4c1d95">applies the write</text>
+        <text x="386" y="86" text-anchor="middle" font-size="10.5" fill="#4c1d95">to its own local copy</text>
+
+        <line x1="510" y1="90" x2="538" y2="90" stroke="#2563eb" stroke-width="2.5" marker-end="url(#mfArrow151)"/>
+
+        <rect x="544" y="20" width="250" height="140" rx="9" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+        <text x="669" y="44" text-anchor="middle" font-size="12" font-weight="800" fill="#1e3a8a">③ PROPAGATE TO N−1</text>
+        <text x="669" y="70" text-anchor="middle" font-size="10.5" fill="#1e3a8a">OTHER REPLICAS</text>
+        <text x="669" y="86" text-anchor="middle" font-size="10" fill="#1e3a8a">(sync waits for acks /</text>
+        <text x="669" y="100" text-anchor="middle" font-size="10" fill="#1e3a8a">async doesn't)</text>
+
+        <line x1="798" y1="90" x2="826" y2="90" stroke="#2563eb" stroke-width="2.5" marker-end="url(#mfArrow151)"/>
+
+        <rect x="832" y="20" width="200" height="140" rx="9" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+        <text x="932" y="44" text-anchor="middle" font-size="12" font-weight="800" fill="#14532d">④ REPLICAS APPLY</text>
+        <text x="932" y="70" text-anchor="middle" font-size="10.5" fill="#14532d">converge to N</text>
+        <text x="932" y="86" text-anchor="middle" font-size="10.5" fill="#14532d">matching copies —</text>
+        <text x="932" y="102" text-anchor="middle" font-size="10.5" fill="#14532d">a read can hit any</text>
+      </svg>
+    </div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Structural diagram — failure-domain placement decides whether N is real</div>
+      <svg viewBox="0 0 1040 260" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <text x="20" y="22" font-size="12" font-weight="700" fill="#7f1d1d">SAME RACK (N=3, but NOT independent)</text>
+        <rect x="20" y="34" width="460" height="140" rx="12" fill="#fff5f5" stroke="#dc2626" stroke-width="2"/>
+        <text x="250" y="56" text-anchor="middle" font-size="10.5" font-style="italic" fill="#7f1d1d">shared power feed, shared top-of-rack switch</text>
+        <circle cx="130" cy="100" r="34" fill="#fee2e2" stroke="#dc2626" stroke-width="2"/>
+        <text x="130" y="106" text-anchor="middle" font-size="14" font-weight="800" fill="#7f1d1d">A</text>
+        <circle cx="250" cy="100" r="34" fill="#fee2e2" stroke="#dc2626" stroke-width="2"/>
+        <text x="250" y="106" text-anchor="middle" font-size="14" font-weight="800" fill="#7f1d1d">B</text>
+        <circle cx="370" cy="100" r="34" fill="#fee2e2" stroke="#dc2626" stroke-width="2"/>
+        <text x="370" y="106" text-anchor="middle" font-size="14" font-weight="800" fill="#7f1d1d">C</text>
+        <rect x="20" y="150" width="460" height="24" fill="none"/>
+        <text x="250" y="196" text-anchor="middle" font-size="11" fill="#7f1d1d">✗ one power/switch failure can take out A, B, AND C</text>
+        <text x="250" y="212" text-anchor="middle" font-size="11" fill="#7f1d1d">   together — effective N collapses to 1</text>
+
+        <text x="560" y="22" font-size="12" font-weight="700" fill="#14532d">DIFFERENT RACKS/AZs (N=3, independent)</text>
+        <rect x="560" y="34" width="130" height="90" rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+        <text x="625" y="60" text-anchor="middle" font-size="10.5" fill="#14532d">RACK 1</text>
+        <text x="625" y="90" text-anchor="middle" font-size="14" font-weight="800" fill="#14532d">A</text>
+        <rect x="705" y="34" width="130" height="90" rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+        <text x="770" y="60" text-anchor="middle" font-size="10.5" fill="#14532d">RACK 2</text>
+        <text x="770" y="90" text-anchor="middle" font-size="14" font-weight="800" fill="#14532d">B</text>
+        <rect x="850" y="34" width="130" height="90" rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+        <text x="915" y="60" text-anchor="middle" font-size="10.5" fill="#14532d">RACK 3</text>
+        <text x="915" y="90" text-anchor="middle" font-size="14" font-weight="800" fill="#14532d">C</text>
+        <text x="770" y="196" text-anchor="middle" font-size="11" fill="#14532d">✓ a rack-level event only ever takes out ONE —</text>
+        <text x="770" y="212" text-anchor="middle" font-size="11" fill="#14532d">   the other two are on independent power/network</text>
+      </svg>
+      <p class="caption">Same N=3 on paper, very different guarantee — placement is what makes the independence assumption in §4's probability math true or false.</p>
+    </div>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">A system propagates writes synchronously but only waits for 1 of the N−1 other replicas to acknowledge (not all of them) before returning success to the client. Using the happy path and the "entry node failing right after acknowledging" edge case, explain whether this is meaningfully different from pure asynchronous replication, and why or why not.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read step 4 of the happy path and the asynchronous-propagation edge case — count exactly how many nodes have the write before the client is told "success" in each scenario.</div>
+      </div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">2</span>
+          <span class="qtext">A network partition splits a 3-replica cluster into two groups: the entry node alone on one side, and the other 2 replicas together on the other side. Using the partition edge case, explain what each side can and cannot do while the partition persists, and why this is described as a trade-off rather than simply a bug.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the "network partition can isolate some replicas" edge case — note which side actually receives new writes in this design.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> You can run this correctly end to end. In a real design, how do you actually choose N and how it's placed — and what does each choice cost?</div>
+  </section>
+
+  <!-- ══════════════════ §7 ══════════════════ -->
+  <section id="s7">
+    <h2 class="section-title"><span class="num">§7</span> ⚖️ The Decision — When, and What It Costs</h2>
+
+    <p>The baseline — N ≥ 2, placed across independent failure domains — is the correctness floor established by §4/§5; N=1 is simply "no replication," and every risk from §4 is fully present. The real decision is what N should be and how the copies should be placed, and that decision is driven by how much simultaneous failure the data must survive, how expensive losing it actually is, and how much write latency the system can tolerate paying for the guarantee.</p>
+
+    <p><strong>Losing this data outright is acceptable — it's cheap to re-derive from another source.</strong> A cache, a materialized view, or anything with a clean rebuild path can often run with a low N, sometimes even N=1, because losing it is inconvenient, not catastrophic — the recovery plan is "rebuild it," not "restore it."</p>
+
+    <p><strong>Losing this data is not acceptable, and you must survive one node or one failure-domain loss.</strong> This is the canonical case: <strong>N=3</strong>, spread across independent failure domains (different racks at minimum, different AZs for stronger guarantees). It's the default absent a stronger stated requirement, and it's what most systems ship with out of the box.</p>
+
+    <p><strong>You must survive multiple simultaneous failures, or a whole region going down.</strong> Push N higher (5 or more) and spread replicas across regions, not just AZs — this is what multi-region durability designs (37.x) build on, at the cost of real cross-region propagation latency.</p>
+
+    <p><strong>Write latency is the binding constraint, and some durability risk is acceptable to get it.</strong> Lean toward asynchronous propagation even with a solid N — the copies still exist, but the guarantee on the <em>very latest</em> write weakens in exchange for speed. This is the choice 15.5 goes deep on.</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Decision tree</div>
+      <svg viewBox="0 0 1040 460" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <rect x="150" y="10" width="740" height="60" rx="10" fill="#f3f2ef" stroke="#94908a" stroke-width="2"/>
+        <text x="520" y="34" text-anchor="middle" font-size="12" font-weight="700" fill="#1a1917">Is losing this data (not just briefly unavailable — actually gone)</text>
+        <text x="520" y="52" text-anchor="middle" font-size="12" font-weight="700" fill="#1a1917">acceptable, e.g. because it's cheaply re-derivable?</text>
+
+        <line x1="320" y1="70" x2="180" y2="120" stroke="#94908a" stroke-width="1.6"/>
+        <text x="210" y="98" font-size="11" font-weight="700" fill="#16a34a">yes</text>
+        <line x1="720" y1="70" x2="860" y2="120" stroke="#94908a" stroke-width="1.6"/>
+        <text x="790" y="98" font-size="11" font-weight="700" fill="#dc2626">no</text>
+
+        <rect x="10" y="124" width="360" height="90" rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+        <text x="190" y="150" text-anchor="middle" font-size="11.5" font-weight="800" fill="#14532d">N=1 (no replication) may be fine.</text>
+        <text x="190" y="168" text-anchor="middle" font-size="11" fill="#14532d">Rebuild-on-loss is the recovery</text>
+        <text x="190" y="184" text-anchor="middle" font-size="11" fill="#14532d">plan — not "restore it."</text>
+
+        <rect x="670" y="124" width="360" height="60" rx="10" fill="#f3f2ef" stroke="#94908a" stroke-width="2"/>
+        <text x="850" y="148" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1a1917">How many simultaneous node/failure-</text>
+        <text x="850" y="166" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1a1917">domain losses must you survive?</text>
+
+        <line x1="770" y1="184" x2="640" y2="230" stroke="#94908a" stroke-width="1.6"/>
+        <text x="680" y="212" font-size="11" font-weight="700" fill="#2563eb">1</text>
+        <line x1="930" y1="184" x2="1000" y2="230" stroke="#94908a" stroke-width="1.6"/>
+        <text x="955" y="212" font-size="11" font-weight="700" fill="#0d9488">2+</text>
+
+        <rect x="450" y="234" width="330" height="110" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+        <text x="615" y="258" text-anchor="middle" font-size="11.5" font-weight="800" fill="#1e3a8a">N=3, spread across independent</text>
+        <text x="615" y="276" text-anchor="middle" font-size="11.5" font-weight="800" fill="#1e3a8a">failure domains</text>
+        <text x="615" y="296" text-anchor="middle" font-size="10.5" fill="#1e3a8a">(common default absent a stronger</text>
+        <text x="615" y="312" text-anchor="middle" font-size="10.5" fill="#1e3a8a">stated requirement)</text>
+
+        <rect x="820" y="234" width="210" height="110" rx="10" fill="#ccfbf1" stroke="#0d9488" stroke-width="2"/>
+        <text x="925" y="258" text-anchor="middle" font-size="11" font-weight="800" fill="#134e4a">N=5+, spread across</text>
+        <text x="925" y="276" text-anchor="middle" font-size="11" font-weight="800" fill="#134e4a">multiple regions</text>
+        <text x="925" y="296" text-anchor="middle" font-size="10" fill="#134e4a">(higher tolerance,</text>
+        <text x="925" y="312" text-anchor="middle" font-size="10" fill="#134e4a">cross-region cost)</text>
+
+        <line x1="520" y1="344" x2="520" y2="366" stroke="#94908a" stroke-width="1.6"/>
+        <line x1="925" y1="344" x2="925" y2="366" stroke="#94908a" stroke-width="1.6"/>
+        <line x1="520" y1="366" x2="925" y2="366" stroke="#94908a" stroke-width="1.6"/>
+        <rect x="330" y="380" width="380" height="60" rx="10" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.6"/>
+        <text x="520" y="404" text-anchor="middle" font-size="11.5" font-weight="700" fill="#4c1d95">How much write latency can you tolerate?</text>
+        <text x="520" y="422" text-anchor="middle" font-size="11" fill="#4c1d95">sync (safer, slower) vs. async (faster, riskier) — 15.5</text>
+      </svg>
+    </div>
+
+    <h3>Trade-offs</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>✅ Benefit</th><th>❌ Cost / Limitation</th></tr></thead>
+        <tbody>
+          <tr><td class="benefit">More independent copies lower the probability of total data loss and raise availability during a single node's failure — the multiplicative effect §4 quantified</td><td class="cost">Storage cost and per-write fan-out grow linearly with N — every additional copy is a permanent, ongoing infrastructure cost, not a one-time decision</td></tr>
+          <tr><td class="benefit">Placing replicas across failure domains protects against correlated failures (a rack, an AZ, a region going down together)</td><td class="cost">Cross-domain — especially cross-region — propagation adds real network latency to keeping replicas in sync</td></tr>
+          <tr><td class="benefit">Synchronous propagation gives a strong "the write is safe on ≥X copies" guarantee before the client is told success</td><td class="cost">Synchronous propagation ties write latency (and sometimes availability) to the slowest required replica responding</td></tr>
+          <tr><td class="benefit">Replication composes cleanly with partitioning (7.x) — each shard simply gets its own N replicas</td><td class="cost">Replication doesn't decide which copy is authoritative or how conflicting writes are ordered — that coordination is a separate mechanism (15.2 or 15.3) layered on top</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>In production</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>System</th><th>How it applies</th><th>The nuance</th></tr></thead>
+        <tbody>
+          <tr><td><strong>PostgreSQL streaming replication</strong></td><td>A primary plus N standby replicas, each receiving a continuous stream of write-ahead-log records</td><td><code>synchronous_commit</code> is configurable per transaction — async is the common default, but a transaction can opt into waiting for one or more standbys to confirm</td></tr>
+          <tr><td><strong>MongoDB replica sets</strong></td><td>Default replica set size of 3 members; writes can require acknowledgment from a majority via write concern</td><td><code>w: "majority"</code> is the sync-leaning default for durability-sensitive writes; <code>w: 1</code> acknowledges after only the primary, trading durability for latency</td></tr>
+          <tr><td><strong>Amazon S3</strong></td><td>Replicates every object across multiple AZs within a region automatically, by default, with no configuration</td><td>Advertises 11 nines of annual durability for exactly the multiplicative-independence reason §4 illustrated; cross-region replication is a separate, optional feature for region-level events</td></tr>
+          <tr><td><strong>Apache Cassandra / DynamoDB-style stores</strong></td><td>Replication factor is an explicit, per-keyspace/table configuration value, with no single leader coordinating writes</td><td>A preview of 16.4's leaderless model — replication factor here is the same N this doc defines, but <em>how</em> writes reach all N copies without a leader is answered later</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">A company stores short-lived session tokens that expire in 15 minutes and can be safely regenerated by asking the user to log in again if they're lost. Using the decision tree and the trade-offs table, propose a replication factor for this data and justify it against both how bad losing it actually is and the cost table's numbers.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the decision tree's first branch and the trade-offs table's first row on what extra copies actually buy versus what they cost.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> Can you deliver this cleanly under interview pressure, including when the interviewer pushes on what raw replication doesn't cover?</div>
+  </section>
+
+  <!-- ══════════════════ §8 ══════════════════ -->
+  <section id="s8">
+    <h2 class="section-title"><span class="num">§8</span> 🎯 In the Interview</h2>
+
+    <h3>When an interviewer asks / says</h3>
+    <ul class="trigger-list">
+      <li>"Walk me through your storage layer's fault tolerance."</li>
+      <li>"What happens if a node holding this data goes down?"</li>
+      <li>"Why do you need more than one copy of this?"</li>
+      <li>"What's your replication factor, and how did you pick it?"</li>
+    </ul>
+
+    <h3>Where this surfaces — template</h3>
+    <div class="table-wrap">
+      <table class="flow-table">
+        <thead><tr><th>Trigger point</th><th>What prompts the return to it</th></tr></thead>
+        <tbody>
+          <tr><th>1. First appearance</th><td>Right after you name any stateful storage component (a database, a non-derivable cache tier) — the interviewer checks whether you've thought about node failure at all</td></tr>
+          <tr><th>2. Second appearance</th><td>The moment you say "replicated" or state a replication factor — expect an immediate "why that number" follow-up</td></tr>
+          <tr><th>3. Third appearance</th><td>If you mention any failure scenario in the design (node crash, region outage), expect a check on whether replication alone actually covers it or you're overclaiming</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>The trade-off statement, broken into a deliverable template</h3>
+    <p style="font-size:13.5px; color:var(--text-muted); margin-top:-6px;">Memorize each row, then deliver them in order as one continuous answer — this is the same content as a single script, just chunked for recall instead of one wall of text.</p>
+    <div class="script-template">
+      <div class="script-step"><div class="step-label">1. Name the choice</div><div class="step-text">"I'm keeping N independent copies of this data — replicas — on separate nodes, not just one."</div></div>
+      <div class="script-step"><div class="step-label">2. Mechanism reason</div><div class="step-text">"That way, no single disk failure or node crash can take the data down with it — as long as one replica survives, the data survives; as long as one node is up, I can still serve it."</div></div>
+      <div class="script-step"><div class="step-label">3. Price it unprompted</div><div class="step-text">"The cost is real: N copies means N times the storage, and every write now has to reach N minus one additional nodes — either before I acknowledge it, synchronously (safer, slower), or after, asynchronously (faster, a small window of risk)."</div></div>
+      <div class="script-step"><div class="step-label">4. Switch condition</div><div class="step-text">"I'd raise N if I need to survive more than one simultaneous failure, or if replicas need to span regions — and I'd push toward synchronous propagation the moment losing even the most recent write becomes unacceptable."</div></div>
+    </div>
+
+    <h3>A second template — the "isn't this just a backup?" pushback</h3>
+    <div class="script-template">
+      <div class="script-step"><div class="step-label">1. Name the distinction</div><div class="step-text">"That's a different mechanism solving a different failure class, and it's worth naming before it's asked."</div></div>
+      <div class="script-step"><div class="step-label">2. Mechanism reason</div><div class="step-text">"Replication keeps every copy live and current with every write — including a bad one. If an application bug deletes the wrong row, that deletion propagates to every replica exactly as faithfully as a correct write would."</div></div>
+      <div class="script-step"><div class="step-label">3. Price it unprompted</div><div class="step-text">"So replication buys me zero protection against logical mistakes — it can't undo a write that was wrong the moment it happened."</div></div>
+      <div class="script-step"><div class="step-label">4. Switch condition</div><div class="step-text">"For that, I'd pair it with backups — deliberately delayed, restorable snapshots — for continuous durability, backups for recovering from mistakes replication can't."</div></div>
+    </div>
+
+    <h3>⚠️ Traps</h3>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "Replication protects against any kind of data loss, including if someone accidentally deletes or corrupts a record."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Replication propagates whatever was written — including a mistake or corruption — to every copy just as faithfully as a good write. That protection comes from backups (20.x), not replication.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "More replicas is strictly better, so I'll just set N as high as I reasonably can."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Every additional replica adds real storage cost and write fan-out with diminishing fault-tolerance return past what your actual failure-tolerance requirement calls for — N should be chosen against a stated number of simultaneous failures to survive, not maximized (§7).</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "As long as N≥2, my data is safe no matter where the replicas physically live."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> N only buys independent-failure protection if the replicas don't share a failure domain — same rack, same power feed, or same AZ can let one event take out several "independent" copies at once (§5, §6).</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "Replication automatically tells me which copy is current, so reads are simple."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Replication only gets you multiple copies — it says nothing on its own about which is authoritative or how a read should choose. That coordination is leader/follower (15.2) or quorum (15.3), a separate mechanism layered on top.</div></div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> Can you combine what you've learned across sections, not just recall each one?</div>
+  </section>
+
+  <!-- ══════════════════ §9 ══════════════════ -->
+  <section id="s9">
+    <h2 class="section-title"><span class="num">§9</span> 🧪 Mastery Gate</h2>
+    <div class="callout callout-quote">Synthesis only. Each question requires combining two or more sections.</div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">1</span>
+        <span class="qtext">A team advertises "we replicate to 3 nodes for durability" but uses fully asynchronous propagation with no acknowledgment requirement at all — a pure fire-and-forget write. Using the "Propagation" concept from §5 and the asynchronous-propagation edge case from §6, explain precisely what guarantee this configuration does and does not actually provide the instant a client is told a write succeeded.</span>
+        <span class="quiz-toggle">▼ Hint</span>
+      </div>
+      <div class="quiz-hint">💡 Sections combined: §5 + §6.</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">2</span>
+        <span class="qtext">A photo-sharing app's "recently viewed" list for a user is regenerated on the fly from an activity log if it's ever lost, updates constantly, and briefly serving a stale or even empty list is a non-event for the user. Using the decision tree from §7 and the mindmap's "what it costs" vs. "the two risks it solves" branches from §3, argue for the appropriate replication factor for this specific data, and explain why over-replicating it would be a real mistake, not just unnecessary caution.</span>
+        <span class="quiz-toggle">▼ Hint</span>
+      </div>
+      <div class="quiz-hint">💡 Sections combined: §7 + §3, applied to a system not mentioned elsewhere in this doc.</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">3</span>
+        <span class="qtext">A company sets N=3 but deploys all three replicas as three virtual machines running on the same physical host — a real, common cloud misconfiguration. Using the concrete failure-probability example from §4 and the "Failure-Domain Placement" concept from §5, explain precisely why this setup has not actually achieved the failure-probability reduction the §4 example promised.</span>
+        <span class="quiz-toggle">▼ Hint</span>
+      </div>
+      <div class="quiz-hint">💡 Sections combined: §4 + §5.</div>
+    </div>
+
+    <h3>Mastery criteria — tick only what you can demonstrate on demand</h3>
+    <ul class="checklist">
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can name the two independent risks a single copy of data carries (durability, availability) with the specific failure each one guards against</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can define replication factor N and justify a chosen N against a stated number of simultaneous node/failure-domain losses to survive</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can explain why failure-domain placement — not replica count alone — determines whether N independent copies actually fail independently</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can state the real costs of replication (N× storage, (N−1)× write fan-out per write) and explain why replication is not a substitute for backups</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can explain, at a high level, why replication alone creates a new coordination problem — which copy is current — that leader/follower (15.2) or quorum (15.3) exists to resolve</span></li>
+    </ul>
+
+    <div class="callout callout-tip">💡 <strong>Rule of thumb:</strong> If you can teach it to someone else and field their follow-up questions, you've mastered it.</div>
+  </section>
+
+  <!-- ══════════════════ §10 ══════════════════ -->
+  <section id="s10">
+    <h2 class="section-title"><span class="num">§10</span> 🔗 Connections &amp; Sources</h2>
+
+    <div class="connections">
+      <div class="conn-card">
+        <span class="conn-icon">⬅️</span>
+        <div><div class="conn-label">Builds on</div><strong>3.6 Share-Nothing Architecture</strong>, whose independent-nodes-no-shared-disk model is exactly the property that makes a replica's failure genuinely independent of the others; and <strong>7.1 Horizontal Partitioning vs. Vertical Partitioning</strong>, whose partitions/shards are the actual unit that gets replicated N times in a real sharded-and-replicated system.</div>
+      </div>
+      <div class="conn-card">
+        <span class="conn-icon">➡️</span>
+        <div><div class="conn-label">Enables</div><strong>15.2 Leader/follower model</strong>, the first concrete answer to the coordination problem this doc's §5 names — which copy is current. <strong>15.3 Quorum reads and writes</strong>, the second, count-based answer to the same question. <strong>15.4 Durability guarantees and replication factor</strong>, which goes deep on choosing N precisely. <strong>15.5 Synchronous vs. asynchronous replication trade-offs</strong>, the full depth on the propagation split previewed in §5/§6. <strong>15.6 Replication lag and read anomalies</strong>, what asynchronous propagation's "catching up" window actually looks like, and what it costs readers, in practice.</div>
+      </div>
+      <div class="conn-card">
+        <span class="conn-icon">⚡</span>
+        <div><div class="conn-label">Tension with</div><strong>Backups (Topic 20)</strong>, which look similar at a glance — both are about "not losing data" — but solve different failure classes and are genuinely easy to conflate, as Trap 1 in §8 flags directly. Replication gives you continuous, near-real-time durability and availability against hardware failure; it cannot undo a logically bad write. Backups give you recovery from exactly that logical-mistake class, at the cost of losing whatever changed since the last snapshot — production systems need both, not one instead of the other.</div>
+      </div>
+    </div>
+
+    <h3>📚 Further reading</h3>
+    <ul class="reading-list">
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Kleppmann, <em>Designing Data-Intensive Applications</em>, Chapter 5 (Replication)</strong> — the foundational treatment of why and how systems replicate data, and the source for most of this subtree's vocabulary (leaders, followers, sync/async propagation)</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>AWS — Amazon S3 storage classes and durability documentation</strong> — <a href="https://aws.amazon.com/s3/storage-classes/">docs</a> — how a hyperscaler reasons about replication factor and failure-domain placement to advertise 11 nines of durability</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>PostgreSQL docs — Chapter 27, "High Availability, Load Balancing, and Replication"</strong> — <a href="https://www.postgresql.org/docs/current/high-availability.html">docs</a> — synchronous vs. asynchronous streaming replication configured in a real, widely-used system</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>MongoDB docs — Replication</strong> — <a href="https://www.mongodb.com/docs/manual/replication/">docs</a> — replica sets, write concern, and the majority-acknowledgment default in a production leader-based system</span></li>
+    </ul>
+  </section>
+
+  <!-- ══════════════════ §11 ══════════════════ -->
+  <section id="s11">
+    <h2 class="section-title"><span class="num">§11</span> ✍️ My Notes</h2>
+    <div class="callout callout-quote">Personal observations, model answers from drilling sessions, things that confused me. Saved locally in this browser.</div>
+    <textarea class="notes-area" placeholder="Your notes, model answers, and annotations…"></textarea>
+  </section>
+
+</article>
+</main>
+
+<script>
+// TOC active state
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('#toc nav a');
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(a => a.classList.remove('active'));
+      const a = document.querySelector(`#toc nav a[href="#${e.target.id}"]`);
+      if (a) a.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+sections.forEach(s => obs.observe(s));
+
+function toggle(cb) { cb.closest('li').classList.toggle('checked'); }
+function toggleReading(cb) { cb.closest('li').classList.toggle('checked'); }
+function toggleQuiz(q) {
+  const item = q.closest('.quiz-item');
+  item.classList.toggle('open');
+  q.querySelector('.quiz-toggle').textContent = item.classList.contains('open') ? '▲ Hide' : '▼ Hint';
+}
+
+// Notes auto-save
+const notesArea = document.querySelector('.notes-area');
+const NOTES_KEY = 'notes_15_1';
+if (localStorage.getItem(NOTES_KEY)) notesArea.value = localStorage.getItem(NOTES_KEY);
+notesArea.addEventListener('input', () => {
+  try { localStorage.setItem(NOTES_KEY, notesArea.value); } catch(e) {}
+});
+</script>
+
+</body>
+</html>

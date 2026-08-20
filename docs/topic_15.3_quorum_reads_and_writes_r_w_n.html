@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>15.3 Quorum Reads and Writes — R + W > N</title>
+<style>
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface-alt: #f3f2ef;
+    --border: #e5e3de; --text: #1a1917; --text-muted: #6b6861;
+    --accent: #2563eb; --accent-light: #dbeafe;
+    --green: #16a34a; --green-light: #dcfce7;
+    --red: #dc2626; --red-light: #fee2e2;
+    --yellow: #d97706; --yellow-light: #fef3c7;
+    --purple: #7c3aed; --purple-light: #ede9fe;
+    --orange: #ea580c; --orange-light: #ffedd5;
+    --teal: #0d9488; --teal-light: #ccfbf1;
+    --code-bg: #1e1e2e; --code-text: #cdd6f4;
+    --sidebar-w: 240px; --content-max: 820px;
+    font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; }
+  #toc { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0 48px; z-index: 100; }
+  #toc-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  #toc-header .phase-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-bottom: 6px; }
+  #toc-header h2 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  #toc-header .tier-tag { font-size: 10px; font-weight: 800; letter-spacing: .06em; color: var(--yellow); background: var(--yellow-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-top: 8px; }
+  #toc nav a { display: block; padding: 5px 16px 5px 20px; font-size: 12.5px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+  main { margin-left: var(--sidebar-w); padding: 48px 48px 96px; max-width: calc(var(--sidebar-w) + var(--content-max) + 96px); width: 100%; }
+  article { max-width: var(--content-max); }
+  .doc-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 2px solid var(--border); }
+  .doc-header .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+  .tag-phase { background: var(--accent-light); color: var(--accent); }
+  .tag-topic { background: var(--purple-light); color: var(--purple); }
+  .tag-tier  { background: var(--yellow-light); color: var(--yellow); }
+  .tag-prereq{ background: var(--teal-light); color: var(--teal); }
+  .tag-date  { background: var(--surface-alt);  color: var(--text-muted); }
+  .doc-header h1 { font-size: 30px; font-weight: 800; line-height: 1.25; letter-spacing: -.02em; color: var(--text); }
+  section { margin-bottom: 52px; scroll-margin-top: 32px; }
+  h2.section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -.01em; }
+  h2.section-title .num { font-size: 11px; font-weight: 800; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; letter-spacing: .04em; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 24px 0 10px; }
+  h4 { font-size: 13.5px; font-weight: 700; color: var(--text); margin: 18px 0 8px; }
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+  code { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-family: "SF Mono","Fira Code",Menlo,monospace; font-size: 12.5px; }
+  ul.plain { margin: 0 0 14px 20px; }
+  ul.plain li { margin-bottom: 7px; font-size: 14.5px; line-height: 1.6; }
+  ol.steps { margin: 0 0 14px 22px; }
+  ol.steps li { margin-bottom: 8px; font-size: 14.5px; line-height: 1.6; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 14px; border-left: 3px solid; }
+  .callout-goal  { background: var(--accent-light); border-color: var(--accent); color: #1e40af; }
+  .callout-tip   { background: var(--yellow-light); border-color: var(--yellow); color: #92400e; }
+  .callout-warn  { background: var(--red-light); border-color: var(--red); color: #7f1d1d; }
+  .callout-quote { background: var(--surface-alt); border-color: var(--border); color: var(--text-muted); font-style: italic; }
+  .callout-teal  { background: var(--teal-light); border-color: var(--teal); color: #134e4a; }
+  .the-question { background: var(--surface); border: 2px solid var(--accent); border-radius: 12px; padding: 16px 20px; margin-top: 18px; font-size: 15.5px; }
+  .the-question .lbl { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); display: block; margin-bottom: 5px; }
+  .the-question em { color: var(--text); font-weight: 600; }
+  .definition { background: var(--purple-light); border-left: 4px solid var(--purple); border-radius: 8px; padding: 16px 20px; margin: 18px 0 24px; font-size: 15px; font-weight: 600; color: #4c1d95; line-height: 1.6; }
+  .mental-model { background: var(--teal-light); border-left: 3px solid var(--teal); border-radius: 8px; padding: 14px 18px; margin: 18px 0; font-size: 14px; color: #134e4a; }
+  .mental-model .mm-name { font-weight: 800; }
+  .mental-model .mm-break { display: block; margin-top: 7px; font-style: italic; opacity: .85; }
+  .bridge { background: linear-gradient(90deg, var(--accent-light), transparent); border-left: 4px solid var(--accent); border-radius: 8px; padding: 13px 18px; margin-top: 28px; font-size: 14.5px; color: #1e40af; font-weight: 600; }
+  .bridge .arrow { font-weight: 800; margin-right: 6px; }
+  .checkpoint { background: var(--surface); border: 2px solid var(--green); border-radius: 12px; padding: 16px 20px; margin-top: 26px; }
+  .checkpoint > .cp-title { font-size: 12px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--green); margin-bottom: 12px; display: flex; align-items: center; gap: 7px; }
+  .cheatsheet { background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 24px 28px; font-family: "SF Mono","Fira Code","Cascadia Code",Menlo,monospace; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-x: auto; margin-top: 16px; }
+  .cheatsheet .label { color: #cba6f7; font-weight: 700; letter-spacing: .08em; display: block; margin-top: 18px; margin-bottom: 4px; border-bottom: 1px solid #313244; padding-bottom: 3px; }
+  .cheatsheet .label:first-child { margin-top: 0; }
+  .diagram-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 16px 14px; margin: 20px 0 28px; overflow-x: auto; }
+  .diagram-wrap .diagram-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); margin-bottom: 12px; }
+  .diagram-wrap svg { display: block; width: 100%; height: auto; }
+  .diagram-wrap p.caption { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 10px; margin-bottom: 0; font-style: italic; }
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; font-size: 14.5px; line-height: 1.55; }
+  .checklist li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 2px; background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .checklist li.checked .cb { background: var(--green); border-color: var(--green); }
+  .checklist li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .checklist li.checked .text { color: var(--text-muted); text-decoration: line-through; }
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: var(--surface-alt); padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.5; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+  .misconception { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .misconception .wrong { background: var(--red-light); padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; }
+  .misconception .right { padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; color: #065f46; background: var(--green-light); }
+  .misconception .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .quiz-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .quiz-q { padding: 14px 18px; font-size: 14.5px; font-weight: 600; cursor: pointer; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .quiz-q:hover { background: var(--surface-alt); }
+  .quiz-num { flex-shrink: 0; width: 24px; height: 24px; background: var(--accent); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; margin-top: 1px; }
+  .quiz-q .qtext { flex: 1; font-weight: 500; }
+  .quiz-toggle { font-size: 11px; color: var(--text-muted); flex-shrink: 0; margin-top: 3px; }
+  .quiz-hint { display: none; padding: 10px 18px 14px; font-size: 13px; color: #92400e; background: var(--yellow-light); border-top: 1px solid var(--border); line-height: 1.6; white-space: pre-wrap; }
+  .quiz-item.open .quiz-hint { display: block; }
+  .reading-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .reading-list li { display: flex; align-items: flex-start; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; font-size: 14px; }
+  .reading-list li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 1px; cursor: pointer; background: var(--surface); display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .reading-list li.checked .cb { background: var(--green); border-color: var(--green); }
+  .reading-list li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .reading-list li.checked .rtext { color: var(--text-muted); text-decoration: line-through; }
+  .notes-area { width: 100%; min-height: 200px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: inherit; font-size: 14px; color: var(--text); resize: vertical; line-height: 1.6; }
+  .notes-area:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .connections { display: flex; flex-direction: column; gap: 12px; }
+  .conn-card { display: flex; align-items: flex-start; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14px; }
+  .conn-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .conn-label { font-weight: 700; margin-bottom: 3px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .tradeoff-box { background: var(--surface-alt); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 16px 20px; font-size: 14.5px; font-style: italic; color: var(--text); margin-top: 14px; line-height: 1.65; }
+  .trigger-list { list-style: none; display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+  .trigger-list li { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--orange); border-radius: 8px; padding: 10px 16px; font-size: 14px; font-style: italic; color: var(--text); }
+  .flow-table { width: 100%; border-collapse: collapse; margin: 14px 0 18px; font-size: 14px; }
+  .flow-table th { background: var(--surface-alt); padding: 9px 14px; text-align: left; font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--accent); border-bottom: 2px solid var(--border); width: 190px; }
+  .flow-table td { padding: 10px 14px; border-bottom: 1px solid var(--border); line-height: 1.55; }
+  .flow-table tr:last-child td, .flow-table tr:last-child th { border-bottom: none; }
+  @media (max-width: 900px) { #toc { display: none; } main { margin-left: 0; padding: 24px 20px 60px; } }
+</style>
+</head>
+<body>
+
+<aside id="toc">
+  <div id="toc-header">
+    <span class="phase-tag">Phase E · Topic 15</span>
+    <h2>15.3 Quorum Reads and Writes</h2>
+    <span class="tier-tag">🥇 T1 · ~3h</span>
+  </div>
+  <nav>
+    <a href="#s0">🧭 The Question</a>
+    <a href="#s1">🎯 Quick Reference</a>
+    <a href="#s2">📋 Cheatsheet</a>
+    <a href="#s3">🧠 The Mindmap</a>
+    <a href="#s4">🔥 The Problem</a>
+    <a href="#s5">💡 The Core Idea</a>
+    <a href="#s6">⚙️ How It Works</a>
+    <a href="#s7">⚖️ The Decision</a>
+    <a href="#s8">🎯 In the Interview</a>
+    <a href="#s9">🧪 Mastery Gate</a>
+    <a href="#s10">🔗 Connections</a>
+    <a href="#s11">✍️ My Notes</a>
+  </nav>
+</aside>
+
+<main>
+<article>
+
+  <header class="doc-header">
+    <div class="meta">
+      <span class="tag tag-phase">Phase E — Reliability Branch</span>
+      <span class="tag tag-topic">Topic 15 — Distributed Storage Systems</span>
+      <span class="tag tag-tier">🥇 T1 Core · ~3h</span>
+      <span class="tag tag-prereq">Prereqs: 15.1, 15.2</span>
+      <span class="tag tag-date">Studied 2026-08-20</span>
+    </div>
+    <h1>15.3 Quorum Reads and Writes — R + W &gt; N</h1>
+  </header>
+
+  <!-- ══════════════════ §0 ══════════════════ -->
+  <section id="s0">
+    <h2 class="section-title"><span class="num">§0</span> 🧭 The Question This Answers</h2>
+
+    <p>15.1 established why you replicate data at all — durability against node loss, availability against node failure — and 15.2 gave you the first working answer to "what's current": a single leader takes every write, propagates it to followers, and reads can go to the leader for freshness or to a follower for cheaper, possibly-stale access. That model works, and it's simple to reason about, precisely because there's one node whose copy is, by definition, the truth.</p>
+
+    <p>But a single leader is also a single thing every write now depends on — and in systems that don't want that dependency, whether for write availability during a region outage, multi-region write latency, or simply not wanting any one node to be a required participant in every write, the leader is exactly the piece you'd like to remove. The moment you remove it, though, you lose the thing that made "which copy is current" trivial to answer: nobody is designated as the source of truth anymore, so any of the N replicas could plausibly hold the latest value, or might not. Writing to one replica and reading from another gives you no guarantee they're the same node — or that the write even landed before the read ran.</p>
+
+    <div class="the-question">
+      <span class="lbl">The question</span>
+      <em>Without a leader coordinating every write, how many of your N replicas must a write reach, and how many must a read query, so that a read is mathematically guaranteed to see the most recent acknowledged write — and what do you trade away, in latency and availability, as you move those two numbers?</em>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> Before the fix, what exactly goes wrong if you pick R and W carelessly — and how bad is it, concretely?</div>
+  </section>
+
+  <!-- ══════════════════ §1 ══════════════════ -->
+  <section id="s1">
+    <h2 class="section-title"><span class="num">§1</span> 🎯 Interview Quick Reference Card</h2>
+    <div class="callout callout-quote">Not a summary — a live-recall tool, built for retrieval speed under interview pressure. If you need the reasoning behind anything here, that's what §2 (cheatsheet) and the rest of the doc are for.</div>
+
+    <h3>The checklist — walk this on the whiteboard, in order</h3>
+    <ol class="steps">
+      <li>Define N, W, R precisely before touching the formula: N = replicas storing the data, W = replicas that must acknowledge a write before it's considered successful, R = replicas queried on a read</li>
+      <li>State the formula and say it's a guarantee, not a convention: <strong>R + W &gt; N</strong> guarantees the set of nodes you wrote to and the set of nodes you read from must share at least one common node</li>
+      <li>Name why, unprompted: pigeonhole — two subsets of an N-element set, sized R and W, cannot both avoid overlapping unless R + W ≤ N; the moment R + W &gt; N, at least one node is forced into both sets</li>
+      <li>Immediately qualify the guarantee: overlap only tells you the latest write is <em>somewhere among</em> the R responses — the read side still needs a way to identify which of the R returned versions is newest (timestamp or version vector), or the overlap is wasted</li>
+      <li>Walk the canonical config: N=3, W=2, R=2 — R+W=4&gt;3, tolerates one node down on either path, balances read/write latency</li>
+      <li>Name the two knobs' independent costs unprompted: raising W raises write latency and lowers write availability (more required acks, more nodes that must be reachable); raising R does the same to reads</li>
+      <li>Name what it does <em>not</em> give you: linearizability under concurrent writes (two clients writing concurrently to overlapping-but-different quorum members still produces a conflict — that's resolved by version reconciliation, not by the formula itself), and safety during a partition unless the reachable side still has W or R nodes</li>
+    </ol>
+
+    <h3>Trigger → action</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Interviewer says</th><th>You do</th></tr></thead>
+        <tbody>
+          <tr><td>"Without a leader, how do you keep reads from returning stale data?"</td><td>State the formula directly: R+W&gt;N guarantees the write set and read set intersect, so at least one node in the read quorum has the latest acknowledged write</td></tr>
+          <tr><td>"Why not just write to all N and read from 1?"</td><td>Name the trade explicitly: W=N gives every read exact freshness for free, but write availability collapses — any single node down blocks every write</td></tr>
+          <tr><td>"What does the overlap actually guarantee?"</td><td>Be precise: it guarantees the latest write is present among the R responses returned — it does not by itself tell you which response is the latest; that needs versioning</td></tr>
+          <tr><td>"What if two clients write concurrently?"</td><td>Name it as a separate problem: quorum overlap doesn't prevent concurrent writes to different quorum members from diverging — conflict resolution (LWW, vector clocks) handles that; quorum only guarantees you'll see all the candidates</td></tr>
+          <tr><td>"How does this relate to your leader/follower design?"</td><td>Contrast directly: leader/follower makes the leader the single source of truth so no arithmetic is needed; quorum removes the leader and replaces that source of truth with an intersection guarantee across N independent replicas</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Fast disambiguation — the pairs that get confused live</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Pair</th><th>The distinction</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Quorum overlap vs. linearizability</strong></td><td>R+W&gt;N guarantees the latest write is present in the read set. It does not by itself guarantee the read returns it correctly identified as latest, or that concurrent writes serialize cleanly — those need versioning and conflict resolution on top.</td></tr>
+          <tr><td><strong>R+W&gt;N (Dynamo-style tunable quorum) vs. majority consensus (Raft/Paxos, W&gt;N/2)</strong></td><td>Dynamo-style quorum lets you tune R and W independently per operation with no fixed relationship beyond R+W&gt;N. Consensus systems use a fixed majority for writes (and typically serve reads from the elected leader, not via a separate R), because they're solving leader election and log agreement, not read/write tuning.</td></tr>
+          <tr><td><strong>Strict quorum vs. sloppy quorum</strong></td><td>Strict quorum requires W (or R) of a key's specific home nodes to respond — if fewer than W of them are reachable, the write fails outright. Sloppy quorum (16.7) accepts writes from any W reachable nodes during a partition, trading strict correctness for write availability. This doc assumes strict quorum throughout.</td></tr>
+          <tr><td><strong>N here vs. replication factor in 15.4</strong></td><td>Same number, different lens: N here is "how many copies exist, which sets the ceiling for R+W&gt;N." 15.4 asks the durability question about that same N — how many copies must survive to not lose data.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>High-yield anchors</h3>
+    <div class="cheatsheet" style="font-size: 12.5px;">Formula: R + W > N  (guarantees write-set / read-set overlap)
+Canonical config: N=3, W=2, R=2  →  R+W=4 > 3
+Read-fast config: N=3, W=3, R=1  →  reads hit 1 node, writes need all 3
+Write-fast config: N=3, W=1, R=3 →  writes hit 1 node, reads need all 3
+No-guarantee zone: R + W ≤ N     →  eventual consistency only, no overlap promise
+Fault tolerance: write survives up to (N − W) node failures;
+                 read survives up to (N − R) node failures</div>
+
+    <h3>The script — say this close to verbatim</h3>
+    <div class="tradeoff-box">"Once you remove the leader, no single replica is the designated source of truth, so you need a mathematical guarantee instead of an organizational one. With N replicas, if a write must be acknowledged by W of them and a read must query R of them, and R plus W is greater than N, then the set of nodes you wrote to and the set you read from can't both avoid each other — by pigeonhole, they're guaranteed to share at least one node. That node has the latest write, so as long as I can tell which of the R responses is newest — a timestamp or a version vector — the read is guaranteed to see it. The cost is that both W and R are still counts of nodes that must actually respond: raising either one raises that operation's latency to the slowest of the required acks, and lowers that operation's availability, because more nodes now have to be up and reachable for it to succeed at all."</div>
+
+    <h3>If pushed on "why not just use W=N, R=1 for reads that must be fresh"</h3>
+    <div class="tradeoff-box">"That's a legitimate choice for a read-heavy, write-light workload, but it makes every single write depend on every single replica — the moment any one of the N nodes is down or slow, writes stop succeeding entirely, which reintroduces exactly the single-point-of-failure problem replication was meant to solve. Quorum's value is that you don't have to pick an extreme — R=W=2 out of N=3 tolerates one node being down on either path, which is usually the better trade unless one operation is genuinely rare enough to absorb the cost."</div>
+  </section>
+
+  <!-- ══════════════════ §2 ══════════════════ -->
+  <section id="s2">
+    <h2 class="section-title"><span class="num">§2</span> 📋 Cheatsheet</h2>
+
+    <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+    <div class="callout callout-tip">⏭️ <strong>First time through this topic?</strong> Skip to §3 and come back here for revision.</div>
+
+<div class="cheatsheet"><span class="label">§ 1  WHY IT EXISTS</span>15.2's leader/follower model answers "what's current" by designating one
+node the source of truth. Systems that remove the leader — for write
+availability, multi-region latency, or fault tolerance — lose that
+answer. Quorum reads and writes replace it with a mathematical
+guarantee instead of an organizational one.
+<span class="label">§ 2  WHAT IT IS</span>N   Number of replicas that store a given piece of data.
+W   Number of replicas that must acknowledge a write before the write
+    is considered successful.
+R   Number of replicas a read must query before returning a result.
+R + W > N   The condition that guarantees the write-set and read-set
+    intersect in at least one node.
+<span class="label">§ 3  THE MECHANISM</span>WRITE   Coordinator sends the write to all N (or all reachable) home
+        nodes for the key, waits for W acknowledgments, returns success.
+READ    Coordinator queries R nodes, waits for R responses, picks the
+        response with the newest version (timestamp / version vector),
+        returns it.
+WHY IT   Two subsets of an N-node set, sized R and W, cannot both avoid
+WORKS    overlapping unless R + W ≤ N. The moment R + W > N, pigeonhole
+         guarantees at least one shared node.
+<span class="label">§ 4  USE / AVOID</span>USE quorum reads/writes when: no single node should be a required
+  dependency for every write, and you can tolerate resolving occasional
+  concurrent-write conflicts at the application/version layer.
+USE a high W, low R (or vice versa) when: one operation (reads or
+  writes) is rare enough that its higher latency/lower availability is
+  acceptable in exchange for the other operation being cheap.
+AVOID R + W ≤ N unless you have explicitly chosen eventual consistency:
+  below that line there is no overlap guarantee at all, and a read can
+  silently miss the latest write.
+AVOID treating quorum overlap as linearizability: it guarantees the
+  latest write is present among the responses, not that concurrent
+  writes are ordered or that reads never observe a stale value under
+  certain timing/partition conditions.
+<span class="label">§ 5  WHAT IT DOES AND DOESN'T GUARANTEE</span>GUARANTEES     The read quorum and write quorum share at least one node,
+               so the latest acknowledged write is always present among
+               the R responses returned.
+DOES NOT       Which of the R responses is newest (needs versioning);
+GUARANTEE      that concurrent writes from two clients don't diverge
+               (needs conflict resolution, 16.3); safety during a
+               partition if fewer than W/R nodes are reachable (needs
+               sloppy quorum, 16.7, as a relaxation).
+<span class="label">§ 6  NUMBERS TO ANCHOR THE DISCUSSION</span>Canonical: N=3, W=2, R=2 → R+W=4>3, tolerates 1 node down either way.
+Fault tolerance: write survives (N−W) node failures; read survives
+  (N−R) node failures.
+No-guarantee zone: R+W≤N (e.g. N=3, R=1, W=1 → R+W=2, no overlap
+  promise at all).
+<span class="label">§ 7  INTERVIEW TRIGGERS + GOTCHA</span>→ "How do reads stay fresh without a leader?" → state R+W>N and the
+                                     overlap guarantee directly
+→ "What does overlap actually promise?"      → presence among R
+                                     responses, not "which one's newest"
+→ "What about concurrent writes?"            → separate problem, needs
+                                     versioning/conflict resolution
+GOTCHA: Treating R+W>N as a complete consistency guarantee on its own.
+  It guarantees intersection of node sets — it says nothing about
+  ordering concurrent writes or about behavior when fewer than W/R
+  nodes are reachable during a partition (§9, and 16.7).</div>
+  </section>
+
+  <!-- ══════════════════ §3 ══════════════════ -->
+  <section id="s3">
+    <h2 class="section-title"><span class="num">§3</span> 🧠 The Mindmap</h2>
+    <div class="callout callout-quote">The picture to hold in your head while you study. Everything below hangs off this.</div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">The R / W tuning spectrum — N = 3 replicas, fixed</div>
+      <svg viewBox="0 0 1040 380" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <rect x="270" y="6" width="500" height="38" rx="9" fill="#1a1917"/>
+        <text x="520" y="30" text-anchor="middle" font-size="12.5" font-weight="800" fill="#ffffff">THE R / W TUNING SPECTRUM — N = 3 REPLICAS, FIXED</text>
+
+        <rect x="20" y="62" width="300" height="168" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+        <text x="170" y="86" text-anchor="middle" font-size="13" font-weight="800" fill="#1e3a8a">READ-OPTIMIZED</text>
+        <text x="170" y="103" text-anchor="middle" font-size="11" font-style="italic" fill="#2563eb">W = N, R = 1</text>
+        <line x1="34" y1="112" x2="306" y2="112" stroke="#93c5fd" stroke-width="1.3"/>
+        <text x="34" y="132" font-size="11" fill="#1e3a8a">reads: 1 node, fast,</text>
+        <text x="34" y="148" font-size="11" fill="#1e3a8a">cheap, always fresh</text>
+        <text x="34" y="172" font-size="11" fill="#1e3a8a">writes: ALL N must ack,</text>
+        <text x="34" y="188" font-size="11" fill="#1e3a8a">slow, fragile — any node</text>
+        <text x="34" y="204" font-size="11" fill="#1e3a8a">down blocks every write</text>
+
+        <rect x="370" y="52" width="300" height="188" rx="10" fill="#ede9fe" stroke="#7c3aed" stroke-width="3"/>
+        <text x="520" y="78" text-anchor="middle" font-size="13" font-weight="800" fill="#4c1d95">BALANCED QUORUM</text>
+        <text x="520" y="95" text-anchor="middle" font-size="11" font-style="italic" fill="#7c3aed">W = 2, R = 2</text>
+        <line x1="384" y1="104" x2="656" y2="104" stroke="#c4b5fd" stroke-width="1.3"/>
+        <text x="384" y="124" font-size="11" fill="#4c1d95">reads: 2 nodes</text>
+        <text x="384" y="140" font-size="11" fill="#4c1d95">writes: 2 nodes</text>
+        <text x="384" y="162" font-size="11" font-weight="700" fill="#4c1d95">R+W = 4 &gt; 3 ✓ overlap</text>
+        <text x="384" y="178" font-size="11" fill="#4c1d95">guaranteed on both sides</text>
+        <text x="384" y="202" font-size="10" font-style="italic" fill="#6b6861">default absent a workload</text>
+        <text x="384" y="216" font-size="10" font-style="italic" fill="#6b6861">reason to skew (§7)</text>
+
+        <rect x="720" y="62" width="300" height="168" rx="10" fill="#ccfbf1" stroke="#0d9488" stroke-width="2"/>
+        <text x="870" y="86" text-anchor="middle" font-size="13" font-weight="800" fill="#134e4a">WRITE-OPTIMIZED</text>
+        <text x="870" y="103" text-anchor="middle" font-size="11" font-style="italic" fill="#0d9488">W = 1, R = N</text>
+        <line x1="734" y1="112" x2="1006" y2="112" stroke="#5eead4" stroke-width="1.3"/>
+        <text x="734" y="132" font-size="11" fill="#134e4a">writes: 1 node, fast,</text>
+        <text x="734" y="148" font-size="11" fill="#134e4a">cheap</text>
+        <text x="734" y="172" font-size="11" fill="#134e4a">reads: N nodes, slow,</text>
+        <text x="734" y="188" font-size="11" fill="#134e4a">fragile — needs ALL up,</text>
+        <text x="734" y="204" font-size="11" fill="#134e4a">pays the freshness cost</text>
+
+        <line x1="20" y1="256" x2="1020" y2="256" stroke="#94908a" stroke-width="2"/>
+        <path d="M20,256 L34,249 L34,263 Z" fill="#94908a"/>
+        <path d="M1020,256 L1006,249 L1006,263 Z" fill="#94908a"/>
+        <text x="170" y="276" text-anchor="middle" font-size="10.5" font-weight="700" fill="#1e3a8a">favors READ speed &amp; availability, starves WRITE side</text>
+        <text x="870" y="276" text-anchor="middle" font-size="10.5" font-weight="700" fill="#134e4a">favors WRITE speed &amp; availability, starves READ side</text>
+
+        <line x1="520" y1="290" x2="520" y2="306" stroke="#dc2626" stroke-width="2" stroke-dasharray="4,3"/>
+        <rect x="120" y="306" width="800" height="60" rx="10" fill="#fee2e2" stroke="#dc2626" stroke-width="1.6"/>
+        <text x="520" y="328" text-anchor="middle" font-size="12" font-weight="800" fill="#7f1d1d">R + W = N — NO OVERLAP GUARANTEE BELOW THIS LINE</text>
+        <text x="520" y="348" text-anchor="middle" font-size="11" fill="#7f1d1d">eventual consistency only — a read can miss the latest acknowledged write entirely</text>
+      </svg>
+      <p class="caption">The balanced center spends fault tolerance evenly across reads and writes; moving toward either edge concentrates that cost onto the other operation. Falling below the dashed line abandons the guarantee entirely.</p>
+    </div>
+
+    <p><strong>How to read it:</strong> Everything on the top row, from the balanced center outward, still satisfies R+W&gt;N — moving along the spectrum chooses <em>which</em> operation pays for the guarantee, not whether the guarantee holds at all. Moving left makes reads cheap by making writes expensive and fragile; moving right does the reverse. The balanced center (R=W≈⌈(N+1)/2⌉, here 2/2) is the default because it spreads the fault-tolerance cost evenly across both operations rather than concentrating it on one. The dashed line below the spectrum is not a cheaper point on the same axis — it's the edge you fall off the moment R+W stops exceeding N: everything below it isn't "a discount quorum," it's not a quorum at all. There is no formula-backed overlap guarantee down there, only whatever eventual consistency replication alone gives you (back to 15.1's territory, without the fix this doc provides).</p>
+  </section>
+
+  <!-- ══════════════════ §4 ══════════════════ -->
+  <section id="s4">
+    <h2 class="section-title"><span class="num">§4</span> 🔥 The Problem</h2>
+
+    <p>15.1 and 15.2 together give you a replicated store with a clear answer to freshness: the leader has it, followers might lag (15.6 covers exactly how much). That clarity is bought by tying every write, and every guaranteed-fresh read, to one particular node. Remove the leader — because you want writes to keep working through a region outage, or because no single node should ever be a hard dependency for every write in the system — and that clarity goes with it. Nothing designates any one of the N replicas as more current than any other. A write lands wherever it lands; a read hits wherever it's routed. Nothing in that description guarantees they're the same node, or that the write even landed before the read ran.</p>
+
+    <p>If you write to just one replica and consider the write done (W=1), and a read queries just one replica (R=1), the read can hit any of the N nodes with equal plausibility — including one of the N−1 that never received the write. The system isn't slightly stale; there is no relationship at all between where a write went and where a read looks. Two clients writing to two different replicas at nearly the same moment don't race for a single leader's attention — there isn't one — they simply both succeed against two different nodes, and now two nodes disagree about the current value, with nothing yet to reconcile them.</p>
+
+    <p>The obvious over-correction is to go to an extreme: write to all N replicas before acknowledging (W=N), so reads can safely hit just one (R=1), because every replica is guaranteed current. This does work — but it moves the entire single-point-of-failure problem replication was supposed to remove onto the write path instead: with W=N, any single one of the N nodes being down or slow blocks every write in the system, which is a worse failure mode than the leader you removed, because now <em>all</em> nodes must be healthy instead of just one. The symmetric mistake — R=N, W=1 — does the same thing to every read. Going to either extreme trades the leader's single point of failure for a different single point of failure; it doesn't remove the dependency, it just relocates it.</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Before / after — no coordination vs. quorum</div>
+      <svg viewBox="0 0 1040 260" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <rect x="10" y="10" width="500" height="240" rx="12" fill="#fff5f5" stroke="#dc2626" stroke-width="2"/>
+        <text x="260" y="38" text-anchor="middle" font-size="13.5" font-weight="800" fill="#7f1d1d">BEFORE — no coordination (R=1, W=1)</text>
+        <line x1="26" y1="50" x2="494" y2="50" stroke="#fecaca" stroke-width="1.4"/>
+        <text x="26" y="74" font-size="12" font-family="SF Mono, Menlo, monospace" fill="#7f1d1d">write lands on ONE of 3 replicas</text>
+        <text x="26" y="94" font-size="12" font-family="SF Mono, Menlo, monospace" fill="#7f1d1d">read queries ONE of 3, independently</text>
+        <line x1="26" y1="112" x2="494" y2="112" stroke="#fecaca" stroke-width="1.4"/>
+        <text x="26" y="136" font-size="12" font-weight="700" fill="#7f1d1d">✗ read can hit either node that</text>
+        <text x="26" y="154" font-size="12" fill="#7f1d1d">   never got the write — no relation</text>
+        <text x="26" y="172" font-size="12" fill="#7f1d1d">   between write and read location</text>
+        <text x="26" y="196" font-size="12" font-weight="700" fill="#7f1d1d">✗ two concurrent writes to two</text>
+        <text x="26" y="214" font-size="12" fill="#7f1d1d">   different nodes just diverge —</text>
+        <text x="26" y="232" font-size="12" fill="#7f1d1d">   nothing flags the conflict</text>
+
+        <rect x="530" y="10" width="500" height="240" rx="12" fill="#f0fdf4" stroke="#16a34a" stroke-width="2"/>
+        <text x="780" y="38" text-anchor="middle" font-size="13.5" font-weight="800" fill="#14532d">AFTER — quorum (R=2, W=2, N=3)</text>
+        <line x1="546" y1="50" x2="1014" y2="50" stroke="#bbf7d0" stroke-width="1.4"/>
+        <text x="546" y="74" font-size="12" font-family="SF Mono, Menlo, monospace" fill="#14532d">write must land on 2 of 3</text>
+        <text x="546" y="94" font-size="12" font-family="SF Mono, Menlo, monospace" fill="#14532d">read queries 2 of 3 — guaranteed</text>
+        <line x1="546" y1="112" x2="1014" y2="112" stroke="#bbf7d0" stroke-width="1.4"/>
+        <text x="546" y="136" font-size="12" font-weight="700" fill="#14532d">✓ read set and write set cannot</text>
+        <text x="546" y="154" font-size="12" fill="#14532d">   avoid sharing a node</text>
+        <text x="546" y="172" font-size="12" fill="#14532d">   (R+W=4 &gt; N=3)</text>
+        <text x="546" y="196" font-size="12" font-weight="700" fill="#14532d">✓ every read is guaranteed to see</text>
+        <text x="546" y="214" font-size="12" fill="#14532d">   the latest acknowledged write</text>
+        <text x="546" y="232" font-size="12" fill="#14532d">   among its R responses</text>
+      </svg>
+      <p class="caption">Local coordination-free writes and reads have no relationship to each other at all — quorum makes that relationship a mathematical guarantee.</p>
+    </div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Made concrete — one write, two careless read placements, N = 3 replicas A, B, C</div>
+      <svg viewBox="0 0 1040 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <text x="20" y="24" font-size="12" fill="#4a4742">Client writes value v2 (overwriting v1) with W=1 → lands on replica A only</text>
+
+        <rect x="20" y="38" width="300" height="70" rx="9" fill="#dcfce7" stroke="#16a34a" stroke-width="1.8"/>
+        <text x="170" y="66" text-anchor="middle" font-size="12.5" font-weight="800" fill="#14532d">Replica A: v2 (fresh)</text>
+        <text x="170" y="86" text-anchor="middle" font-size="10.5" fill="#14532d">received the write</text>
+
+        <rect x="370" y="38" width="300" height="70" rx="9" fill="#fee2e2" stroke="#dc2626" stroke-width="1.8"/>
+        <text x="520" y="66" text-anchor="middle" font-size="12.5" font-weight="800" fill="#7f1d1d">Replica B: v1 (stale)</text>
+        <text x="520" y="86" text-anchor="middle" font-size="10.5" fill="#7f1d1d">never saw the write</text>
+
+        <rect x="720" y="38" width="300" height="70" rx="9" fill="#fee2e2" stroke="#dc2626" stroke-width="1.8"/>
+        <text x="870" y="66" text-anchor="middle" font-size="12.5" font-weight="800" fill="#7f1d1d">Replica C: v1 (stale)</text>
+        <text x="870" y="86" text-anchor="middle" font-size="10.5" fill="#7f1d1d">never saw the write</text>
+
+        <rect x="20" y="124" width="490" height="54" rx="9" fill="#dcfce7" stroke="#16a34a" stroke-width="1.6"/>
+        <text x="265" y="146" text-anchor="middle" font-size="12" font-weight="700" fill="#14532d">Read #1, R=1 → routed to A → returns v2</text>
+        <text x="265" y="164" text-anchor="middle" font-size="10.5" fill="#14532d">correct, but only by 1-in-3 odds</text>
+
+        <rect x="530" y="124" width="490" height="54" rx="9" fill="#fee2e2" stroke="#dc2626" stroke-width="1.6"/>
+        <text x="775" y="146" text-anchor="middle" font-size="12" font-weight="700" fill="#7f1d1d">Read #2, R=1 → routed to B → returns v1</text>
+        <text x="775" y="164" text-anchor="middle" font-size="10.5" fill="#7f1d1d">WRONG — nothing in the protocol detected it</text>
+
+        <rect x="20" y="200" width="1000" height="80" rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+        <text x="520" y="224" text-anchor="middle" font-size="12.5" font-weight="800" fill="#14532d">With R=2, W=2 instead: only 2-node read subsets are {A,B}, {A,C}, {B,C}</text>
+        <text x="520" y="244" text-anchor="middle" font-size="12" fill="#14532d">Every one of them includes at least one of {A,B} — the write quorum</text>
+        <text x="520" y="264" text-anchor="middle" font-size="12" fill="#14532d">The stale-only outcome above (hitting only C or only B) is not a legal R=2 result — it isn't possible</text>
+      </svg>
+    </div>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">A teammate proposes fixing Read #2's staleness by always reading from replica A specifically, since that's where the write happened to land. Using the concrete example above, explain precisely why this "fix" doesn't generalize, and what property of quorum (R=2 above) replaces the need to know which specific node has the latest write.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the "made concrete" example — specifically what determines which node the write lands on when W=1, and why that makes "always read node A" not a real fix.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> If the fix is R+W&gt;N, what exactly does that design look like, and what else does it need to actually work — not just to have overlap?</div>
+  </section>
+
+  <!-- ══════════════════ §5 ══════════════════ -->
+  <section id="s5">
+    <h2 class="section-title"><span class="num">§5</span> 💡 The Core Idea</h2>
+
+    <div class="definition">Quorum reads and writes guarantee that, for N replicas of a piece of data, a write acknowledged by W of them and a read that queries R of them are mathematically forced to overlap in at least one node whenever R + W &gt; N — replacing a designated leader's single source of truth with an intersection guarantee that holds regardless of which specific nodes any given write or read happens to touch.</div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">The build chain</div>
+      <svg viewBox="0 0 1200 220" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="bcArrow153" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#7c3aed"/>
+          </marker>
+        </defs>
+        <g>
+          <rect x="4" y="30" width="216" height="86" rx="9" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+          <text x="112" y="52" text-anchor="middle" font-size="11" font-weight="800" fill="#4c1d95">THE QUORUM</text>
+          <text x="112" y="68" text-anchor="middle" font-size="11" font-weight="800" fill="#4c1d95">FORMULA</text>
+          <text x="112" y="136" text-anchor="middle" font-size="10" font-style="italic" fill="#6b6861">because pigeonhole</text>
+          <text x="112" y="151" text-anchor="middle" font-size="10" font-style="italic" fill="#6b6861">guarantees overlap (§4)</text>
+        </g>
+        <line x1="224" y1="73" x2="248" y2="73" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow153)"/>
+        <g>
+          <rect x="254" y="30" width="216" height="86" rx="9" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+          <text x="362" y="52" text-anchor="middle" font-size="11" font-weight="800" fill="#1e3a8a">WHAT OVERLAP</text>
+          <text x="362" y="68" text-anchor="middle" font-size="11" font-weight="800" fill="#1e3a8a">ACTUALLY BUYS YOU</text>
+          <text x="362" y="136" text-anchor="middle" font-size="10" font-style="italic" fill="#6b6861">because overlap ≠</text>
+          <text x="362" y="151" text-anchor="middle" font-size="10" font-style="italic" fill="#6b6861">"which one is newest"</text>
+        </g>
+        <line x1="474" y1="73" x2="498" y2="73" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow153)"/>
+        <g>
+          <rect x="504" y="30" width="216" height="86" rx="9" fill="#ccfbf1" stroke="#0d9488" stroke-width="2"/>
+          <text x="612" y="52" text-anchor="middle" font-size="11" font-weight="800" fill="#134e4a">TUNING R AND W</text>
+          <text x="612" y="68" text-anchor="middle" font-size="11" font-weight="800" fill="#134e4a">— THE TRADE-OFF</text>
+          <text x="612" y="136" text-anchor="middle" font-size="10" font-style="italic" fill="#6b6861">because fixed N means</text>
+          <text x="612" y="151" text-anchor="middle" font-size="10" font-style="italic" fill="#6b6861">raising one costs the other</text>
+        </g>
+        <line x1="724" y1="73" x2="748" y2="73" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow153)"/>
+        <g>
+          <rect x="754" y="30" width="216" height="86" rx="9" fill="#ffedd5" stroke="#ea580c" stroke-width="2"/>
+          <text x="862" y="52" text-anchor="middle" font-size="11" font-weight="800" fill="#7c2d12">FAILURE</text>
+          <text x="862" y="68" text-anchor="middle" font-size="11" font-weight="800" fill="#7c2d12">TOLERANCE</text>
+          <text x="862" y="136" text-anchor="middle" font-size="10" font-style="italic" fill="#6b6861">because W/R are counts of</text>
+          <text x="862" y="151" text-anchor="middle" font-size="10" font-style="italic" fill="#6b6861">nodes that must respond</text>
+        </g>
+        <line x1="974" y1="73" x2="998" y2="73" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow153)"/>
+        <g>
+          <rect x="1004" y="30" width="192" height="86" rx="9" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+          <text x="1100" y="52" text-anchor="middle" font-size="10.5" font-weight="800" fill="#14532d">RELATION TO THE</text>
+          <text x="1100" y="68" text-anchor="middle" font-size="10.5" font-weight="800" fill="#14532d">LEADER YOU REMOVED</text>
+          <text x="1100" y="136" text-anchor="middle" font-size="10" font-style="italic" fill="#6b6861">because quorum isn't</text>
+          <text x="1100" y="151" text-anchor="middle" font-size="10" font-style="italic" fill="#6b6861">the only answer</text>
+        </g>
+      </svg>
+    </div>
+
+    <h3>The Quorum Formula</h3>
+    <p>Builds directly on §4's insight: you don't need every replica on both sides of a write and a read — you need just enough of each that the two sets can't both avoid each other. With N replicas, any subset of size W (the write quorum) and any subset of size R (the read quorum) are guaranteed to share at least one member the moment W + R &gt; N — this is a direct application of the pigeonhole principle: if you tried to build a write set and a read set that shared <em>no</em> node, together they could cover at most N nodes total, so the moment their combined size exceeds N, that's impossible. The formula doesn't care which specific nodes end up in either set; it only cares about the counts.</p>
+
+    <h3>What Overlap Actually Buys You</h3>
+    <p>The formula guarantees a shared node exists — it says nothing about which of the R responses that shared node's answer is, or how to recognize it as the freshest one. If a read queries 2 nodes and gets back two different values, R+W&gt;N tells you the newer of those two values is <em>definitely</em> one of them — but the read still needs its own mechanism to determine which is newer. That mechanism is versioning: every write is tagged with a timestamp or a version vector, and on read, the coordinator compares the versions returned by the R responses and returns (or exposes) the newest. Quorum overlap and versioning are two separate, jointly-necessary mechanisms — overlap guarantees the answer is <em>in the response set</em>; versioning is what lets you <em>find</em> it there.</p>
+
+    <h3>Tuning R and W — the Trade-off</h3>
+    <p>Because N is fixed for a given piece of data, R and W move in tension with each other, not independently: raising W to make writes safer or more durable directly raises write latency (the coordinator waits for the slowest of the W required acks) and lowers write availability (more of the N nodes must be reachable for a write to succeed at all) — and the same is true of R on the read side. A workload that reads far more than it writes can afford to push more of that cost onto W (fewer, cheaper reads; slower, more demanding writes), and a write-heavy workload can do the reverse — but neither can make <em>both</em> operations cheap without abandoning R+W&gt;N and the guarantee it buys.</p>
+
+    <h3>Failure Tolerance</h3>
+    <p>This is the mechanism-level reason tuning has real stakes: a write with quorum W succeeds only while at least W of the N nodes are up and reachable, so the system tolerates up to N−W node failures before writes start failing outright — and symmetrically, reads tolerate up to N−R failures. Push W or R too close to N to chase a stronger guarantee, and nearly all of the fault tolerance budget goes to that one operation; during a genuine partition, a coordinator that can't reach W (or R) of a key's home nodes has to either fail the operation (strict quorum, what this doc assumes) or relax the rule and accept help from a non-home node instead — that relaxation is sloppy quorum, which 16.7 covers in depth as the mechanism that trades this doc's exactness for write availability during exactly this failure.</p>
+
+    <h3>How This Relates to the Leader You Removed</h3>
+    <p>15.2's leader/follower model sidesteps all of this arithmetic by designating one node the answer — reads that need freshness just ask the leader, and there's no R or W to tune because there's no ambiguity about who's current. Quorum is the answer for systems that specifically don't want that single required node; it isn't the only way to get durability guarantees out of multiple replicas, though — a leader-based system can <em>also</em> require a write to be acknowledged by a quorum of followers before returning success (Kafka's in-sync-replica-set with <code>acks=all</code> is exactly this, layered on top of a leader), which is a preview of the synchronous-replication durability trade-off 15.4 and 15.5 pick up next.</p>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">Using only "The Quorum Formula" and "What Overlap Actually Buys You," explain precisely why a system that satisfies R+W&gt;N can still return a stale value to a client, and name the specific missing piece that would prevent it.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read "What Overlap Actually Buys You" — the sentence about needing a second mechanism to recognize which response is newest.</div>
+      </div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">2</span>
+          <span class="qtext">Trace the link from "Tuning R and W" into "Failure Tolerance": a team decides to set W=N−1 and R=2 on a system with N=5, reasoning "we want writes to be very durable." Using both concept blocks, explain what they've actually done to write availability, and why this specific choice barely improves the read-side fault tolerance despite N being 5.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read "Failure Tolerance" — the sentence connecting W directly to N−W tolerated failures, and note what R was set to independently.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> You know the shape of the design. What actually happens, step by step, on a real write and a real read — and what specifically breaks when nodes fail or a partition hits?</div>
+  </section>
+
+  <!-- ══════════════════ §6 ══════════════════ -->
+  <section id="s6">
+    <h2 class="section-title"><span class="num">§6</span> ⚙️ How It Actually Works</h2>
+
+    <h3>Happy path — a quorum write, then a quorum read, N=3, W=2, R=2</h3>
+    <ol class="steps">
+      <li>A client sends a write for key K, value v, to a coordinator (any node in the cluster, or a dedicated coordinator role, depending on the system).</li>
+      <li>The coordinator identifies K's N home replicas (via consistent hashing, 7.4) and sends the write, tagged with a new version (timestamp or version vector), to all of them.</li>
+      <li>The coordinator waits for acknowledgments from W of the N replicas — as soon as W acks arrive, it returns success to the client, without waiting for the remaining N−W (they'll still apply the write; the client just doesn't wait on them).</li>
+      <li>Later, a client sends a read for key K to a coordinator.</li>
+      <li>The coordinator queries R of K's home replicas and collects their responses, each carrying that replica's current version of K.</li>
+      <li>The coordinator compares the R versions returned, identifies the newest one (by timestamp, or by version-vector causality), and returns that value to the client.</li>
+    </ol>
+
+    <div class="mental-model">
+      <span class="mm-name">🗺️ Mental model — quorum is a jury pool, not a live vote.</span> A courtroom doesn't need every citizen in the district to serve for a verdict to be legitimate — it needs a big-enough panel drawn from the pool that, whoever ends up serving, the outcome can be trusted to reflect the district's actual view. R and W work the same way: a big-enough subset of the replicas, and it doesn't matter which specific ones, because the guarantee is about the <em>size</em> of the panel relative to the whole pool.
+      <span class="mm-break">Where it breaks down: a jury deliberates live and reaches one shared verdict before anyone leaves the room. Quorum replicas do not talk to each other during a read or a write — each one just answers independently, with no discussion. That's exactly why versioning has to do the work a jury's live deliberation would otherwise do: nothing forces the R responses to agree, so the coordinator — not the replicas — is the one that has to look at the independent answers afterward and figure out which is current.</span>
+    </div>
+
+    <h3>Failure &amp; edge cases</h3>
+    <ul class="plain">
+      <li><strong>Fewer than W (or R) reachable nodes is a hard failure under strict quorum.</strong> If a coordinator can only reach W−1 of K's home replicas — a node crash, a network partition, a rolling deploy taking nodes offline — the write fails outright rather than partially succeeding. This is the direct cost of §5's fault-tolerance math: strict quorum has no fallback built in.</li>
+      <li><strong>Concurrent writes to overlapping-but-different quorum members can still diverge.</strong> Two clients writing v2 and v2' at nearly the same moment can each reach a different W-sized subset of the N nodes (their subsets may or may not overlap with each other) — quorum guarantees a <em>later reader</em> will see both candidates among its R responses, but it does nothing to prevent the two writes from having happened concurrently in the first place. Resolving which value "wins," or merging them, is conflict resolution's job (16.3), not quorum's.</li>
+      <li><strong>A read can return multiple versions with no single "latest."</strong> If a version vector shows two writes are causally concurrent (neither happened-before the other, rather than one simply being older), the R responses can legitimately disagree without either being stale — the coordinator has to surface both to the application or a resolution policy, not silently pick one, or it risks silently discarding a real update.</li>
+      <li><strong>Read repair is the standard opportunistic fix for the divergence above.</strong> When a quorum read notices one of its R responses is stale relative to the version it determined was newest, most implementations write the newest version back to the stale replica right then, as a side effect of the read — narrowing the divergence window without waiting for a separate background process. (16.7 covers this mechanism, plus its background counterpart, Merkle-tree anti-entropy, in depth.)</li>
+      <li><strong>Clock skew undermines timestamp-based versioning specifically.</strong> If "newest" is determined by wall-clock timestamp rather than a version vector, clock drift between nodes can make an actually-older write look newer, silently overwriting a real update — this is a large part of why version vectors, which encode causality rather than wall-clock time, are the safer default (16.3 covers the mechanism).</li>
+    </ul>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Mechanism flow, end to end</div>
+      <svg viewBox="0 0 1040 200" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="mfArrow153" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#2563eb"/>
+          </marker>
+        </defs>
+        <rect x="8" y="20" width="230" height="130" rx="9" fill="#f3f2ef" stroke="#94908a" stroke-width="2"/>
+        <text x="123" y="44" text-anchor="middle" font-size="12" font-weight="800" fill="#1a1917">① CLIENT WRITE/READ</text>
+        <text x="123" y="70" text-anchor="middle" font-size="11" fill="#4a4742">arrives at any</text>
+        <text x="123" y="86" text-anchor="middle" font-size="11" fill="#4a4742">coordinator node</text>
+
+        <line x1="242" y1="85" x2="270" y2="85" stroke="#2563eb" stroke-width="2.5" marker-end="url(#mfArrow153)"/>
+
+        <rect x="276" y="20" width="240" height="130" rx="9" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+        <text x="396" y="44" text-anchor="middle" font-size="12" font-weight="800" fill="#4c1d95">② COORDINATOR SENDS</text>
+        <text x="396" y="70" text-anchor="middle" font-size="10.5" fill="#4c1d95">to K's N home replicas,</text>
+        <text x="396" y="86" text-anchor="middle" font-size="10.5" fill="#4c1d95">tagged with a version</text>
+
+        <line x1="520" y1="85" x2="548" y2="85" stroke="#2563eb" stroke-width="2.5" marker-end="url(#mfArrow153)"/>
+
+        <rect x="554" y="20" width="240" height="130" rx="9" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+        <text x="674" y="44" text-anchor="middle" font-size="12" font-weight="800" fill="#1e3a8a">③ WAIT FOR W / R</text>
+        <text x="674" y="70" text-anchor="middle" font-size="10.5" fill="#1e3a8a">responses to arrive</text>
+        <text x="674" y="86" text-anchor="middle" font-size="10.5" fill="#1e3a8a">(write: W acks; read: R)</text>
+
+        <line x1="798" y1="85" x2="826" y2="85" stroke="#2563eb" stroke-width="2.5" marker-end="url(#mfArrow153)"/>
+
+        <rect x="832" y="20" width="200" height="130" rx="9" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+        <text x="932" y="44" text-anchor="middle" font-size="12" font-weight="800" fill="#14532d">④ RESOLVE VERSION</text>
+        <text x="932" y="70" text-anchor="middle" font-size="10.5" fill="#14532d">read: return newest;</text>
+        <text x="932" y="86" text-anchor="middle" font-size="10.5" fill="#14532d">write: just return success</text>
+      </svg>
+    </div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Structural diagram — why R+W&gt;N forces overlap (N=3, W=2, R=2)</div>
+      <svg viewBox="0 0 1040 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <text x="20" y="24" font-size="11.5" font-weight="700" fill="#1a1917">Write quorum W=2 used replicas {A, B} — check every possible size-2 read subset of {A, B, C} against it</text>
+
+        <circle cx="150" cy="80" r="42" fill="#dbeafe" stroke="#2563eb" stroke-width="2.4"/>
+        <text x="150" y="86" text-anchor="middle" font-size="16" font-weight="800" fill="#1e3a8a">A</text>
+        <circle cx="290" cy="80" r="42" fill="#dbeafe" stroke="#2563eb" stroke-width="2.4"/>
+        <text x="290" y="86" text-anchor="middle" font-size="16" font-weight="800" fill="#1e3a8a">B</text>
+        <circle cx="430" cy="80" r="42" fill="#f3f2ef" stroke="#94908a" stroke-width="2.4"/>
+        <text x="430" y="86" text-anchor="middle" font-size="16" font-weight="800" fill="#4a4742">C</text>
+        <rect x="98" y="16" width="244" height="26" rx="7" fill="none" stroke="#2563eb" stroke-width="2" stroke-dasharray="5,3"/>
+        <text x="220" y="10" text-anchor="middle" font-size="11" font-weight="800" fill="#1e3a8a">WRITE QUORUM {A,B}</text>
+
+        <rect x="20" y="150" width="1000" height="42" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="1.6"/>
+        <text x="30" y="176" font-size="12" font-family="SF Mono, Menlo, monospace" fill="#14532d">read {A,B} ∩ write {A,B} = {A,B}  →  overlaps ✓</text>
+
+        <rect x="20" y="198" width="1000" height="42" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="1.6"/>
+        <text x="30" y="224" font-size="12" font-family="SF Mono, Menlo, monospace" fill="#14532d">read {A,C} ∩ write {A,B} = {A}    →  overlaps ✓</text>
+
+        <rect x="20" y="246" width="1000" height="42" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="1.6"/>
+        <text x="30" y="272" font-size="12" font-family="SF Mono, Menlo, monospace" fill="#14532d">read {B,C} ∩ write {A,B} = {B}    →  overlaps ✓  — no 2-of-3 read subset misses both A and B</text>
+      </svg>
+      <p class="caption">C can only ever pair with one of A or B — never with a 4th node that doesn't exist. R+W=4&gt;N=3 makes overlap structurally unavoidable, not merely likely.</p>
+    </div>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">A system implements reads by querying R nodes and simply returning whichever response arrives first, with no version comparison. Using the happy path and the "read can return multiple versions" edge case, explain exactly what can go wrong, even though R+W&gt;N is correctly configured.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read step 6 of the happy path and the "read can return multiple versions" edge case — what the coordinator is supposed to do with the R responses versus what "return whichever arrives first" actually does.</div>
+      </div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">2</span>
+          <span class="qtext">Two clients concurrently write to key K: client 1's write reaches replicas {A,B}, client 2's write (a different, concurrent value) reaches replicas {B,C}. A later read with R=2 queries {A,C}. Using the failure/edge cases above, walk through what this read actually observes, and explain why this scenario is not a bug in the quorum formula.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read "Concurrent writes to overlapping-but-different quorum members can still diverge" and "A read can return multiple versions with no single 'latest.'"</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> You can run this correctly end to end. In a real design, how do you actually choose R and W, and what does each choice cost?</div>
+  </section>
+
+  <!-- ══════════════════ §7 ══════════════════ -->
+  <section id="s7">
+    <h2 class="section-title"><span class="num">§7</span> ⚖️ The Decision — When, and What It Costs</h2>
+
+    <p>The baseline — pick N, then pick R and W such that R+W&gt;N — is the correctness floor established by §4/§5; it's not optional if you want the overlap guarantee at all. The real decision is where along the spectrum in §3 to land, and that decision is driven entirely by which operation your workload does more of, and how much you can tolerate that operation's latency and fault tolerance being spent on the other.</p>
+
+    <p><strong>Reads dominate the workload, and read latency/availability matters more than write latency/availability.</strong> Push R down and W up (e.g., N=3, W=3, R=1, or more realistically W=2–3, R=1 for larger N) — reads become cheap, single-node lookups, and writes absorb the cost of reaching more replicas. This is the right trade when writes are comparatively rare (profile updates, configuration, catalog data) and reads are the hot path.</p>
+
+    <p><strong>Writes dominate, and write latency/availability matters more than read latency/availability.</strong> Push W down and R up — writes become cheap and fast, reads absorb the cost. This suits write-heavy, append-style workloads (logging, metrics ingestion, activity feeds) where individual reads are rarer, or where read staleness for a short window is tolerable and the read side can afford to query more nodes when it does happen.</p>
+
+    <p><strong>Neither operation clearly dominates, and both need reasonable fault tolerance.</strong> This is the canonical balanced quorum — R=W≈⌈(N+1)/2⌉ (e.g., N=3 → R=W=2; N=5 → R=W=3) — spending the fault-tolerance budget evenly instead of concentrating it on one operation. This is the default in the absence of a workload-specific reason to skew, and it's what most systems ship as their out-of-the-box consistency level.</p>
+
+    <p><strong>The overlap guarantee itself is not required — eventual consistency is acceptable, and both operations need to be as cheap as possible.</strong> This is the case for dropping below R+W&gt;N entirely (e.g., R=1, W=1) — you get the fastest, most available reads and writes the cluster can offer, at the cost of the overlap guarantee disappearing completely; a read can miss the latest write with no bound on how stale it might be until read repair or anti-entropy (16.7) eventually catches it up.</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Decision tree</div>
+      <svg viewBox="0 0 1040 420" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <rect x="170" y="10" width="700" height="60" rx="10" fill="#f3f2ef" stroke="#94908a" stroke-width="2"/>
+        <text x="520" y="34" text-anchor="middle" font-size="12" font-weight="700" fill="#1a1917">Does a read need a guaranteed-fresh answer (the latest</text>
+        <text x="520" y="52" text-anchor="middle" font-size="12" font-weight="700" fill="#1a1917">acknowledged write must be recoverable from the response set)?</text>
+
+        <line x1="330" y1="70" x2="180" y2="120" stroke="#94908a" stroke-width="1.6"/>
+        <text x="210" y="98" font-size="11" font-weight="700" fill="#dc2626">no</text>
+        <line x1="710" y1="70" x2="860" y2="120" stroke="#94908a" stroke-width="1.6"/>
+        <text x="790" y="98" font-size="11" font-weight="700" fill="#16a34a">yes</text>
+
+        <rect x="10" y="124" width="360" height="130" rx="10" fill="#fee2e2" stroke="#dc2626" stroke-width="2"/>
+        <text x="190" y="148" text-anchor="middle" font-size="11.5" font-weight="800" fill="#7f1d1d">R + W ≤ N is acceptable.</text>
+        <text x="190" y="166" text-anchor="middle" font-size="11" fill="#7f1d1d">Cheapest reads/writes available,</text>
+        <text x="190" y="182" text-anchor="middle" font-size="11" fill="#7f1d1d">no overlap guarantee — accept</text>
+        <text x="190" y="198" text-anchor="middle" font-size="11" fill="#7f1d1d">eventual consistency and lean on</text>
+        <text x="190" y="214" text-anchor="middle" font-size="11" fill="#7f1d1d">read repair / anti-entropy (16.7)</text>
+        <text x="190" y="230" text-anchor="middle" font-size="11" fill="#7f1d1d">to converge eventually.</text>
+
+        <rect x="670" y="124" width="360" height="60" rx="10" fill="#f3f2ef" stroke="#94908a" stroke-width="2"/>
+        <text x="850" y="148" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1a1917">Which operation is rarer / can</text>
+        <text x="850" y="166" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1a1917">absorb more cost — reads or writes?</text>
+
+        <line x1="770" y1="184" x2="640" y2="230" stroke="#94908a" stroke-width="1.6"/>
+        <text x="680" y="212" font-size="11" font-weight="700" fill="#2563eb">reads rarer</text>
+        <line x1="930" y1="184" x2="1000" y2="230" stroke="#94908a" stroke-width="1.6"/>
+        <text x="955" y="212" font-size="11" font-weight="700" fill="#0d9488">writes rarer</text>
+
+        <rect x="450" y="234" width="330" height="130" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+        <text x="615" y="258" text-anchor="middle" font-size="11.5" font-weight="800" fill="#1e3a8a">Push R down, W up.</text>
+        <text x="615" y="276" text-anchor="middle" font-size="11" fill="#1e3a8a">Reads become cheap, single-</text>
+        <text x="615" y="292" text-anchor="middle" font-size="11" fill="#1e3a8a">node lookups; writes absorb</text>
+        <text x="615" y="308" text-anchor="middle" font-size="11" fill="#1e3a8a">the fault-tolerance cost.</text>
+
+        <rect x="820" y="234" width="210" height="130" rx="10" fill="#ccfbf1" stroke="#0d9488" stroke-width="2"/>
+        <text x="925" y="258" text-anchor="middle" font-size="11" font-weight="800" fill="#134e4a">Push W down, R up.</text>
+        <text x="925" y="276" text-anchor="middle" font-size="11" fill="#134e4a">Writes become cheap;</text>
+        <text x="925" y="292" text-anchor="middle" font-size="11" fill="#134e4a">reads absorb the</text>
+        <text x="925" y="308" text-anchor="middle" font-size="11" fill="#134e4a">fault-tolerance cost.</text>
+
+        <rect x="380" y="380" width="280" height="34" rx="8" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.6"/>
+        <text x="520" y="402" text-anchor="middle" font-size="11" font-weight="700" fill="#4c1d95">Neither dominates? Default: R=W≈⌈(N+1)/2⌉</text>
+      </svg>
+    </div>
+
+    <h3>Trade-offs</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>✅ Benefit</th><th>❌ Cost / Limitation</th></tr></thead>
+        <tbody>
+          <tr><td class="benefit">R+W&gt;N guarantees the latest acknowledged write is always recoverable from a quorum read — no leader dependency, no single node required for correctness</td><td class="cost">Both R and W are counts of nodes that must actually respond — raising either raises that operation's latency (waits for the slowest required ack) and lowers its availability (more nodes must be reachable)</td></tr>
+          <tr><td class="benefit">R and W are independently tunable per workload, letting reads and writes trade fault-tolerance cost against each other rather than sharing one fixed cost</td><td class="cost">The guarantee is overlap only — it says nothing about ordering concurrent writes (needs 16.3's conflict resolution) or about which returned response is newest (needs versioning)</td></tr>
+          <tr><td class="benefit">Fault tolerance degrades gracefully and predictably — a write tolerates N−W node failures, a read tolerates N−R, and you choose exactly how that budget is split</td><td class="cost">Strict quorum has no fallback: falling below the required W or R reachable nodes fails the operation outright, with no partial-success path (that's what sloppy quorum, 16.7, exists to relax)</td></tr>
+          <tr><td class="benefit">Dropping below R+W&gt;N is a legitimate, explicit choice for workloads that value raw speed/availability over guaranteed freshness</td><td class="cost">Below that line there is no overlap guarantee at all — staleness becomes unbounded until read repair or anti-entropy eventually converges the replicas</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>In production</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>System</th><th>How it applies</th><th>The nuance</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Amazon Dynamo</strong> (and its open-source descendants, Riak/Voldemort)</td><td>The paper that introduced this exact tunable-quorum model, with the canonical N=3, R=2, W=2 default</td><td>Dynamo's quorum is <em>sloppy</em> by default during partitions (16.7), not strict — this doc's R+W&gt;N reasoning is the strict-quorum foundation Dynamo relaxes under failure, not Dynamo's literal runtime behavior in every condition</td></tr>
+          <tr><td><strong>Apache Cassandra</strong></td><td>Exposes R and W directly as per-query <strong>consistency levels</strong> (<code>ONE</code>, <code>QUORUM</code>, <code>ALL</code>, <code>LOCAL_QUORUM</code>, etc.) — a client can choose a different R or W for every single read or write against the same table</td><td><code>QUORUM</code> is computed as <code>⌊N/2⌋ + 1</code> for the table's replication factor — the balanced-quorum default from the decision tree above, expressed directly as a configuration value</td></tr>
+          <tr><td><strong>MongoDB replica sets (<code>w</code> write concern)</strong></td><td><code>w: "majority"</code> requires acknowledgment from a majority of voting replica set members before a write returns — the same W-side math, though MongoDB pairs it with a single primary (closer to 15.2's leader model) rather than a fully leaderless design</td><td>Reads default to the primary unless a read preference explicitly allows secondaries, so MongoDB's out-of-the-box behavior leans on the leader for read freshness rather than tuning R the way Dynamo-style systems do</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">A social media company's "view count" service writes extremely frequently (every view increments a counter) and is read far less often (only when a user opens the analytics dashboard), and a few seconds of read staleness on the dashboard is completely acceptable. Using the decision tree and the trade-offs table, propose an R/W configuration for N=3, and justify it against both the write frequency and the acceptable staleness.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the "writes dominate" boundary condition and the trade-offs table's first row on what raising a count actually costs.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> Can you deliver this cleanly under interview pressure, including when the interviewer pushes on what the guarantee doesn't cover?</div>
+  </section>
+
+  <!-- ══════════════════ §8 ══════════════════ -->
+  <section id="s8">
+    <h2 class="section-title"><span class="num">§8</span> 🎯 In the Interview</h2>
+
+    <h3>When an interviewer asks / says</h3>
+    <ul class="trigger-list">
+      <li>"You said there's no leader — how do reads stay consistent?"</li>
+      <li>"What values of R and W would you pick, and why?"</li>
+      <li>"What happens if two clients write at the same time?"</li>
+      <li>"What if the cluster loses a node?"</li>
+    </ul>
+
+    <h3>Where this surfaces — template</h3>
+    <div class="table-wrap">
+      <table class="flow-table">
+        <thead><tr><th>Trigger point</th><th>What prompts the return to it</th></tr></thead>
+        <tbody>
+          <tr><th>1. First appearance</th><td>Right after you've named a leaderless or multi-region design (or explicitly ruled out 15.2's single-leader model) — the interviewer asks how reads avoid staleness without a leader to ask</td></tr>
+          <tr><th>2. Second appearance</th><td>The moment you mention "quorum" or "R and W" — expect an immediate ask for specific numbers and the reasoning behind them</td></tr>
+          <tr><th>3. Third appearance</th><td>If you describe concurrent writes or node failure anywhere in the design, expect a pushback on whether quorum alone actually handles it</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>What you say / do — delivered in this fixed order</h3>
+    <div class="table-wrap">
+      <table class="flow-table">
+        <tbody>
+          <tr><th>1. Name the choice</th><td>"N replicas, with a write requiring W acknowledgments and a read querying R nodes, chosen so that R plus W is greater than N."</td></tr>
+          <tr><th>2. Give the mechanism reason</th><td>"That guarantees the set of nodes a write touched and the set a read touches can't both avoid each other — by pigeonhole, they always share at least one node, and I tag every write with a version so the read can tell which of its responses is the newest."</td></tr>
+          <tr><th>3. Price it unprompted</th><td>"Both R and W are counts of nodes that actually have to respond, so raising either one raises that operation's latency and lowers its availability — a write tolerates N minus W node failures, a read tolerates N minus R."</td></tr>
+          <tr><th>4. Name the switch condition</th><td>"I'd skew R and W toward whichever operation is rarer in this workload — push the other one down for speed. And overlap alone doesn't resolve concurrent writes to different quorum members; that still needs version vectors and conflict resolution on top."</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>The trade-off statement (memorize this pattern)</h3>
+    <div class="tradeoff-box">
+      "Without a leader, no single replica is the source of truth, so I need a mathematical guarantee instead of an organizational one. With N replicas, I require a write to be acknowledged by W of them and a read to query R of them, chosen so R plus W is greater than N — by pigeonhole, the write set and the read set can't both avoid sharing a node, so the latest acknowledged write is always present among the read's responses, as long as every write carries a version so the read can identify which response is newest.<br><br>
+      The cost is that R and W are counts of nodes that must actually respond: raising either raises that operation's latency to the slowest required ack, and lowers its availability, because a write only tolerates N minus W node failures and a read only tolerates N minus R. And the guarantee is overlap only — it doesn't resolve two clients writing concurrently to different quorum members, which still requires version vectors and conflict resolution on top."
+    </div>
+
+    <h3>A second trade-off variant — the "what if two clients write at the same time" pushback</h3>
+    <div class="tradeoff-box">
+      "That's a separate problem from what quorum solves, and it's worth naming before it's asked: R+W&gt;N guarantees a later read will see every concurrent write's value among its responses — it does not prevent two writes from being concurrent in the first place, or pick a winner between them.<br><br>
+      If two clients write to different, overlapping-but-not-identical subsets of the N nodes at nearly the same time, a later quorum read can legitimately return both candidate values with no causal relationship between them. Resolving that — last-write-wins by timestamp, or a version vector that lets the application merge or choose — is a layer on top of quorum, not something the R+W&gt;N formula does by itself."
+    </div>
+
+    <h3>⚠️ Traps</h3>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "R+W&gt;N means the system is strongly consistent — every read always returns the correct latest value."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> R+W&gt;N guarantees the latest write is <em>present</em> among the R responses returned. It does not guarantee the read correctly identifies it as latest (that needs versioning) or that concurrent writes are ordered (that needs conflict resolution, 16.3).</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "I'll just set R=1 and W=1 for speed — with 3 replicas, odds are good a read hits the right node."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> R+W=2 is not greater than N=3 — there's no overlap guarantee at all, just probability. That's a legitimate choice only if you've explicitly accepted eventual consistency; it isn't quorum, and calling it quorum in an interview is a real miss (§3, §4).</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "Higher R and W is always safer, so I'll set both close to N."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Pushing both R and W high spends fault tolerance on <em>both</em> operations at once — a write with W=N−1 only tolerates 1 failure, same for a read with R=N−1, which can be worse than a deliberately skewed choice that concentrates the cost on whichever operation is rarer (§5, §7).</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "Quorum removes the need to think about node failures — R+W&gt;N handles it."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> R+W&gt;N is a strict-quorum guarantee that fails outright the moment fewer than W (or R) home nodes are reachable — it has no built-in fallback. Handling that gracefully during a real partition needs sloppy quorum (16.7), a separate mechanism this formula assumes away.</div></div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> Can you combine what you've learned across sections, not just recall each one?</div>
+  </section>
+
+  <!-- ══════════════════ §9 ══════════════════ -->
+  <section id="s9">
+    <h2 class="section-title"><span class="num">§9</span> 🧪 Mastery Gate</h2>
+    <div class="callout callout-quote">Synthesis only. Each question requires combining two or more sections.</div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">1</span>
+        <span class="qtext">A team sets N=5, W=3, R=3 and implements reads by comparing the R responses' wall-clock timestamps to pick the newest. During a period of significant clock drift between nodes, a write that happened microseconds before another write on a differently-drifted node ends up with a later timestamp. Using the versioning concept from §5 and the "clock skew undermines timestamp-based versioning" edge case from §6, explain exactly what a subsequent quorum read does wrong here, and why R+W&gt;N being correctly satisfied doesn't prevent it.</span>
+        <span class="quiz-toggle">▼ Hint</span>
+      </div>
+      <div class="quiz-hint">💡 Sections combined: §5 + §6.</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">2</span>
+        <span class="qtext">A ride-sharing company's driver-location service updates a driver's GPS coordinates roughly once per second (very write-heavy) and is read constantly by the rider-matching algorithm searching for nearby drivers (also very read-heavy, and it needs coordinates to be close to real-time, not stale by more than a second or two). Using the decision tree in §7 and the R/W spectrum from §3, explain why this workload doesn't fit either extreme end of the spectrum, and propose and justify a concrete R/W choice for N=3.</span>
+        <span class="quiz-toggle">▼ Hint</span>
+      </div>
+      <div class="quiz-hint">💡 Sections combined: §7 + §3, applied to a system not mentioned elsewhere in this doc.</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">3</span>
+        <span class="qtext">Using the concrete N=3 example from §4 and the "concurrent writes to overlapping-but-different quorum members" edge case from §6, explain why increasing R and W beyond satisfying R+W&gt;N (for example going from R=W=2 to R=W=3 on N=3) does not, by itself, prevent the divergence scenario described in §6 — and name what actually would.</span>
+        <span class="quiz-toggle">▼ Hint</span>
+      </div>
+      <div class="quiz-hint">💡 Sections combined: §4 + §6.</div>
+    </div>
+
+    <h3>Mastery criteria — tick only what you can demonstrate on demand</h3>
+    <ul class="checklist">
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can state the R+W&gt;N formula precisely, explain the pigeonhole reasoning behind it, and calculate valid/invalid R,W pairs for a given N</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can explain exactly what quorum overlap does and does not guarantee — presence of the latest write among R responses, versus ordering of concurrent writes or automatic identification of the newest response</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can explain the fault-tolerance cost of raising R or W (N−W tolerated write failures, N−R tolerated read failures) and choose a skewed R/W split for a stated read-heavy or write-heavy workload</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can distinguish quorum reads/writes from majority consensus (Raft/Paxos) and from the leader/follower model, and explain why removing the leader is what creates the need for this formula in the first place</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can explain why R+W&gt;N alone doesn't resolve concurrent writes, and name what additional mechanism (versioning, conflict resolution) is required</span></li>
+    </ul>
+
+    <div class="callout callout-tip">💡 <strong>Rule of thumb:</strong> If you can teach it to someone else and field their follow-up questions, you've mastered it.</div>
+  </section>
+
+  <!-- ══════════════════ §10 ══════════════════ -->
+  <section id="s10">
+    <h2 class="section-title"><span class="num">§10</span> 🔗 Connections &amp; Sources</h2>
+
+    <div class="connections">
+      <div class="conn-card">
+        <span class="conn-icon">⬅️</span>
+        <div><div class="conn-label">Builds on</div><strong>15.1 Replication — why and how</strong>, which established why multiple copies of data exist at all (durability, availability), and <strong>15.2 Leader/follower model</strong>, whose single-source-of-truth answer to "what's current" this doc removes and replaces with the R+W&gt;N intersection guarantee — quorum only becomes a question once you've decided not to designate a leader.</div>
+      </div>
+      <div class="conn-card">
+        <span class="conn-icon">➡️</span>
+        <div><div class="conn-label">Enables</div><strong>15.4 Durability guarantees and replication factor</strong>, which asks how many surviving copies are enough to not lose data — the same N this doc tunes R and W against. <strong>16.3 Conflict resolution — LWW, vector clocks, CRDTs</strong>, which resolves exactly the concurrent-write divergence this doc's §6/§9 identify but does not solve. <strong>16.4 Leaderless replication — Dynamo-style</strong>, the production architecture this doc's quorum model is native to. <strong>16.7 Read repair, hinted handoff, and sloppy quorum</strong>, which directly relaxes this doc's strict R+W&gt;N requirement to trade exactness for write availability during a partition.</div>
+      </div>
+      <div class="conn-card">
+        <span class="conn-icon">⚡</span>
+        <div><div class="conn-label">Tension with</div><strong>15.2's leader/follower model</strong>, which sidesteps quorum arithmetic entirely by making one node authoritative — trading the single-point-of-failure and write-availability cost of a leader for the simplicity of never needing R, W, or versioning at all. Neither model is strictly better: leader/follower is simpler and gives real linearizable reads from the leader for free; quorum removes the leader dependency at the cost of needing versioning, conflict resolution, and careful R/W tuning to get comparable guarantees.</div>
+      </div>
+    </div>
+
+    <h3>📚 Further reading</h3>
+    <ul class="reading-list">
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>DeCandia et al. — "Dynamo: Amazon's Highly Available Key-value Store" (2007)</strong> — <a href="https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf">paper</a> — the paper that introduced this exact R+W&gt;N tunable quorum model, including the N=3/R=2/W=2 default this doc uses throughout</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Kleppmann, <em>Designing Data-Intensive Applications</em>, Chapter 5 (Replication) — "Quorums for reading and writing"</strong> — the clearest textbook treatment of R+W&gt;N, including its limits and how it interacts with concurrent writes</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Apache Cassandra docs — Consistency levels</strong> — <a href="https://cassandra.apache.org/doc/latest/cassandra/architecture/dynamo.html#tunable-consistency">docs</a> — how <code>ONE</code>/<code>QUORUM</code>/<code>ALL</code> map directly onto this doc's R and W, configurable per query</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Riak docs — Replication properties (N, R, W)</strong> — <a href="https://docs.riak.com/riak/kv/latest/developing/app-guide/replication-properties/">docs</a> — a second production implementation of the same tunable model, using the same knobs, named identically</span></li>
+    </ul>
+  </section>
+
+  <!-- ══════════════════ §11 ══════════════════ -->
+  <section id="s11">
+    <h2 class="section-title"><span class="num">§11</span> ✍️ My Notes</h2>
+    <div class="callout callout-quote">Personal observations, model answers from drilling sessions, things that confused me. Saved locally in this browser.</div>
+    <textarea class="notes-area" placeholder="Your notes, model answers, and annotations…"></textarea>
+  </section>
+
+</article>
+</main>
+
+<script>
+// TOC active state
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('#toc nav a');
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(a => a.classList.remove('active'));
+      const a = document.querySelector(`#toc nav a[href="#${e.target.id}"]`);
+      if (a) a.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+sections.forEach(s => obs.observe(s));
+
+function toggle(cb) { cb.closest('li').classList.toggle('checked'); }
+function toggleReading(cb) { cb.closest('li').classList.toggle('checked'); }
+function toggleQuiz(q) {
+  const item = q.closest('.quiz-item');
+  item.classList.toggle('open');
+  q.querySelector('.quiz-toggle').textContent = item.classList.contains('open') ? '▲ Hide' : '▼ Hint';
+}
+
+// Notes auto-save
+const notesArea = document.querySelector('.notes-area');
+const NOTES_KEY = 'notes_15_3';
+if (localStorage.getItem(NOTES_KEY)) notesArea.value = localStorage.getItem(NOTES_KEY);
+notesArea.addEventListener('input', () => {
+  try { localStorage.setItem(NOTES_KEY, notesArea.value); } catch(e) {}
+});
+</script>
+
+</body>
+</html>
