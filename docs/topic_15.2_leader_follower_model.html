@@ -1,0 +1,1002 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>15.2 Leader/Follower Model</title>
+<style>
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface-alt: #f3f2ef;
+    --border: #e5e3de; --text: #1a1917; --text-muted: #6b6861;
+    --accent: #2563eb; --accent-light: #dbeafe;
+    --green: #16a34a; --green-light: #dcfce7;
+    --red: #dc2626; --red-light: #fee2e2;
+    --yellow: #d97706; --yellow-light: #fef3c7;
+    --purple: #7c3aed; --purple-light: #ede9fe;
+    --orange: #ea580c; --orange-light: #ffedd5;
+    --teal: #0d9488; --teal-light: #ccfbf1;
+    --code-bg: #1e1e2e; --code-text: #cdd6f4;
+    --sidebar-w: 240px; --content-max: 820px;
+    font-size: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; }
+  #toc { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0 48px; z-index: 100; }
+  #toc-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  #toc-header .phase-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-bottom: 6px; }
+  #toc-header h2 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  #toc-header .tier-tag { font-size: 10px; font-weight: 800; letter-spacing: .06em; color: var(--yellow); background: var(--yellow-light); border-radius: 4px; padding: 2px 7px; display: inline-block; margin-top: 8px; }
+  #toc nav a { display: block; padding: 5px 16px 5px 20px; font-size: 12.5px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toc nav a:hover { color: var(--accent); background: var(--accent-light); }
+  #toc nav a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-light); }
+  main { margin-left: var(--sidebar-w); padding: 48px 48px 96px; max-width: calc(var(--sidebar-w) + var(--content-max) + 96px); width: 100%; }
+  article { max-width: var(--content-max); }
+  .doc-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 2px solid var(--border); }
+  .doc-header .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+  .tag-phase { background: var(--accent-light); color: var(--accent); }
+  .tag-topic { background: var(--purple-light); color: var(--purple); }
+  .tag-tier  { background: var(--yellow-light); color: var(--yellow); }
+  .tag-prereq{ background: var(--teal-light); color: var(--teal); }
+  .tag-date  { background: var(--surface-alt);  color: var(--text-muted); }
+  .doc-header h1 { font-size: 30px; font-weight: 800; line-height: 1.25; letter-spacing: -.02em; color: var(--text); }
+  section { margin-bottom: 52px; scroll-margin-top: 32px; }
+  h2.section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -.01em; }
+  h2.section-title .num { font-size: 11px; font-weight: 800; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; letter-spacing: .04em; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 24px 0 10px; }
+  h4 { font-size: 13.5px; font-weight: 700; color: var(--text); margin: 18px 0 8px; }
+  p { margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+  code { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-family: "SF Mono","Fira Code",Menlo,monospace; font-size: 12.5px; }
+  ul.plain { margin: 0 0 14px 20px; }
+  ul.plain li { margin-bottom: 7px; font-size: 14.5px; line-height: 1.6; }
+  ol.steps { margin: 0 0 14px 22px; }
+  ol.steps li { margin-bottom: 8px; font-size: 14.5px; line-height: 1.6; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 14px; border-left: 3px solid; }
+  .callout-goal  { background: var(--accent-light); border-color: var(--accent); color: #1e40af; }
+  .callout-tip   { background: var(--yellow-light); border-color: var(--yellow); color: #92400e; }
+  .callout-warn  { background: var(--red-light); border-color: var(--red); color: #7f1d1d; }
+  .callout-quote { background: var(--surface-alt); border-color: var(--border); color: var(--text-muted); font-style: italic; }
+  .callout-teal  { background: var(--teal-light); border-color: var(--teal); color: #134e4a; }
+  .the-question { background: var(--surface); border: 2px solid var(--accent); border-radius: 12px; padding: 16px 20px; margin-top: 18px; font-size: 15.5px; }
+  .the-question .lbl { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); display: block; margin-bottom: 5px; }
+  .the-question em { color: var(--text); font-weight: 600; }
+  .definition { background: var(--purple-light); border-left: 4px solid var(--purple); border-radius: 8px; padding: 16px 20px; margin: 18px 0 24px; font-size: 15px; font-weight: 600; color: #4c1d95; line-height: 1.6; }
+  .mental-model { background: var(--teal-light); border-left: 3px solid var(--teal); border-radius: 8px; padding: 14px 18px; margin: 18px 0; font-size: 14px; color: #134e4a; }
+  .mental-model .mm-name { font-weight: 800; }
+  .mental-model .mm-break { display: block; margin-top: 7px; font-style: italic; opacity: .85; }
+  .bridge { background: linear-gradient(90deg, var(--accent-light), transparent); border-left: 4px solid var(--accent); border-radius: 8px; padding: 13px 18px; margin-top: 28px; font-size: 14.5px; color: #1e40af; font-weight: 600; }
+  .bridge .arrow { font-weight: 800; margin-right: 6px; }
+  .checkpoint { background: var(--surface); border: 2px solid var(--green); border-radius: 12px; padding: 16px 20px; margin-top: 26px; }
+  .checkpoint > .cp-title { font-size: 12px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--green); margin-bottom: 12px; display: flex; align-items: center; gap: 7px; }
+  .cheatsheet { background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 24px 28px; font-family: "SF Mono","Fira Code","Cascadia Code",Menlo,monospace; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-x: auto; margin-top: 16px; }
+  .cheatsheet .label { color: #cba6f7; font-weight: 700; letter-spacing: .08em; display: block; margin-top: 18px; margin-bottom: 4px; border-bottom: 1px solid #313244; padding-bottom: 3px; }
+  .cheatsheet .label:first-child { margin-top: 0; }
+  .diagram-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 16px 14px; margin: 20px 0 28px; overflow-x: auto; }
+  .diagram-wrap .diagram-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); margin-bottom: 12px; }
+  .diagram-wrap svg { display: block; width: 100%; height: auto; }
+  .diagram-wrap p.caption { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 10px; margin-bottom: 0; font-style: italic; }
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; font-size: 14.5px; line-height: 1.55; }
+  .checklist li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 2px; background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .checklist li.checked .cb { background: var(--green); border-color: var(--green); }
+  .checklist li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .checklist li.checked .text { color: var(--text-muted); text-decoration: line-through; }
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: var(--surface-alt); padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.5; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--surface-alt); }
+  .benefit { color: var(--green); font-weight: 600; }
+  .cost    { color: var(--red);   font-weight: 600; }
+  .misconception { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .misconception .wrong { background: var(--red-light); padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; }
+  .misconception .right { padding: 10px 16px; font-size: 14px; display: flex; align-items: flex-start; gap: 8px; color: #065f46; background: var(--green-light); }
+  .misconception .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .quiz-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .quiz-q { padding: 14px 18px; font-size: 14.5px; font-weight: 600; cursor: pointer; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .quiz-q:hover { background: var(--surface-alt); }
+  .quiz-num { flex-shrink: 0; width: 24px; height: 24px; background: var(--accent); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; margin-top: 1px; }
+  .quiz-q .qtext { flex: 1; font-weight: 500; }
+  .quiz-toggle { font-size: 11px; color: var(--text-muted); flex-shrink: 0; margin-top: 3px; }
+  .quiz-hint { display: none; padding: 10px 18px 14px; font-size: 13px; color: #92400e; background: var(--yellow-light); border-top: 1px solid var(--border); line-height: 1.6; white-space: pre-wrap; }
+  .quiz-item.open .quiz-hint { display: block; }
+  .reading-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .reading-list li { display: flex; align-items: flex-start; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; font-size: 14px; }
+  .reading-list li .cb { flex-shrink: 0; width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; margin-top: 1px; cursor: pointer; background: var(--surface); display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .reading-list li.checked .cb { background: var(--green); border-color: var(--green); }
+  .reading-list li.checked .cb::after { content:''; display:block; width:5px; height:9px; border:2px solid #fff; border-top:none; border-left:none; transform:rotate(45deg) translateY(-1px); }
+  .reading-list li.checked .rtext { color: var(--text-muted); text-decoration: line-through; }
+  .notes-area { width: 100%; min-height: 200px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: inherit; font-size: 14px; color: var(--text); resize: vertical; line-height: 1.6; }
+  .notes-area:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .connections { display: flex; flex-direction: column; gap: 12px; }
+  .conn-card { display: flex; align-items: flex-start; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14px; }
+  .conn-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .conn-label { font-weight: 700; margin-bottom: 3px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .tradeoff-box { background: var(--surface-alt); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 16px 20px; font-size: 14.5px; font-style: italic; color: var(--text); margin-top: 14px; line-height: 1.65; }
+  .trigger-list { list-style: none; display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+  .trigger-list li { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--orange); border-radius: 8px; padding: 10px 16px; font-size: 14px; font-style: italic; color: var(--text); }
+  .flow-table { width: 100%; border-collapse: collapse; margin: 14px 0 18px; font-size: 14px; }
+  .flow-table th { background: var(--surface-alt); padding: 9px 14px; text-align: left; font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--accent); border-bottom: 2px solid var(--border); width: 190px; }
+  .flow-table td { padding: 10px 14px; border-bottom: 1px solid var(--border); line-height: 1.55; }
+  .flow-table tr:last-child td, .flow-table tr:last-child th { border-bottom: none; }
+  .script-template { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+  .script-step { display: grid; grid-template-columns: 170px 1fr; gap: 14px; background: var(--surface-alt); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 8px; padding: 12px 16px; align-items: start; }
+  .script-step .step-label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--accent); line-height: 1.4; }
+  .script-step .step-text { font-size: 14px; font-style: italic; color: var(--text); line-height: 1.55; }
+  @media (max-width: 900px) { #toc { display: none; } main { margin-left: 0; padding: 24px 20px 60px; } .script-step { grid-template-columns: 1fr; gap: 4px; } }
+</style>
+</head>
+<body>
+
+<aside id="toc">
+  <div id="toc-header">
+    <span class="phase-tag">Phase E · Topic 15</span>
+    <h2>15.2 Leader/Follower Model</h2>
+    <span class="tier-tag">🥇 T1 · ~3h</span>
+  </div>
+  <nav>
+    <a href="#s0">🧭 The Question</a>
+    <a href="#s1">🎯 Quick Reference</a>
+    <a href="#s2">📋 Cheatsheet</a>
+    <a href="#s3">🧠 The Mindmap</a>
+    <a href="#s4">🔥 The Problem</a>
+    <a href="#s5">💡 The Core Idea</a>
+    <a href="#s6">⚙️ How It Works</a>
+    <a href="#s7">⚖️ The Decision</a>
+    <a href="#s8">🎯 In the Interview</a>
+    <a href="#s9">🧪 Mastery Gate</a>
+    <a href="#s10">🔗 Connections</a>
+    <a href="#s11">✍️ My Notes</a>
+  </nav>
+</aside>
+
+<main>
+<article>
+
+  <header class="doc-header">
+    <div class="meta">
+      <span class="tag tag-phase">Phase E — Reliability Branch</span>
+      <span class="tag tag-topic">Topic 15 — Distributed Storage Systems</span>
+      <span class="tag tag-tier">🥇 T1 Core · ~3h</span>
+      <span class="tag tag-prereq">Prereqs: 15.1</span>
+      <span class="tag tag-date">Studied 2026-08-21</span>
+    </div>
+    <h1>15.2 Leader/Follower Model</h1>
+  </header>
+
+  <!-- ══════════════════ §0 ══════════════════ -->
+  <section id="s0">
+    <h2 class="section-title"><span class="num">§0</span> 🧭 The Question This Answers</h2>
+
+    <p>15.1 established why N independent copies of data exist and how a write reaches all of them — but it deliberately left one question open. The moment more than one copy exists, <em>something</em> has to decide the order writes are applied in, and which copy a read should trust as current. Raw replication propagates writes faithfully; it says nothing about arbitrating between two writes that land on different replicas in different orders, or telling a reader which of N copies is "the" answer.</p>
+
+    <p>The leader/follower model is the first, and by far the most common, answer to that coordination problem: designate exactly one replica as the sole place writes are accepted, and let every other replica simply apply, in order, whatever that one node did. It's a deliberately narrow design — trading flexibility (any node can take a write) for an unambiguous answer to "which copy is current."</p>
+
+    <div class="the-question">
+      <span class="lbl">The question</span>
+      <em>If exactly one replica accepts every write, how does that write actually reach the followers and get served back out to readers — and, critically, what happens to both reads and writes the moment that one replica stops working?</em>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> Before the mechanism, what specifically goes wrong if there's no leader at all — no single place writes must go through?</div>
+  </section>
+
+  <!-- ══════════════════ §1 ══════════════════ -->
+  <section id="s1">
+    <h2 class="section-title"><span class="num">§1</span> 🎯 Interview Quick Reference Card</h2>
+    <div class="callout callout-quote">Not a summary — a live-recall tool, built for retrieval speed under interview pressure. If you need the reasoning behind anything here, that's what §2 (cheatsheet) and the rest of the doc are for.</div>
+
+    <h3>The checklist — walk this on the whiteboard, in order</h3>
+    <ol class="steps">
+      <li>Name the coordination problem 15.1 left open, unprompted: with N copies, something must decide write order and which copy is authoritative.</li>
+      <li>State the definition: exactly one node — the <strong>leader</strong> — accepts all writes for a piece of data; every other node — a <strong>follower</strong> — applies writes streamed from the leader, in order, and can optionally serve reads.</li>
+      <li>Name the two read paths and their trade-off, unprompted: read from the <strong>leader</strong> (always current, doesn't scale) or read from a <strong>follower</strong> (scales read throughput, may be stale — 15.6 is the deep dive on that lag).</li>
+      <li>Say what happens to writes during a leader failure, unprompted: writes are unavailable until failover completes — detect the leader is actually gone, elect the most caught-up follower, promote it, repoint clients and remaining followers.</li>
+      <li>Name failover mechanics at a black-box level: heartbeat-timeout detection past a grace period, election among followers, promotion, repointing. Say 18.2 (Raft) is the concrete mechanism underneath "elect."</li>
+      <li>Name the dangerous failure mode, unprompted: <strong>split-brain</strong> — the old leader comes back (e.g. after a partition heals) without being fenced off, and both it and the newly promoted leader accept writes at once. Say 18.5 is the deep dive, and that fencing (a monotonic generation/epoch number) is the mitigation to gesture at.</li>
+      <li>Price it unprompted: the leader is a hard ceiling on write throughput and a single point of write availability; follower reads carry a real staleness bound. Leader/follower buys unambiguous ordering with zero conflict-resolution machinery, at the cost of funneling every write through one place.</li>
+    </ol>
+
+    <h3>Trigger → action</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Interviewer says</th><th>You do</th></tr></thead>
+        <tbody>
+          <tr><td>"How do you keep your replicas consistent with each other?"</td><td>Name single-leader: one node accepts writes, streams them to followers in order</td></tr>
+          <tr><td>"What happens if the leader goes down?"</td><td>Detect → elect (most caught-up follower) → promote → repoint. Writes pause during that window; any write acknowledged-but-not-yet-streamed under async propagation can be lost</td></tr>
+          <tr><td>"Can you scale your reads with this model?"</td><td>Yes — route reads to followers, independent of leader capacity. Trade-off: a real staleness bound (replication lag, 15.6)</td></tr>
+          <tr><td>"Two nodes both think they're the leader — what happened?"</td><td>Split-brain, usually an unfenced old leader returning after a partition. Mitigation: fencing — a generation number followers use to reject a stale leader's writes</td></tr>
+          <tr><td>"Is this the only way to replicate data?"</td><td>No — orthogonal choices exist: multi-leader (16.2) and leaderless (16.4), each trading this model's unambiguous ordering for concurrent multi-node writes</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Fast disambiguation — the pairs that get confused live</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Pair</th><th>The distinction</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Leader/follower vs. Quorum (15.3)</strong></td><td>Leader/follower answers <em>who accepts writes</em> — exactly one node. Quorum answers <em>how many replicas must participate</em> in a given read or write — a separate, count-based question that can even be layered on top of a leader-based system (e.g. requiring a majority of followers to ack).</td></tr>
+          <tr><td><strong>Failover vs. Split-brain</strong></td><td>Failover is the intended, safe transition to a new leader once the old one is confirmed gone. Split-brain is the failure mode where two nodes simultaneously believe they're leader — usually because the old one wasn't fenced off before a new one was promoted.</td></tr>
+          <tr><td><strong>Reading from the leader vs. reading from a follower</strong></td><td>Leader reads are always current — nothing can be more current than where writes land first. Follower reads reflect whatever that follower has applied so far, which can lag by a real, non-zero amount under async propagation.</td></tr>
+          <tr><td><strong>Leader/follower (15.2) vs. Multi-leader (16.2)</strong></td><td>This model funnels every write through one node for an unambiguous order. Multi-leader lets more than one node accept writes — better for concurrent multi-region writers, at the cost of needing conflict resolution (16.3) this model avoids entirely.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>High-yield anchors</h3>
+    <div class="cheatsheet" style="font-size: 12.5px;">Roles: 1 leader, N−1 followers (typical)
+Write path: client → leader only, never a follower directly
+Read path: leader = current; follower = current minus replication lag
+Failover: detect (heartbeat + grace period) → elect (most caught-up
+  follower) → promote → repoint
+Split-brain: 2 nodes both accept writes → diverging data; fixed by
+  fencing (generation/epoch numbers)
+Async propagation + leader crash: an acknowledged-but-unpropagated
+  write can be lost (15.1/15.5)
+Deep dives elsewhere: 18.2 (Raft election mechanism), 18.5 (split-brain
+  cause &amp; prevention), 15.6 (replication lag &amp; read anomalies)</div>
+
+    <h3>The script — say this close to verbatim</h3>
+    <div class="tradeoff-box">"I'm using single-leader replication: exactly one node — the leader — accepts every write for this data, applies it locally, and streams it to the followers in the same order it received it. That gives me one unambiguous write order with zero conflict-resolution machinery, and I can scale reads by routing them to followers. The cost is real: the leader is a hard ceiling on write throughput, and follower reads carry a real staleness bound — a client can read data slightly behind the very latest write. If the leader fails, writes are unavailable for the detection-plus-election window — typically low single-digit seconds with an automated, Raft-based election — and I'd fence the old leader explicitly, with a generation number, so that if it comes back it can't accept writes and create a split-brain."</div>
+
+    <h3>If pushed on "why not just let any node take a write and merge conflicts later?"</h3>
+    <div class="tradeoff-box">"Because without a designated leader, two clients writing to two different replicas at nearly the same time produce two different, unordered histories, and clock-based timestamp reconciliation can't cleanly resolve that — clocks skew across machines, and some writes are genuinely concurrent with no true 'later' one. Leader/follower sidesteps the whole problem: the leader's own receive order <em>is</em> the order, no reconciliation required."</div>
+  </section>
+
+  <!-- ══════════════════ §2 ══════════════════ -->
+  <section id="s2">
+    <h2 class="section-title"><span class="num">§2</span> 📋 Cheatsheet</h2>
+
+    <div class="callout callout-quote">Everything you need to recall this concept in 30 seconds — for quick review before an interview.</div>
+    <div class="callout callout-tip">⏭️ <strong>First time through this topic?</strong> Skip to §3 and come back here for revision.</div>
+
+<div class="cheatsheet"><span class="label">§ 1  WHY IT EXISTS</span>15.1 gives you N independent copies but never says which one accepts a
+write first. Accept-anywhere designs let concurrent writes land on
+different replicas with no shared way to order them, so replicas can
+permanently disagree about the truth. Leader/follower removes the
+ambiguity by funneling every write through exactly one node.
+<span class="label">§ 2  WHAT IT IS</span>Leader      The one replica currently authorized to accept writes for
+            this data.
+Follower    Every other replica in the set — applies the leader's
+            write stream in order, and can optionally serve reads.
+Failover    The procedure that replaces a dead leader: detect, elect,
+            promote, repoint.
+<span class="label">§ 3  THE MECHANISM</span>WRITE    always goes to the current leader — applied locally first,
+         then streamed to followers in the leader's own order (15.1's
+         propagation, with the entry point now pinned down).
+READ     to the leader = always current; to a follower = current as of
+         that follower's last applied write — a real staleness bound
+         (15.6 quantifies it).
+FAILOVER heartbeat timeout suspects the leader → grace period rules
+         out "just slow" → most-caught-up follower is elected and
+         promoted → old leader must be fenced, or split-brain results.
+<span class="label">§ 4  USE / AVOID</span>USE leader/follower whenever writes need one unambiguous order with
+  zero conflict-resolution machinery — the default for most OLTP
+  systems.
+USE follower reads to scale read throughput when some staleness is
+  acceptable.
+AVOID assuming follower reads are current — they can lag by a real,
+  non-zero amount (15.6).
+AVOID assuming electing a new leader alone prevents split-brain — the
+  old leader must be explicitly fenced (18.5).
+<span class="label">§ 5  FAILOVER SEQUENCE</span>1. DETECT    heartbeat/health check misses past a grace period
+2. ELECT     remaining followers/coordinator pick the most caught-up
+             one, to minimize data loss
+3. PROMOTE   the chosen follower becomes the new leader
+4. REPOINT   clients and remaining followers redirect writes to it
+5. FENCE     old leader is blocked from accepting writes if it
+             returns — skip this step and you risk split-brain
+<span class="label">§ 6  NUMBERS TO ANCHOR THE DISCUSSION</span>Typical automated election time: low single-digit seconds (MongoDB,
+  Raft-based systems).
+Writes during election: unavailable — a real, bounded gap, not a
+  rounding error.
+Async propagation + leader crash: any write acknowledged to the client
+  but not yet streamed to a follower can be lost — the same gap
+  15.1/15.5 name, now tied to a concrete failure moment.
+<span class="label">§ 7  INTERVIEW TRIGGERS + GOTCHA</span>→ "How do replicas stay consistent?"    → one leader accepts writes,
+                                 followers replay its order
+→ "What happens if the leader dies?"    → detect → elect → promote →
+                                 repoint; writes paused meanwhile
+→ "Can followers take writes too?"      → no — that's multi-leader
+                                 (16.2), a different model
+GOTCHA: Assuming electing a new leader is the whole story. If the old
+  leader isn't fenced off, it can come back still believing it's in
+  charge — two nodes both accepting writes at once (split-brain,
+  18.5).</div>
+  </section>
+
+  <!-- ══════════════════ §3 ══════════════════ -->
+  <section id="s3">
+    <h2 class="section-title"><span class="num">§3</span> 🧠 The Mindmap</h2>
+    <div class="callout callout-quote">The picture to hold in your head while you study. Everything below hangs off this.</div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Leader/Follower — hub and five branches</div>
+      <svg viewBox="0 0 1200 480" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <rect x="440" y="10" width="320" height="74" rx="10" fill="#1a1917"/>
+        <text x="600" y="36" text-anchor="middle" font-size="14" font-weight="800" fill="#ffffff">LEADER / FOLLOWER</text>
+        <text x="600" y="54" text-anchor="middle" font-size="9.5" fill="#cbc8c1">"exactly one node says what order</text>
+        <text x="600" y="67" text-anchor="middle" font-size="9.5" fill="#cbc8c1">writes happened in"</text>
+
+        <line x1="600" y1="84" x2="122" y2="140" stroke="#94908a" stroke-width="1.4"/>
+        <line x1="600" y1="84" x2="356" y2="140" stroke="#94908a" stroke-width="1.4"/>
+        <line x1="600" y1="84" x2="600" y2="140" stroke="#94908a" stroke-width="1.4"/>
+        <line x1="600" y1="84" x2="844" y2="140" stroke="#94908a" stroke-width="1.4"/>
+        <line x1="600" y1="84" x2="1078" y2="140" stroke="#94908a" stroke-width="1.4"/>
+
+        <!-- Branch 1: red -->
+        <rect x="10" y="140" width="224" height="330" rx="10" fill="#fee2e2" stroke="#dc2626" stroke-width="2"/>
+        <text x="122" y="164" text-anchor="middle" font-size="11.5" font-weight="800" fill="#7f1d1d">THE PROBLEM</text>
+        <text x="122" y="180" text-anchor="middle" font-size="11.5" font-weight="800" fill="#7f1d1d">IT SOLVES</text>
+        <line x1="24" y1="192" x2="220" y2="192" stroke="#fecaca" stroke-width="1.2"/>
+        <text x="24" y="212" font-size="10" fill="#7f1d1d">accept-anywhere designs</text>
+        <text x="24" y="226" font-size="10" fill="#7f1d1d">let concurrent writes land</text>
+        <text x="24" y="240" font-size="10" fill="#7f1d1d">on different replicas with</text>
+        <text x="24" y="254" font-size="10" fill="#7f1d1d">no shared order</text>
+        <text x="24" y="276" font-size="10" fill="#7f1d1d">replicas can permanently</text>
+        <text x="24" y="290" font-size="10" fill="#7f1d1d">disagree about what's true</text>
+
+        <!-- Branch 2: blue -->
+        <rect x="244" y="140" width="224" height="330" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+        <text x="356" y="164" text-anchor="middle" font-size="11.5" font-weight="800" fill="#1e3a8a">THE ROLES</text>
+        <text x="356" y="180" text-anchor="middle" font-size="11.5" font-weight="800" fill="#1e3a8a">&amp; PATHS</text>
+        <line x1="258" y1="192" x2="454" y2="192" stroke="#93c5fd" stroke-width="1.2"/>
+        <text x="258" y="212" font-size="10" fill="#1e3a8a">leader = sole write</text>
+        <text x="258" y="226" font-size="10" fill="#1e3a8a">acceptor</text>
+        <text x="258" y="248" font-size="10" fill="#1e3a8a">follower = applies</text>
+        <text x="258" y="262" font-size="10" fill="#1e3a8a">leader's stream, may</text>
+        <text x="258" y="276" font-size="10" fill="#1e3a8a">serve reads</text>
+        <text x="258" y="298" font-size="10" fill="#1e3a8a">write path: leader only</text>
+        <text x="258" y="320" font-size="10" fill="#1e3a8a">read path: leader =</text>
+        <text x="258" y="334" font-size="10" fill="#1e3a8a">current, follower = maybe</text>
+        <text x="258" y="348" font-size="10" fill="#1e3a8a">stale</text>
+
+        <!-- Branch 3: purple -->
+        <rect x="478" y="140" width="244" height="330" rx="10" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+        <text x="600" y="164" text-anchor="middle" font-size="11.5" font-weight="800" fill="#4c1d95">FAILOVER,</text>
+        <text x="600" y="180" text-anchor="middle" font-size="11.5" font-weight="800" fill="#4c1d95">AT A GLANCE</text>
+        <line x1="492" y1="192" x2="708" y2="192" stroke="#c4b5fd" stroke-width="1.2"/>
+        <text x="492" y="212" font-size="10" fill="#4c1d95">detect (heartbeat +</text>
+        <text x="492" y="226" font-size="10" fill="#4c1d95">grace period)</text>
+        <text x="492" y="248" font-size="10" fill="#4c1d95">→ elect (most caught-</text>
+        <text x="492" y="262" font-size="10" fill="#4c1d95">up wins)</text>
+        <text x="492" y="284" font-size="10" fill="#4c1d95">→ promote → repoint</text>
+        <text x="492" y="306" font-size="10" fill="#4c1d95">writes paused for the</text>
+        <text x="492" y="320" font-size="10" fill="#4c1d95">whole window</text>
+
+        <!-- Branch 4: orange -->
+        <rect x="732" y="140" width="224" height="330" rx="10" fill="#ffedd5" stroke="#ea580c" stroke-width="2"/>
+        <text x="844" y="164" text-anchor="middle" font-size="11.5" font-weight="800" fill="#7c2d12">WHAT IT COSTS</text>
+        <text x="844" y="180" text-anchor="middle" font-size="11.5" font-weight="800" fill="#7c2d12">/ RISKS</text>
+        <line x1="746" y1="192" x2="942" y2="192" stroke="#fdba74" stroke-width="1.2"/>
+        <text x="746" y="212" font-size="10" fill="#7c2d12">leader = a write</text>
+        <text x="746" y="226" font-size="10" fill="#7c2d12">throughput ceiling</text>
+        <text x="746" y="248" font-size="10" fill="#7c2d12">follower reads = real</text>
+        <text x="746" y="262" font-size="10" fill="#7c2d12">staleness bound</text>
+        <text x="746" y="284" font-size="10" fill="#7c2d12">botched failover =</text>
+        <text x="746" y="298" font-size="10" fill="#7c2d12">split-brain</text>
+
+        <!-- Branch 5: green -->
+        <rect x="966" y="140" width="224" height="330" rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+        <text x="1078" y="164" text-anchor="middle" font-size="11.5" font-weight="800" fill="#14532d">WHERE IT LEADS</text>
+        <line x1="980" y1="180" x2="1176" y2="180" stroke="#86efac" stroke-width="1.2"/>
+        <text x="980" y="200" font-size="10" fill="#14532d">15.3 quorum — count-</text>
+        <text x="980" y="214" font-size="10" fill="#14532d">based refinement</text>
+        <text x="980" y="236" font-size="10" fill="#14532d">15.6 replication lag &amp;</text>
+        <text x="980" y="250" font-size="10" fill="#14532d">read anomalies</text>
+        <text x="980" y="272" font-size="10" fill="#14532d">16.1 failure modes,</text>
+        <text x="980" y="286" font-size="10" fill="#14532d">deeper</text>
+        <text x="980" y="308" font-size="10" fill="#14532d">18.2 Raft — leader</text>
+        <text x="980" y="322" font-size="10" fill="#14532d">election</text>
+        <text x="980" y="344" font-size="10" fill="#14532d">18.5 split-brain, cause</text>
+        <text x="980" y="358" font-size="10" fill="#14532d">&amp; prevention</text>
+      </svg>
+      <p class="caption">The problem it solves is the why; the roles and paths are the how at this doc's level; failover, at a glance, is what happens the instant the single point of failure fails; what it costs is the honest ledger; where it leads is the rest of the reliability trunk.</p>
+    </div>
+
+    <p><strong>How to read it:</strong> The <strong>problem it solves</strong> branch is the <em>why</em> — everything else exists to give writes one unambiguous order. The <strong>roles &amp; paths</strong> branch is the <em>how</em>, at this subtopic's level of detail — a fixed write path and a forked read path. <strong>Failover, at a glance</strong> is what happens the instant the mechanism's single point of failure actually fails — the sequence §6 unpacks in full. <strong>What it costs</strong> is the honest ledger: this model buys ordering simplicity by accepting a write ceiling, a staleness bound, and a real risk if failover is done wrong. <strong>Where it leads</strong> is this doc's own table of contents into the rest of the reliability trunk — every subtopic there either refines, deepens, or challenges something this doc introduces.</p>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> Made concrete — what exactly breaks if any replica can accept a write directly, with no leader at all?</div>
+  </section>
+
+  <!-- ══════════════════ §4 ══════════════════ -->
+  <section id="s4">
+    <h2 class="section-title"><span class="num">§4</span> 🔥 The Problem</h2>
+
+    <p>15.1 solved durability and availability with N independent copies and a propagation mechanism, but it left the actual write <em>entry point</em> unspecified — "which node handles first-contact writes is itself a design choice this doc leaves open," as its own §6 put it. Nothing in raw replication says which of the N replicas a client should send a write to first, or which replica a reader should trust.</p>
+
+    <p>The naive answer is to let it not matter: any replica accepts writes directly from whichever client happens to talk to it, then propagates that write out to the others, same as any other write. This is <strong>accept-anywhere</strong> replication, and it looks harmless until two clients write concurrently to <em>different</em> replicas. Say two users both try to register the username "alice" at nearly the same instant — one write lands on replica 1, the other on replica 2. Both replicas apply their local write immediately and report success, because from each replica's own point of view, its write was the only one it saw. Propagation then has to reconcile two writes to the same key with no shared record of which one actually happened first — because neither replica ever knew about the other write until after committing its own. Different replicas can converge to different final answers, or never converge cleanly at all. This isn't a performance problem; it's a correctness bug — two replicas can permanently disagree about who owns "alice," and a reader querying different replicas can see contradictory histories.</p>
+
+    <p>The instinctive fix is to attach a timestamp to every write and let "the newer timestamp wins" resolve any collision during propagation. This looks reasonable until it meets two hard problems. First, clock skew: machine clocks drift and are never perfectly synchronized, so "newer" as measured by two different nodes' clocks doesn't reliably reflect what actually happened first. Second, genuine concurrency: two writes can happen close enough together that there is no true "first" — any resolution rule is picking a winner arbitrarily, not discovering one. For data where quietly discarding one of two valid, concurrent writes is dangerous — a bank balance, an inventory decrement, a username registration — arbitrary resolution is not an acceptable answer, and building real conflict-resolution machinery (last-write-wins with proper logical clocks, vector clocks, CRDTs — Topic 16's territory) is a substantial cost most systems would rather avoid if they don't need concurrent multi-node writes in the first place.</p>
+
+    <p>The insight that resolves this without any of that machinery: designate exactly one replica the <strong>leader</strong>. Every write, from any client, anywhere, is funneled to that single node. The leader doesn't need to negotiate an order with anyone — the order writes are applied in is simply the order that one node happened to receive them in. Followers then just replay that same order faithfully. The ordering ambiguity accept-anywhere creates disappears entirely, for the price of concentrating every write on one node.</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Before / after — accept-anywhere vs. leader/follower</div>
+      <svg viewBox="0 0 1040 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <rect x="10" y="10" width="500" height="280" rx="12" fill="#fff5f5" stroke="#dc2626" stroke-width="2"/>
+        <text x="260" y="38" text-anchor="middle" font-size="13.5" font-weight="800" fill="#7f1d1d">BEFORE — accept-anywhere, no leader</text>
+        <line x1="26" y1="50" x2="494" y2="50" stroke="#fecaca" stroke-width="1.4"/>
+        <text x="26" y="74" font-size="12" font-family="SF Mono, Menlo, monospace" fill="#7f1d1d">client A writes "alice" → Node 1</text>
+        <text x="26" y="94" font-size="12" font-family="SF Mono, Menlo, monospace" fill="#7f1d1d">client B writes "alice" → Node 2</text>
+        <text x="26" y="112" font-size="11" font-style="italic" fill="#7f1d1d">(same time)</text>
+        <line x1="26" y1="126" x2="494" y2="126" stroke="#fecaca" stroke-width="1.4"/>
+        <text x="26" y="148" font-size="12" font-weight="700" fill="#7f1d1d">✗ Node 1 &amp; Node 2 each apply</text>
+        <text x="26" y="166" font-size="12" fill="#7f1d1d">   locally — no shared order</text>
+        <text x="26" y="188" font-size="12" font-weight="700" fill="#7f1d1d">✗ propagation has no record of</text>
+        <text x="26" y="206" font-size="12" fill="#7f1d1d">   which write happened first</text>
+        <text x="26" y="228" font-size="12" font-weight="700" fill="#7f1d1d">✗ replicas can permanently</text>
+        <text x="26" y="246" font-size="12" fill="#7f1d1d">   disagree who owns "alice"</text>
+        <text x="26" y="266" font-size="11" fill="#7f1d1d">   ✗ timestamp "fix" breaks on clock</text>
+        <text x="26" y="282" font-size="11" fill="#7f1d1d">     skew &amp; genuine concurrency</text>
+
+        <rect x="530" y="10" width="500" height="280" rx="12" fill="#f0fdf4" stroke="#16a34a" stroke-width="2"/>
+        <text x="780" y="38" text-anchor="middle" font-size="13.5" font-weight="800" fill="#14532d">AFTER — leader/follower, one entry point</text>
+        <line x1="546" y1="50" x2="1014" y2="50" stroke="#bbf7d0" stroke-width="1.4"/>
+        <text x="546" y="74" font-size="12" font-family="SF Mono, Menlo, monospace" fill="#14532d">client A's write → LEADER (first)</text>
+        <text x="546" y="94" font-size="12" font-family="SF Mono, Menlo, monospace" fill="#14532d">client B's write → LEADER (second)</text>
+        <line x1="546" y1="112" x2="1014" y2="112" stroke="#bbf7d0" stroke-width="1.4"/>
+        <text x="546" y="136" font-size="12" font-weight="700" fill="#14532d">✓ the leader sees A's write, then</text>
+        <text x="546" y="154" font-size="12" fill="#14532d">   B's — an unambiguous order exists</text>
+        <text x="546" y="176" font-size="12" font-weight="700" fill="#14532d">✓ followers replay that exact</text>
+        <text x="546" y="194" font-size="12" fill="#14532d">   order — every replica agrees</text>
+        <text x="546" y="216" font-size="12" font-weight="700" fill="#14532d">✓ "who registered alice" has one</text>
+        <text x="546" y="234" font-size="12" fill="#14532d">   answer, from leader order</text>
+        <text x="546" y="256" font-size="11" fill="#14532d">   ✓ no reconciliation guess needed —</text>
+        <text x="546" y="272" font-size="11" fill="#14532d">     no conflict-resolution machinery</text>
+      </svg>
+      <p class="caption">Accept-anywhere has no shared order across replicas; leader/follower makes the leader's own receive order the system's single source of truth.</p>
+    </div>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">Two clients concurrently register the username "alice" against two different replicas in an accept-anywhere design with no leader. Using the naive fix's timestamp-ordering idea and its two stated problems, explain why timestamp-based reconciliation doesn't cleanly resolve this case, and what property the leader/follower model gives you instead that timestamps can't.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the "instinctive fix" paragraph's two problems (clock skew, genuine concurrency) and the final paragraph's description of what the leader's receive order actually gives you.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> If the fix is one leader, what does that design actually consist of — the roles, the write path, the read path, and what happens when the leader itself eventually fails?</div>
+  </section>
+
+  <!-- ══════════════════ §5 ══════════════════ -->
+  <section id="s5">
+    <h2 class="section-title"><span class="num">§5</span> 💡 The Core Idea</h2>
+
+    <div class="definition">Leader/follower (single-leader) replication is a replication topology in which exactly one replica — the leader — accepts all writes for a given piece of data, propagates them in the order it received them to every other replica — the followers — and reads may be served by the leader or by any follower depending on how fresh a client needs the answer to be.</div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">The build chain</div>
+      <svg viewBox="0 0 1200 220" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="bcArrow152" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#7c3aed"/>
+          </marker>
+        </defs>
+        <g>
+          <rect x="4" y="30" width="272" height="86" rx="9" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+          <text x="140" y="52" text-anchor="middle" font-size="11" font-weight="800" fill="#4c1d95">LEADER &amp; FOLLOWERS —</text>
+          <text x="140" y="68" text-anchor="middle" font-size="11" font-weight="800" fill="#4c1d95">ROLES, NOT HARDWARE</text>
+          <text x="140" y="136" text-anchor="middle" font-size="10" font-style="italic" fill="#6b6861">because §4: no single node</text>
+          <text x="140" y="151" text-anchor="middle" font-size="10" font-style="italic" fill="#6b6861">should decide order alone</text>
+        </g>
+        <line x1="280" y1="73" x2="304" y2="73" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow152)"/>
+        <g>
+          <rect x="310" y="30" width="280" height="86" rx="9" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+          <text x="450" y="52" text-anchor="middle" font-size="11" font-weight="800" fill="#1e3a8a">THE WRITE PATH — EVERY</text>
+          <text x="450" y="68" text-anchor="middle" font-size="11" font-weight="800" fill="#1e3a8a">WRITE FUNNELS TO ONE NODE</text>
+          <text x="450" y="136" text-anchor="middle" font-size="10" font-style="italic" fill="#6b6861">because roles exist only if</text>
+          <text x="450" y="151" text-anchor="middle" font-size="10" font-style="italic" fill="#6b6861">the write path is defined</text>
+        </g>
+        <line x1="600" y1="73" x2="624" y2="73" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow152)"/>
+        <g>
+          <rect x="630" y="30" width="270" height="86" rx="9" fill="#ccfbf1" stroke="#0d9488" stroke-width="2"/>
+          <text x="765" y="52" text-anchor="middle" font-size="11" font-weight="800" fill="#134e4a">THE READ PATH — TWO</text>
+          <text x="765" y="68" text-anchor="middle" font-size="11" font-weight="800" fill="#134e4a">VERY DIFFERENT GUARANTEES</text>
+          <text x="765" y="136" text-anchor="middle" font-size="10" font-style="italic" fill="#6b6861">because writes always land</text>
+          <text x="765" y="151" text-anchor="middle" font-size="10" font-style="italic" fill="#6b6861">on the leader first</text>
+        </g>
+        <line x1="900" y1="73" x2="924" y2="73" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#bcArrow152)"/>
+        <g>
+          <rect x="930" y="30" width="266" height="86" rx="9" fill="#ffedd5" stroke="#ea580c" stroke-width="2"/>
+          <text x="1063" y="52" text-anchor="middle" font-size="11" font-weight="800" fill="#7c2d12">FAILOVER — SOMEONE HAS</text>
+          <text x="1063" y="68" text-anchor="middle" font-size="11" font-weight="800" fill="#7c2d12">TO REPLACE THE LEADER</text>
+          <text x="1063" y="136" text-anchor="middle" font-size="10" font-style="italic" fill="#6b6861">because the leader is</text>
+          <text x="1063" y="151" text-anchor="middle" font-size="10" font-style="italic" fill="#6b6861">ordinary hardware (§4)</text>
+        </g>
+      </svg>
+    </div>
+
+    <h3>Leader &amp; Followers — Roles, Not Hardware</h3>
+    <p>Builds directly on §4's insight: exactly one node should decide the order writes are applied in. Every replica in a set is assigned one of two roles: exactly one is the <strong>leader</strong>, and every other node is a <strong>follower</strong>. This is a <em>role</em>, not a permanent property of specific hardware — §6 shows the role must move to different physical nodes over the system's lifetime, whenever the current leader dies. While a node holds the follower role, it does not accept client writes directly for that data at all — its job is to apply, in order, whatever the leader streams to it, and it can optionally also serve reads (the Read Path, next). A follower is not a permanently second-class machine; it is simply "not currently the leader," and any follower is a candidate to become leader later.</p>
+
+    <h3>The Write Path — Every Write Funnels Through One Node</h3>
+    <p>Builds on roles existing at all: because there is exactly one leader, every write for that data — no matter which client sent it, no matter which node the client happened to talk to first — is routed to the leader. The leader applies the write to its own local copy first, giving it a definite position in that node's write-ahead log, then streams it out to the followers in that same order — this is 15.1's propagation mechanism, now with the entry point pinned down to one specific node. Because every write passes through that single node, the order writes are applied in is simply the order the leader happened to receive them — no cross-replica negotiation is needed to establish an ordering, which is exactly the ambiguity §4 showed accept-anywhere designs cannot cleanly resolve.</p>
+
+    <h3>The Read Path — Two Very Different Guarantees</h3>
+    <p>Builds on the write path always landing on the leader first: a read, unlike a write, genuinely has a choice of which node to hit. Reading from the <strong>leader</strong> always returns the most recent write, because nothing in the system can be more current than the node writes land on first. Reading from a <strong>follower</strong> returns whatever that follower has applied so far, which under asynchronous propagation (15.1 §5, 15.5's deep dive) can lag behind the leader by a real, non-zero amount of time — the follower might not yet reflect a write the client itself just made. This is the entire reason follower reads exist as an option: they let read traffic scale horizontally across N−1 extra nodes, at the cost of a staleness bound that 15.6 goes on to quantify and manage in depth.</p>
+
+    <h3>Failover — Someone Has to Replace the Leader</h3>
+    <p>Builds on all three of the above: because exactly one node holds the leader role, and that node is ordinary hardware subject to every failure §4 named, the system needs a defined procedure for what happens when it dies. <strong>Failover</strong> is that procedure: detect that the leader is actually gone (not just briefly slow), pick a replacement from among the followers, promote it, and repoint clients and remaining followers at the new leader — the exact sequence §6 unpacks step by step. Until failover completes, writes have nowhere correct to go. Get any step of this wrong — promote too early on a false suspicion, promote a follower that wasn't caught up on the leader's latest writes, or fail to fence the old leader from accepting writes if it returns — and the design can end up with two nodes both believing they're leader at once: the <strong>split-brain</strong> failure that 18.5 covers in depth.</p>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">A junior engineer argues that since any follower can eventually become leader, calling them "followers" instead of just "replicas" is purely cosmetic — they behave identically to the leader at any given instant. Using the "Leader &amp; Followers" concept, explain precisely what is functionally different about a node's behavior while it holds the follower role, at the same instant a leader exists.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the second half of "Leader &amp; Followers" — the sentence stating what a follower does and does not do while holding that role.</div>
+      </div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">2</span>
+          <span class="qtext">Trace the link between the write path and failover: explain why promoting a follower that is behind on replication — one that hasn't yet applied the leader's most recent writes — is a risky choice during failover, using both concepts.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read "The Write Path" on what makes the leader's order authoritative, and "Failover" on the specific risk named for promoting a follower that wasn't caught up.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> You know the shape of the design. What actually happens, step by step, on a real write and a real failure — and what specifically breaks during each?</div>
+  </section>
+
+  <!-- ══════════════════ §6 ══════════════════ -->
+  <section id="s6">
+    <h2 class="section-title"><span class="num">§6</span> ⚙️ How It Actually Works</h2>
+
+    <h3>Happy path — a write reaches all N replicas, then a later read, N=3 (1 leader, 2 followers)</h3>
+    <ol class="steps">
+      <li>A client sends a write for key K to whichever node currently holds the leader role — clients and followers alike must know who the current leader is, itself simple bookkeeping most driver libraries or a routing layer handle transparently.</li>
+      <li>The leader applies the write to its own local copy, giving it a definite position in its write-ahead log.</li>
+      <li>The leader streams the write to both followers, tagged with its log position so each follower applies it in that same order.</li>
+      <li>Depending on propagation mode (15.1 §5): <strong>synchronous</strong> — the leader waits for some number of followers to acknowledge before telling the client the write succeeded; <strong>asynchronous</strong> — the leader tells the client success immediately, and propagation continues in the background.</li>
+      <li>Each follower applies the write to its own local copy in log order, converging toward the leader's state.</li>
+      <li>A later read: hitting the leader returns the current value; hitting a follower returns whatever that follower has applied so far — current, minus however much replication lag exists at that instant.</li>
+    </ol>
+
+    <div class="mental-model">
+      <span class="mm-name">🗺️ Mental model — a single stenographer mailing carbon copies.</span> The leader is the one authorized scribe writing the official transcript; followers are recipients who receive a mailed carbon copy of each page, in order, as it's written. Anyone can read a carbon copy, but it's only ever as current as the last page that has actually arrived in the mail.
+      <span class="mm-break">Where it breaks down: mailed carbon copies never "elect a new scribe" on their own if the scribe stops writing — a desk doesn't get automatically reassigned. Real systems must add detection-and-election machinery on top, which this analogy has no notion of. And unlike physical carbon copies handed out once, if two scribes — the original and a hastily appointed replacement — both believe they hold the pen at the same time, they can write two different, diverging "official" transcripts. A stack of carbon copies has no equivalent of two contradictory master documents both claiming to be authoritative.</span>
+    </div>
+
+    <h3>Failure &amp; edge cases</h3>
+    <ul class="plain">
+      <li><strong>A follower crashing is far cheaper than a leader crashing.</strong> Writes continue uninterrupted through the leader to the remaining followers; the failed follower simply catches up on rejoining, replaying whatever it missed from the leader's log.</li>
+      <li><strong>A leader that's briefly slow or partitioned, but not actually dead, is the dangerous case for premature failover.</strong> A monitor that declares the leader dead after a single missed heartbeat — with no grace period — risks promoting a new leader while the "dead" one is still alive and might still be accepting writes on its own, which is exactly how split-brain starts. Real systems wait out a grace period specifically to rule this out, at the cost of a slower reaction to a genuinely dead leader.</li>
+      <li><strong>Choosing which follower to promote matters.</strong> The follower furthest along in the log — the most caught-up — is the standard choice, to minimize how many committed writes are lost in the transition (the exact risk named in §5's second checkpoint). When multiple followers are tied, a concrete coordination algorithm has to break the tie; Raft's leader election (18.2) is the mechanism most modern systems actually run.</li>
+      <li><strong>Writes are unavailable for the entire detection-plus-election-plus-promotion window.</strong> This is a real, bounded availability gap for writes specifically — not a rounding error, and distinct from the separate durability question of whether an acknowledged write actually survives.</li>
+      <li><strong>Split-brain is what happens when the old leader isn't fenced off.</strong> If a partition heals and the original leader comes back still believing it's in charge, and nothing stops it from accepting writes, the system now has two nodes both accepting writes simultaneously — old leader and newly promoted leader — and the data can diverge in ways plain replication has no way to reconcile. The fix is <strong>fencing</strong>: a monotonically increasing generation (or epoch) number that followers use to reject writes from any leader whose generation is stale. 18.5 is the full treatment.</li>
+    </ul>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Mechanism flow, end to end</div>
+      <svg viewBox="0 0 1040 200" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <defs>
+          <marker id="mfArrow152" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#2563eb"/>
+          </marker>
+        </defs>
+        <rect x="8" y="20" width="230" height="150" rx="9" fill="#f3f2ef" stroke="#94908a" stroke-width="2"/>
+        <text x="123" y="44" text-anchor="middle" font-size="12" font-weight="800" fill="#1a1917">① CLIENT WRITE</text>
+        <text x="123" y="70" text-anchor="middle" font-size="11" fill="#4a4742">arrives at the</text>
+        <text x="123" y="86" text-anchor="middle" font-size="11" fill="#4a4742">current leader</text>
+
+        <line x1="242" y1="90" x2="270" y2="90" stroke="#2563eb" stroke-width="2.5" marker-end="url(#mfArrow152)"/>
+
+        <rect x="276" y="20" width="250" height="150" rx="9" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+        <text x="401" y="44" text-anchor="middle" font-size="12" font-weight="800" fill="#4c1d95">② LEADER APPLIES</text>
+        <text x="401" y="70" text-anchor="middle" font-size="10.5" fill="#4c1d95">&amp; LOGS locally</text>
+        <text x="401" y="98" text-anchor="middle" font-size="10" font-style="italic" fill="#4c1d95">[reads here = always</text>
+        <text x="401" y="112" text-anchor="middle" font-size="10" font-style="italic" fill="#4c1d95">current]</text>
+
+        <line x1="530" y1="90" x2="558" y2="90" stroke="#2563eb" stroke-width="2.5" marker-end="url(#mfArrow152)"/>
+
+        <rect x="564" y="20" width="240" height="150" rx="9" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+        <text x="684" y="44" text-anchor="middle" font-size="12" font-weight="800" fill="#1e3a8a">③ STREAM TO</text>
+        <text x="684" y="60" text-anchor="middle" font-size="12" font-weight="800" fill="#1e3a8a">FOLLOWERS</text>
+        <text x="684" y="84" text-anchor="middle" font-size="10" fill="#1e3a8a">(sync waits for acks /</text>
+        <text x="684" y="98" text-anchor="middle" font-size="10" fill="#1e3a8a">async doesn't)</text>
+
+        <line x1="808" y1="90" x2="836" y2="90" stroke="#2563eb" stroke-width="2.5" marker-end="url(#mfArrow152)"/>
+
+        <rect x="842" y="20" width="190" height="150" rx="9" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+        <text x="937" y="44" text-anchor="middle" font-size="12" font-weight="800" fill="#14532d">④ FOLLOWERS</text>
+        <text x="937" y="60" text-anchor="middle" font-size="12" font-weight="800" fill="#14532d">APPLY</text>
+        <text x="937" y="84" text-anchor="middle" font-size="10.5" fill="#14532d">converge toward</text>
+        <text x="937" y="98" text-anchor="middle" font-size="10.5" fill="#14532d">leader's state</text>
+        <text x="937" y="120" text-anchor="middle" font-size="10" font-style="italic" fill="#14532d">[reads here = current</text>
+        <text x="937" y="134" text-anchor="middle" font-size="10" font-style="italic" fill="#14532d">minus lag]</text>
+      </svg>
+    </div>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Structural diagram — failover as a state machine, fenced vs. unfenced</div>
+      <svg viewBox="0 0 1040 420" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <text x="250" y="22" text-anchor="middle" font-size="12.5" font-weight="800" fill="#14532d">FENCED PATH (safe)</text>
+        <text x="790" y="22" text-anchor="middle" font-size="12.5" font-weight="800" fill="#7f1d1d">UNFENCED PATH (unsafe — split-brain)</text>
+
+        <!-- left column states -->
+        <rect x="40" y="34" width="420" height="46" rx="8" fill="#f3f2ef" stroke="#94908a" stroke-width="2"/>
+        <text x="250" y="62" text-anchor="middle" font-size="12" font-weight="700" fill="#1a1917">STABLE — leader serves reads+writes</text>
+        <line x1="250" y1="80" x2="250" y2="106" stroke="#94908a" stroke-width="1.6"/>
+        <text x="270" y="97" font-size="10" fill="#4a4742">heartbeat misses × k</text>
+
+        <rect x="40" y="110" width="420" height="42" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+        <text x="250" y="136" text-anchor="middle" font-size="12" font-weight="700" fill="#92400e">SUSPECTED (grace period running)</text>
+        <line x1="250" y1="152" x2="250" y2="178" stroke="#94908a" stroke-width="1.6"/>
+        <text x="284" y="169" font-size="10" fill="#4a4742">grace period expires, still silent</text>
+
+        <rect x="40" y="182" width="420" height="46" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+        <text x="250" y="203" text-anchor="middle" font-size="12" font-weight="700" fill="#1e3a8a">ELECTING — writes blocked;</text>
+        <text x="250" y="219" text-anchor="middle" font-size="11" fill="#1e3a8a">most caught-up follower selected</text>
+        <line x1="250" y1="228" x2="250" y2="254" stroke="#94908a" stroke-width="1.6"/>
+        <text x="290" y="245" font-size="10" fill="#4a4742">follower promoted</text>
+
+        <rect x="40" y="258" width="420" height="42" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+        <text x="250" y="284" text-anchor="middle" font-size="12" font-weight="700" fill="#14532d">NEW LEADER — writes resume</text>
+        <line x1="250" y1="300" x2="250" y2="326" stroke="#94908a" stroke-width="1.6"/>
+        <text x="264" y="317" font-size="10" fill="#4a4742">old leader returns → generation checked</text>
+
+        <rect x="40" y="330" width="420" height="52" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="2.4"/>
+        <text x="250" y="352" text-anchor="middle" font-size="12" font-weight="800" fill="#14532d">✓ REJECTED — old leader demoted</text>
+        <text x="250" y="370" text-anchor="middle" font-size="11" fill="#14532d">to follower; one leader, safe</text>
+
+        <!-- right column states -->
+        <rect x="580" y="34" width="420" height="46" rx="8" fill="#f3f2ef" stroke="#94908a" stroke-width="2"/>
+        <text x="790" y="62" text-anchor="middle" font-size="12" font-weight="700" fill="#1a1917">STABLE — leader serves reads+writes</text>
+        <line x1="790" y1="80" x2="790" y2="106" stroke="#94908a" stroke-width="1.6"/>
+        <text x="810" y="97" font-size="10" fill="#4a4742">heartbeat misses × k</text>
+
+        <rect x="580" y="110" width="420" height="42" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+        <text x="790" y="136" text-anchor="middle" font-size="12" font-weight="700" fill="#92400e">SUSPECTED (grace period running)</text>
+        <line x1="790" y1="152" x2="790" y2="178" stroke="#94908a" stroke-width="1.6"/>
+        <text x="824" y="169" font-size="10" fill="#4a4742">grace period expires, still silent</text>
+
+        <rect x="580" y="182" width="420" height="46" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+        <text x="790" y="203" text-anchor="middle" font-size="12" font-weight="700" fill="#1e3a8a">ELECTING — writes blocked;</text>
+        <text x="790" y="219" text-anchor="middle" font-size="11" fill="#1e3a8a">most caught-up follower selected</text>
+        <line x1="790" y1="228" x2="790" y2="254" stroke="#94908a" stroke-width="1.6"/>
+        <text x="830" y="245" font-size="10" fill="#4a4742">follower promoted</text>
+
+        <rect x="580" y="258" width="420" height="42" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+        <text x="790" y="284" text-anchor="middle" font-size="12" font-weight="700" fill="#14532d">NEW LEADER — writes resume</text>
+        <line x1="790" y1="300" x2="790" y2="326" stroke="#94908a" stroke-width="1.6"/>
+        <text x="812" y="317" font-size="10" fill="#4a4742">old leader returns → NOT checked</text>
+
+        <rect x="580" y="330" width="420" height="52" rx="8" fill="#fee2e2" stroke="#dc2626" stroke-width="2.4"/>
+        <text x="790" y="352" text-anchor="middle" font-size="12" font-weight="800" fill="#7f1d1d">✗ SPLIT-BRAIN — both accept writes</text>
+        <text x="790" y="370" text-anchor="middle" font-size="11" fill="#7f1d1d">at once; data diverges</text>
+      </svg>
+      <p class="caption">Same detect → suspect → elect → promote sequence on both sides. The only difference is whether the returning old leader is fenced by a generation check — that one step decides safe recovery vs. split-brain.</p>
+    </div>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">A design uses synchronous propagation but requires acknowledgment from only 1 of the 2 followers (not both) before telling the client the write succeeded. Using the happy path's steps 2–4, state exactly how many of the 3 total copies (leader + followers) are guaranteed to hold the write the instant the client is told "success," and explain why that number matters for durability if the leader then crashes.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read step 2 (leader applies locally) and step 4 (synchronous waits for some number of followers) — count the leader's own copy plus however many followers were required to ack.</div>
+      </div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">2</span>
+          <span class="qtext">A monitoring system declares the leader dead after a single missed heartbeat, with zero grace period, and immediately promotes a follower. Using the "briefly slow, not actually dead" edge case, explain the concrete risk this specific policy creates if the original leader was only momentarily slow rather than truly gone.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the edge case describing why a grace period exists and what happens when a "dead" leader might still be accepting writes on its own.</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> You can run this correctly end to end. In a real design, when is single-leader replication actually the right call, and what does it cost you compared to the alternatives?</div>
+  </section>
+
+  <!-- ══════════════════ §7 ══════════════════ -->
+  <section id="s7">
+    <h2 class="section-title"><span class="num">§7</span> ⚖️ The Decision</h2>
+
+    <p>The baseline: leader/follower is the correctness floor whenever writes need one unambiguous order and you don't want to build conflict-resolution machinery — which describes most OLTP workloads by default. The real decision is less "should I replicate this way at all" and more "does this workload's read/write shape and failure tolerance actually fit the trade-offs this model makes."</p>
+
+    <p><strong>Writes need one unambiguous order, and you don't want to engineer conflict resolution.</strong> This is the canonical case — a relational database, an inventory count, anything where two concurrent writes silently overwriting each other is a real bug, not a shrug. Single-leader gives you that ordering for free, as a structural property of the design, not something you build.</p>
+
+    <p><strong>The workload is read-heavy and some staleness is acceptable.</strong> Route reads to followers and scale read throughput horizontally, independent of the leader's own capacity — the leader stays a write bottleneck, but reads stop being one.</p>
+
+    <p><strong>Write throughput itself is the binding constraint, and a single node genuinely can't keep up.</strong> Leader/follower alone doesn't fix this — the leader is a ceiling by design, adding followers only adds durability and read capacity, never write capacity. The actual fix is partitioning (7.x, each shard gets its own leader) or reconsidering the replication model entirely if writes must originate concurrently from multiple places (16.x).</p>
+
+    <p><strong>Near-zero write downtime during a leader failure is a hard requirement.</strong> Invest in fast, reliable failure detection and automated, consensus-based election (18.2's Raft is the concrete mechanism most systems run) — but accept that some bounded write-unavailability window during detection and election is inherent to this model, not an engineering gap you can fully close.</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Decision tree</div>
+      <svg viewBox="0 0 1040 560" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <rect x="150" y="10" width="740" height="60" rx="10" fill="#f3f2ef" stroke="#94908a" stroke-width="2"/>
+        <text x="520" y="34" text-anchor="middle" font-size="12" font-weight="700" fill="#1a1917">Do writes need one unambiguous order, with no conflict-</text>
+        <text x="520" y="52" text-anchor="middle" font-size="12" font-weight="700" fill="#1a1917">resolution machinery you're willing to build and maintain?</text>
+
+        <line x1="320" y1="70" x2="180" y2="120" stroke="#94908a" stroke-width="1.6"/>
+        <text x="210" y="98" font-size="11" font-weight="700" fill="#16a34a">yes</text>
+        <line x1="720" y1="70" x2="860" y2="120" stroke="#94908a" stroke-width="1.6"/>
+        <text x="790" y="98" font-size="11" font-weight="700" fill="#dc2626">no</text>
+
+        <rect x="10" y="124" width="360" height="80" rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+        <text x="190" y="150" text-anchor="middle" font-size="11.5" font-weight="800" fill="#14532d">Single-leader is the right</text>
+        <text x="190" y="168" text-anchor="middle" font-size="11.5" font-weight="800" fill="#14532d">baseline. Continue below.</text>
+
+        <rect x="670" y="124" width="360" height="80" rx="10" fill="#fee2e2" stroke="#dc2626" stroke-width="2"/>
+        <text x="850" y="146" text-anchor="middle" font-size="11" font-weight="700" fill="#7f1d1d">Concurrent multi-region writers</text>
+        <text x="850" y="164" text-anchor="middle" font-size="11" font-weight="700" fill="#7f1d1d">required — look at multi-leader /</text>
+        <text x="850" y="182" text-anchor="middle" font-size="11" font-weight="700" fill="#7f1d1d">leaderless (16.x) instead</text>
+
+        <line x1="190" y1="204" x2="190" y2="230" stroke="#94908a" stroke-width="1.6"/>
+
+        <rect x="10" y="234" width="360" height="60" rx="10" fill="#f3f2ef" stroke="#94908a" stroke-width="2"/>
+        <text x="190" y="258" text-anchor="middle" font-size="11" font-weight="700" fill="#1a1917">Is the workload read-heavy, with</text>
+        <text x="190" y="276" text-anchor="middle" font-size="11" font-weight="700" fill="#1a1917">staleness acceptable on some reads?</text>
+
+        <line x1="120" y1="294" x2="70" y2="330" stroke="#94908a" stroke-width="1.6"/>
+        <text x="80" y="316" font-size="10.5" font-weight="700" fill="#16a34a">yes</text>
+        <line x1="270" y1="294" x2="330" y2="330" stroke="#94908a" stroke-width="1.6"/>
+        <text x="300" y="316" font-size="10.5" font-weight="700" fill="#dc2626">no</text>
+
+        <rect x="10" y="334" width="180" height="70" rx="9" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+        <text x="100" y="356" text-anchor="middle" font-size="10.5" font-weight="800" fill="#1e3a8a">Route reads to</text>
+        <text x="100" y="372" text-anchor="middle" font-size="10.5" font-weight="800" fill="#1e3a8a">followers — scale</text>
+        <text x="100" y="388" text-anchor="middle" font-size="10.5" font-weight="800" fill="#1e3a8a">read capacity</text>
+
+        <rect x="200" y="334" width="180" height="70" rx="9" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+        <text x="290" y="352" text-anchor="middle" font-size="10.5" font-weight="800" fill="#4c1d95">Route reads to</text>
+        <text x="290" y="368" text-anchor="middle" font-size="10.5" font-weight="800" fill="#4c1d95">leader only — reads</text>
+        <text x="290" y="384" text-anchor="middle" font-size="10.5" font-weight="800" fill="#4c1d95">don't scale past it</text>
+
+        <line x1="190" y1="404" x2="190" y2="424" stroke="#94908a" stroke-width="1.6"/>
+
+        <rect x="10" y="428" width="360" height="60" rx="10" fill="#f3f2ef" stroke="#94908a" stroke-width="2"/>
+        <text x="190" y="452" text-anchor="middle" font-size="11" font-weight="700" fill="#1a1917">Is near-zero write downtime on</text>
+        <text x="190" y="470" text-anchor="middle" font-size="11" font-weight="700" fill="#1a1917">leader failure a hard requirement?</text>
+
+        <line x1="120" y1="488" x2="70" y2="516" stroke="#94908a" stroke-width="1.6"/>
+        <text x="80" y="508" font-size="10.5" font-weight="700" fill="#16a34a">yes</text>
+        <line x1="270" y1="488" x2="330" y2="516" stroke="#94908a" stroke-width="1.6"/>
+        <text x="300" y="508" font-size="10.5" font-weight="700" fill="#dc2626">no</text>
+
+        <rect x="10" y="520" width="180" height="34" rx="8" fill="#ccfbf1" stroke="#0d9488" stroke-width="2"/>
+        <text x="100" y="541" text-anchor="middle" font-size="9.5" font-weight="800" fill="#134e4a">Fast detection + Raft election (18.2)</text>
+
+        <rect x="200" y="520" width="180" height="34" rx="8" fill="#ffedd5" stroke="#ea580c" stroke-width="2"/>
+        <text x="290" y="541" text-anchor="middle" font-size="9.5" font-weight="800" fill="#7c2d12">Simpler, slower failover is fine</text>
+      </svg>
+    </div>
+
+    <h3>Trade-offs</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>✅ Benefit</th><th>❌ Cost / Limitation</th></tr></thead>
+        <tbody>
+          <tr><td class="benefit">Every write gets one unambiguous, deterministic order with zero cross-node coordination or conflict-resolution machinery at write time</td><td class="cost">The leader is a hard ceiling on write throughput — adding followers never raises it, only read capacity and durability go up</td></tr>
+          <tr><td class="benefit">Reads scale horizontally across N−1 followers, independent of leader capacity</td><td class="cost">Follower reads carry a real staleness bound (replication lag, 15.6) — a client can read data older than what it itself most recently wrote</td></tr>
+          <tr><td class="benefit">Failover gives an automatic recovery path when the leader dies, keeping the system self-healing rather than requiring a human on call</td><td class="cost">The write path has a real, bounded unavailability window during detection + election + promotion, and a botched failover (unfenced old leader) risks split-brain (18.5)</td></tr>
+          <tr><td class="benefit">No conflict-resolution machinery to design, test, or reason about — LWW, vector clocks, and CRDTs are all Topic 16 problems this model avoids entirely</td><td class="cost">All writes must physically route to wherever the leader lives, which taxes latency for writers far from it — a poor fit for concurrent, low-latency multi-region writes</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>In production</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>System</th><th>How it applies</th><th>The nuance</th></tr></thead>
+        <tbody>
+          <tr><td><strong>PostgreSQL primary/standby</strong></td><td>One primary accepts all writes; standbys apply a streamed write-ahead log and can optionally serve reads</td><td>Automated failover isn't built in — tools like Patroni or repmgr add detection and election, often using a consensus store (etcd) to avoid two primaries at once</td></tr>
+          <tr><td><strong>MySQL source/replica</strong></td><td>One source accepts writes; replicas apply a binlog stream, either asynchronously or via semi-sync plugins</td><td>External tooling (Orchestrator, MHA) handles failure detection and promotion; misconfigured failover here is a classic real-world split-brain source</td></tr>
+          <tr><td><strong>MongoDB replica sets</strong></td><td>Members automatically elect a primary using a Raft-derived protocol; a <code>priority</code> setting biases which member is preferred</td><td>Election typically completes in a few seconds; a member with <code>priority: 0</code> can never become primary — useful for keeping a geographically distant replica read-only</td></tr>
+          <tr><td><strong>Apache Kafka</strong></td><td>Each partition has its own leader among that partition's replica set — not one leader for the whole cluster</td><td>The "in-sync replica set" (ISR) generalizes the followers-must-be-caught-up idea; a cluster controller (itself elected via consensus, KRaft in modern versions) manages elections across every partition</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="checkpoint">
+      <div class="cp-title">✅ Checkpoint</div>
+      <div class="quiz-item">
+        <div class="quiz-q" onclick="toggleQuiz(this)">
+          <span class="quiz-num">1</span>
+          <span class="qtext">A social app needs a user's follower count updated with a single, unambiguous increment order — two simultaneous follows must never silently overwrite each other into a wrong count — but the workload is read-dominated roughly 1000:1, and a follower count that's a few hundred milliseconds stale is completely acceptable to display. Using the decision tree and the trade-offs table, decide whether single-leader replication fits this workload, and specify how you'd route reads and writes to get the specific benefit this workload needs.</span>
+          <span class="quiz-toggle">▼ Hint</span>
+        </div>
+        <div class="quiz-hint">💡 If you hesitate, re-read the decision tree's first branch (unambiguous order, no conflict resolution) and its second branch (read-heavy, staleness acceptable → route reads to followers).</div>
+      </div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> Can you deliver this cleanly under interview pressure, including when the interviewer pushes on what happens during a failure?</div>
+  </section>
+
+  <!-- ══════════════════ §8 ══════════════════ -->
+  <section id="s8">
+    <h2 class="section-title"><span class="num">§8</span> 🎯 In the Interview</h2>
+
+    <h3>When an interviewer asks / says</h3>
+    <ul class="trigger-list">
+      <li>"How do you keep your replicas consistent with each other?"</li>
+      <li>"What happens if your primary database goes down?"</li>
+      <li>"Can you scale your reads?"</li>
+      <li>"Walk me through failover."</li>
+    </ul>
+
+    <h3>Where this surfaces — template</h3>
+    <div class="table-wrap">
+      <table class="flow-table">
+        <thead><tr><th>Trigger point</th><th>What prompts the return to it</th></tr></thead>
+        <tbody>
+          <tr><th>1. First appearance</th><td>Right after naming a replicated datastore — often immediately following 15.1's "what's your replication factor" question</td></tr>
+          <tr><th>2. Second appearance</th><td>The moment you say "reads can go to replicas" — expect an immediate staleness follow-up</td></tr>
+          <tr><th>3. Third appearance</th><td>Any "what if the database goes down" question — expect a check of exactly what's unavailable, for how long, and what could be lost</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>The trade-off statement, broken into a deliverable template</h3>
+    <p style="font-size:13.5px; color:var(--text-muted); margin-top:-6px;">Memorize each row, then deliver them in order as one continuous answer — this is the same content as a single script, just chunked for recall instead of one wall of text.</p>
+    <div class="script-template">
+      <div class="script-step"><div class="step-label">1. Name the choice</div><div class="step-text">"I'm using single-leader replication — exactly one node accepts writes for this data, and followers apply the same write stream in order."</div></div>
+      <div class="script-step"><div class="step-label">2. Mechanism reason</div><div class="step-text">"That gives every write one unambiguous, deterministic order with no conflict-resolution machinery, and I can scale reads by routing them to followers."</div></div>
+      <div class="script-step"><div class="step-label">3. Price it unprompted</div><div class="step-text">"The leader is a hard ceiling on write throughput, and follower reads carry a real staleness bound. If the leader fails, writes are unavailable for the detection-plus-election window — typically low single-digit seconds with an automated election."</div></div>
+      <div class="script-step"><div class="step-label">4. Switch condition</div><div class="step-text">"I'd move to multi-leader or leaderless replication the moment I need concurrent, low-latency writes from multiple regions at once — this model forces every write through one place."</div></div>
+    </div>
+
+    <h3>A second template — the "what actually happens during failover" pushback</h3>
+    <div class="script-template">
+      <div class="script-step"><div class="step-label">1. Name the distinction</div><div class="step-text">"Failover has two phases worth separating: detecting the leader is actually gone, and electing plus promoting its replacement."</div></div>
+      <div class="script-step"><div class="step-label">2. Mechanism reason</div><div class="step-text">"Detection uses a heartbeat timeout with a grace period, specifically so a leader that's briefly slow isn't mistaken for one that's dead. Election picks the most caught-up follower to minimize data loss, then repoints clients and remaining followers at it."</div></div>
+      <div class="script-step"><div class="step-label">3. Price it unprompted</div><div class="step-text">"Writes are unavailable for that whole window — and under asynchronous propagation, any write the old leader had acknowledged but not yet streamed to a follower can be lost."</div></div>
+      <div class="script-step"><div class="step-label">4. Switch condition</div><div class="step-text">"I'd explicitly fence the old leader — reject writes from a stale generation number — the moment I need a guarantee against split-brain, rather than assuming it simply stays down."</div></div>
+    </div>
+
+    <h3>⚠️ Traps</h3>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "Followers can also accept writes directly, we just replicate them out afterward."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> That's multi-leader, not leader/follower. In this model only the leader accepts writes — a follower taking a write directly recreates the exact accept-anywhere ordering problem §4 showed breaks down.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "Reads from a follower are just as current as reads from the leader."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> Follower reads lag by however much replication delay currently exists; only reads from the leader are guaranteed current (§5, §6).</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "Failover is basically instantaneous, so there's no real availability impact."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> There's a real, bounded write-unavailability window while the system detects the failure and elects and promotes a replacement (§6) — often low single digits of seconds, sometimes longer.</div></div>
+    </div>
+
+    <div class="misconception">
+      <div class="wrong"><span class="icon">❌</span><div><strong>Trap:</strong> "As long as a new leader gets elected, split-brain can't happen."</div></div>
+      <div class="right"><span class="icon">✅</span><div><strong>Reality:</strong> It can, if the old leader isn't explicitly fenced off. Electing a replacement says nothing about stopping the old leader from still accepting writes if it comes back without being told to step down (§6, 18.5).</div></div>
+    </div>
+
+    <div class="bridge"><span class="arrow">→</span> <strong>Next:</strong> Can you combine what you've learned across sections, not just recall each one?</div>
+  </section>
+
+  <!-- ══════════════════ §9 ══════════════════ -->
+  <section id="s9">
+    <h2 class="section-title"><span class="num">§9</span> 🧪 Mastery Gate</h2>
+    <div class="callout callout-quote">Synthesis only. Each question requires combining two or more sections.</div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">1</span>
+        <span class="qtext">A team's monitoring declares the leader dead after exactly one missed heartbeat with zero grace period, and immediately promotes whichever follower responds first — without checking how caught-up it is. Using the "Failover" concept from §5 and the promotion / split-brain edge cases from §6, name the two independent failure modes this specific policy risks creating, and explain why they are genuinely separate risks rather than the same problem twice.</span>
+        <span class="quiz-toggle">▼ Hint</span>
+      </div>
+      <div class="quiz-hint">💡 Sections combined: §5 + §6.</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">2</span>
+        <span class="qtext">A flight-booking service must guarantee that two customers can never both successfully book the last seat on a flight — one unambiguous order, no silent overwrite — while read traffic (customers browsing the seat map) outweighs booking writes by roughly 200:1, and a few hundred milliseconds of staleness on the seat map view is acceptable. Using the decision tree and trade-offs table from §7, decide whether single-leader replication fits this system, and specify exactly which operations should route to the leader and which to followers.</span>
+        <span class="quiz-toggle">▼ Hint</span>
+      </div>
+      <div class="quiz-hint">💡 Sections combined: §7, applied to a system not mentioned elsewhere in this doc.</div>
+    </div>
+
+    <div class="quiz-item">
+      <div class="quiz-q" onclick="toggleQuiz(this)">
+        <span class="quiz-num">3</span>
+        <span class="qtext">An interviewer asks, "why not just let any node accept writes and merge conflicts later using timestamps?" — the exact concern §4 raised early in this doc. Using §4's two-part argument against timestamp reconciliation and §8's "name the choice, then price it unprompted" delivery structure, give a concise spoken answer that both rejects the naive fix and states what leader/follower buys instead.</span>
+        <span class="quiz-toggle">▼ Hint</span>
+      </div>
+      <div class="quiz-hint">💡 Sections combined: §4 + §8.</div>
+    </div>
+
+    <h3>Mastery criteria — tick only what you can demonstrate on demand</h3>
+    <ul class="checklist">
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can explain leader/follower replication, including exactly what happens to reads and writes during a leader failure</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can explain why an accept-anywhere design with no leader creates an ordering problem that timestamps can't cleanly resolve, and what leader/follower gives you instead</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can state the difference between reading from the leader and reading from a follower, and name the guarantee each one gives</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can walk through the failover sequence (detect → elect → promote → repoint → fence) and state exactly what's unavailable, and at risk, during it</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can explain what split-brain is, how an unfenced failover causes it, and name fencing as the mitigation</span></li>
+      <li><span class="cb" onclick="toggle(this)"></span><span class="text">Can judge, given a workload's ordering requirement and read/write ratio, whether single-leader replication is the right fit and how to route its reads and writes</span></li>
+    </ul>
+
+    <div class="callout callout-tip">💡 <strong>Rule of thumb:</strong> If you can teach it to someone else and field their follow-up questions, you've mastered it.</div>
+  </section>
+
+  <!-- ══════════════════ §10 ══════════════════ -->
+  <section id="s10">
+    <h2 class="section-title"><span class="num">§10</span> 🔗 Connections &amp; Sources</h2>
+
+    <div class="connections">
+      <div class="conn-card">
+        <span class="conn-icon">⬅️</span>
+        <div><div class="conn-label">Builds on</div><strong>15.1 Replication — Why and How</strong>, which established N independent copies and the propagation mechanism between them, but explicitly left open "which copy is current, and how does a read choose" — this doc is single-leader replication's answer to exactly that question.</div>
+      </div>
+      <div class="conn-card">
+        <span class="conn-icon">➡️</span>
+        <div><div class="conn-label">Enables</div><strong>15.3 Quorum reads and writes</strong>, a complementary, count-based refinement that can layer on top of the pure leader model (e.g. requiring a majority of followers to acknowledge before a write commits). <strong>15.6 Replication lag and read anomalies</strong>, the direct deep dive into the follower-read staleness this doc introduces but doesn't quantify. <strong>16.1 Single-leader replication — recap and failure modes</strong>, which extends this doc's failure-mode treatment further. <strong>18.2 Raft — leader election</strong>, the concrete consensus algorithm behind the black-boxed "elect a new leader" step in §6.</div>
+      </div>
+      <div class="conn-card">
+        <span class="conn-icon">⚡</span>
+        <div><div class="conn-label">Tension with</div><strong>16.2 Multi-leader replication</strong>, which relaxes the single-writer constraint this doc establishes as its core simplification — at the direct cost of needing conflict resolution (16.3), the exact machinery this doc's §4 argued single-leader lets you avoid. <strong>18.5 Split-brain — cause and prevention</strong>, the dark failure mode this doc's §6 names but only partially resolves (fencing, at a black-box level) — 18.5 is where the mechanism is actually built out.</div>
+      </div>
+    </div>
+
+    <h3>📚 Further reading</h3>
+    <ul class="reading-list">
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Kleppmann, <em>Designing Data-Intensive Applications</em>, Chapter 5 — "Leaders and Followers"</strong> — the specific section of the replication chapter this doc's model comes from, including its treatment of failover risks</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>The Raft Consensus Algorithm</strong> — <a href="https://raft.github.io/">raft.github.io</a> — an interactive visualization of exactly the leader-election mechanism this doc black-boxes into "elect"; useful preview before 18.2</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>MongoDB docs — Replica Set Elections</strong> — <a href="https://www.mongodb.com/docs/manual/core/replica-set-elections/">docs</a> — a real, production election protocol, including <code>priority</code> and how ties are broken</span></li>
+      <li><span class="cb" onclick="toggleReading(this)"></span><span class="rtext"><strong>Apache Kafka documentation — Replication</strong> — <a href="https://kafka.apache.org/documentation/#replication">docs</a> — per-partition leaders and the in-sync replica set (ISR), a variant worth contrasting with whole-cluster leader/follower</span></li>
+    </ul>
+  </section>
+
+  <!-- ══════════════════ §11 ══════════════════ -->
+  <section id="s11">
+    <h2 class="section-title"><span class="num">§11</span> ✍️ My Notes</h2>
+    <div class="callout callout-quote">Personal observations, model answers from drilling sessions, things that confused me. Saved locally in this browser.</div>
+    <textarea class="notes-area" placeholder="Your notes, model answers, and annotations…"></textarea>
+  </section>
+
+</article>
+</main>
+
+<script>
+// TOC active state
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('#toc nav a');
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(a => a.classList.remove('active'));
+      const a = document.querySelector(`#toc nav a[href="#${e.target.id}"]`);
+      if (a) a.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+sections.forEach(s => obs.observe(s));
+
+function toggle(cb) { cb.closest('li').classList.toggle('checked'); }
+function toggleReading(cb) { cb.closest('li').classList.toggle('checked'); }
+function toggleQuiz(q) {
+  const item = q.closest('.quiz-item');
+  item.classList.toggle('open');
+  q.querySelector('.quiz-toggle').textContent = item.classList.contains('open') ? '▲ Hide' : '▼ Hint';
+}
+
+// Notes auto-save
+const notesArea = document.querySelector('.notes-area');
+const NOTES_KEY = 'notes_15_2';
+if (localStorage.getItem(NOTES_KEY)) notesArea.value = localStorage.getItem(NOTES_KEY);
+notesArea.addEventListener('input', () => {
+  try { localStorage.setItem(NOTES_KEY, notesArea.value); } catch(e) {}
+});
+</script>
+
+</body>
+</html>
